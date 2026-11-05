@@ -17,6 +17,8 @@ import type {
   SendOptions,
 } from './types';
 
+const LISTENER_MS = 4000;
+
 export const keys = {
   report: ['report', 'latest'] as const,
   chat: ['chat'] as const,
@@ -25,6 +27,7 @@ export const keys = {
   dataStatus: ['data-status'] as const,
   notificationSettings: ['settings', 'notifications'] as const,
   notifications: ['notifications'] as const,
+  memory: ['memory'] as const,
   alarmSettings: ['settings', 'alarms'] as const,
   accessRequests: ['admin', 'access-requests'] as const,
   google: ['google', 'status'] as const,
@@ -189,6 +192,8 @@ export function useSendMessage() {
     onSuccess: (added, { target, options }) => {
       storeAnswer(client, added, target, options.replaces);
       client.invalidateQueries({ queryKey: keys.conversations });
+      // The listener runs after the answer: look again once it has had time.
+      setTimeout(() => client.invalidateQueries({ queryKey: keys.memory }), LISTENER_MS);
     },
     // A slow answer was still stored with its question: reload to show them as they arrive.
     onError: (error) => {
@@ -261,6 +266,45 @@ export function useUpdateAlarmSettings() {
 }
 
 /** "Was this alert useful?": kept on the alarm, and counted in the evaluation. */
+export function useMemory() {
+  return useQuery({ queryKey: keys.memory, queryFn: api.getMemory });
+}
+
+function useMemoryChange<Input>(change: (input: Input) => Promise<unknown>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: change,
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: keys.memory });
+      client.invalidateQueries({ queryKey: keys.notifications });
+    },
+  });
+}
+
+export function useDecideMemory() {
+  return useMemoryChange(({ id, keep }: { id: string; keep: boolean }) =>
+    api.decideMemory(id, keep),
+  );
+}
+
+export function useRewordMemory() {
+  return useMemoryChange(({ id, text }: { id: string; text: string }) =>
+    api.rewordMemory(id, text),
+  );
+}
+
+export function useForgetMemory() {
+  return useMemoryChange((id: string) => api.forgetMemory(id));
+}
+
+export function useMuteInterest() {
+  return useMemoryChange((topic: string) => api.muteInterest(topic));
+}
+
+export function useForgetEpisode() {
+  return useMemoryChange((id: string) => api.forgetEpisode(id));
+}
+
 export function useAlarmFeedback() {
   const client = useQueryClient();
   return useMutation({

@@ -7,6 +7,7 @@ import { describeSchedule, nextDue, validTime } from '@/lib/reminders';
 import { ApiError } from './http';
 import { getToken } from './token';
 import type {
+  MemoryFact,
   AlarmSettings,
   AppNotification,
   AccessRequest,
@@ -376,6 +377,7 @@ let inbox: AppNotification[] = [
     link: '/reminders',
     alarmId: null,
     alarmFeedback: null,
+    factId: null,
     createdAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
     readAt: null,
   },
@@ -387,10 +389,52 @@ let inbox: AppNotification[] = [
     link: '/reminders',
     alarmId: 'a_sleep',
     alarmFeedback: null,
+    factId: null,
     createdAt: new Date(Date.now() - 40 * 60_000).toISOString(),
     readAt: null,
   },
 ];
+
+// Made-up memory, shaped like the backend's: `waiting` and `kept` follow the person's taps.
+let facts: MemoryFact[] = [
+  {
+    id: 'f_goal',
+    kind: 'goal',
+    text: 'Wants to be in bed earlier on weeknights',
+    status: 'approved',
+    start: null,
+    end: null,
+    createdAt: new Date(Date.now() - 12 * 86_400_000).toISOString(),
+  },
+  {
+    id: 'f_exams',
+    kind: 'event',
+    text: 'Exams',
+    status: 'proposed',
+    start: isoDate(-3),
+    end: isoDate(-8),
+    createdAt: new Date(Date.now() - 3600_000).toISOString(),
+  },
+  {
+    id: 'f_once',
+    kind: 'routine',
+    text: 'Trains on Tuesdays',
+    status: 'candidate',
+    start: null,
+    end: null,
+    createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+  },
+];
+let interests = [{ topic: 'bedtime_hour', label: 'bedtime' }];
+let episodes = [
+  { id: 'e_bed', day: isoDate(9), text: 'Later bedtimes went with lower sleep efficiency.' },
+];
+
+function factWith(id: string): MemoryFact {
+  const found = facts.find((f) => f.id === id);
+  if (!found) throw new ApiError('There is no such fact.', 'not_found', 404);
+  return found;
+}
 
 let alarmSettings: AlarmSettings = { enabled: true, mutedKinds: [], sensitivity: 'normal' };
 
@@ -1395,6 +1439,22 @@ export const mockClient: ApiClient = {
       conversationId,
     });
     chat = [...chat, answer];
+    const asked = /remember that (.+)/i.exec(text);
+    if (asked) {
+      const id = `f_${Date.now().toString(36)}`;
+      facts = [
+        {
+          id,
+          kind: 'context',
+          text: asked[1].slice(0, 120),
+          status: 'proposed',
+          start: null,
+          end: null,
+          createdAt: new Date().toISOString(),
+        },
+        ...facts,
+      ];
+    }
     return delay([...added, answer]);
   },
 
@@ -1483,6 +1543,61 @@ export const mockClient: ApiClient = {
       const found = inbox.find((n) => n.alarmId === alarmId);
       if (!found) throw new ApiError('No such alarm.', 'not_found', 404);
       found.alarmFeedback = useful ? 'useful' : 'not_useful';
+    }),
+
+  getMemory: () =>
+    later(() => {
+      const having = (status: MemoryFact['status']) => facts.filter((f) => f.status === status);
+      return {
+        waiting: having('proposed'),
+        kept: having('approved'),
+        noticed: having('candidate'),
+        interests,
+        episodes,
+      };
+    }),
+
+  decideMemory: (id, keep) =>
+    later(() => {
+      const fact = factWith(id);
+      if (fact.status !== 'proposed') {
+        throw new ApiError('This fact was already decided.', 'invalid_request', 422);
+      }
+      inbox = inbox.map((n) =>
+        n.factId === id ? { ...n, readAt: n.readAt ?? new Date().toISOString() } : n,
+      );
+      facts = keep
+        ? facts.map((f) => (f.id === id ? { ...f, status: 'approved' } : f))
+        : facts.filter((f) => f.id !== id);
+      return { ...fact, status: keep ? ('approved' as const) : fact.status };
+    }),
+
+  rewordMemory: (id, text) =>
+    later(() => {
+      const fact = { ...factWith(id), text };
+      if (/insomnia|apnea|medication/i.test(text)) {
+        throw new ApiError('Patterns does not keep medical details.', 'invalid_request', 422);
+      }
+      facts = facts.map((f) => (f.id === id ? fact : f));
+      return fact;
+    }),
+
+  forgetMemory: (id) =>
+    later(() => {
+      factWith(id);
+      facts = facts.filter((f) => f.id !== id);
+    }),
+
+  noteOpened: () => delay(undefined),
+
+  muteInterest: (topic) =>
+    later(() => {
+      interests = interests.filter((i) => i.topic !== topic);
+    }),
+
+  forgetEpisode: (id) =>
+    later(() => {
+      episodes = episodes.filter((e) => e.id !== id);
     }),
 
   getDataStatus: () =>

@@ -93,6 +93,7 @@ function Navigation() {
           <Stack.Screen name="reminder/[id]" options={{ title: 'Reminder' }} />
           <Stack.Screen name="chats" options={{ title: 'Your chats' }} />
           <Stack.Screen name="teams" options={{ title: 'Teams' }} />
+          <Stack.Screen name="memory" options={{ title: '' }} />
           <Stack.Screen name="data" options={{ headerShown: false }} />
           <Stack.Screen
             name="evidence/[id]"

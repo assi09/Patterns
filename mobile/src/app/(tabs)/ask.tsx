@@ -27,6 +27,7 @@ import {
 import type { Attachment, Depth, ExpertChoice, Finding } from '@/api/types';
 import { type Anchor, AttachSheet } from '@/components/attach';
 import { MessageBubble, Thinking } from '@/components/chat';
+import { MemoryPrompts } from '@/components/MemoryPrompt';
 import { Composer } from '@/components/composer';
 import { ConversationList, IconButton } from '@/components/conversations';
 import { NoData } from '@/components/NoData';
@@ -291,6 +292,7 @@ export default function AskScreen() {
                   />
                 );
               })}
+              {pendingText === undefined && <MemoryPrompts />}
               {pendingText !== undefined && (
                 <>
                   <View
