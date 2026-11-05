@@ -1,0 +1,92 @@
+[
+ {
+  "q": "Calories in hummus?",
+  "fell_back": false,
+  "stop": "looked_up",
+  "cost": 0.00085,
+  "answer": "For hummus, the result shows **hummus, commercial** at **237 kcal per 100 g** and **229 kcal per 100 g**. It also shows **hummus, home prepared** at **177 kcal per 100 g**.",
+  "trace": [
+   "food_lookup"
+  ]
+ },
+ {
+  "q": "How can I recover faster?",
+  "fell_back": false,
+  "stop": "submitted",
+  "cost": 0.00412,
+  "answer": "I can\u2019t point to any recovery habit your data clearly supports yet. The habit checks for recovery score and HRV both came back with no clear pattern, so the safest move is to test one habit at a time rather than guess. If you want, I can help set up a simple experiment to see whether an earlier bedt",
+  "trace": []
+ },
+ {
+  "q": "What did we say about exams in my other chat?",
+  "fell_back": false,
+  "stop": "recalled",
+  "cost": 0.0007,
+  "answer": "You only shared one line from the other chat: on \"2026-10-12\" in \"Bedtime,\" you said, \"I want to stop going to bed so late during exams.\"\n\nThere isn\u2019t any earlier reply here about exams, so I can\u2019t say what \u201cwe\u201d said beyond that quote. If you want, I can help you restate that line.",
+  "trace": []
+ },
+ {
+  "q": "Am I more active on weekdays or weekends?",
+  "fell_back": false,
+  "stop": "submitted",
+  "cost": 0.00898,
+  "answer": "You don\u2019t show a clear weekday-vs-weekend activity split overall. Steps were a little higher on weekends, but with this many checks that could be normal variation; your distance, Active Zone Minutes, and light activity all held steady.",
+  "trace": []
+ },
+ {
+  "q": "Has my sleep changed lately?",
+  "fell_back": true,
+  "stop": "budget",
+  "cost": 0.01132,
+  "answer": "Yes \u2014 your sleep looks like it improved a bit near the end of the period. Your time asleep and time in bed both stepped up around Oct 22, and your sleep score also rose around Oct 21; sleep efficiency was already a little higher after Sep 6, so the recent change is more about getting a bit more slee",
+  "trace": []
+ },
+ {
+  "q": "Are my steps going up or down?",
+  "fell_back": false,
+  "stop": "submitted",
+  "cost": 0.01032,
+  "answer": "Your steps held steady overall, with no clear rise or drop across Aug 1 to Oct 29. There\u2019s a small upward tilt in the raw numbers, but with the checks we ran that looks like normal variation rather than a real shift.",
+  "trace": []
+ },
+ {
+  "q": "Am I sleeping more than I was two months ago?",
+  "fell_back": false,
+  "stop": "submitted",
+  "cost": 0.01394,
+  "answer": "No \u2014 your time asleep was basically unchanged two months later. In Oct 1 to Oct 29 you averaged 6 h 51 min, versus 6 h 53 min in Aug 1 to Sep 30, and your bedtime, time in bed, sleep efficiency and time awake in bed were all steady too. Data coverage was complete, so this looks like a real no-change",
+  "trace": []
+ },
+ {
+  "q": "Why do some nights go so much better than others?",
+  "fell_back": true,
+  "stop": "no_submission",
+  "cost": 0.01612,
+  "answer": "Some nights go better than others mostly because your bedtime shifts around: your bedtime was earlier on weekends, and the nights with better sleep scores lined up with a more regular sleep pattern overall. But there wasn\u2019t a strong weekday/weekend difference in sleep score, time asleep, or sleep ef",
+  "trace": []
+ },
+ {
+  "q": "Is strain linked to my recovery the next day?",
+  "fell_back": false,
+  "stop": "submitted",
+  "cost": 0.01417,
+  "answer": "Strain does not look linked to your recovery the next day in this data. Your recovery score showed no clear next-day pattern with strain, while time asleep did move with higher recovery score. Coverage was solid with no low-wear days, so this looks like a real no-link result rather than a data gap.",
+  "trace": []
+ },
+ {
+  "q": "When did my sleep efficiency start changing?",
+  "fell_back": false,
+  "stop": "submitted",
+  "cost": 0.00784,
+  "answer": "Your sleep efficiency didn\u2019t show a clear start to a real change over this period. The analysis picked Sep 6 as a possible shift, but the overall difference was tiny, and October looked basically the same as August-September. Your bedtime, time in bed, and time awake in bed also held steady, so ther",
+  "trace": []
+ },
+ {
+  "q": "Why is my HRV lower some weeks?",
+  "fell_back": true,
+  "stop": "submitted",
+  "cost": 0.01976,
+  "answer": "Heart rate variability (HRV) did not show a clear overall change or downward trend across Aug 1 to Oct 29. Time asleep did not clearly go with heart rate variability (HRV) across Aug 1 to Oct 29. Bedtime showed a weak same-day link with heart rate variability (HRV), but after correcting for the test",
+  "trace": []
+ }
+]

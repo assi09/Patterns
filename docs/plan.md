@@ -86,6 +86,9 @@ unhappy paths. Prompt and tool versions are recorded on every trace (workstream 
 
 ### K. Memory that listens: short-term, long-term, and "cognify"
 
+**Status (2026-11-05):** built and live, in our own Postgres without Cognee or Letta (#115, #117-#119,
+#121; see [architecture.md](architecture.md#memory-and-context)). What follows is the original brief.
+
 Asked for on 2026-10-28: the agent should be **actively listening**. Today it mostly forgets what
 people tell it:
 

@@ -4,10 +4,10 @@ from datetime import date
 
 import pytest
 
-from app.agent.agent import SUBMIT, Claim, fallback_summary
+from app.agent.agent import SUBMIT, Claim, answer, fallback_summary
 from app.agent.ask import ask
 from app.agent.intent import Intent
-from app.agent.llm import Completion, ScriptedLLM, ToolCall, Usage
+from app.agent.llm import Budget, Completion, ScriptedLLM, ToolCall, Usage
 from app.agent.router import EXPERT_LABELS, LABELS, Classification, JevRouter, KeywordRouter
 from app.agent.strategy import COACHING_OFFER, STRATEGIES, coaching_evidence, snapshot
 from app.analysis.day import with_scores
@@ -155,6 +155,48 @@ def test_logging_keeps_the_full_toolbox(frame):
     assert "expand_tools" not in offered_tools(llm)
 
 
+def claim(kind: str, text: str, metric: str = "steps") -> Claim:
+    return Claim(text=text, kind=kind, evidence_ids=["e"], metric=metric)
+
+
+def test_the_fallback_never_leads_with_a_note_on_data_quality():
+    claims = [
+        claim("data_quality", "Coverage was complete."),
+        claim("no_change", "Steps did not clearly differ between weekdays and weekends."),
+    ]
+    assert fallback_summary(claims) == "Steps did not clearly differ between weekdays and weekends."
+
+
+def test_the_fallback_keeps_a_note_when_there_is_nothing_else():
+    assert fallback_summary([claim("data_quality", "Coverage was complete.")]) == (
+        "Coverage was complete."
+    )
+
+
+def test_two_steady_metrics_keep_their_own_words_and_three_are_grouped():
+    two = [
+        claim("no_change", "Steps did not differ by weekday."),
+        claim("no_change", "Distance did not differ by weekday.", "distance_km"),
+    ]
+    assert (
+        fallback_summary(two)
+        == "Steps did not differ by weekday. Distance did not differ by weekday."
+    )
+    three = [*two, claim("no_change", "Sleep held.", "sleep_minutes")]
+    assert fallback_summary(three).endswith("showed no clear change.")
+
+
+@pytest.mark.parametrize("failure", ["budget", "model"])
+def test_a_summary_that_failed_its_check_is_never_the_answer(frame, failure):
+    bad = ScriptedLLM.call(SUBMIT, summary="Your sleep was 999 minutes.", claims=[])
+    # The run ends during the repair: out of budget, or the model is gone.
+    turns = [bad] if failure == "model" else [bad, bad]
+    budget = Budget(max_calls=1 if failure == "budget" else 5)
+    result = answer(ScriptedLLM(turns), frame, "How did I sleep?", budget=budget)
+    assert result.stop_reason in ("budget", "model_error")
+    assert "999" not in result.summary
+
+
 def test_an_unknown_type_works_like_before(frame):
     llm = ScriptedLLM([submit()])
     ask(llm, Router(None), frame, "Tell me about my data")
@@ -191,5 +233,6 @@ def test_a_failed_summary_is_rebuilt_from_the_claims_grouped():
         ),
     ]
     assert fallback_summary(claims) == (
-        "Sleep efficiency went down. Time asleep and bedtime showed no clear change."
+        "Sleep efficiency went down. Time asleep did not clearly change. Bedtime did not clearly "
+        "change."
     )
