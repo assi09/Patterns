@@ -18,7 +18,7 @@ from app.api.main import create_app
 from app.api.store import analyze, get_data
 from app.auth.accounts import LoginThrottle
 from app.config import settings
-from app.db.models import ChatMessage, EvidenceRecord, MemoryFact, User
+from app.db.models import ChatMessage, EvidenceRecord, User
 from app.db.session import session_scope
 from app.ingest.takeout import DailyData
 from app.synthetic import generate
@@ -220,15 +220,59 @@ def test_people_never_see_each_others_chat(client, engine, agent):
     assert "A question only I asked" not in json.dumps(agent.llm.requests[-1]["messages"])
 
 
-def test_a_proposed_fact_waits_for_approval(client, engine, agent):
-    propose = ScriptedLLM.call(
-        "propose_fact", kind="routine", text="Works night shifts since August"
+def listening(agent) -> AgentParts:
+    return AgentParts(agent.llm, agent.router, None, background=True)
+
+
+def wait_for(check, seconds: float = 5.0):
+    """Polls for what a background job leaves behind."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if found := check():
+            return found
+        time.sleep(0.02)
+    raise AssertionError("the background job left nothing")
+
+
+def test_what_is_heard_becomes_a_card_only_when_asked_for(client, engine, agent):
+    headers = signed_in(client, engine)
+    parts = listening(agent)
+    client.app.dependency_overrides[chat.get_agent] = lambda: parts
+    heard = ScriptedLLM.call(
+        "record_memories", memories=[{"kind": "routine", "text": "Works night shifts"}]
     )
-    agent.llm.turns.extend([propose, submission("Nothing stood out.")])
-    ask(client, signed_in(client, engine), "I work night shifts since August. How is my sleep?")
-    with session_scope(engine) as session:
-        fact = session.scalar(select(MemoryFact))
-        assert fact.text == "Works night shifts since August" and fact.status == "proposed"
+    agent.llm.turns.extend([*describe_then_claim("Your time asleep held steady."), heard])
+    ask(client, headers, "Please remember that I work night shifts")
+
+    def card():
+        return client.get("/memory", headers=headers).json()["waiting"]
+
+    [fact] = wait_for(card)
+    assert fact["text"] == "Works night shifts" and fact["kind"] == "routine"
+    inbox = client.get("/notifications", headers=headers).json()
+    assert inbox["items"][0]["kind"] == "memory" and inbox["items"][0]["factId"] == fact["id"]
+
+    kept = client.post(f"/memory/facts/{fact['id']}/decision", json={"keep": True}, headers=headers)
+    assert kept.json()["status"] == "approved"
+    assert client.get("/notifications", headers=headers).json()["unread"] == 0
+
+
+def test_a_plain_question_costs_no_listening_call(client, engine, agent):
+    headers = signed_in(client, engine)
+    parts = listening(agent)
+    client.app.dependency_overrides[chat.get_agent] = lambda: parts
+    agent.llm.turns.extend(describe_then_claim("Your time asleep held steady."))
+    ask(client, headers, "How did I sleep last month?")
+    time.sleep(0.1)  # the job would have run by now
+    assert not [r for r in agent.llm.requests if r["tools"] == ["record_memories"]]
+
+
+def test_a_refused_message_is_not_listened_to(client, engine, agent):
+    headers = signed_in(client, engine)
+    parts = AgentParts(agent.llm, FixedRouter(out_of_scope=0.9), None, background=True)
+    client.app.dependency_overrides[chat.get_agent] = lambda: parts
+    ask(client, headers, "I think I have something wrong with me")
+    assert agent.llm.requests == []
 
 
 def test_a_failed_run_is_stored_as_a_plain_apology(client, engine, agent):

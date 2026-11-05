@@ -34,6 +34,7 @@ from app.agent.conversation import DRAFT_NOTE, draft_reply
 from app.agent.experts import EXPERTS, Depth, available
 from app.agent.guard import Guard
 from app.agent.intent import Intent
+from app.agent.listener import MAX_KNOWN, fit_to_keep, is_explicit, listen, worth_listening
 from app.agent.llm import LLM, LLMError, OpenAILLM
 from app.agent.router import Router
 from app.agent.summary import FOLD_AT, fold, to_fold
@@ -63,6 +64,7 @@ router = APIRouter(tags=["chat"])
 HISTORY_SHOWN = 100  # messages the app gets back
 HISTORY_USED = 20  # messages the agent sees as context; the context builder trims further
 HISTORY_FOLDED = 40  # messages looked at for the running summary
+QUIET_INTENTS = (Intent.LOG, Intent.REMIND)  # one-off requests: nothing to listen for
 FAILED = "I couldn't finish answering this time. Please try again in a moment."
 
 Sessions = Callable[[], AbstractContextManager[Session]]
@@ -73,7 +75,7 @@ class AgentParts:
     llm: LLM
     router: Router
     guard: Guard | None
-    summarize: bool = False  # keep each chat's running summary: a small model call in long chats
+    background: bool = False  # the summary and the listener: small model calls after an answer
 
 
 @lru_cache(maxsize=1)
@@ -83,7 +85,7 @@ def _agent() -> AgentParts:
     except LLMError as exc:
         logger.warning("The agent is not available: %s", exc)
         raise ApiError(503, "agent_unavailable", "Answering questions is not set up yet.") from exc
-    return AgentParts(llm, default_router(settings), default_guard(settings), summarize=True)
+    return AgentParts(llm, default_router(settings), default_guard(settings), background=True)
 
 
 def get_agent() -> AgentParts:
@@ -245,6 +247,48 @@ def update_summary(sessions: Sessions, llm: LLM, user_id, conversation_id: uuid.
         logger.exception("Updating a chat's summary failed")
 
 
+def listen_to(
+    sessions: Sessions,
+    agent: AgentParts,
+    user_id,
+    question_id,
+    text: str,
+    today,
+    now: datetime,
+) -> None:
+    """Hears what the person's message says about them, after the answer; nothing is kept without
+    their tap (`app.db.memory.propose_fact`)."""
+    if not worth_listening(text):
+        return
+    try:
+        with sessions() as db:
+            held = memory.held_facts(db, user_id)[:MAX_KNOWN]
+            known = [(fact.id, fact.text) for fact in held]
+        result = listen(agent.llm, text, today, [words for _, words in known])
+        kept = fit_to_keep(result.heard, agent.guard)
+        explicit = is_explicit(text)
+        with sessions() as db:
+            question = db.get(ChatMessage, question_id)
+            for heard in kept if question is not None else ():
+                with suppress(memory.MemoryRejected):
+                    memory.propose_fact(
+                        db,
+                        user_id,
+                        heard.kind,
+                        heard.text,
+                        explicit=explicit,
+                        start=heard.start,
+                        end=heard.end,
+                        same_as=None if heard.same_as is None else known[heard.same_as][0],
+                        message_id=question_id,
+                        now=now,
+                    )
+            if question is not None and question.conversation_id:
+                store.charge_answer(db, user_id, question.conversation_id, result.cost_usd)
+    except Exception:
+        logger.exception("Listening to a message failed")
+
+
 def _answer(
     sessions: Sessions,
     agent: AgentParts,
@@ -257,6 +301,8 @@ def _answer(
     conversation_id: uuid.UUID | None = None,
 ) -> list[ChatMessage]:
     """Runs on a worker thread: answers, stores the answer, and frees the person for the next."""
+    heard = False  # the message was answered, and is one that may say something about them
+    today = now.astimezone(ZoneInfo(settings.timezone)).date()
     try:
         with sessions() as db:
             # The conversation's own turns and summary; memory is shared with the person's others.
@@ -372,10 +418,8 @@ def _answer(
                 # The agent's words when they do not claim it is on; the card holds the details.
                 result.summary, result.claims = reminder_reply(result.summary), []
             refused = reply.route.action == "refuse"
+            heard = not refused and reply.route.classification.intent not in QUIET_INTENTS
             memory.mark_used(db, user_id, reply.context.memory_used, now)
-            for fact in reply.proposed_facts:
-                with suppress(memory.MemoryRejected):
-                    memory.propose_fact(db, user_id, **fact, run_id=result.run_id)
             answer = store.add_answer(
                 db,
                 user_id,
@@ -419,9 +463,13 @@ def _answer(
     finally:
         with _busy_lock:
             _busy.discard(user_id)
-        if agent.summarize and conversation_id:
-            with suppress(RuntimeError):  # the server is shutting down: the next answer folds it
+        with suppress(RuntimeError):  # the server is shutting down: this can wait or go unheard
+            if agent.background and conversation_id:
                 _pool.submit(update_summary, sessions, agent.llm, user_id, conversation_id)
+            if agent.background and heard:
+                _pool.submit(
+                    listen_to, sessions, agent, user_id, question_id, body.text, today, now
+                )
 
 
 @router.get("/chat", response_model=list[schemas.ChatMessage], response_model_exclude_none=True)
@@ -477,6 +525,7 @@ def delete_conversation(
     conversation = _owned(db, user, conversation_id)
     if user.id in _busy:
         raise ApiError(409, "busy", "Still answering a question; try again in a moment.")
+    store.forget_candidates(db, user.id, ChatMessage.conversation_id == conversation.id)
     db.execute(delete(ChatMessage).where(ChatMessage.conversation_id == conversation.id))
     db.execute(delete(MemoryEpisode).where(MemoryEpisode.conversation_id == conversation.id))
     db.delete(conversation)

@@ -335,8 +335,19 @@ user's data.
 | **Episodes** | one dated line of a chat's best verified claims, with their evidence | code, when the chat has been idle for an hour; no model call | 90 days, or until the chat is deleted | in other chats, when the metrics match; more likely when their dates overlap the last 30 days |
 | **Context answers** | the person's answers to the agent's questions ("exam week") with the dates and metrics asked about | the person | 180 days | the date range or metrics overlap |
 | **Check-ins** | daily rating 1-5 and fixed tags | the person | 365 days | through a `checkins` tool, for the window being investigated |
-| **Facts and preferences** (semantic) | short structured facts: routine, goal, preference, context; at most 120 characters, with the metrics they concern | **proposed by the agent, saved only after the person approves** | until changed or deleted; not retrieved after 60 days unused | preferences always (at most 3); other facts when their metrics match |
+| **Facts** (semantic) | what the person said about themselves: routine, goal, preference, context, dated event, commitment; at most 120 characters | **heard by the listener; a card once said twice or asked for; kept only after the person's tap** | candidates 30 days; kept ones until changed or deleted, not retrieved after 60 days unused | preferences always (at most 3); other facts when their metrics match; events when their dates overlap the last 30 days |
 | **Traces** | every run's steps, cost and verdicts | the system | 30 days | never put in a prompt: for AgentOps and evaluation only |
+
+### Listening
+
+After an answer, code skips plain questions and one-off requests; other messages go to one small
+model call (`app/agent/listener.py`, about $0.0006) that notes what they say about the person, typed
+and dated, through a tool. Each note then passes the medical guard and the fact rules (no condition,
+no instruction, 120 characters), and is counted in `memory_facts`: a candidate is used for nothing
+and only shown on the memory page. Said twice, or with "remember that", it becomes a card in the
+inbox. What the person declined is never raised again, and what was only heard in a message goes
+when that message is edited or its chat deleted. `GET /memory` shows all of it except what was
+declined; the person can keep, reword or delete.
 
 ### Retrieval: the context builder
 

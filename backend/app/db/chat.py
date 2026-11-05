@@ -13,7 +13,14 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.analysis.evidence import Evidence
-from app.db.models import ChatMessage, Conversation, EvidenceRecord, HealthAction, Reminder
+from app.db.models import (
+    ChatMessage,
+    Conversation,
+    EvidenceRecord,
+    HealthAction,
+    MemoryFact,
+    Reminder,
+)
 
 NEW_TITLE = "New chat"
 TITLE_LENGTH = 60
@@ -90,14 +97,25 @@ def replace_from(
     if reached and message.created_at <= reached:
         # It speaks of messages that are going: the turns left are folded again.
         conversation.summary = conversation.summary_until = None
+    going = (
+        ChatMessage.user_id == user_id,
+        ChatMessage.conversation_id == message.conversation_id,
+        ChatMessage.created_at >= message.created_at,
+    )
+    forget_candidates(session, user_id, *going)
+    session.execute(delete(ChatMessage).where(*going))
+    return conversation
+
+
+def forget_candidates(session: Session, user_id: uuid.UUID, *messages) -> None:
+    """What was only heard in these messages goes with them; what the person saw stays theirs."""
     session.execute(
-        delete(ChatMessage).where(
-            ChatMessage.user_id == user_id,
-            ChatMessage.conversation_id == message.conversation_id,
-            ChatMessage.created_at >= message.created_at,
+        delete(MemoryFact).where(
+            MemoryFact.user_id == user_id,
+            MemoryFact.status == "candidate",
+            MemoryFact.source_message_id.in_(select(ChatMessage.id).where(*messages)),
         )
     )
-    return conversation
 
 
 def add_question(

@@ -8,11 +8,10 @@ the conversation (`conversation.py`). What the context included and how the ques
 are the first steps of the trace, so every answer can be traced to its context and its routing.
 """
 
-import json
 import re
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 
 import pandas as pd
@@ -39,7 +38,6 @@ from app.agent.experts import (
     owner,
     visible_metrics,
 )
-from app.agent.facts import FACT_KINDS, FactRejected, validate_fact
 from app.agent.guard import Guard, JevGuard
 from app.agent.intent import Intent
 from app.agent.jev import JevClient, JevError
@@ -82,52 +80,6 @@ class Answer:
     route: Route
     result: AgentResult
     context: Context
-    proposed_facts: list[dict] = field(default_factory=list)  # for the person to approve
-
-
-PROPOSE_FACT = "propose_fact"
-MAX_PROPOSALS = 1
-
-
-def _propose_tool(proposals: list[dict]) -> ExtraTool:
-    """Collects at most one fact for the person to approve; nothing is stored by the agent."""
-
-    def run(arguments: dict | None) -> tuple[str, dict]:
-        arguments = arguments or {}
-        if len(proposals) >= MAX_PROPOSALS:
-            message = "You already proposed a fact in this answer."
-            return json.dumps({"error": message}), {"error": message}
-        try:
-            text, metrics = validate_fact(
-                str(arguments.get("kind", "")),
-                str(arguments.get("text", "")),
-                [str(m) for m in arguments.get("metrics") or []],
-            )
-        except FactRejected as exc:
-            return json.dumps({"error": str(exc)}), {"error": str(exc)}
-        proposals.append({"kind": arguments["kind"], "text": text, "metrics": metrics})
-        return (
-            json.dumps({"proposed": True, "note": "The person will be asked to approve it."}),
-            {"proposed": proposals[-1]},
-        )
-
-    return ExtraTool(
-        PROPOSE_FACT,
-        "Propose remembering something lasting the person told you about themselves in this "
-        "conversation (a routine, goal, preference or context, such as 'night shifts since "
-        "September'). Never something you inferred from the data. At most one per answer, at "
-        "most 120 characters; it is kept only if the person approves.",
-        {
-            "type": "object",
-            "properties": {
-                "kind": {"type": "string", "enum": list(FACT_KINDS)},
-                "text": {"type": "string", "maxLength": 120},
-                "metrics": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["kind", "text"],
-        },
-        run,
-    )
 
 
 def _scope(route: Route) -> set[str] | None:
@@ -259,8 +211,7 @@ def ask(
         now=now,
         chat=chat,
     )
-    proposals: list[dict] = []
-    tools = [_propose_tool(proposals)]
+    tools: list[ExtraTool] = []
     logging_tools = []
     if (
         route.classification.intent in (Intent.LOG, Intent.MIXED) or continuing
@@ -379,4 +330,4 @@ def ask(
         result.trace[1]["continuing_log_expert"] = continuing_log
     if reminding:
         result.trace[1]["reminding"] = True
-    return Answer(route, result, context, proposals)
+    return Answer(route, result, context)

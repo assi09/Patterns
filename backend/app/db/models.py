@@ -258,7 +258,7 @@ CONTEXT_OPTIONS = (
     "rather_not_say",
 )
 QUESTION_STATUSES = ("asked", "answered", "dismissed")
-FACT_STATUSES = ("proposed", "approved", "declined")
+FACT_STATUSES = ("candidate", "proposed", "approved", "declined")
 
 
 class Finding(Base):
@@ -329,8 +329,9 @@ class CheckIn(Base):
 
 
 class MemoryFact(Base):
-    """A short fact or preference (semantic memory), proposed by the agent and kept only once the
-    person approves it. Not retrieved after 60 days unused."""
+    """Something the person said about themselves (semantic memory). The listener hears it as a
+    candidate, it is proposed once said twice or asked for, and it is kept only once the person
+    approves it. Not retrieved after 60 days unused."""
 
     __tablename__ = "memory_facts"
     __table_args__ = (
@@ -346,6 +347,11 @@ class MemoryFact(Base):
     metrics: Mapped[list[str]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(16), default="proposed")
     source_run_id: Mapped[str | None] = mapped_column(String(32), default=None)  # provenance
+    source_message_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)  # who said it
+    start_day: Mapped[date | None] = mapped_column(Date, default=None)  # an event's dates
+    end_day: Mapped[date | None] = mapped_column(Date, default=None)
+    seen: Mapped[int] = mapped_column(default=1, server_default="1")  # times heard
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
@@ -653,6 +659,10 @@ class Notification(Base):
     # The smart alarm it carries, so the inbox can ask whether it was useful.
     alarm_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("alarms.id", ondelete="SET NULL"), default=None
+    )
+    # The memory it asks about, so the inbox can offer to keep it.
+    fact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("memory_facts.id", ondelete="SET NULL"), default=None
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
