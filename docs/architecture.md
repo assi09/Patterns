@@ -361,6 +361,17 @@ chat itself reads the same search, with no extra model call. Memories are few an
 are no embeddings or vector store. Numbers, times and dates in an answer still come only from
 computed evidence: the agent refers to a profile item in words ("your bedtime goal").
 
+### Coaching knowledge
+
+Fifteen cards in `backend/app/knowledge/*.md` say how to try an everyday habit, in our own words,
+each with its public source and the habit it belongs to. They hold no numbers, and tests keep them
+free of medical words. When a person's data supports a habit (`habit_options`), code attaches that
+habit's card to the task; `knowledge_lookup` is for coaching questions about anything else. A card
+only goes next to the person's own evidence, and the answer names its source without a link, since
+a link would make the turn read like an instruction when quoted back. `eval/knowledge_guard.py`
+checks every card with the medical guard. There are no cards on logging: no public page we found
+supports one.
+
 ### Retrieval: the context builder
 
 Deterministic, before the model is called:

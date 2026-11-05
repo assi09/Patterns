@@ -118,7 +118,8 @@ STRATEGIES: dict[str, Strategy] = {
         ),
         guide="How to work: the habits this person's data supports are already tested below, as "
         "evidence you may cite. Suggest only those marked supported (at most two), as claims of "
-        "kind suggestion; a significant correlation you find may back one too. With none "
+        "kind suggestion; a significant correlation you find may back one too. Vetted guidance on "
+        "how to try them is below too; you may use it, next to their evidence. With none "
         "supported, say so and offer to test a habit. No hypotheses. Then call submit_findings.",
         budget=Budget(max_calls=4, max_tool_calls=5, max_cost_usd=0.015),
         snapshot=True,

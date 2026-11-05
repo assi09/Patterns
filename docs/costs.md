@@ -94,3 +94,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-05 | Chat summary, made-up chat of five turns: two folds ($0.0011; the second lost the exams and the goal), then again after fixing the prompt ($0.0015) | $0.0027 |
 | 2026-11-05 | Memory listener, made-up messages: nine ($0.0050), then eleven with the medical guard after the fixes ($0.0064), plus about $0.0006 of Jev guard calls | $0.0120 |
 | 2026-11-05 | Profile and memory search, synthetic person, four made-up questions (change, lookup, a question about another chat, why) | $0.0353 |
+| 2026-11-05 | Knowledge cards: medical guard on all cards, twice ($0.0003), and "How can I sleep better?" twice on a synthetic person ($0.0067, about $0.008) | $0.0150 |

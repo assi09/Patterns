@@ -41,6 +41,7 @@ from app.agent.experts import (
 from app.agent.guard import Guard, JevGuard
 from app.agent.intent import Intent
 from app.agent.jev import JevClient, JevError
+from app.agent.knowledge import Card, cards_for, guidance_block, knowledge_tool, source_note
 from app.agent.llm import LLM
 from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
 from app.agent.router import (
@@ -81,6 +82,9 @@ class Answer:
     route: Route
     result: AgentResult
     context: Context
+
+
+HABITS = "habit_options"
 
 
 def _scope(route: Route) -> set[str] | None:
@@ -241,6 +245,7 @@ def ask(
         else strategy_for(route.classification.question_type)
     )
     block, evidence, owners = context.block, dict(context.evidence), dict(context.owners)
+    guidance: list[Card] = []
     if plan:
         visible = sorted(_scope(route) or frame.columns)
         found: list[tuple[list[Evidence], str]] = []
@@ -254,6 +259,11 @@ def ask(
                 evidence[record.id] = record
                 if metric_owner := owner(record.metrics[0]):
                     owners[record.id] = metric_owner.name
+        if plan.coaching:
+            guidance = cards_for(e for records, _ in found for e in records if e.tool == HABITS)
+            block = "\n\n".join(part for part in (block, guidance_block(guidance)) if part)
+    if plan and plan.coaching:
+        tools.append(knowledge_tool())
     if plan and plan.memory:  # what a search may find can be cited, like the rest of memory
         if archive:
             tools.append(memory_lookup_tool(archive))
@@ -344,6 +354,10 @@ def ask(
         and not OFFERED.search(result.summary)
     ):
         result.notes.append(COACHING_OFFER)  # coaching ends with something to do
+    if guidance:
+        result.trace.append({"type": "guidance", "cards": [card.id for card in guidance]})
+    if note := source_note(result):
+        result.notes.append(note)
     result.trace[:0] = [_context_step(context), _route_step(route)]
     if continuing:
         result.trace[1]["continuing_log_expert"] = continuing_log
