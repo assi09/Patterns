@@ -368,4 +368,7 @@ Spent so far on real runs: about $0.67 in all, almost all OpenAI (Jev under $0.0
 30. **A goal cannot be measured.** "How is my goal going?" cannot say how close they are, because a
     target's number is not evidence. It needs a goal tool, probably with personal experiments.
 31. **`day` and `lookup` take about three model calls**, not the one or two planned.
+32. **Real data is harder than the synthetic sets.** The first real check (six questions) had two
+    summaries fall back and one run end with no answer (`no_submission`, on a weekend bedtime
+    question). `eval/real_check.py` repeats it, keeping answers in git-ignored `data/`.
 
