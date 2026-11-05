@@ -210,11 +210,12 @@ error it is marked unavailable and only the given values are sent. Which metrics
 the kind of workout; see [workouts.md](workouts.md).
 
 **Conversations.** A person's chats are separate conversations (migration 0007 filed the earlier
-single thread as the first). A run is given its own conversation's recent turns; memory is the
-person's and shared by all of them: facts, findings, answers, and verified claims from their other
-conversations of the last 60 days (memory kind `chat`, with their evidence), which the context
-builder picks by the question's metrics, so an answer can point to what another chat found.
-Deleting a conversation deletes its messages; facts and findings stay. Conversations can be renamed
+single thread as the first). A run is given its own conversation's recent turns and summary; only long-term memory crosses
+chats: facts, findings, answers, and episodes. An episode (memory kind `episode`, 90 days) is one
+dated line that code writes from a chat's verified claims when it has been idle for an hour, with
+their evidence, so an answer can point to what another chat found. Nothing a chat merely said
+reaches another chat. Deleting a conversation deletes its messages and episode; facts and findings
+stay. Conversations can be renamed
 and pinned (migration 0008). Editing a question, or retrying an answer, sends the new text with
 `replaces`: that question and everything after it in the conversation are removed, only once no
 other answer is running for the person, and the new text is answered as usual.
@@ -331,6 +332,7 @@ user's data.
 | **Conversation** | the chat turns: questions, verified answers, attachments | the system, per turn | the thread | always: last 3 turns verbatim; older ones through the summary, condensed until it reaches them |
 | **Chat summary** (short-term) | about 100 words on the turns before those: what was asked and found, what the person said, what is open; plus drafts and reminders still waiting, read from their rows | the small model, after the answer, two turns at a time; never in a chat of under 5 turns | the conversation; cleared when an edit removes turns it reaches | always, in its own conversation only; never citable |
 | **Findings** (episodic) | verified claims of past runs with their evidence ids, metrics and dates | the system, only after verification | until a newer finding on the same metric supersedes it, at most 90 days | the question's metrics match; newest first |
+| **Episodes** | one dated line of a chat's best verified claims, with their evidence | code, when the chat has been idle for an hour; no model call | 90 days, or until the chat is deleted | in other chats, when the metrics match; more likely when their dates overlap the last 30 days |
 | **Context answers** | the person's answers to the agent's questions ("exam week") with the dates and metrics asked about | the person | 180 days | the date range or metrics overlap |
 | **Check-ins** | daily rating 1-5 and fixed tags | the person | 365 days | through a `checkins` tool, for the window being investigated |
 | **Facts and preferences** (semantic) | short structured facts: routine, goal, preference, context; at most 120 characters, with the metrics they concern | **proposed by the agent, saved only after the person approves** | until changed or deleted; not retrieved after 60 days unused | preferences always (at most 3); other facts when their metrics match |

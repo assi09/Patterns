@@ -352,6 +352,29 @@ class MemoryFact(Base):
     uses: Mapped[int] = mapped_column(default=0)
 
 
+class MemoryEpisode(Base):
+    """What a chat found, as one dated line for the person's other chats. Written by code from the
+    chat's verified claims once it goes idle, so it needs no approval; it goes with the chat."""
+
+    __tablename__ = "memory_episodes"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", name="uq_memory_episodes_conversation"),
+        Index("ix_memory_episodes_user_day", "user_id", "day"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE")
+    )
+    day: Mapped[date] = mapped_column(Date)
+    text: Mapped[str] = mapped_column(String(300))
+    metrics: Mapped[list[str]] = mapped_column(JSON, default=list)
+    evidence_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    through: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # the chat's use it covers
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 ACTION_STATUSES = (
     "draft",
     "executing",

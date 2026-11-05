@@ -8,6 +8,8 @@
 - **Check-ins** are the person's: a rating from 1 to 5 and tags from a fixed list, for today only.
 - **Facts** are proposed by the agent and kept only once the person approves; text that reads like
   an instruction is refused, and a fact the person declined is not proposed again.
+- **Episodes** are how one chat reaches the others: when a chat goes idle, code writes one dated
+  line from its verified claims. Nothing else from a chat crosses over.
 
 Every function takes the user, and every query filters on it. Rejected writes raise
 `MemoryRejected`, whose message is safe to show.
@@ -33,6 +35,7 @@ from app.db.models import (
     ContextQuestion,
     Conversation,
     Finding,
+    MemoryEpisode,
     MemoryFact,
 )
 
@@ -41,8 +44,12 @@ FINDING_DAYS = 90
 ANSWER_DAYS = 180
 CHECKIN_DAYS = 365
 FACT_UNUSED_DAYS = 60  # approved facts unused this long are no longer retrieved
-CHAT_DAYS = 60  # verified claims from the person's other conversations, for pointers between them
-CHAT_CLAIMS = 40  # at most this many, newest first; the context builder picks the relevant few
+EPISODE_DAYS = 90
+EPISODE_IDLE = timedelta(hours=1)  # a chat unused this long is consolidated
+EPISODE_CLAIMS = 2
+MAX_EPISODE_CHARS = 300
+# Which of a chat's claims are worth keeping, best first; `day` and data-quality notes are not.
+EPISODE_KINDS = ("change", "association", "suggestion", "no_change")
 # After this many dismissals within the window, no new question for a while.
 BACKOFF_DISMISSALS, BACKOFF_WINDOW_DAYS, BACKOFF_QUIET_DAYS = 2, 30, 14
 DECLINED = "rather_not_say"  # an answer, but counted like a dismissal
@@ -331,6 +338,7 @@ def expire(session: Session, user_id: uuid.UUID, now: datetime | None = None) ->
     for name, table, column, days in (
         ("findings", Finding, Finding.created_at, FINDING_DAYS),
         ("context_questions", ContextQuestion, ContextQuestion.asked_at, ANSWER_DAYS),
+        ("episodes", MemoryEpisode, MemoryEpisode.through, EPISODE_DAYS),
     ):
         result = session.execute(
             delete(table).where(table.user_id == user_id, column < now - timedelta(days=days))
@@ -365,8 +373,8 @@ def memory_items(
 ) -> list[MemoryItem]:
     """This person's memory that may still be retrieved: current findings with their evidence,
     answers from the last 180 days (not "rather not say"), approved facts used or decided in the
-    last 60 days, and verified claims from their other conversations of the last 60 days (with
-    `conversation_id`, the one being answered), so one chat can point to what another found."""
+    last 60 days, and the episodes of their chats other than `conversation_id`, the one being
+    answered, whose own turns it already has."""
     now = now or _now()
     items: list[MemoryItem] = []
     findings = current_findings(session, user_id, now)
@@ -427,46 +435,29 @@ def memory_items(
                 importance=1.0,
             )
         )
-    if conversation_id is not None:
-        items += _other_chats(session, user_id, conversation_id, now)
+    items += _episodes(session, user_id, conversation_id)
     return items
 
 
-def _other_chats(
-    session: Session, user_id: uuid.UUID, conversation_id: uuid.UUID, now: datetime
+def _episodes(
+    session: Session, user_id: uuid.UUID, conversation_id: uuid.UUID | None
 ) -> list[MemoryItem]:
-    rows = session.execute(
-        select(ChatMessage, Conversation.title)
-        .join(Conversation, Conversation.id == ChatMessage.conversation_id)
-        .where(
-            ChatMessage.user_id == user_id,
-            ChatMessage.role == "assistant",
-            ChatMessage.conversation_id != conversation_id,
-            ChatMessage.created_at >= now - timedelta(days=CHAT_DAYS),
-        )
-        .order_by(ChatMessage.created_at.desc())
-    ).all()
-    claims = [
-        (message, title, claim)
-        for message, title in rows
-        for claim in message.claims
-        if claim.get("metric") and claim.get("text")
-    ][:CHAT_CLAIMS]
-    evidence = load_evidence(
-        session, user_id, {i for _, _, claim in claims for i in claim.get("evidence_ids", [])}
-    )
+    query = select(MemoryEpisode).where(MemoryEpisode.user_id == user_id)
+    if conversation_id is not None:
+        query = query.where(MemoryEpisode.conversation_id != conversation_id)
+    rows = list(session.scalars(query))
+    evidence = load_evidence(session, user_id, {i for row in rows for i in row.evidence_ids})
     items = []
-    for index, (message, title, claim) in enumerate(claims):
-        created = _aware(message.created_at)
-        cited = tuple(evidence[i] for i in claim.get("evidence_ids", []) if i in evidence)
+    for row in rows:
+        cited = tuple(evidence[i] for i in row.evidence_ids if i in evidence)
         items.append(
             MemoryItem(
-                kind="chat",
+                kind="episode",
                 # Not a fact id, so using it in a run leaves the facts' usage alone.
-                id=f"chat:{message.id}:{index}",
-                text=f'In the chat "{title}" ({short_date(created.date())}): {claim["text"]}',
-                metrics=(claim["metric"],),
-                created=created,
+                id=f"episode:{row.id}",
+                text=row.text,
+                metrics=tuple(row.metrics),
+                created=_aware(row.through),
                 importance=0.5,
                 start=min((w.start for e in cited for w in e.windows), default=None),
                 end=max((w.end for e in cited for w in e.windows), default=None),
@@ -474,6 +465,94 @@ def _other_chats(
             )
         )
     return items
+
+
+# Episodes
+
+
+def _worth_keeping(messages: Iterable[ChatMessage]) -> list[dict]:
+    """A chat's verified claims, best kind first and the newest first within a kind."""
+    claims = [
+        claim
+        for message in reversed(list(messages))
+        if message.role == "assistant" and not message.refused
+        for claim in message.claims or ()
+        if claim.get("kind") in EPISODE_KINDS and claim.get("metric") and claim.get("text")
+    ]
+    return sorted(claims, key=lambda claim: EPISODE_KINDS.index(claim["kind"]))
+
+
+def _episode_text(day: date, claims: Iterable[dict]) -> tuple[str, list[dict]]:
+    """The dated line, with as many claims as fit; a claim is never cut short."""
+    text, kept = short_date(day) + ":", []
+    for claim in claims:
+        addition = " " + claim["text"].strip()
+        if len(kept) == EPISODE_CLAIMS or len(text) + len(addition) > MAX_EPISODE_CHARS:
+            continue
+        text += addition
+        kept.append(claim)
+    return text, kept
+
+
+def consolidate(session: Session, user_id: uuid.UUID, now: datetime | None = None) -> int:
+    """Writes or refreshes the episode of each idle chat used since its last one; returns how many
+    changed. Only verified claims go in, so a chat without any leaves no episode."""
+    now = now or _now()
+    episodes = {
+        row.conversation_id: row
+        for row in session.scalars(select(MemoryEpisode).where(MemoryEpisode.user_id == user_id))
+    }
+    changed = 0
+    for conversation in session.scalars(
+        select(Conversation).where(
+            Conversation.user_id == user_id,
+            Conversation.updated_at <= now - EPISODE_IDLE,
+            Conversation.updated_at >= now - timedelta(days=EPISODE_DAYS),
+        )
+    ):
+        used = _aware(conversation.updated_at)
+        episode = episodes.get(conversation.id)
+        if episode is not None and _aware(episode.through) >= used:
+            continue
+        messages = session.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.user_id == user_id, ChatMessage.conversation_id == conversation.id)
+            .order_by(ChatMessage.created_at)
+        )
+        text, claims = _episode_text(used.date(), _worth_keeping(messages))
+        if not claims:
+            if episode is not None:  # an edit took its claims away
+                session.delete(episode)
+                changed += 1
+            continue
+        values = {
+            "day": used.date(),
+            "text": text,
+            "metrics": list(dict.fromkeys(c["metric"] for c in claims)),
+            "evidence_ids": list(dict.fromkeys(i for c in claims for i in c["evidence_ids"])),
+            "through": used,
+        }
+        if episode is None:
+            session.add(MemoryEpisode(user_id=user_id, conversation_id=conversation.id, **values))
+        else:
+            for name, value in values.items():
+                setattr(episode, name, value)
+        changed += 1
+    session.flush()
+    return changed
+
+
+def maintain_all(sessions, now: datetime) -> dict[str, int]:
+    """The background pass over everyone with a chat: consolidate idle chats, expire what is old.
+    Each person has their own session, so one failure leaves the others done."""
+    with sessions() as db:
+        people = list(db.scalars(select(Conversation.user_id).distinct()))
+    totals = {"episodes": 0, "expired": 0}
+    for user_id in people:
+        with sessions() as db:
+            totals["episodes"] += consolidate(db, user_id, now)
+            totals["expired"] += sum(expire(db, user_id, now).values())
+    return totals
 
 
 def mark_used(

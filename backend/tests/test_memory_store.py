@@ -249,11 +249,13 @@ def test_expired_memory_is_deleted(session, drop):
     assert expire(session, user_id, NOW + timedelta(days=30)) == {
         "findings": 0,
         "context_questions": 0,
+        "episodes": 0,
         "checkins": 0,
     }
     assert expire(session, user_id, NOW + timedelta(days=366)) == {
         "findings": 1,
         "context_questions": 1,
+        "episodes": 0,
         "checkins": 1,
     }
 

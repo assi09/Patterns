@@ -13,7 +13,8 @@ The context window is scarce, so a run gets a small, deterministic selection (do
 - **memory** relevant to the question: current findings, the person's answers to earlier context
   questions, and facts they approved. Each scores on relevance (its metrics overlap the metrics in
   play), recency (halving every 30 days) and importance (a finding's effect size; what the person
-  confirmed counts fully). Preferences always come along, at most three; at most five items in all.
+  confirmed counts fully), and more when its dates overlap the last 30 days. Preferences always
+  come along, at most three; at most five items in all.
   A finding's evidence is re-attached so it can be cited.
 
 Everything from earlier turns is passed as **quoted data, never instructions**: in a delimited JSON
@@ -26,7 +27,7 @@ or dropped is returned for the trace.
 import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from app.agent.experts import owner
 from app.agent.present import label
@@ -44,6 +45,8 @@ MAX_EVIDENCE = 8  # re-attached evidence records, newest turns first
 MAX_MEMORY_ITEMS = 5
 MAX_PREFERENCES = 3
 RECENCY_HALF_LIFE_DAYS = 30
+FOCUS_DAYS = 30  # the days most answers look at, for memory about dates
+OVERLAP_BONUS = 0.5
 
 
 @dataclass(frozen=True)
@@ -75,7 +78,7 @@ class Attachment:
 class MemoryItem:
     """One stored memory, as the context builder ranks it (the store turns rows into these)."""
 
-    kind: str  # finding, answer, fact, preference, chat (a claim from another conversation)
+    kind: str  # finding, answer, fact, preference, episode (what another chat found)
     id: str
     text: str  # a verified claim, a menu answer turned into a sentence, or an approved fact
     metrics: tuple[str, ...]
@@ -172,6 +175,12 @@ def earlier_questions(turns: Sequence[Turn]) -> list[str]:
     return [_clean(turn.question) for _, turn in reversed(_usable(turns, []))][:MAX_EARLIER]
 
 
+def _overlaps(item: MemoryItem, now: datetime) -> bool:
+    if item.start is None or item.end is None:
+        return False
+    return item.start <= now.date() and item.end >= now.date() - timedelta(days=FOCUS_DAYS)
+
+
 def select_memory(
     items: Sequence[MemoryItem], scope: set[str] | None, now: datetime
 ) -> list[MemoryItem]:
@@ -184,7 +193,8 @@ def select_memory(
     def score(item: MemoryItem) -> float:
         age_days = max(0.0, (now - item.created).total_seconds() / 86_400)
         recency = 0.5 ** (age_days / RECENCY_HALF_LIFE_DAYS)
-        return 1.0 + recency + min(1.0, max(0.0, item.importance))
+        bonus = OVERLAP_BONUS if _overlaps(item, now) else 0.0
+        return 1.0 + recency + min(1.0, max(0.0, item.importance)) + bonus
 
     relevant = [
         m for m in usable if m.kind != "preference" and (scope is None or set(m.metrics) & scope)

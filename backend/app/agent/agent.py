@@ -82,8 +82,8 @@ Writing for the person:
 - If the context holds the person's answers or facts they approved, say in the summary how they
   line up with what the data shows ("this coincided with the travel you mentioned"), never as a
   cause. Cite evidence the context already lists instead of recomputing it.
-- Context items of kind chat come from the person's other conversations: you may point to them
-  ("as you saw in your chat about bedtime") and cite their evidence when it answers the question.
+- Context items of kind episode are dated notes of what the person's other chats found: you may
+  point to them ("as you saw on Oct 12") and cite their evidence when it answers the question.
 - If the person tells you something lasting about themselves (a routine, goal, preference or
   context, such as night shifts), call propose_fact once so they can choose to have it remembered.
 
