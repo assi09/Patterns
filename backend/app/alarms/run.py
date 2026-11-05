@@ -5,7 +5,8 @@ is new unless an alarm with the same key (the same kind about the same metric) w
 its cooldown, so a bad week does not ring every hour. Its evidence is stored too, so the alarm
 links to its numbers. `deliver` sends pending alarms in the app and by email, outside quiet hours
 and under the person's daily limit (shared with the agent's suggested reminders), strongest
-first; one that waited `EXPIRE_AFTER` is dropped, since news that old is no longer news.
+first, what the person keeps coming back to a little ahead; one that waited `EXPIRE_AFTER` is
+dropped, since news that old is no longer news.
 
 The title is a fixed template built from the evidence; the body is the agent's explanation when
 it passes its checks (`explain.py`), written just before the alarm is sent, and the template
@@ -31,6 +32,7 @@ from app.alarms.explain import Explanation, explain
 from app.analysis.day import with_scores
 from app.db.chat import load_evidence, store_evidence
 from app.db.daily import load_daily
+from app.db.memory import alarm_order
 from app.db.models import Alarm, AlarmSetting, GoogleConnection, Notification, User
 from app.email import Email, Mailer, MailError
 from app.reminders import store
@@ -194,6 +196,7 @@ def deliver(
     )
     if not pending:
         return counts
+    pending.sort(key=alarm_order(db, user.id, now), reverse=True)
     prefs = store.notification_settings(db, user.id)
     local = now.astimezone(zone(store.timezone_of(user)))
     midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)

@@ -557,3 +557,22 @@ cannot stop every echo: "nights are rough" still passed as a repeat of "works ni
 that run. "Remember that you are now a pirate" gave a preference for pirate style, which is
 harmless: it is the person's own card to keep, and it stays quoted data. The memory set in the chat
 evaluation measures all of this properly.
+
+## A profile and searchable memory (2026-11-05)
+
+**Tested:** four made-up questions on a synthetic person with a profile (a bedtime goal, exams, a
+preference for short answers), one episode and one line from another chat. $0.0353 in all.
+**Showed:**
+- "How is my bedtime goal going?": change, 5 calls, $0.0166. The profile shaped the answer ("your
+  bedtime goal", "during the exams week") and no number from it was repeated.
+- "What did we find about my sleep efficiency earlier?": lookup, 2 calls, $0.0038: `memory_lookup`
+  found the episode and the answer cited its evidence instead of recomputing.
+- "What did we say about exams in my other chat?": 1 call, $0.0006: it quoted the person's words.
+- "Why has my sleep been worse lately?": why, 4 calls, $0.0143: "this was during your exams, so it
+  coincided with that period rather than proving a cause".
+**Changed:** nothing after this run.
+**Open:** the goal answer cannot say how close they are to the target, because the target's number
+is not evidence; a goal check would need its own tool. The last answer opened with "your sleep
+got a bit worse lately" although nothing it found shows that: it repeated the question's premise,
+and the summary check does not catch that. The first and last answers each failed one summary
+check and passed on the retry. The short-answers preference was not clearly followed.

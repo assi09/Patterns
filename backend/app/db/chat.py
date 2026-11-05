@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.agent.sanitize import clean, reads_like_instruction, stems
 from app.analysis.evidence import Evidence
 from app.db.models import (
     ChatMessage,
@@ -23,6 +24,9 @@ from app.db.models import (
 )
 
 NEW_TITLE = "New chat"
+SEARCHED_MESSAGES = 500
+SEARCH_FOUND = 5
+SEARCH_TEXT_CHARS = 240
 TITLE_LENGTH = 60
 
 
@@ -311,6 +315,53 @@ def waiting_cards(
         )
         waiting += [f"The reminder “{title}” has not been confirmed yet." for title in titles]
     return waiting
+
+
+def search_messages(
+    session: Session,
+    user_id: uuid.UUID,
+    query: str,
+    not_in: uuid.UUID | None = None,
+    limit: int = SEARCH_FOUND,
+) -> list[dict]:
+    """What was said in the person's other chats that shares words with `query`, best first: only
+    their latest messages, without refusals or anything that reads like an instruction."""
+    words = stems(query)
+    if not words:
+        return []
+    where = [ChatMessage.user_id == user_id]
+    if not_in is not None:
+        where.append(ChatMessage.conversation_id != not_in)
+    rows = session.execute(
+        select(ChatMessage, Conversation.title)
+        .join(Conversation, Conversation.id == ChatMessage.conversation_id)
+        .where(*where)
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.role.asc())
+        .limit(SEARCHED_MESSAGES)
+    ).all()
+    scored = []
+    refused_in: set[uuid.UUID] = set()  # newest first: a refusal comes just before its question
+    for message, title in rows:
+        if message.refused:
+            refused_in.add(message.conversation_id)
+            continue
+        if message.role == "user" and message.conversation_id in refused_in:
+            refused_in.discard(message.conversation_id)
+            continue
+        shared = len(words & stems(message.text))
+        unsafe = reads_like_instruction(message.text) or reads_like_instruction(title)
+        if shared and not unsafe:
+            scored.append((shared, message, title))
+    scored.sort(key=lambda found: found[0], reverse=True)  # stable: newest first among equals
+    return [
+        {
+            "date": message.created_at.date().isoformat(),
+            "chat": title,
+            "who": "person" if message.role == "user" else "assistant",
+            "text": clean(message.text, SEARCH_TEXT_CHARS),
+        }
+        for _, message, title in scored[:limit]
+    ]
 
 
 def load_evidence(session: Session, user_id: uuid.UUID, ids: Iterable[str]) -> dict[str, Evidence]:

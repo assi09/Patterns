@@ -58,6 +58,7 @@ class Strategy:
     snapshot: bool = False
     coaching: bool = False
     deepens: bool = False  # a deep answer gets twice the budget
+    memory: bool = True  # may search memory and past chats; a question about one day has no need
 
 
 _WHY = DEFAULT_GUIDE
@@ -70,6 +71,7 @@ STRATEGIES: dict[str, Strategy] = {
         "compare_day for the metrics it lacks. No hypotheses. Then call submit_findings.",
         budget=Budget(max_calls=3, max_tool_calls=4, max_cost_usd=0.01),
         snapshot=True,
+        memory=False,
     ),
     "lookup": Strategy(
         tools=("describe", "rank_days", "usual_ranges", "compare_day", "coverage", "checkins"),

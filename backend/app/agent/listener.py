@@ -18,7 +18,7 @@ from app.agent.conversation import _quoted
 from app.agent.facts import FACT_KINDS, MAX_FACT_CHARS
 from app.agent.guard import Guard, GuardError
 from app.agent.llm import LLM, Budget, LLMError
-from app.agent.sanitize import clean
+from app.agent.sanitize import clean, stems
 
 RECORD = "record_memories"
 MAX_HEARD = 2
@@ -38,9 +38,6 @@ ASKS = re.compile(
     re.IGNORECASE,
 )
 CLAUSE = re.compile(r"[^,;.!?\n]+[,;.!?\n]*")
-WORD = re.compile(r"[a-z0-9]+")
-STEM = 5  # enough to match "nights" with "night" and "training" with "train"
-COMMON = {"they", "their", "have", "want", "wants", "will", "this", "that", "with", "from"}
 
 PROMPT = f"""You read one message a person sent to Patterns, an app that reads their tracker \
 data, and note what it says about their life that would still matter in a later chat.
@@ -154,16 +151,11 @@ def _heard(item, today: date, known: int) -> Heard | None:
     return Heard(kind, text, start, end, same_as - 1 if fits else None)
 
 
-def _stems(text: str) -> set[str]:
-    words = WORD.findall(text.casefold())
-    return {word[:STEM] for word in words if len(word) >= 4 and word not in COMMON}
-
-
 def _mentioned(known: str, message: str) -> bool:
     """Whether the message shares a word with a known item, so it can be repeating it. The model
     sometimes echoes known items, and each echo would count as the person saying it again."""
-    stems = _stems(known)
-    return not stems or bool(stems & _stems(message))
+    words = stems(known)
+    return not words or bool(words & stems(message))
 
 
 def fit_to_keep(heard: Sequence[Heard], guard: Guard | None) -> list[Heard]:

@@ -12,6 +12,7 @@ from app.alarms.run import link, save_settings, settings_of
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
 from app.api.schemas import ApiModel
+from app.db.memory import note_interest
 from app.db.models import Alarm, User
 from app.reminders.store import utc
 
@@ -82,7 +83,10 @@ def give_feedback(alarm_id: uuid.UUID, body: Feedback, db: Db, user: Person) -> 
     row = db.scalar(select(Alarm).where(Alarm.id == alarm_id, Alarm.user_id == user.id))
     if row is None:
         raise ApiError(404, "not_found", "No such alarm.")
+    first = row.feedback is None  # changing one's mind is not a second signal
     row.feedback = "useful" if body.useful else "not_useful"
+    if first:
+        note_interest(db, user.id, [row.metric], row.feedback)
     return _out(row)
 
 
