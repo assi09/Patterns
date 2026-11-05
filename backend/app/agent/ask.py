@@ -61,7 +61,9 @@ from app.agent.strategy import (
     snapshot,
     strategy_for,
 )
+from app.agent.world import answer_world
 from app.analysis.evidence import Evidence
+from app.outside import Outside
 from app.reminders.tools import REMINDER_PROMPT
 
 # A coaching answer that already offers a reminder or a test needs no extra line.
@@ -175,6 +177,7 @@ def ask(
     chat: ChatState | None = None,
     archive: Sequence[MemoryItem] = (),
     search_past: Callable[[str], list[dict]] | None = None,
+    outside: Outside | None = None,
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -239,9 +242,16 @@ def ask(
     )
     # How to work on this kind of question; logging and reminders keep the full toolbox.
     acting = route.classification.intent in (Intent.LOG, Intent.MIXED, Intent.REMIND)
+    # A question about the world goes to its lookup, unless it comes with something to do.
+    world = (
+        outside is not None
+        and route.classification.question_type == "world"
+        and route.action in ("expert", "general")
+        and not (acting or continuing or reminding or logging_tools)
+    )
     plan = (
         None
-        if acting or continuing or reminding or logging_tools
+        if acting or continuing or reminding or logging_tools or world
         else strategy_for(route.classification.question_type)
     )
     block, evidence, owners = context.block, dict(context.evidence), dict(context.owners)
@@ -278,6 +288,8 @@ def ask(
     deep = depth == Depth.DEEP
     if route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
+    elif world:
+        result = answer_world(llm, question, outside, guard=guard)
     elif route.action == "conversation":
         result = recall(
             llm,

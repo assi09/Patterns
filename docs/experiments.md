@@ -588,3 +588,17 @@ verifier was right to refuse the time.
 **Changed:** code now attaches the card of each supported habit, so the choice is not the model's.
 Three cards were reworded to say no more than their sources.
 **Open:** coaching with cards on correct data has not had a real run yet; the chat evaluation does.
+
+## Looking things up outside the data (2026-11-05)
+
+**Tested:** five made-up questions on a synthetic person, then one again after a fix. $0.0950 in all,
+counting each search at $0.025.
+**Showed:** all routed right: "calories in a bowl of mloukhieh" and two general questions took the
+lookup route; "good for my blood pressure" and "who won the world cup" were refused before any
+lookup. USDA gave cooked jute at 37 kcal per 100 g and the reply said it was a close match. Both web
+answers failed: a search counts as a model call, so the two-call budget ran out before the reply.
+**Changed:** three calls. "What is mloukhieh made of?" then worked, from fr.wikipedia.org. It opened
+with "Nice!" because the shared voice says to react, so this reply has its own plain tone.
+**Open:** the tone change came after the last run. A web lookup costs about six times a normal
+answer, which is why the cap and the cache matter. The real price of a search is still to be read
+from OpenAI's dashboard.

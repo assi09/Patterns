@@ -38,6 +38,7 @@ from app.agent.listener import MAX_KNOWN, fit_to_keep, is_explicit, listen, wort
 from app.agent.llm import LLM, LLMError, OpenAILLM
 from app.agent.router import Router
 from app.agent.summary import FOLD_AT, fold, to_fold
+from app.agent.world import food_tool
 from app.analysis.day import with_scores
 from app.analysis.habits import with_checkins
 from app.api import schemas
@@ -56,6 +57,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import session_scope
+from app.outside import FoodData, Outside
 from app.reminders.tools import reminder_reply, reminder_tools
 
 logger = logging.getLogger(__name__)
@@ -86,6 +88,11 @@ def _agent() -> AgentParts:
         logger.warning("The agent is not available: %s", exc)
         raise ApiError(503, "agent_unavailable", "Answering questions is not set up yet.") from exc
     return AgentParts(llm, default_router(settings), default_guard(settings), background=True)
+
+
+@lru_cache(maxsize=1)
+def food_data() -> FoodData | None:
+    return FoodData.from_settings(settings)
 
 
 def get_agent() -> AgentParts:
@@ -368,7 +375,16 @@ def _answer(
             with sessions() as db:
                 return measure_workout(db, user_id, start, end, exercise_type)
 
-        draft_tools = proposal_tools(sessions, user_id, question_id, now, prepared, measurer)
+        estimates: list[str] = []
+        outside = Outside(sessions, user_id, now, _day_start(now), food_data())
+        draft_tools = proposal_tools(
+            sessions, user_id, question_id, now, prepared, measurer, estimates
+        )
+        if outside.food_data:
+            draft_tools["nutrition"] = [
+                *draft_tools.get("nutrition", ()),
+                food_tool(outside, estimates),
+            ]
         reminders: list[str] = []
         reminding_tools = reminder_tools(sessions, user_id, now, reminders)
         try:
@@ -392,6 +408,7 @@ def _answer(
                 chat=chat,
                 archive=archive,
                 search_past=search_past,
+                outside=outside,
             )
         except Exception:
             logger.exception("Answering failed")

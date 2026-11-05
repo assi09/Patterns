@@ -148,6 +148,12 @@ export function logTitle(log: HealthLog): string {
 }
 
 /** The parts of the summary line, e.g. ["Sat 24 Oct, 13:00", "550 kcal", "P 40 g · C 30 g"]. */
+/** Says the values are looked up, not the person's, so they check them before confirming. */
+export function estimateNote(log: HealthLog): string | null {
+  if (log.kind !== 'food' || log.provenance !== 'estimated') return null;
+  return `Estimated from ${log.estimateSource ?? 'a food lookup'}. Check it before you confirm.`;
+}
+
 export function logDetails(log: HealthLog): string[] {
   if (log.kind === 'food') {
     const at = wall(log.consumedAt);

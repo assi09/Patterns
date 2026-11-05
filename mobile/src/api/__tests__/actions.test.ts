@@ -1,4 +1,5 @@
 import {
+  estimateNote,
   exerciseName,
   formFromLog,
   logDetails,
@@ -248,3 +249,34 @@ it('lists Active Zone Minutes and swim lengths when the tracker recorded them', 
     '24 lengths',
   ]);
 });
+
+describe('estimateNote', () => {
+  const entered = {
+    kind: 'food',
+    foodName: 'Toast',
+    consumedAt: '2026-11-05T08:00:00+00:00',
+    mealType: 'BREAKFAST',
+    energyKcal: 90,
+    provenance: 'user_entered',
+  } as const;
+
+  it('says nothing about values the person gave', () => {
+    expect(estimateNote(entered)).toBeNull();
+  });
+
+  it('names where looked-up values came from', () => {
+    const looked = {
+      ...entered,
+      provenance: 'estimated',
+      estimateSource: 'USDA FoodData Central: Jute',
+    } as const;
+    expect(estimateNote(looked)).toContain('USDA FoodData Central: Jute');
+  });
+
+  it('stops being an estimate once the person edits it', () => {
+    const looked = { ...entered, provenance: 'estimated', estimateSource: 'USDA' } as const;
+    const edited = logFromForm(looked, formFromLog(looked));
+    expect(estimateNote(edited)).toBeNull();
+  });
+});
+

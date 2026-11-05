@@ -18,6 +18,7 @@ import { Text } from '@/components/Text';
 import { Button, Card, Chip } from '@/components/ui';
 import {
   formFromLog,
+  estimateNote,
   logDetails,
   logFromForm,
   logTitle,
@@ -170,6 +171,11 @@ export function LogDraftCard({
           <Text variant="caption" color="muted">
             {logDetails(row.log).join(' · ')}
           </Text>
+          {estimateNote(row.log) && (
+            <Text variant="caption" color="warning">
+              {estimateNote(row.log)}
+            </Text>
+          )}
         </View>
         <StatusPill status={row.status} />
         {collapsible && (

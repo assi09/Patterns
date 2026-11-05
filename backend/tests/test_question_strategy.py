@@ -63,7 +63,7 @@ def test_the_keyword_router_tells_question_types_apart(question, kind):
 def test_jev_is_asked_the_question_type_in_the_same_call():
     questions = JevRouter("key").payload("How can I sleep better?")["questions"]
     assert questions["question_type"]["type"] == "choice"
-    assert set(questions["question_type"]["criteria"]) == set(STRATEGIES)
+    assert set(questions["question_type"]["criteria"]) == {*STRATEGIES, "world"}
 
 
 def test_a_day_question_starts_with_a_snapshot_it_can_answer_from(frame):
