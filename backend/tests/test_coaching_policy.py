@@ -36,7 +36,7 @@ def test_a_grounded_suggestion_worded_as_an_option_passes():
 def test_a_suggestion_without_a_real_pattern_is_refused():
     e = evidence(p=0.4)
     reasons = check_claim(suggestion("You could try going to bed earlier.", [e.id]), {e.id: e})
-    assert any("real pattern" in r for r in reasons)
+    assert any("specific to this person" in r for r in reasons)
 
 
 @pytest.mark.parametrize(

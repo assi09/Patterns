@@ -654,3 +654,36 @@ wording is clearer.
 - "Is strain linked to my recovery?" returned nothing once, with no model call: it looked like an
   OpenAI failure, and the app shows its "try again" message.
 - Three of the eight reruns still fell back, and a `why` answer can repeat the question's premise.
+
+## Advice specific to the person, and whether cards matter (2026-11-05)
+
+**Tested:** `eval/advice_compare.py`: 9 coaching questions on two synthetic people with made-up
+lives (a student with exams, a new parent), each answered three ways: no cards, the cards code
+picks, and all cards in the prompt. Also 3 plain questions and one alert. $0.3632 in all. The blind
+answers are in `eval/results/`.
+
+| Out of 18 answers | No cards | Picked by code | All cards |
+|---|---|---|---|
+| Gave a suggestion claim | 13 | 14 | 12 |
+| Suggestion with their own number | 12 | 14 | 10 |
+| Generic phrases | 0 | 0 | 0 |
+| Medical words | 0 | 0 | 0 |
+| Summary fell back | 0 | 1 | 0 |
+| Mean cost | $0.0061 | $0.0060 | $0.0063 |
+
+**Showed:** the personal step works. Where the habit tests found nothing, answers used the person's
+routine and life: "your Wednesdays are your quietest days at 5,863 steps", "with exams this week
+you could try keeping weeknight bedtimes...". None of the 3 plain questions got advice. The alert
+on a three-night streak ended with something to try and knew about the exams.
+
+Cards made little difference. Picked cards were a little ahead and all cards a little behind, but
+with 18 answers, one run and no human reading, that is within noise. **What made advice specific was
+the person's own data and profile, not retrieval.** Generic phrases are zero in all three because
+the verifier refuses them, so that row shows the check works, not the arms' quality.
+
+**Changed:** nothing after this run: picked cards stay, and no retrieval is added. One card
+(breathing) was removed before it, as the kind of tip not wanted.
+
+**Open:** four answers in the picked arm had no suggestion claim, though two of them gave one in
+words; "How can I recover faster?" for the new parent fell back to joined claims. "A little movement
+to help your nights settle" leans towards a cause. Nobody has read the answers blind yet.

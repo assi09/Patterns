@@ -4,7 +4,7 @@ The cards (`app/knowledge/*.md`) are in our own words, each with its public sour
 numbers: a number in an answer still has to come from computed evidence. They say how to try a
 habit; whether it fits this person is for their own data to say, so a card only ever goes next to
 their evidence. When the data supports a habit, code attaches that habit's card to the task;
-`knowledge_lookup` is for asking how to try something else. Fifteen cards need no vector store:
+`knowledge_lookup` is for asking how to try something else. Fourteen cards need no vector store:
 they are ranked by metric and word match.
 
 Sources are named in the answer without a link, because a link in an answer would make that turn

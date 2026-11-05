@@ -363,7 +363,18 @@ computed evidence: the agent refers to a profile item in words ("your bedtime go
 
 ### Coaching knowledge
 
-Fifteen cards in `backend/app/knowledge/*.md` say how to try an everyday habit, in our own words,
+Advice is specific to the person or it is not given. When they ask how to improve, code runs
+`habit_options` (tested habits) and `personal_options` (what stands out in their routine: bedtimes
+on best and worst days, weekend drift, a heavier week, the quietest weekday), and the model words
+at most two suggestions from those, fitted to the profile. What stands out is described, not
+tested, so it is said as worth trying. With nothing specific, the agent says so and asks what is
+going on. The verifier refuses advice anyone could read anywhere (`GENERIC_ADVICE`). Questions about
+what happened get no advice. An alert adds one suggestion only on a problem that lasted (a streak,
+a two-week change), only when the data has something to point at, and it reads the profile. A
+comparison found the cards made little difference, so retrieval was not extended
+([experiments.md](experiments.md#advice-specific-to-the-person-and-whether-cards-matter-2026-11-05)).
+
+Fourteen cards in `backend/app/knowledge/*.md` say how to try an everyday habit, in our own words,
 each with its public source and the habit it belongs to. They hold no numbers, and tests keep them
 free of medical words. When a person's data supports a habit (`habit_options`), code attaches that
 habit's card to the task; `knowledge_lookup` is for coaching questions about anything else. A card

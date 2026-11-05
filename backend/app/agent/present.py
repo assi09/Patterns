@@ -179,6 +179,8 @@ def _extra_display(evidence: Evidence) -> dict[str, str]:
             for lever in stats.get("levers", [])
             if lever.get("mean_with") is not None and lever.get("mean_without") is not None
         )
+    elif evidence.tool == "personal_options":
+        shown["options"] = "; ".join(option["note"] for option in stats.get("options", []))
     elif evidence.tool == "sleep_regularity":
         if (median := stats.get("median")) is not None:
             shown["median"] = clock(median)

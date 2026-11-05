@@ -41,7 +41,14 @@ from app.agent.experts import (
 from app.agent.guard import Guard, JevGuard
 from app.agent.intent import Intent
 from app.agent.jev import JevClient, JevError
-from app.agent.knowledge import Card, cards_for, guidance_block, knowledge_tool, source_note
+from app.agent.knowledge import (
+    Card,
+    cards_for,
+    guidance_block,
+    knowledge_tool,
+    load_cards,
+    source_note,
+)
 from app.agent.llm import LLM
 from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
 from app.agent.router import (
@@ -178,6 +185,7 @@ def ask(
     archive: Sequence[MemoryItem] = (),
     search_past: Callable[[str], list[dict]] | None = None,
     outside: Outside | None = None,
+    guidance_mode: str = "picked",  # "none" and "all" exist to compare them (eval/advice_compare)
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -271,6 +279,8 @@ def ask(
                     owners[record.id] = metric_owner.name
         if plan.coaching:
             guidance = cards_for(e for records, _ in found for e in records if e.tool == HABITS)
+            if guidance_mode != "picked":
+                guidance = list(load_cards()) if guidance_mode == "all" else []
             block = "\n\n".join(part for part in (block, guidance_block(guidance)) if part)
     if plan and plan.coaching:
         tools.append(knowledge_tool())

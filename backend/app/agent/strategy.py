@@ -22,7 +22,7 @@ from app.agent.llm import Budget
 from app.agent.present import label
 from app.agent.strategy_types import DEFAULT_TYPE
 from app.agent.tools import TOOLS, Toolbox, evidence_payload
-from app.analysis.coaching import habit_options
+from app.analysis.coaching import habit_options, personal_options
 from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
 
@@ -116,11 +116,13 @@ STRATEGIES: dict[str, Strategy] = {
             "tag_effect",
             "coverage",
         ),
-        guide="How to work: the habits this person's data supports are already tested below, as "
-        "evidence you may cite. Suggest only those marked supported (at most two), as claims of "
-        "kind suggestion; a significant correlation you find may back one too. Vetted guidance on "
-        "how to try them is below too; you may use it, next to their evidence. With none "
-        "supported, say so and offer to test a habit. No hypotheses. Then call submit_findings.",
+        guide="How to work: below are the habits tested on this person's days and what stands out "
+        "in their own routine, as evidence you may cite. Give at most two suggestions, as claims "
+        "of kind suggestion: first what tested as supported, otherwise what stands out, said as "
+        "worth trying, not as something proven. Each must use their own numbers, and fit what the "
+        "profile says is going on in their life. With nothing specific below, say that and ask "
+        "what is going on for them; never fill the gap with a general tip. No hypotheses. Then "
+        "call submit_findings.",
         budget=Budget(max_calls=4, max_tool_calls=5, max_cost_usd=0.015),
         snapshot=True,
         coaching=True,
@@ -207,12 +209,13 @@ def snapshot(frame: pd.DataFrame, metrics: list[str]) -> tuple[list[Evidence], s
 def coaching_evidence(
     frame: pd.DataFrame, expert: str | None, metrics: list[str]
 ) -> tuple[list[Evidence], str]:
-    """habit_options on the goal's metrics over the last 60 days, run before the model starts."""
+    """habit_options and personal_options on the goal's metrics over the last 60 days, run before
+    the model starts."""
     if frame.empty:
         return [], ""
     end = frame.index.max().date()
     window = Window(start=end - timedelta(days=COACHING_DAYS - 1), end=end)
-    found, lines = [], []
+    found, lines, stands_out = [], [], []
     for metric in GOALS.get(expert, GOALS[None]):
         if metric not in metrics or metric not in frame.columns:
             continue
@@ -226,6 +229,22 @@ def coaching_evidence(
             f"- {label(metric)} (evidence_id {evidence.id}): "
             + (f"supported: {'; '.join(supported)}" if supported else "no habit clearly supported")
         )
+        routine = personal_options(frame, metric, window)
+        if routine.sufficient:
+            found.append(routine)
+            stands_out.append(
+                f"- {label(metric)} (evidence_id {routine.id}): "
+                + "; ".join(
+                    option["note"] + (f" (could try {option['try']})" if option["try"] else "")
+                    for option in routine.stats["options"]
+                )
+            )
     if not found:
         return [], ""
-    return found, "Habits tested on this person's own days (habit_options):\n" + "\n".join(lines)
+    text = "Habits tested on this person's own days (habit_options):\n" + "\n".join(lines)
+    if stands_out:
+        text += (
+            "\n\nWhat stands out in their own routine (personal_options; described, not tested):\n"
+            + "\n".join(stands_out)
+        )
+    return found, text

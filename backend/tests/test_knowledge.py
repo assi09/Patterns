@@ -41,8 +41,8 @@ FORBIDDEN = re.compile(
 )
 
 
-def test_there_are_at_least_fifteen_cards_with_unique_titles():
-    assert len(CARDS) >= 15
+def test_there_are_cards_with_unique_titles():
+    assert len(CARDS) >= 14
     assert len({card.title for card in CARDS}) == len(CARDS)
 
 
