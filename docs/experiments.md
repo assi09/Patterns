@@ -525,7 +525,7 @@ its tools once (`expand_tools`). Synthetic person with a planted bedtime-efficie
 `suggestion` claim (the summary passed its checks, so it is still verified text); nobody widened
 their tools in this run.
 
-## A running summary per chat (2026-10-29)
+## A running summary per chat (2026-11-05)
 
 **Tested:** two folds of a made-up five-turn chat (exams, a bedtime goal, a reminder put off, a drop
 in steps) on the small model, twice. $0.0027 in all.
