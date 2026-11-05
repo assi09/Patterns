@@ -576,3 +576,15 @@ is not evidence; a goal check would need its own tool. The last answer opened wi
 got a bit worse lately" although nothing it found shows that: it repeated the question's premise,
 and the summary check does not catch that. The first and last answers each failed one summary
 check and passed on the retry. The short-answers preference was not clearly followed.
+
+## Coaching knowledge cards (2026-11-05)
+
+**Tested:** the 15 cards through the medical guard, and one coaching question twice on a synthetic
+person. $0.0150 in all.
+**Showed:** the guard flagged no card. The agent looked up cards, but chose evening exercise and
+daylight for a bedtime habit. Its suggestion was rejected in both runs, and that part was our
+mistake: the test frame held bedtimes as 23.5 where the app uses hours from midnight (-0.5), so the
+verifier was right to refuse the time.
+**Changed:** code now attaches the card of each supported habit, so the choice is not the model's.
+Three cards were reworded to say no more than their sources.
+**Open:** coaching with cards on correct data has not had a real run yet; the chat evaluation does.
