@@ -167,6 +167,7 @@ def test_tool_errors_go_back_to_the_model(frame):
             ScriptedLLM.call("trend", metric="steps", start=day(0), end=day(59)),
             ScriptedLLM.say("ok"),
             ScriptedLLM.say("still no"),
+            ScriptedLLM.say("Still no."),
         ]
     )
     result = answer(llm, frame, "How is my sleep?", metrics=["sleep_minutes"])
@@ -175,10 +176,10 @@ def test_tool_errors_go_back_to_the_model(frame):
     assert result.stop_reason == "no_submission"  # it never submitted
 
 
-def test_a_reply_without_tools_gets_one_reminder(frame):
-    llm = ScriptedLLM([ScriptedLLM.say("I think it is fine."), ScriptedLLM.say("Really fine.")])
+def test_a_reply_without_tools_gets_two_reminders_then_stops(frame):
+    llm = ScriptedLLM([ScriptedLLM.say("It is fine.") for _ in range(3)])
     result = answer(llm, frame, "How is my sleep?")
-    assert len(llm.requests) == 2
+    assert len(llm.requests) == 3
     assert SUBMIT in llm.requests[1]["messages"][-1]["content"]
     assert result.stop_reason == "no_submission" and result.claims == []
 

@@ -46,7 +46,8 @@ endpoint exists in the backend, the app uses the in-memory mock in `mobile/src/a
   hinting at an illness or condition, no treatment, medication, supplements, diets or "see a
   doctor". The app describes patterns in the user's own data and, since 2026-10-28, may coach
   everyday habits (sleep timing, wind-down, training load and rest, movement), each grounded in the
-  user's own evidence and offered as an option.
+  user's own evidence and offered as an option. One exception to "see a doctor": a fixed reply in
+  code (`URGENT_BODY_REPLY`, `URGENT_MIND_REPLY`) tells someone describing an emergency to get help.
 - **The LLM never computes statistics.** Numbers come from deterministic tools in
   `backend/app/analysis`; the agent chooses what to investigate and writes text that cites
   evidence ids.

@@ -99,3 +99,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-05 | Chat evaluation, synthetic person: 62 questions, 16 listener messages and 4 recall questions ($0.6151), three questions to find why summaries failed ($0.0147), and eleven again after the fixes ($0.1081), plus about $0.01 of Jev | $0.7479 |
 | 2026-11-05 | Advice comparison, two synthetic people: 18 coaching answers three ways, 3 plain questions and an alert | $0.3632 |
 | 2026-11-05 | First real-data check, the owner's Takeout export, six questions (`eval/real_check.py`; answers stay in git-ignored `data/`) | $0.0725 |
+| 2026-11-05 | The no-answer question twice on the owner's export ($0.0107), then the six-question real-data check again ($0.0869) | $0.0976 |

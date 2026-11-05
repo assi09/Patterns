@@ -370,5 +370,7 @@ Spent so far on real runs: about $0.67 in all, almost all OpenAI (Jev under $0.0
 31. **`day` and `lookup` take about three model calls**, not the one or two planned.
 32. **Real data is harder than the synthetic sets.** The first real check (six questions) had two
     summaries fall back and one run end with no answer (`no_submission`, on a weekend bedtime
-    question). `eval/real_check.py` repeats it, keeping answers in git-ignored `data/`.
+    question). `eval/real_check.py` repeats it, keeping answers in git-ignored `data/`. After a
+    second reminder to submit, a rerun answered all six with no fallback, but that is one run, one
+    still ended on its budget, and a `why` question took 15 calls and $0.05.
 
