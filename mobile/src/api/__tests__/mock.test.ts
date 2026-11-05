@@ -380,3 +380,37 @@ describe('alerts', () => {
     expect(await mockClient.getAlarmSettings()).toEqual(changed);
   });
 });
+
+describe('memory', () => {
+  it('moves a fact from waiting to kept when the person keeps it', async () => {
+    const before = await mockClient.getMemory();
+    const [fact] = before.waiting;
+    await mockClient.decideMemory(fact.id, true);
+    const after = await mockClient.getMemory();
+    expect(after.waiting.map((f) => f.id)).not.toContain(fact.id);
+    expect(after.kept.map((f) => f.id)).toContain(fact.id);
+    await expect(mockClient.decideMemory(fact.id, true)).rejects.toMatchObject({ status: 422 });
+  });
+
+  it('refuses a medical rewording, and forgets on request', async () => {
+    const [fact] = (await mockClient.getMemory()).kept;
+    await expect(mockClient.rewordMemory(fact.id, 'Has insomnia')).rejects.toMatchObject({
+      status: 422,
+    });
+    expect((await mockClient.rewordMemory(fact.id, 'Goes to bed early')).text).toBe(
+      'Goes to bed early',
+    );
+    await mockClient.forgetMemory(fact.id);
+    await expect(mockClient.forgetMemory(fact.id)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('asks about what the person asked to have remembered', async () => {
+    await mockClient.sendMessage('Please remember that I train on Sundays', {
+      expert: 'auto',
+      depth: 'quick',
+    });
+    const { waiting } = await mockClient.getMemory();
+    expect(waiting.map((f) => f.text)).toContain('I train on Sundays');
+  });
+});
+

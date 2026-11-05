@@ -10,6 +10,8 @@ import type {
   ChatMessage,
   CheckIn,
   Conversation,
+  MemoryFact,
+  MemoryPage,
   Credentials,
   DataStatus,
   DaySummary,
@@ -160,6 +162,23 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       post<unknown>(baseUrl, `/alarms/${encodeURIComponent(alarmId)}/feedback`, { useful }).then(
         () => undefined,
       ),
+    getMemory: () => request<MemoryPage>(baseUrl, '/memory'),
+    decideMemory: (id, keep) =>
+      post<MemoryFact>(baseUrl, `/memory/facts/${encodeURIComponent(id)}/decision`, { keep }),
+    rewordMemory: (id, text) =>
+      request<MemoryFact>(baseUrl, `/memory/facts/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ text }),
+      }),
+    forgetMemory: (id) =>
+      request<void>(baseUrl, `/memory/facts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    noteOpened: (topic) => post<void>(baseUrl, '/memory/interests', { topic }),
+    muteInterest: (topic) =>
+      request<void>(baseUrl, `/memory/interests/${encodeURIComponent(topic)}`, {
+        method: 'DELETE',
+      }),
+    forgetEpisode: (id) =>
+      request<void>(baseUrl, `/memory/episodes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     setTimezone: (timezone) =>
       request<void>(baseUrl, '/me/timezone', { method: 'PUT', body: JSON.stringify({ timezone }) }),
     previewTeam: (code) => post<TeamPreview>(baseUrl, '/teams/preview', { code }),

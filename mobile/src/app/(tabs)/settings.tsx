@@ -46,6 +46,15 @@ export default function SettingsScreen() {
         ) : null}
       </Section>
 
+      <Section title="Memory">
+        <Row
+          icon="bookmark-outline"
+          title="What Patterns knows"
+          detail="See, change or remove what it keeps in mind"
+          onPress={() => router.push('/memory')}
+        />
+      </Section>
+
       <Section title="Appearance">
         <View style={styles.control}>
           <AppearanceSwitch />

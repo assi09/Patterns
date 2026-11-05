@@ -261,8 +261,29 @@ export interface AppNotification {
   link: string | null; // a path in the app, such as "/reminders"
   alarmId: string | null; // a smart alarm, which can be marked useful or not
   alarmFeedback: 'useful' | 'not_useful' | null;
+  factId: string | null; // a memory the person may keep
   createdAt: ISODateTime;
   readAt: ISODateTime | null;
+}
+
+/** Something the person said about themselves. Used only once they chose to keep it. */
+export interface MemoryFact {
+  id: string;
+  kind: 'routine' | 'goal' | 'preference' | 'context' | 'event' | 'commitment';
+  text: string;
+  status: 'candidate' | 'proposed' | 'approved';
+  start: ISODate | null; // an event's dates
+  end: ISODate | null;
+  createdAt: ISODateTime;
+}
+
+/** What Patterns holds about the person. */
+export interface MemoryPage {
+  waiting: MemoryFact[]; // to keep or decline
+  kept: MemoryFact[];
+  noticed: MemoryFact[]; // heard once and used for nothing; shown so nothing is hidden
+  interests: { topic: string; label: string }[]; // strongest first
+  episodes: { id: string; day: ISODate; text: string }[]; // newest first
 }
 
 /** Which smart alarms (alerts sent automatically from the data) the person wants. */
@@ -449,6 +470,13 @@ export interface ApiClient {
   getAlarmSettings(): Promise<AlarmSettings>;
   updateAlarmSettings(settings: AlarmSettings): Promise<AlarmSettings>;
   sendAlarmFeedback(alarmId: string, useful: boolean): Promise<void>;
+  getMemory(): Promise<MemoryPage>;
+  decideMemory(id: string, keep: boolean): Promise<MemoryFact>;
+  rewordMemory(id: string, text: string): Promise<MemoryFact>;
+  forgetMemory(id: string): Promise<void>;
+  noteOpened(topic: string): Promise<void>; // the person opened a metric's page
+  muteInterest(topic: string): Promise<void>;
+  forgetEpisode(id: string): Promise<void>;
   getDataStatus(): Promise<DataStatus>;
   previewTeam(code: string): Promise<TeamPreview>;
   joinTeam(code: string, consentVersion: string): Promise<Membership>;

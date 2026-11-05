@@ -237,3 +237,29 @@ describe('the rest of Today', () => {
     ]);
   });
 });
+
+describe('memory', () => {
+  it('sends each change to its route', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: () => Promise.resolve(undefined),
+    });
+    globalThis.fetch = fetchMock;
+    const client = httpClient(BASE, mockClient);
+    await client.forgetMemory('a/b');
+    await client.muteInterest('steps');
+    await client.forgetEpisode('e1');
+    await client.noteOpened('steps');
+    await client.decideMemory('f1', true);
+    const calls = fetchMock.mock.calls.map(([url, init]) => [init?.method ?? 'GET', url]);
+    expect(calls).toEqual([
+      ['DELETE', `${BASE}/memory/facts/a%2Fb`],
+      ['DELETE', `${BASE}/memory/interests/steps`],
+      ['DELETE', `${BASE}/memory/episodes/e1`],
+      ['POST', `${BASE}/memory/interests`],
+      ['POST', `${BASE}/memory/facts/f1/decision`],
+    ]);
+  });
+});
+

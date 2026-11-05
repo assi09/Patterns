@@ -21,6 +21,7 @@ import type {
   Reminder,
 } from '@/api/types';
 import { Row, Section } from '@/components/list';
+import { InboxMemoryChoice } from '@/components/MemoryPrompt';
 import { QueryState, Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Button, Chip } from '@/components/ui';
@@ -153,6 +154,7 @@ function Inbox({ items, unread }: { items: AppNotification[]; unread: number }) 
             accessibilityLabel={`${item.readAt ? '' : 'Unread: '}${item.title}. ${item.body}`}
           />
           {item.alarmId && <AlarmFeedback alarmId={item.alarmId} given={item.alarmFeedback} />}
+          {item.factId && <InboxMemoryChoice factId={item.factId} />}
         </View>
       ))}
     </Section>

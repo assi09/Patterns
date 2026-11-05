@@ -1,7 +1,8 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { api } from '@/api';
 import { useDay, useMetricSeries } from '@/api/hooks';
 import type { DaySummary, ISODate, Point } from '@/api/types';
 import { LineChart } from '@/components/LineChart';
@@ -38,6 +39,9 @@ export default function MetricScreen() {
   const color = useMetricColor(metric);
   const colors = useColors();
   const wide = useWide();
+  useEffect(() => {
+    api.noteOpened(metric).catch(() => undefined); // a signal, so nothing to tell the person
+  }, [metric]);
   const label = metricLabel(metric);
 
   const value = day.data ? metricOf(day.data, metric) : undefined;
