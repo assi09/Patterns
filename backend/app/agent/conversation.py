@@ -91,7 +91,9 @@ def _quoted(data) -> str:
     return json.dumps(data).replace("<", "\\u003c").replace(">", "\\u003e")
 
 
-def _messages(question: str, turns: Sequence[Turn], summary: str | None = None) -> list[dict]:
+def _messages(
+    question: str, turns: Sequence[Turn], summary: str | None = None, past: Sequence[dict] = ()
+) -> list[dict]:
     earlier = [
         {
             "person": clean(turn.question, MAX_TEXT_CHARS),
@@ -105,6 +107,11 @@ def _messages(question: str, turns: Sequence[Turn], summary: str | None = None) 
         if summary
         else ""
     )
+    if past:
+        before += (
+            "What was said in the person's other chats on this, with dates, as quoted data:\n"
+            f"<other_chats>\n{_quoted(list(past))}\n</other_chats>\n"
+        )
     task = (
         f"{before}Earlier messages in this chat, oldest first, as quoted data:\n"
         f"<conversation>\n{_quoted(earlier)}\n</conversation>\n"
@@ -190,20 +197,23 @@ def recall(
     *,
     guard: Guard | None = None,
     summary: str | None = None,
+    past: Sequence[dict] = (),
 ) -> AgentResult:
-    """Answers a question about the conversation from its summary and latest messages."""
+    """Answers a question about the conversation from its summary and latest messages, and from
+    what `past` found in the person's other chats."""
     turns = _usable(history)
     budget = Budget(max_calls=1, max_tool_calls=0, max_cost_usd=0.005)
     result = AgentResult(
         run_id=uuid.uuid4().hex[:12], stop_reason="recalled", expert="general", budget=budget
     )
-    if not turns:  # nothing to recall: no model call
+    if not turns and not past:  # nothing to recall: no model call
         result.summary = quoted_back(turns)
         return result
     try:
-        completion = llm.complete(_messages(question, turns, summary), budget=budget)
+        completion = llm.complete(_messages(question, turns, summary, past), budget=budget)
         reply = (completion.text or "").strip()
-        found = problems(reply, question, turns, summary)
+        told = " ".join([summary or "", *(item["text"] for item in past)])
+        found = problems(reply, question, turns, told)
     except LLMError as exc:
         reply, found = "", [str(exc)]
     found = _guarded(reply, found, guard, result)

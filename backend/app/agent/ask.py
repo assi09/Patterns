@@ -10,7 +10,7 @@ are the first steps of the trace, so every answer can be traced to its context a
 
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 
@@ -42,6 +42,7 @@ from app.agent.guard import Guard, JevGuard
 from app.agent.intent import Intent
 from app.agent.jev import JevClient, JevError
 from app.agent.llm import LLM
+from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
 from app.agent.router import (
     FallbackRouter,
     JevRouter,
@@ -168,6 +169,8 @@ def ask(
     continuing_log: str | None = None,
     reminder_tools: list[ExtraTool] | None = None,
     chat: ChatState | None = None,
+    archive: Sequence[MemoryItem] = (),
+    search_past: Callable[[str], list[dict]] | None = None,
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -251,12 +254,28 @@ def ask(
                 evidence[record.id] = record
                 if metric_owner := owner(record.metrics[0]):
                     owners[record.id] = metric_owner.name
+    if plan and plan.memory:  # what a search may find can be cited, like the rest of memory
+        if archive:
+            tools.append(memory_lookup_tool(archive))
+        if search_past:
+            tools.append(conversation_search_tool(search_past))
+        for item in archive:
+            metric_owner = next((owner(m) for m in item.metrics if owner(m)), None)
+            for record in item.evidence:
+                evidence.setdefault(record.id, record)
+                if metric_owner:
+                    owners.setdefault(record.id, metric_owner.name)
     deep = depth == Depth.DEEP
     if route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
     elif route.action == "conversation":
         result = recall(
-            llm, question, history, guard=guard, summary=chat.usable_summary if chat else None
+            llm,
+            question,
+            history,
+            guard=guard,
+            summary=chat.usable_summary if chat else None,
+            past=search_past(question) if search_past else (),
         )
     elif action_tools and route.classification.intent == Intent.MANAGE:
         result = AgentResult(

@@ -358,6 +358,23 @@ class MemoryFact(Base):
     uses: Mapped[int] = mapped_column(default=0)
 
 
+class MemoryInterest(Base):
+    """What a person keeps coming back to, learned from what they do, not from what they say.
+
+    `score` is as of `updated_at` and halves every 30 days. Muted topics are the person's call.
+    """
+
+    __tablename__ = "memory_interests"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    topic: Mapped[str] = mapped_column(String(64), primary_key=True)  # a metric
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    muted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class MemoryEpisode(Base):
     """What a chat found, as one dated line for the person's other chats. Written by code from the
     chat's verified claims once it goes idle, so it needs no approval; it goes with the chat."""

@@ -313,12 +313,20 @@ def _answer(
             ]
             turns = turns_from(earlier)
             cited = store.load_evidence(db, user_id, {i for t in turns for i in t.evidence_ids})
-            remembered = memory.memory_items(db, user_id, now, conversation_id)
+            person = memory.profile(db, user_id, today, now)
+            archive = memory.memory_items(db, user_id, now, conversation_id, with_faded=True)
+            remembered = [
+                item
+                for item in memory.memory_items(db, user_id, now, conversation_id)
+                if item.id not in person.fact_ids
+            ]
             own = store.get_conversation(db, user_id, conversation_id) if conversation_id else None
             chat = ChatState(
                 summary=own.summary if own else None,
                 until=own.summary_until if own else None,
                 waiting=tuple(store.waiting_cards(db, user_id, earlier)),
+                profile=person.lines,
+                interests=memory.interests(db, user_id, now),
             )
             checkins = [
                 (row.day, row.rating, list(row.tags or []))
@@ -349,6 +357,10 @@ def _answer(
             )
         prepared: list[str] = []
 
+        def search_past(query: str) -> list[dict]:
+            with sessions() as db:
+                return store.search_messages(db, user_id, query, conversation_id)
+
         def measurer(start: datetime, end: datetime, exercise_type: str) -> Measured:
             # Imported here: the actions routes import Google's, which import this module.
             from app.api.actions import measure_workout
@@ -378,6 +390,8 @@ def _answer(
                 continuing_log=continuing_log,
                 reminder_tools=reminding_tools,
                 chat=chat,
+                archive=archive,
+                search_past=search_past,
             )
         except Exception:
             logger.exception("Answering failed")
@@ -420,6 +434,15 @@ def _answer(
             refused = reply.route.action == "refuse"
             heard = not refused and reply.route.classification.intent not in QUIET_INTENTS
             memory.mark_used(db, user_id, reply.context.memory_used, now)
+            if not refused:
+                asked_about = [c.metric for c in result.claims]
+                memory.note_interest(
+                    db,
+                    user_id,
+                    [attachment.metric if attachment else None, *asked_about],
+                    "asked",
+                    now,
+                )
             answer = store.add_answer(
                 db,
                 user_id,
@@ -511,6 +534,10 @@ def update_conversation(
     if body.title is not None:
         conversation.title = store.title_from(body.title)
     if body.pinned is not None:
+        if body.pinned and not conversation.pinned:  # a chat worth keeping says what matters
+            said = store.history(db, user.id, HISTORY_FOLDED, conversation.id)
+            topics = [c.get("metric") for message in said for c in message.claims or ()]
+            memory.note_interest(db, user.id, topics, "pinned")
         conversation.pinned = body.pinned
     db.flush()
     count = next((n for row, n in store.conversations(db, user.id) if row.id == conversation.id), 0)

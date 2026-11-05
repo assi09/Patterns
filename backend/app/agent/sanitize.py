@@ -18,6 +18,16 @@ INSTRUCTION_LIKE = re.compile(
 )
 
 
+WORD = re.compile(r"[a-z0-9]+")
+STEM = 5  # enough to match "nights" with "night" and "training" with "train"
+COMMON = {"they", "their", "have", "want", "wants", "will", "this", "that", "with", "from"}
+
+
+def stems(text: str) -> set[str]:
+    """The words that say what a text is about, cut short so forms of a word match."""
+    return {w[:STEM] for w in WORD.findall(text.casefold()) if len(w) >= 4 and w not in COMMON}
+
+
 def clean(text: str | None, limit: int) -> str:
     """Without control characters and surrounding space, at most `limit` characters."""
     return CONTROL.sub(" ", text or "").strip()[:limit]

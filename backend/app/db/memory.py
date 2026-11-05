@@ -12,16 +12,21 @@
   and what they declined is not proposed again.
 - **Episodes** are how one chat reaches the others: when a chat goes idle, code writes one dated
   line from its verified claims. Nothing else from a chat crosses over.
+- **Interests** are learned from what the person does (what they ask about, pin, open, mark
+  useful), not from what they say, so they need no approval; they fade, and can be muted.
+- The **profile** is what the agent always gets: what the person chose to keep and still applies.
 
 Every function takes the user, and every query filters on it. Rejected writes raise
 `MemoryRejected`, whose message is safe to show.
 """
 
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.agent.context import MemoryItem
@@ -39,6 +44,7 @@ from app.db.models import (
     Finding,
     MemoryEpisode,
     MemoryFact,
+    MemoryInterest,
     Notification,
 )
 
@@ -49,6 +55,13 @@ CHECKIN_DAYS = 365
 FACT_UNUSED_DAYS = 60  # approved facts unused this long are no longer retrieved
 CANDIDATE_DAYS = 30  # heard once and not again this long: forgotten
 PROMOTE_AT = 2  # heard this many times, a candidate becomes a card
+PROFILE_CHARS = 1_000  # about 250 tokens
+PROFILE_ORDER = ("preference", "goal", "commitment", "event", "routine", "context")
+PROFILE_INTERESTS = 3
+INTEREST_FLOOR = 1.0  # a topic is one of theirs from about this score
+INTEREST_HALF_LIFE_DAYS = 30
+FORGOTTEN_INTEREST = 0.05
+SIGNALS = {"asked": 1.0, "pinned": 1.0, "useful": 2.0, "opened": 0.25, "not_useful": -1.0}
 EPISODE_DAYS = 90
 EPISODE_IDLE = timedelta(hours=1)  # a chat unused this long is consolidated
 EPISODE_CLAIMS = 2
@@ -392,6 +405,18 @@ def edit_fact(session: Session, user_id: uuid.UUID, fact_id: uuid.UUID, text: st
     return fact
 
 
+def delete_episode(session: Session, user_id: uuid.UUID, episode_id: uuid.UUID) -> None:
+    row = session.scalar(
+        select(MemoryEpisode).where(
+            MemoryEpisode.user_id == user_id, MemoryEpisode.id == episode_id
+        )
+    )
+    if row is None:
+        raise MemoryRejected("There is no such note.")
+    session.delete(row)
+    session.flush()
+
+
 def delete_fact(session: Session, user_id: uuid.UUID, fact_id: uuid.UUID) -> None:
     session.delete(_fact(session, user_id, fact_id))
     session.flush()
@@ -435,6 +460,18 @@ def expire(session: Session, user_id: uuid.UUID, now: datetime | None = None) ->
         )
     )
     removed["candidates"] = result.rowcount
+    faded = [
+        row
+        for row in session.scalars(
+            select(MemoryInterest).where(
+                MemoryInterest.user_id == user_id, MemoryInterest.muted.is_(False)
+            )
+        )
+        if _decayed(row, now) < FORGOTTEN_INTEREST
+    ]
+    for row in faded:
+        session.delete(row)
+    removed["interests"] = len(faded)
     return removed
 
 
@@ -456,11 +493,13 @@ def memory_items(
     user_id: uuid.UUID,
     now: datetime | None = None,
     conversation_id: uuid.UUID | None = None,
+    *,
+    with_faded: bool = False,
 ) -> list[MemoryItem]:
     """This person's memory that may still be retrieved: current findings with their evidence,
     answers from the last 180 days (not "rather not say"), approved facts used or decided in the
     last 60 days, and the episodes of their chats other than `conversation_id`, the one being
-    answered, whose own turns it already has."""
+    answered, whose own turns it already has. `with_faded` adds unused facts, for a search."""
     now = now or _now()
     items: list[MemoryItem] = []
     findings = current_findings(session, user_id, now)
@@ -509,7 +548,7 @@ def memory_items(
         select(MemoryFact).where(MemoryFact.user_id == user_id, MemoryFact.status == "approved")
     ):
         last = _aware(fact.last_used_at or fact.decided_at or fact.created_at)
-        if now - last > timedelta(days=FACT_UNUSED_DAYS):
+        if now - last > timedelta(days=FACT_UNUSED_DAYS) and not with_faded:
             continue  # unused facts fade out
         items.append(
             MemoryItem(
@@ -553,6 +592,131 @@ def _episodes(
             )
         )
     return items
+
+
+# Interests
+
+
+def _decayed(row: MemoryInterest, now: datetime) -> float:
+    age_days = max(0.0, (now - _aware(row.updated_at)).total_seconds() / 86_400)
+    return row.score * 0.5 ** (age_days / INTEREST_HALF_LIFE_DAYS)
+
+
+def note_interest(
+    session: Session,
+    user_id: uuid.UUID,
+    topics: Iterable[str | None],
+    signal: str,
+    now: datetime | None = None,
+) -> None:
+    """Records what the person did about these metrics; anything else is not a topic."""
+    now = now or _now()
+    for topic in dict.fromkeys(t for t in topics if t in METRICS):
+        row = session.get(MemoryInterest, (user_id, topic))
+        if row is None:
+            try:  # two signals at once: the other one created the row, and this one is lost
+                with session.begin_nested():
+                    session.add(
+                        MemoryInterest(
+                            user_id=user_id,
+                            topic=topic,
+                            score=max(0.0, SIGNALS[signal]),
+                            updated_at=now,
+                        )
+                    )
+            except IntegrityError:
+                pass
+            continue
+        row.score = max(0.0, _decayed(row, now) + SIGNALS[signal])
+        row.updated_at = now
+    session.flush()
+
+
+def interests(session: Session, user_id: uuid.UUID, now: datetime | None = None) -> dict:
+    """The person's topics as they stand today, strongest first; muted ones are left out."""
+    now = now or _now()
+    rows = session.scalars(
+        select(MemoryInterest).where(
+            MemoryInterest.user_id == user_id, MemoryInterest.muted.is_(False)
+        )
+    )
+    scores = {row.topic: _decayed(row, now) for row in rows}
+    kept = {topic: score for topic, score in scores.items() if score >= FORGOTTEN_INTEREST}
+    return dict(sorted(kept.items(), key=lambda pair: pair[1], reverse=True))
+
+
+def mute_interest(session: Session, user_id: uuid.UUID, topic: str) -> None:
+    """The person says this is not one of their topics; it stops counting until they undo it."""
+    if topic not in METRICS:
+        raise MemoryRejected("There is no such topic.")
+    row = session.get(MemoryInterest, (user_id, topic))
+    if row is None:
+        row = MemoryInterest(user_id=user_id, topic=topic, score=0.0)
+        session.add(row)
+    row.muted = True
+    session.flush()
+
+
+def alarm_order(session: Session, user_id: uuid.UUID, now: datetime) -> Callable[[object], float]:
+    """A sort key for proactive alerts: severity, lifted by up to a quarter for their topics."""
+    scores = interests(session, user_id, now)
+    top = max(scores.values(), default=0.0)
+
+    def key(alarm) -> float:
+        lift = scores.get(alarm.metric, 0.0) / top if top else 0.0
+        return alarm.severity * (1 + 0.25 * lift)
+
+    return key
+
+
+# The profile
+
+
+@dataclass(frozen=True)
+class Profile:
+    lines: tuple[str, ...] = ()
+    fact_ids: tuple[str, ...] = ()  # given here, so not again as memory items
+
+
+def _still_applies(fact: MemoryFact, today: date) -> bool:
+    return fact.end_day is None or fact.end_day >= today
+
+
+def _line(fact: MemoryFact) -> str:
+    dates = ""
+    if fact.start_day and fact.end_day:
+        dates = f" ({short_date(fact.start_day)} to {short_date(fact.end_day)})"
+    return f"{fact.kind}: {fact.text}{dates}"
+
+
+def profile(session: Session, user_id: uuid.UUID, today: date, now: datetime) -> Profile:
+    """What the agent always gets: facts the person kept that still apply, then their main topics.
+    Past events and commitments stay searchable but leave the profile."""
+    facts = [
+        fact
+        for fact in session.scalars(
+            select(MemoryFact).where(MemoryFact.user_id == user_id, MemoryFact.status == "approved")
+        )
+        if _still_applies(fact, today)
+    ]
+    facts.sort(key=lambda f: _aware(f.decided_at or f.created_at), reverse=True)
+    facts.sort(key=lambda f: PROFILE_ORDER.index(f.kind))  # stable: newest first within a kind
+    lines, ids, used = [], [], 0
+    for fact in facts:
+        line = _line(fact)
+        if used + len(line) > PROFILE_CHARS:
+            continue
+        lines.append(line)
+        ids.append(str(fact.id))
+        used += len(line)
+    topics = [
+        label(topic)
+        for topic, score in interests(session, user_id, now).items()
+        if score >= INTEREST_FLOOR
+    ][:PROFILE_INTERESTS]
+    if topics:
+        lines.append("Often looks at: " + ", ".join(topics))
+    return Profile(tuple(lines), tuple(ids))
 
 
 # Episodes
