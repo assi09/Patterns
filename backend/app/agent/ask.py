@@ -80,6 +80,31 @@ OFFERED = re.compile(r"\b(remind\w*|test\w*|experiment\w*)\b", re.IGNORECASE)
 REMINDERS = "reminders"
 
 # Shown without calling the model: the refusal costs nothing and cannot be talked around.
+# What must not wait for a tracker app. Matched in code, so it holds when the router is down. It
+# errs towards replying: a sore chest after a hard session gets this too, and that is fine.
+URGENT_BODY = re.compile(
+    r"\b(chest (?:pain|pains|hurts?|pressure|tightness|is tight|feels tight)|"
+    r"pain in (?:my|the) chest|(?:can'?t|cannot|struggling to|hard to) breathe|"
+    r"(?:passed|blacked|passing|blacking) out|fainted|"
+    r"(?:face|mouth) (?:is )?droop\w*|slurred speech|sudden numbness|"
+    r"numb(?:ness)? (?:on|in) one side|coughing (?:up )?blood)\b",
+    re.IGNORECASE,
+)
+URGENT_MIND = re.compile(
+    r"\b(kill(?:ing)? myself|suicid\w*|end(?:ing)? my life|want to die|don'?t want to (?:live|be "
+    r"here)|hurt(?:ing)? myself|self[- ]harm)\b",
+    re.IGNORECASE,
+)
+URGENT_BODY_REPLY = (
+    "That could be serious, and it isn't something your tracker data can answer. If it's "
+    "happening now or getting worse, please call your local emergency number or get to urgent "
+    "care. If it has passed, it's still worth getting it checked by a doctor soon."
+)
+URGENT_MIND_REPLY = (
+    "I'm really sorry you're feeling this way, and I'm glad you said it. I'm not the right help "
+    "for this, but you shouldn't carry it alone. Please reach out now to someone you trust, a "
+    "local crisis line, or your local emergency number if you might act on these thoughts."
+)
 REFUSAL = (
     "I can only describe patterns in your own Fitbit data, so I can't help with medical "
     "questions, diagnoses or advice, or with questions about anything else."
@@ -296,7 +321,17 @@ def ask(
                 if metric_owner:
                     owners.setdefault(record.id, metric_owner.name)
     deep = depth == Depth.DEEP
-    if route.action == "refuse":
+    urgent = (
+        URGENT_MIND_REPLY
+        if URGENT_MIND.search(question)
+        else URGENT_BODY_REPLY
+        if URGENT_BODY.search(question)
+        else None
+    )
+    if urgent:  # before anything else, and no model: this reply must not be able to go wrong
+        route = replace(route, action="refuse")
+        result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="urgent", summary=urgent)
+    elif route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
     elif world:
         result = answer_world(llm, question, outside, guard=guard)

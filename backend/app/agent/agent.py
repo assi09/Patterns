@@ -41,7 +41,7 @@ from app.analysis.screen import screen
 SUBMIT = "submit_findings"
 HYPOTHESES = "record_hypotheses"
 REPAIR_ROUNDS = 1
-NUDGES = 1  # times a reply without a tool call is answered with a reminder to submit
+NUDGES = 2  # times a reply without a tool call is answered with a reminder to submit
 
 
 class HypothesesArguments(BaseModel):
@@ -292,7 +292,13 @@ def run_agent(
         if not completion.tool_calls:
             if nudges_left:
                 nudges_left -= 1
-                messages.append({"role": "user", "content": f"Use the tools, then call {SUBMIT}."})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "A reply in plain text is not shown to the person. Call "
+                        f"{SUBMIT} now, with claims citing the evidence you have.",
+                    }
+                )
                 continue
             break
 

@@ -361,6 +361,13 @@ chat itself reads the same search, with no extra model call. Memories are few an
 are no embeddings or vector store. Numbers, times and dates in an answer still come only from
 computed evidence: the agent refers to a profile item in words ("your bedtime goal").
 
+### Urgent messages
+
+A message describing an emergency (chest pain, trouble breathing, stroke signs, thoughts of
+self-harm) gets a fixed reply from code telling them to get help, before any routing result is used
+and with no model call, so it holds when Jev or OpenAI is down. It errs towards replying. The wider
+definition of what the agent may say about health is agreed in outline and on hold.
+
 ### Coaching knowledge
 
 Advice is specific to the person or it is not given. When they ask how to improve, code runs

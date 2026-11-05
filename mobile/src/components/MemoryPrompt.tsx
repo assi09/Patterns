@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { useDecideMemory, useMemory } from '@/api/hooks';
@@ -15,6 +16,16 @@ export function MemoryChoice({ fact }: { fact: MemoryFact }) {
   const decide = useDecideMemory();
   const choose = (keep: boolean) =>
     decide.mutate({ id: fact.id, keep }, { onSuccess: () => (keep ? success() : select()) });
+  const keepAndRemind = () =>
+    decide.mutate(
+      { id: fact.id, keep: true },
+      {
+        onSuccess: () => {
+          success();
+          router.push('/reminder/new');
+        },
+      },
+    );
   return (
     <Card style={styles.card}>
       <View style={styles.head}>
@@ -31,6 +42,14 @@ export function MemoryChoice({ fact }: { fact: MemoryFact }) {
       )}
       <View style={styles.buttons}>
         <Button label="Keep" onPress={() => choose(true)} disabled={decide.isPending} />
+        {fact.kind === 'commitment' && (
+          <Button
+            label="Keep and set a reminder"
+            variant="secondary"
+            onPress={keepAndRemind}
+            disabled={decide.isPending}
+          />
+        )}
         <Button
           label="No thanks"
           variant="secondary"
@@ -64,5 +83,5 @@ export function InboxMemoryChoice({ factId }: { factId: string }) {
 const styles = StyleSheet.create({
   card: { gap: spacing.sm, marginTop: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  buttons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
 });
