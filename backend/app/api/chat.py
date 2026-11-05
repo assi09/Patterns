@@ -46,7 +46,14 @@ from app.api.store import LoadedData, get_data
 from app.config import settings
 from app.db import chat as store
 from app.db import memory
-from app.db.models import CHECKIN_TAGS, ChatMessage, CheckIn, Conversation, User
+from app.db.models import (
+    CHECKIN_TAGS,
+    ChatMessage,
+    CheckIn,
+    Conversation,
+    MemoryEpisode,
+    User,
+)
 from app.db.session import session_scope
 from app.reminders.tools import reminder_reply, reminder_tools
 
@@ -466,11 +473,12 @@ def update_conversation(
 def delete_conversation(
     conversation_id: uuid.UUID, db: Db, user: Annotated[User, Depends(approved_user)]
 ) -> None:
-    """Deletes the conversation and its messages; facts and findings stay in memory."""
+    """Deletes the conversation, its messages and its episode; facts and findings stay."""
     conversation = _owned(db, user, conversation_id)
     if user.id in _busy:
         raise ApiError(409, "busy", "Still answering a question; try again in a moment.")
     db.execute(delete(ChatMessage).where(ChatMessage.conversation_id == conversation.id))
+    db.execute(delete(MemoryEpisode).where(MemoryEpisode.conversation_id == conversation.id))
     db.delete(conversation)
     db.flush()
 

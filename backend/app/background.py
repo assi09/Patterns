@@ -4,7 +4,8 @@
 - every 15 minutes: start a sync for each connected person whose last attempt is over
   `SYNC_EVERY` old, so data stays fresh when nobody opens the app; then check everyone for smart
   alarms and send what may go now (`app.alarms.run.run_all`). A sync started here finishes on its
-  own thread; the next pass picks up what it brought.
+  own thread; the next pass picks up what it brought. Then memory is kept up: idle chats become
+  episodes and what has outlived its lifetime goes (`app.db.memory.maintain_all`).
 
 Two copies of the API overlapping during a deploy are safe: reminder sends are claimed by a unique
 key, alarms by their cooldown, and a person's sync runs once at a time. Logs carry counts only.
@@ -18,6 +19,7 @@ from sqlalchemy import func, select
 
 from app.alarms.run import run_all
 from app.config import settings
+from app.db.memory import maintain_all
 from app.db.models import GoogleConnection, SyncRun
 from app.db.session import session_scope
 from app.reminders.loop import _mailer, run_once
@@ -99,6 +101,17 @@ class Background:
             tick += 1
             if tick % ALARM_TICKS == 1:  # the first pass a minute after start, then every 15
                 self._alarms()
+                self._memory()
+
+    @staticmethod
+    def _memory() -> None:
+        try:
+            counts = maintain_all(session_scope, datetime.now(UTC))
+        except Exception:
+            logger.exception("The memory pass failed")
+            return
+        if any(counts.values()):
+            logger.info("Memory kept up: %s", counts)
 
     @staticmethod
     def _alarms() -> None:

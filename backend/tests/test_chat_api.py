@@ -499,29 +499,48 @@ def test_people_never_reach_each_others_conversations(client, engine, agent):
     assert len(client.get("/chat", params={"conversation": chat_id}, headers=first).json()) == 2
 
 
-def test_another_conversations_verified_claims_are_shared_as_memory(client, engine, agent):
+def test_only_an_idle_chats_episode_reaches_another_chat(client, engine, agent):
     from app.db import memory
 
     headers = signed_in(client, engine)
     agent.llm.turns.extend(describe_then_claim("Your time asleep held steady."))
     sleep_chat = ask(client, headers).json()[0]["conversationId"]
     other = client.post("/conversations", headers=headers).json()["id"]
+
+    # Still in use: nothing from it crosses over.
+    agent.llm.turns.append(submission("Nothing to add."))
+    ask(client, headers, "How is my sleep lately?", conversationId=other)
+    assert "Your time asleep held steady." not in json.dumps(agent.llm.requests[-1]["messages"])
+
+    later = datetime.now(UTC) + memory.EPISODE_IDLE + timedelta(minutes=1)
     with session_scope(engine) as session:
         user = session.scalar(select(User))
-        import uuid
+        assert memory.consolidate(session, user.id, later) == 1  # the other chat has no claims
+        from_other = memory.memory_items(session, user.id, later, uuid.UUID(other))
+        from_same = memory.memory_items(session, user.id, later, uuid.UUID(sleep_chat))
+    [episode] = [item for item in from_other if item.kind == "episode"]
+    assert episode.metrics == ("sleep_minutes",) and episode.evidence[0].tool == "describe"
+    assert "Your time asleep held steady." in episode.text
+    assert not [item for item in from_same if item.kind == "episode"]  # its own turns are history
 
-        from_other = memory.memory_items(session, user.id, None, uuid.UUID(other))
-        from_same = memory.memory_items(session, user.id, None, uuid.UUID(sleep_chat))
-    chats = [item for item in from_other if item.kind == "chat"]
-    assert len(chats) == 1 and chats[0].metrics == ("sleep_minutes",)
-    assert chats[0].text.startswith('In the chat "How did I sleep?"')
-    assert chats[0].evidence and chats[0].evidence[0].tool == "describe"
-    assert not [item for item in from_same if item.kind == "chat"]  # its own turns are history
-    # The next question in the other conversation is given the pointer.
     agent.llm.turns.append(submission("As you saw before, sleep held steady."))
-    ask(client, headers, "How is my sleep lately?", conversationId=other)
-    sent = json.dumps(agent.llm.requests[-1]["messages"])
-    assert "In the chat" in sent and "Your time asleep held steady." in sent
+    ask(client, headers, "How is my sleep now?", conversationId=other)
+    assert "Your time asleep held steady." in json.dumps(agent.llm.requests[-1]["messages"])
+
+
+def test_deleting_a_chat_deletes_its_episode(client, engine, agent):
+    from app.db import memory
+    from app.db.models import MemoryEpisode
+
+    headers = signed_in(client, engine)
+    agent.llm.turns.extend(describe_then_claim("Your time asleep held steady."))
+    chat_id = ask(client, headers).json()[0]["conversationId"]
+    later = datetime.now(UTC) + memory.EPISODE_IDLE + timedelta(minutes=1)
+    with session_scope(engine) as session:
+        memory.consolidate(session, session.scalar(select(User)).id, later)
+    assert client.delete(f"/conversations/{chat_id}", headers=headers).status_code == 204
+    with session_scope(engine) as session:
+        assert session.scalars(select(MemoryEpisode)).all() == []
 
 
 def test_pinned_conversations_come_first(client, engine, agent):
