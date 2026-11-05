@@ -65,6 +65,17 @@ MEDICAL = re.compile(
     r"depress\w*|prescri\w*|medication|dosage|treatment)\b",
     re.IGNORECASE,
 )
+# Advice anyone could read anywhere. An answer must speak to this person, or say nothing.
+GENERIC_ADVICE = re.compile(
+    r"\b(balanced diet|eat(?:ing)? (?:well|healthy|healthier)|stay(?:ing)? hydrated|drink(?:ing)? "
+    r"(?:more|enough|plenty of) water|get(?:ting)? enough (?:sleep|rest)|sleep hygiene|"
+    r"(?:deep|slow|calming) breath\w*|breathing exercises?|take (?:a|some) deep|"
+    r"(?:aim for|get|getting|at least) (?:7|8|9|seven|eight|nine)(?:(?:-| to )\d)? hours|"
+    r"listen to your body|(?:reduce|manage|managing|reducing) (?:your )?stress|"
+    r"healthy (?:lifestyle|habits)|exercise regularly|regular exercise|stay active|"
+    r"mindfulness|meditat\w*|good night'?s sleep)\b",
+    re.IGNORECASE,
+)
 # A suggestion is an option the person may take up, never an order.
 OPTION_WORDS = re.compile(r"\b(could|might|may|try|trying|consider|option|if you want)\b", re.I)
 ORDER_WORDS = re.compile(r"\b(you should|you must|you need to|make sure (?:to|you))\b", re.I)
@@ -243,6 +254,8 @@ LEVEL_KEYS = (
     "usual_low",
     "usual_high",
     "split_at",
+    "best_bedtime",
+    "worst_bedtime",
 )
 
 # Statistics expressed in the metric's own unit, which may be quoted in a related unit.
@@ -429,13 +442,15 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
         grounded = [
             e
             for e in about
-            if _significant(e) or (e.tool == "habit_options" and e.stats.get("supported"))
+            if _significant(e)
+            or (e.tool == "habit_options" and e.stats.get("supported"))
+            or (e.tool == "personal_options" and e.stats.get("options"))
         ]
         if not grounded:
             reasons.append(
-                "a suggestion must cite evidence that shows a real pattern in this person's data "
-                "(a significant test or a supported habit option); without one, say there is no "
-                "clear pattern yet and offer an experiment instead"
+                "a suggestion must cite evidence specific to this person (a significant test, a "
+                "supported habit option, or something personal_options found); without one, say "
+                "nothing specific stands out yet and ask what is going on"
             )
         if not OPTION_WORDS.search(claim.text):
             reasons.append("word a suggestion as an option the person may try (could, might, try)")
@@ -498,6 +513,11 @@ def text_problems(text: str, cited: list[Evidence]) -> list[str]:
         reasons.append("mentions dates outside the cited evidence: " + ", ".join(map(str, bad)))
     if EVIDENCE_ID.search(text):
         reasons.append("writes evidence ids in the text; list them only in evidence_ids")
+    if GENERIC_ADVICE.search(text):
+        reasons.append(
+            "gives advice anyone could read anywhere; say something specific to this person's "
+            "own numbers and life, or leave it out"
+        )
     covered = {metric for evidence in cited for metric in evidence.metrics}
     if uncovered := [
         m for m, pattern in MENTIONS.items() if m not in covered and pattern.search(text)
@@ -563,6 +583,13 @@ def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
         metric
         for e in evidence
         if e.tool == "compare_day" and e.stats.get("position") in ("above", "below")
+        for metric in e.metrics
+    }
+    # "Your weekend bedtimes run later" describes the person's routine, which code measured.
+    supported |= {
+        metric
+        for e in evidence
+        if e.tool == "personal_options" and e.stats.get("options")
         for metric in e.metrics
     }
     tested = {metric for e in evidence if e.tool in TEST_TOOLS for metric in e.metrics}

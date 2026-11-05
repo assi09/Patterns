@@ -19,11 +19,12 @@ import uuid
 from collections import Counter
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agent.context import ChatState, build
 from app.agent.guard import Guard
 from app.agent.llm import LLM
 from app.agent.present import format_level, label, short_date
@@ -32,7 +33,7 @@ from app.alarms.explain import Explanation, explain
 from app.analysis.day import with_scores
 from app.db.chat import load_evidence, store_evidence
 from app.db.daily import load_daily
-from app.db.memory import alarm_order
+from app.db.memory import alarm_order, profile
 from app.db.models import Alarm, AlarmSetting, GoogleConnection, Notification, User
 from app.email import Email, Mailer, MailError
 from app.reminders import store
@@ -256,6 +257,7 @@ def explainer_for(frame, today, llm: LLM | None, guard: Guard | None) -> Explain
 
     def explain_one(db: Session, alarm: Alarm) -> Explanation:
         evidence = load_evidence(db, alarm.user_id, list(alarm.evidence_ids or []))
+        kept = profile(db, alarm.user_id, today, datetime.now(UTC)).lines
         return explain(
             llm,
             frame,
@@ -266,6 +268,7 @@ def explainer_for(frame, today, llm: LLM | None, guard: Guard | None) -> Explain
             evidence=[evidence[i] for i in alarm.evidence_ids or [] if i in evidence],
             today=today,
             guard=guard,
+            context=build([], {}, chat=ChatState(profile=kept)).block,
         )
 
     return explain_one

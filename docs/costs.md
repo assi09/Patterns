@@ -97,3 +97,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-05 | Knowledge cards: medical guard on all cards, twice ($0.0003), and "How can I sleep better?" twice on a synthetic person ($0.0067, about $0.008) | $0.0150 |
 | 2026-11-05 | Outside lookups, made-up questions: five (one USDA, two web, two refused, $0.0620), then one web question after the fix ($0.0330). Web cost counts each search at $0.025, the higher published figure; check the OpenAI dashboard for the real charge | $0.0950 |
 | 2026-11-05 | Chat evaluation, synthetic person: 62 questions, 16 listener messages and 4 recall questions ($0.6151), three questions to find why summaries failed ($0.0147), and eleven again after the fixes ($0.1081), plus about $0.01 of Jev | $0.7479 |
+| 2026-11-05 | Advice comparison, two synthetic people: 18 coaching answers three ways, 3 plain questions and an alert | $0.3632 |
