@@ -179,8 +179,10 @@ def _guarded(reply: str, found: list[str], guard: Guard | None, result: AgentRes
     return found
 
 
-def quoted_back(turns: Sequence[Turn]) -> str:
+def quoted_back(turns: Sequence[Turn], past: Sequence[dict] = ()) -> str:
     """The person's own latest messages, word for word: always true, needs no model."""
+    if not turns and past:
+        return f"In another chat it says: “{clean(past[0]['text'], MAX_TEXT_CHARS)}”"
     if not turns:
         return "There are no earlier messages in this chat yet."
     asked = [clean(t.question, MAX_TEXT_CHARS) for t in turns[-QUOTED_QUESTIONS:]]
@@ -212,14 +214,14 @@ def recall(
     try:
         completion = llm.complete(_messages(question, turns, summary, past), budget=budget)
         reply = (completion.text or "").strip()
-        told = " ".join([summary or "", *(item["text"] for item in past)])
+        told = " ".join([summary or "", *(f"{item['date']} {item['text']}" for item in past)])
         found = problems(reply, question, turns, told)
     except LLMError as exc:
         reply, found = "", [str(exc)]
     found = _guarded(reply, found, guard, result)
     result.trace.append({"type": "recall", "turns": len(turns), "problems": found})
     if found:
-        result.stop_reason, reply = "recall_fallback", quoted_back(turns)
+        result.stop_reason, reply = "recall_fallback", quoted_back(turns, past)
     result.summary = reply
     return result
 

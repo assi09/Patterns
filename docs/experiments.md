@@ -602,3 +602,55 @@ with "Nice!" because the shared voice says to react, so this reply has its own p
 **Open:** the tone change came after the last run. A web lookup costs about six times a normal
 answer, which is why the cap and the cache matter. The real price of a search is still to be read
 from OpenAI's dashboard.
+
+## The chat, end to end (2026-11-05)
+
+**Tested:** `eval/chat_eval.py` on one synthetic person with a planted bedtime link: 62 made-up
+questions across every type, including 6 medical and 3 unrelated ones that must be refused, 16
+listener messages and 4 recall questions. $0.7479 in all. Results are in `eval/results/`.
+
+| Measure | First run | After the fixes |
+|---|---|---|
+| Refused when it should | 9/9 | not rerun |
+| Answered when it should | 53/53 | not rerun |
+| Lead expert right | 40/40 | not rerun |
+| Question type right | 47/53 | 50/53 (router only) |
+| Medical words in an answer | 0/53 | not rerun |
+| Summary fell back to joined claims | 11/53 | 3 of the 8 rerun from those 11 |
+| Coaching with a suggestion | 5/8 (the other 3 said none was supported) | not rerun |
+| Listener: right kind | 11/13 | not rerun |
+| Listener: medical kept | 0/3 | not rerun |
+| Listener: echoes of known items | 0/14 | not rerun |
+| Listener: repeats found | 1/2 | not rerun |
+| Recall: used what was kept | 1/3 | the other-chat question fixed |
+| Recall: leaked what was not kept | 0 | not rerun |
+
+Per question, in the first run: `day` 3.1 calls and $0.0064; `lookup` 3.5 and $0.0051; `change` 4.2
+and $0.0093; `why` 5.4 and $0.0167; `pattern` 5.9 and $0.0122; `coaching` 2.2 and $0.0051; `world`
+2.7 and $0.0254. The plan's target of one or two calls for `day` and `lookup` was **not met**.
+
+**Showed:**
+- One answer in five fell back to joined claims, some opening with "Coverage was complete", and "Am
+  I more active on weekdays or weekends?" got an answer that did not answer it. The summary check
+  was right to refuse direction words on results that were not significant; the repair message
+  did not say how to fix them, and the fallback led with the data-quality note.
+- A rerun showed a worse thing: when the budget ran out during a repair, **the rejected summary was
+  still the answer**. Nothing in the first run's numbers showed it.
+- Recall said "no earlier messages" because its number check did not count the dates of what it
+  was given.
+- Five `lookup` and `day` questions ran out of calls, and "Nice!" opened bad news.
+
+**Changed:** a summary that failed its check is never the answer, whatever ends the run. The repair
+message says how to word a result that is not significant. The fallback leads with findings and
+keeps claims' own words. `day` and `lookup` have four calls. Plain questions get no reaction.
+`food_lookup` is preferred for any food value (hummus had gone to the web at $0.03). Question type
+wording is clearer.
+
+**Open:**
+- One synthetic person, run once, and written by us: this is a smoke test of the whole, not the
+  evaluation on real data, which is still to do.
+- The medical, routing, listener and recall figures come from before the fixes and were not rerun,
+  as the fixes do not touch them but the budget was spent.
+- "Is strain linked to my recovery?" returned nothing once, with no model call: it looked like an
+  OpenAI failure, and the app shows its "try again" message.
+- Three of the eight reruns still fell back, and a `why` answer can repeat the question's premise.

@@ -30,9 +30,7 @@ def main() -> None:
     parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="503p-logging-smoke-") as folder:
         url = f"sqlite:///{folder}/test.db"
-        config = Config(
-            str(Path(__file__).resolve().parents[1] / "backend/alembic.ini")
-        )
+        config = Config(str(Path(__file__).resolve().parents[1] / "backend/alembic.ini"))
         config.set_main_option("sqlalchemy.url", url)
         command.upgrade(config, "head")
         engine = create_engine(url)
@@ -43,9 +41,7 @@ def main() -> None:
             user_id = user.id
         now = datetime(2026, 10, 24, 12, tzinfo=UTC)
         prepared: list[str] = []
-        tools = proposal_tools(
-            lambda: session_scope(engine), user_id, uuid.uuid4(), now, prepared
-        )
+        tools = proposal_tools(lambda: session_scope(engine), user_id, uuid.uuid4(), now, prepared)
         reply = ask(
             OpenAILLM.from_settings(settings),
             default_router(settings),
@@ -59,9 +55,7 @@ def main() -> None:
             guard=default_guard(settings),
         )
         extra_cost = reply.route.classification.cost_usd + sum(
-            step.get("cost_usd", 0)
-            for step in reply.result.trace
-            if step["type"] == "guard"
+            step.get("cost_usd", 0) for step in reply.result.trace if step["type"] == "guard"
         )
         print(
             json.dumps(
@@ -78,9 +72,7 @@ def main() -> None:
             )
         )
         if len(prepared) != 1 or reply.result.stop_reason != "submitted":
-            raise SystemExit(
-                "Expected one reviewable draft and a completed submission."
-            )
+            raise SystemExit("Expected one reviewable draft and a completed submission.")
         engine.dispose()
 
 

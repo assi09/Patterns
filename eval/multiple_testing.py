@@ -28,12 +28,24 @@ def w(a: int, b: int) -> Window:
 def battery(frame):
     recent, baseline, whole = w(CHANGE, DAYS - 1), w(0, CHANGE - 1), w(0, DAYS - 1)
     tests = []
-    for m in ("sleep_minutes", "bedtime_hour", "time_in_bed", "sleep_efficiency",
-              "deep_sleep_minutes", "awake_in_bed_minutes"):
+    for m in (
+        "sleep_minutes",
+        "bedtime_hour",
+        "time_in_bed",
+        "sleep_efficiency",
+        "deep_sleep_minutes",
+        "awake_in_bed_minutes",
+    ):
         tests.append(tools.compare_windows(frame, m, recent, baseline))
     for m in ("sleep_minutes", "bedtime_hour", "sleep_efficiency"):
         tests.append(tools.change_point(frame, m, whole))
-    for driver in ("bedtime_hour", "steps", "active_zone_minutes", "resting_hr", "very_active_minutes"):
+    for driver in (
+        "bedtime_hour",
+        "steps",
+        "active_zone_minutes",
+        "resting_hr",
+        "very_active_minutes",
+    ):
         tests.append(tools.correlate(frame, driver, "sleep_minutes", whole, 2))
     for m in ("sleep_minutes", "bedtime_hour"):
         tests.append(tools.weekday_split(frame, m, whole))
@@ -64,7 +76,9 @@ def decisions(tests):
 
 
 def found(tests, sig, tool, metric):
-    return any(s and e.tool == tool and metric in e.metrics for e, s in zip(tests, sig, strict=True))
+    return any(
+        s and e.tool == tool and metric in e.metrics for e, s in zip(tests, sig, strict=True)
+    )
 
 
 rules = ["raw", "BH, all tests", "BH, per family", "BH, associations only"]
@@ -85,15 +99,19 @@ for seed in range(SEEDS):
     for rule, sig in decisions(shifted).items():
         power[rule]["sleep change"] += found(shifted, sig, "compare_windows", "sleep_minutes")
         power[rule]["bedtime change"] += found(shifted, sig, "compare_windows", "bedtime_hour")
-        power[rule]["bedtime-sleep association"] += (
-            found(shifted, sig, "correlate", "bedtime_hour")
-        )
+        power[rule]["bedtime-sleep association"] += found(shifted, sig, "correlate", "bedtime_hour")
 
-print(f"{SEEDS} people per condition, {len(battery(generate(START, DAYS, seed=1).frame))} tests per run")
-print(f"{'rule':<24} {'null: any false':>16} {'null: false assoc.':>19} "
-      f"{'sleep change':>13} {'bedtime change':>15} {'association':>12}")
+print(
+    f"{SEEDS} people per condition, {len(battery(generate(START, DAYS, seed=1).frame))} tests per run"
+)
+print(
+    f"{'rule':<24} {'null: any false':>16} {'null: false assoc.':>19} "
+    f"{'sleep change':>13} {'bedtime change':>15} {'association':>12}"
+)
 for r in rules:
     pw = power[r]
-    print(f"{r:<24} {null_any[r] / SEEDS:>16.0%} {null_assoc[r] / SEEDS:>19.0%} "
-          f"{pw['sleep change'] / SEEDS:>13.0%} {pw['bedtime change'] / SEEDS:>15.0%} "
-          f"{pw['bedtime-sleep association'] / SEEDS:>12.0%}")
+    print(
+        f"{r:<24} {null_any[r] / SEEDS:>16.0%} {null_assoc[r] / SEEDS:>19.0%} "
+        f"{pw['sleep change'] / SEEDS:>13.0%} {pw['bedtime change'] / SEEDS:>15.0%} "
+        f"{pw['bedtime-sleep association'] / SEEDS:>12.0%}"
+    )

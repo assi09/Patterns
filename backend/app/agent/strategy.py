@@ -69,7 +69,7 @@ STRATEGIES: dict[str, Strategy] = {
         guide="How to work: the snapshot below already compares the latest day with the usual "
         "range, as evidence you may cite. Answer from it if it covers the question; otherwise use "
         "compare_day for the metrics it lacks. No hypotheses. Then call submit_findings.",
-        budget=Budget(max_calls=3, max_tool_calls=4, max_cost_usd=0.01),
+        budget=Budget(max_calls=4, max_tool_calls=4, max_cost_usd=0.012),
         snapshot=True,
         memory=False,
     ),
@@ -77,7 +77,7 @@ STRATEGIES: dict[str, Strategy] = {
         tools=("describe", "rank_days", "usual_ranges", "compare_day", "coverage", "checkins"),
         guide="How to work: answer the value asked for with the fewest tool calls (the snapshot "
         "below may already cover it). No hypotheses. Then call submit_findings.",
-        budget=Budget(max_calls=3, max_tool_calls=4, max_cost_usd=0.01),
+        budget=Budget(max_calls=4, max_tool_calls=4, max_cost_usd=0.012),
         snapshot=True,
     ),
     "change": Strategy(

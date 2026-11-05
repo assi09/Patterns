@@ -211,6 +211,13 @@ def _rejections_message(
         "instruction": "Fix or drop the rejected claims and call submit_findings again with "
         "the complete list of claims.",
     }
+    if summary:
+        message["instruction"] += (
+            " In the summary, a metric with no significant test takes no direction word (higher, "
+            "more, later, up, down). Say it held steady or showed no clear difference, or say in "
+            'the same sentence that it "could be normal variation". Keep answering the question '
+            "that was asked, in your own words."
+        )
     if uncovered:
         message["uncovered"] = uncovered
         # Worded so the claim it asks for can pass the ownership rule: about the expert's own
@@ -308,6 +315,11 @@ def run_agent(
         if submitted:
             result.stop_reason = "submitted"
             break
+    # A run can end during a repair, on its budget or a model failure: what failed its check is
+    # never the answer.
+    checks = [step for step in result.trace if step["type"] == "verify"]
+    if result.stop_reason != "submitted" and checks and checks[-1]["summary_problems"]:
+        result.summary = fallback_summary(result.claims)
     return result
 
 
@@ -531,13 +543,16 @@ def fallback_summary(claims: list[Claim]) -> str:
         text = text.strip()
         return text[:1].upper() + text[1:] + ("" if text.endswith((".", "!", "?")) else ".")
 
-    lead = [sentence(c.text) for c in claims if c.kind != "no_change"][:3]
+    # Findings lead; a note on data quality only supports them, so it comes last, if at all.
+    lead = [sentence(c.text) for c in claims if c.kind not in ("no_change", "data_quality")][:3]
     unchanged = [c for c in claims if c.kind == "no_change"]
+    notes = [sentence(c.text) for c in claims if c.kind == "data_quality"][:1]
     steady = list(dict.fromkeys(label(c.metric) for c in unchanged if c.metric))
-    if len(steady) < 2:  # one steady metric reads best in its own claim's words
-        return " ".join(lead + [sentence(c.text) for c in unchanged])
-    names = f"{', '.join(steady[:-1])} and {steady[-1]}"
-    return " ".join([*lead, sentence(f"{names} showed no clear change")])
+    if len(steady) < 3:  # a claim's own words fit its question ("did not differ by weekday")
+        said = [sentence(c.text) for c in unchanged]
+    else:
+        said = [sentence(f"{', '.join(steady[:-1])} and {steady[-1]} showed no clear change")]
+    return " ".join([*lead, *said, *(notes if not lead and not said else [])])
 
 
 def answer_task(

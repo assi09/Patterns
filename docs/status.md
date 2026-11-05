@@ -23,14 +23,14 @@ priority**; the UI and data plumbing exist to serve them.
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic, request intent and a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers; questions about one day use `compare_day` with its own `day` claim kind; a consulted expert's verified claims are carried into the answer when the summary uses them; claims from the person's other conversations are memory items (kind `chat`). Reachable through `POST /chat` |
 | API | `/health`, `/data/status`, `/days/{date|latest}` (with the recovery score and its parts), `/days/{date}/workouts` and `/days/{date}/hourly` (read live from Google, kept 5 minutes), `/checkins/{day}`, `/metrics/{metric}`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: conversations (`GET`/`POST /conversations`, `PATCH` (rename, pin) and `DELETE /conversations/{id}`; editing or retrying a question with `replaces`), `GET /chat?conversation=`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps of $0.10 per person and $0.50 in all from stored answer costs); **Google Health per person**: `POST /google/connect`, `GET /google/callback`, `POST /google/sync`, `POST /google/disconnect`, `GET /google/status` (tokens encrypted with `FA_TOKEN_KEY`, PKCE, first sync of the whole history newest first, later syncs reread the last 3 days) |
 | App | landing page; sign up / sign in (keychain, or localStorage on the web), waiting screen, Access requests for the owner; tabs **Today** (day switcher; Recovery, Sleep, Steps and, on wide screens, Resting heart rate in large figures against the usual range; morning check-in; sleep stages; steps by hour; the day's workouts with a page each; heart and body; what changed lately; a page per metric with 7/30/90 days and the usual band; two columns on wide screens), **Ask** (separate chats with a collapsible sidebar on the web, pin, rename, delete; copy, edit and retry on messages; attach a metric or finding; expert picker, quick/deep), **Reminders** (mock data) and **Settings** (account, appearance, Google Health, data coverage, logged entries); an evidence page per computation (question, answer, chart, figures, method); flat sections and rows in the "Track day" palette, light and dark; Expo SDK 58, Expo Go and web |
-| Engineering | protected `main`, PRs with both CI jobs required, 695 backend and 102 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 1194 backend and 146 mobile tests |
 
 **Not built yet:** **personal experiments**, the headline agentic feature
 ([product.md](product.md#personal-experiments-headline-agentic-feature-planned)); the evaluation
-suite, tracing and metrics, the failure matrix and threat model; the daily run (and the agent's
-note on Today, skipped for now at the user's request); real reminders (the tab runs on the mock);
-the journal with habit impact; fitness age; the weekly workout summary; nutrition columns; a screen
-to approve facts the agent proposes. Deployment (Railway and Vercel, see
+on real data, tracing and metrics, the failure matrix and threat model; the daily run (and the
+agent's note on Today, skipped for now at the user's request);
+the journal with habit impact; fitness age; the weekly workout summary; nutrition columns.
+Deployment (Railway and Vercel, see
 [deployment.md](deployment.md)) and teams with weekly supervisor reports ([teams.md](teams.md))
 are built.
 
@@ -178,6 +178,12 @@ To let someone else sign in, add their Google account as a test user in the cons
 
 ## Next
 
+**The smarter chat is built** (2026-10-28 to 11-05, #112-#122): coaching that stays non-medical,
+seven new tools, a way of working per question type, a running summary per chat, long-term memory
+(episodes, a listener with one-tap cards, a profile, memory search, interests), knowledge cards,
+food and web lookups, and the app screens for all of it. Next: personal experiments, then traces,
+the evaluation on real data, the failure matrix, the bonus practices and the pilot.
+
 **The plan for the last four weeks is [plan.md](plan.md)** (2026-10-27 to 11-23, then two weeks of
 buffer): join the parts into one agentic loop (daily run, proposals inbox, shared memory), personal
 experiments, reminders for real, team improvements, chat fixes and new tools, a pilot with about 10
@@ -316,9 +322,8 @@ Spent so far on real runs: about $0.67 in all, almost all OpenAI (Jev under $0.0
     words; the evaluation's planted scenarios will measure how often it happens. Improved in PR #54:
     a hedged sentence may say "a little less, though that could be normal variation", and the
     evidence card explains when a result is not clear once the answer's checks are counted.
-15. **The agent has not yet proposed a fact in a real run.** Told "I've been working night shifts
-    since August", it did not call `propose_fact` in either real run, the second after the prompt
-    asked it to. Proposals work in the scripted tests.
+15. ~~The agent has not yet proposed a fact in a real run.~~ Fixed in #118: a listener after each
+    answer replaces `propose_fact`, and it hears these in real runs.
 16. **Accounts have no email check and no password reset yet.** Anyone can sign up with any
     address (approval is the gate), and a forgotten password needs the owner (`python -m app.auth set-password`). Both need an email
     service. The log-in lock is kept in memory, so it resets on restart and is per server process. On
@@ -331,8 +336,9 @@ Spent so far on real runs: about $0.67 in all, almost all OpenAI (Jev under $0.0
     memory, per server process.
 18. **On the web, `?google=` stays in the address** after Google sends the browser back, so a
     reload shows the "connected" notice again.
-19. **No screen yet for facts the agent proposes**; they are stored as proposed. Jev's routing and
-    guard costs (about $0.00007 a question) are not added to the stored cost of an answer.
+19. ~~No screen yet for facts the agent proposes.~~ Fixed in #121: memory cards in the chat and the
+    inbox, and a memory page in Settings. Still open: Jev's routing and guard costs (about $0.00007
+    a question) are not added to the stored cost of an answer.
 20. **A verdict depends on how many tests the agent chose to run.** The same time-asleep drop on the
     same data was "no clear change" after 6 tests (adjusted p 0.096) and "a small real dip" after 5
     (0.04). The correction is right for each run, but the answer should not hinge on how many
@@ -350,6 +356,16 @@ Spent so far on real runs: about $0.67 in all, almost all OpenAI (Jev under $0.0
     transparent; morning check-ins are the ground truth to compare it with once there are enough.
 25. **Workouts and steps by hour need a Google Health connection**; the owner's Takeout fallback
     shows none.
-26. **Not seen in a real run yet** (the day's chat cap was reached): pointers between
-    conversations, and sending an edited or retried question. Both are covered by scripted tests.
+26. **Not seen in a real run yet** (the day's chat cap was reached): sending an edited or retried
+    question. It is covered by scripted tests. Pointers between conversations became episodes
+    (#117), and a question about another chat worked in a real run.
 27. **Answers stored before #64 keep the old note wording** ("does not cover the ... side").
+28. **Some summaries still fall back to joined claims.** Down from 11 of 53, but 3 of the 8 rerun
+    after the fixes still did, mostly on `why` and `change` questions
+    ([experiments.md](experiments.md#the-chat-end-to-end-2026-11-05)).
+29. **An answer can repeat the question's premise.** Asked "why has my sleep been worse?", it said it
+    got a bit worse although nothing it found shows that. The summary check does not catch this.
+30. **A goal cannot be measured.** "How is my goal going?" cannot say how close they are, because a
+    target's number is not evidence. It needs a goal tool, probably with personal experiments.
+31. **`day` and `lookup` take about three model calls**, not the one or two planned.
+

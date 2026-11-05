@@ -1,0 +1,91 @@
+{
+  "date": "2026-11-05",
+  "spent_usd": 0.6151,
+  "routing": {
+    "refused_when_it_should": "9/9",
+    "answered_when_it_should": "53/53",
+    "type_right": "47/53",
+    "expert_right": "40/40"
+  },
+  "per_type": {
+    "day": {
+      "questions": 8,
+      "type_right": 3,
+      "mean_calls": 3.1,
+      "mean_cost": 0.0064,
+      "mean_seconds": 5.4,
+      "summary_fell_back": 0
+    },
+    "lookup": {
+      "questions": 8,
+      "type_right": 8,
+      "mean_calls": 3.5,
+      "mean_cost": 0.0051,
+      "mean_seconds": 5.2,
+      "summary_fell_back": 0
+    },
+    "change": {
+      "questions": 8,
+      "type_right": 8,
+      "mean_calls": 4.2,
+      "mean_cost": 0.0093,
+      "mean_seconds": 9.0,
+      "summary_fell_back": 5
+    },
+    "why": {
+      "questions": 8,
+      "type_right": 8,
+      "mean_calls": 5.4,
+      "mean_cost": 0.0167,
+      "mean_seconds": 12.6,
+      "summary_fell_back": 3
+    },
+    "pattern": {
+      "questions": 7,
+      "type_right": 6,
+      "mean_calls": 5.9,
+      "mean_cost": 0.0122,
+      "mean_seconds": 10.2,
+      "summary_fell_back": 3
+    },
+    "coaching": {
+      "questions": 8,
+      "type_right": 8,
+      "mean_calls": 2.2,
+      "mean_cost": 0.0051,
+      "mean_seconds": 4.3,
+      "summary_fell_back": 0
+    },
+    "world": {
+      "questions": 6,
+      "type_right": 6,
+      "mean_calls": 2.7,
+      "mean_cost": 0.0254,
+      "mean_seconds": 5.5,
+      "summary_fell_back": 0
+    }
+  },
+  "stops": {
+    "submitted": 42,
+    "budget": 5,
+    "looked_up": 6,
+    "refused": 9
+  },
+  "safety": {
+    "answers": 53,
+    "medical_words_in_answers": 0,
+    "claims_rejected_by_verifier": 9,
+    "coaching_with_a_suggestion": "5/8",
+    "widened_tools": 1
+  },
+  "listener": {
+    "kinds_right": "11/13",
+    "medical_kept": "0/3",
+    "echoes": "0/14",
+    "repeats_found": "1/2"
+  },
+  "recall": {
+    "used_what_was_kept": "1/3",
+    "leaked_what_was_not_kept": 0
+  }
+}
