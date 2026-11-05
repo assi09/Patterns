@@ -6,8 +6,10 @@
   person's answer must be one of them. A metric and period once asked about is not asked again,
   and questions stop for a while after the person dismisses two.
 - **Check-ins** are the person's: a rating from 1 to 5 and tags from a fixed list, for today only.
-- **Facts** are proposed by the agent and kept only once the person approves; text that reads like
-  an instruction is refused, and a fact the person declined is not proposed again.
+- **Facts** are what the person said about themselves. The listener hears them as candidates;
+  one heard twice, or that the person asked to have remembered, is proposed as a card, and it is
+  kept only once they approve. Text that reads like an instruction or names a condition is refused,
+  and what they declined is not proposed again.
 - **Episodes** are how one chat reaches the others: when a chat goes idle, code writes one dated
   line from its verified claims. Nothing else from a chat crosses over.
 
@@ -37,6 +39,7 @@ from app.db.models import (
     Finding,
     MemoryEpisode,
     MemoryFact,
+    Notification,
 )
 
 FINDING_KINDS = ("change", "association")
@@ -44,6 +47,8 @@ FINDING_DAYS = 90
 ANSWER_DAYS = 180
 CHECKIN_DAYS = 365
 FACT_UNUSED_DAYS = 60  # approved facts unused this long are no longer retrieved
+CANDIDATE_DAYS = 30  # heard once and not again this long: forgotten
+PROMOTE_AT = 2  # heard this many times, a candidate becomes a card
 EPISODE_DAYS = 90
 EPISODE_IDLE = timedelta(hours=1)  # a chat unused this long is consolidated
 EPISODE_CLAIMS = 2
@@ -267,6 +272,21 @@ def _normalized(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
+def _ask_to_keep(session: Session, fact: MemoryFact) -> None:
+    """Makes a heard fact a card: proposed, and asked about in the inbox."""
+    fact.status = "proposed"
+    session.add(
+        Notification(
+            user_id=fact.user_id,
+            kind="memory",
+            title="Keep this in mind?",
+            body=fact.text,
+            link="/memory",
+            fact_id=fact.id,
+        )
+    )
+
+
 def propose_fact(
     session: Session,
     user_id: uuid.UUID,
@@ -275,27 +295,67 @@ def propose_fact(
     metrics: Iterable[str] = (),
     *,
     run_id: str | None = None,
+    explicit: bool = True,
+    start: date | None = None,
+    end: date | None = None,
+    same_as: uuid.UUID | None = None,
+    message_id: uuid.UUID | None = None,
+    now: datetime | None = None,
 ) -> MemoryFact | None:
-    """Stores the agent's proposal for the person to approve; None if they declined it before."""
+    """Records something the person said. `explicit` (they asked for it) makes it a card at once;
+    otherwise it is a candidate until heard `PROMOTE_AT` times. `same_as` is what the listener took
+    it to repeat. Returns None if they declined it before."""
     try:
         cleaned, concerned = validate_fact(kind, text, metrics)
     except FactRejected as exc:
         raise MemoryRejected(str(exc)) from exc
+    now = now or _now()
     same = [
         fact
         for fact in session.scalars(select(MemoryFact).where(MemoryFact.user_id == user_id))
         if _normalized(fact.text) == _normalized(cleaned)
+        or (fact.id == same_as and fact.kind == kind)
     ]
     if any(fact.status == "declined" for fact in same):
         return None  # the person said no; do not ask again
     if same:
-        return same[0]
+        fact = same[0]
+        fact.seen += 1
+        fact.last_seen_at = now
+        if fact.status == "candidate" and (explicit or fact.seen >= PROMOTE_AT):
+            _ask_to_keep(session, fact)
+        session.flush()
+        return fact
     fact = MemoryFact(
-        user_id=user_id, kind=kind, text=cleaned, metrics=concerned, source_run_id=run_id
+        user_id=user_id,
+        kind=kind,
+        text=cleaned,
+        metrics=concerned,
+        status="candidate",
+        source_run_id=run_id,
+        source_message_id=message_id,
+        start_day=start,
+        end_day=end,
+        last_seen_at=now,
     )
     session.add(fact)
     session.flush()
+    if explicit:
+        _ask_to_keep(session, fact)
+        session.flush()
     return fact
+
+
+def held_facts(session: Session, user_id: uuid.UUID) -> list[MemoryFact]:
+    """What the listener compares a new message with, newest first; declined ones too, so that
+    what the person said no to is recognised however it is worded."""
+    return list(
+        session.scalars(
+            select(MemoryFact)
+            .where(MemoryFact.user_id == user_id)
+            .order_by(MemoryFact.created_at.desc())
+        )
+    )
 
 
 def decide_fact(
@@ -308,8 +368,26 @@ def decide_fact(
     fact = _fact(session, user_id, fact_id)
     if fact.status != "proposed":
         raise MemoryRejected("This fact was already decided.")
+    session.execute(
+        update(Notification)
+        .where(Notification.fact_id == fact.id, Notification.read_at.is_(None))
+        .values(read_at=now or _now())
+    )
     fact.status = "approved" if approve else "declined"
     fact.decided_at = now or _now()
+    session.flush()
+    return fact
+
+
+def edit_fact(session: Session, user_id: uuid.UUID, fact_id: uuid.UUID, text: str) -> MemoryFact:
+    """The person's own wording of something kept or waiting; the same rules as any fact."""
+    fact = _fact(session, user_id, fact_id)
+    if fact.status not in ("proposed", "approved"):
+        raise MemoryRejected("This fact cannot be edited.")
+    try:
+        fact.text, _ = validate_fact(fact.kind, text, fact.metrics)
+    except FactRejected as exc:
+        raise MemoryRejected(str(exc)) from exc
     session.flush()
     return fact
 
@@ -349,6 +427,14 @@ def expire(session: Session, user_id: uuid.UUID, now: datetime | None = None) ->
         delete(CheckIn).where(CheckIn.user_id == user_id, CheckIn.day < cutoff)
     )
     removed["checkins"] = result.rowcount
+    result = session.execute(
+        delete(MemoryFact).where(
+            MemoryFact.user_id == user_id,
+            MemoryFact.status == "candidate",
+            MemoryFact.last_seen_at < now - timedelta(days=CANDIDATE_DAYS),
+        )
+    )
+    removed["candidates"] = result.rowcount
     return removed
 
 
@@ -427,12 +513,14 @@ def memory_items(
             continue  # unused facts fade out
         items.append(
             MemoryItem(
-                kind="preference" if fact.kind == "preference" else "fact",
+                kind=fact.kind if fact.kind in ("preference", "event") else "fact",
                 id=str(fact.id),
                 text=fact.text,
                 metrics=tuple(fact.metrics),
                 created=_aware(fact.decided_at or fact.created_at),
                 importance=1.0,
+                start=fact.start_day,
+                end=fact.end_day,
             )
         )
     items += _episodes(session, user_id, conversation_id)

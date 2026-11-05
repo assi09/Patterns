@@ -26,6 +26,7 @@ class NotificationOut(ApiModel):
     link: str | None  # a path in the app
     alarm_id: str | None  # a smart alarm, which the person may mark useful or not
     alarm_feedback: str | None  # "useful", "not_useful", or not given yet
+    fact_id: str | None  # a memory the person may keep
     created_at: datetime
     read_at: datetime | None
 
@@ -44,6 +45,7 @@ def _out(row: Notification, feedback: str | None = None) -> NotificationOut:
         link=row.link,
         alarm_id=str(row.alarm_id) if row.alarm_id else None,
         alarm_feedback=feedback,
+        fact_id=str(row.fact_id) if row.fact_id else None,
         created_at=utc(row.created_at),
         read_at=utc(row.read_at),
     )

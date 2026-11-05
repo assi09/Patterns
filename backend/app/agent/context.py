@@ -78,7 +78,7 @@ class Attachment:
 class MemoryItem:
     """One stored memory, as the context builder ranks it (the store turns rows into these)."""
 
-    kind: str  # finding, answer, fact, preference, episode (what another chat found)
+    kind: str  # finding, answer, fact, preference, event, episode (what another chat found)
     id: str
     text: str  # a verified claim, a menu answer turned into a sentence, or an approved fact
     metrics: tuple[str, ...]
@@ -197,7 +197,11 @@ def select_memory(
         return 1.0 + recency + min(1.0, max(0.0, item.importance)) + bonus
 
     relevant = [
-        m for m in usable if m.kind != "preference" and (scope is None or set(m.metrics) & scope)
+        m
+        for m in usable
+        if m.kind != "preference"
+        # An event matters by its dates, whatever metrics a question is about.
+        and (scope is None or set(m.metrics) & scope or (m.kind == "event" and _overlaps(m, now)))
     ]
     ranked = sorted(relevant, key=lambda m: (score(m), m.created), reverse=True)
     return (preferences + ranked)[:MAX_MEMORY_ITEMS]
