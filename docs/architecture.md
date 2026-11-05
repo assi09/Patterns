@@ -328,7 +328,8 @@ user's data.
 
 | Kind | What it holds | Written by | Lifetime | Retrieved when |
 |---|---|---|---|---|
-| **Conversation** | the chat turns: questions, verified answers, attachments | the system, per turn | the thread; older turns condensed to their questions and verified claims | always: last 4 turns verbatim, earlier ones condensed |
+| **Conversation** | the chat turns: questions, verified answers, attachments | the system, per turn | the thread | always: last 3 turns verbatim; older ones through the summary, condensed until it reaches them |
+| **Chat summary** (short-term) | about 100 words on the turns before those: what was asked and found, what the person said, what is open; plus drafts and reminders still waiting, read from their rows | the small model, after the answer, two turns at a time; never in a chat of under 5 turns | the conversation; cleared when an edit removes turns it reaches | always, in its own conversation only; never citable |
 | **Findings** (episodic) | verified claims of past runs with their evidence ids, metrics and dates | the system, only after verification | until a newer finding on the same metric supersedes it, at most 90 days | the question's metrics match; newest first |
 | **Context answers** | the person's answers to the agent's questions ("exam week") with the dates and metrics asked about | the person | 180 days | the date range or metrics overlap |
 | **Check-ins** | daily rating 1-5 and fixed tags | the person | 365 days | through a `checkins` tool, for the window being investigated |

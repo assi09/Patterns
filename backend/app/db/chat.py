@@ -13,7 +13,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.analysis.evidence import Evidence
-from app.db.models import ChatMessage, Conversation, EvidenceRecord
+from app.db.models import ChatMessage, Conversation, EvidenceRecord, HealthAction, Reminder
 
 NEW_TITLE = "New chat"
 TITLE_LENGTH = 60
@@ -85,6 +85,11 @@ def replace_from(
     )
     if message is None or message.conversation_id is None:
         return None
+    conversation = get_conversation(session, user_id, message.conversation_id)
+    reached = conversation.summary_until if conversation else None
+    if reached and message.created_at <= reached:
+        # It speaks of messages that are going: the turns left are folded again.
+        conversation.summary = conversation.summary_until = None
     session.execute(
         delete(ChatMessage).where(
             ChatMessage.user_id == user_id,
@@ -92,7 +97,7 @@ def replace_from(
             ChatMessage.created_at >= message.created_at,
         )
     )
-    return get_conversation(session, user_id, message.conversation_id)
+    return conversation
 
 
 def add_question(
@@ -214,6 +219,80 @@ def history(
     if limit is not None:
         query = query.limit(limit)
     return list(reversed(session.scalars(query).all()))
+
+
+def charge_answer(
+    session: Session, user_id: uuid.UUID, conversation_id: uuid.UUID, cost_usd: float
+) -> None:
+    """Adds background work on a chat to its latest answer, so the daily caps count it."""
+    answer = session.scalar(
+        select(ChatMessage)
+        .where(
+            ChatMessage.user_id == user_id,
+            ChatMessage.conversation_id == conversation_id,
+            ChatMessage.role == "assistant",
+        )
+        .order_by(ChatMessage.created_at.desc())
+        .limit(1)
+    )
+    if answer is not None:
+        answer.cost_usd = (answer.cost_usd or 0.0) + cost_usd
+
+
+def save_summary(
+    session: Session,
+    user_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    summary: str,
+    until: datetime,
+    seen: datetime | None,
+) -> bool:
+    """Stores a new summary, unless the chat moved on while it was written: another fold landed
+    (`seen` is no longer current), or the turns it reaches were edited away."""
+    conversation = get_conversation(session, user_id, conversation_id)
+    if conversation is None or conversation.summary_until != seen:
+        return False
+    reached = session.scalar(
+        select(ChatMessage.id).where(
+            ChatMessage.conversation_id == conversation_id,
+            ChatMessage.role == "assistant",
+            ChatMessage.created_at == until,
+        )
+    )
+    if reached is None:
+        return False
+    conversation.summary, conversation.summary_until = summary or None, until
+    return True
+
+
+def waiting_cards(
+    session: Session, user_id: uuid.UUID, messages: Iterable[ChatMessage]
+) -> list[str]:
+    """What these messages prepared that still waits for the person's tap, in plain words."""
+    action_ids, reminder_ids = set(), set()
+    for message in messages:
+        action_ids |= {uuid.UUID(str(i)) for i in message.action_ids or ()}
+        reminder_ids |= {uuid.UUID(str(i)) for i in message.reminder_ids or ()}
+    waiting = []
+    if action_ids:
+        kinds = session.scalars(
+            select(HealthAction.kind).where(
+                HealthAction.user_id == user_id,
+                HealthAction.id.in_(action_ids),
+                HealthAction.status == "draft",
+            )
+        )
+        waiting += [f"A {kind} log draft has not been confirmed yet." for kind in kinds]
+    if reminder_ids:
+        titles = session.scalars(
+            select(Reminder.title).where(
+                Reminder.user_id == user_id,
+                Reminder.id.in_(reminder_ids),
+                Reminder.status == "proposed",
+            )
+        )
+        waiting += [f"The reminder “{title}” has not been confirmed yet." for title in titles]
+    return waiting
 
 
 def load_evidence(session: Session, user_id: uuid.UUID, ids: Iterable[str]) -> dict[str, Evidence]:
