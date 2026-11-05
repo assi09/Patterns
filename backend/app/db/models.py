@@ -168,7 +168,7 @@ class SyncRun(Base):
 
 
 class Conversation(Base):
-    """One of a person's chats. Memory is the person's, so every conversation shares it."""
+    """One of a person's chats. Long-term memory is the person's; its summary stays in the chat."""
 
     __tablename__ = "conversations"
     __table_args__ = (Index("ix_conversations_user_updated", "user_id", "updated_at"),)
@@ -177,6 +177,9 @@ class Conversation(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     title: Mapped[str] = mapped_column(String(120), default="New chat")
     pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())  # first
+    # This chat's short-term memory (`app.agent.summary`), and the last answer it reaches.
+    summary: Mapped[str | None] = mapped_column(Text, default=None)
+    summary_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 

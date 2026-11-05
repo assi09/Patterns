@@ -18,7 +18,15 @@ from datetime import date, datetime
 import pandas as pd
 
 from app.agent.agent import DEFAULT_GUIDE, SYSTEM_PROMPT, AgentResult, ExtraTool, answer
-from app.agent.context import Attachment, Context, MemoryItem, Turn, build, earlier_questions
+from app.agent.context import (
+    Attachment,
+    ChatState,
+    Context,
+    MemoryItem,
+    Turn,
+    build,
+    earlier_questions,
+)
 from app.agent.conversation import ask_what_they_want, recall
 from app.agent.experts import (
     BUDGETS,
@@ -207,6 +215,7 @@ def ask(
     action_tools: dict[str, list[ExtraTool]] | None = None,
     continuing_log: str | None = None,
     reminder_tools: list[ExtraTool] | None = None,
+    chat: ChatState | None = None,
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -248,6 +257,7 @@ def ask(
         memory=memory,
         scope=_scope(route),
         now=now,
+        chat=chat,
     )
     proposals: list[dict] = []
     tools = [_propose_tool(proposals)]
@@ -294,7 +304,9 @@ def ask(
     if route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
     elif route.action == "conversation":
-        result = recall(llm, question, history, guard=guard)
+        result = recall(
+            llm, question, history, guard=guard, summary=chat.usable_summary if chat else None
+        )
     elif action_tools and route.classification.intent == Intent.MANAGE:
         result = AgentResult(
             run_id=uuid.uuid4().hex[:12],

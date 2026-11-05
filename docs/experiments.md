@@ -525,3 +525,15 @@ its tools once (`expand_tools`). Synthetic person with a planted bedtime-efficie
 `suggestion` claim (the summary passed its checks, so it is still verified text); nobody widened
 their tools in this run.
 
+## A running summary per chat (2026-10-29)
+
+**Tested:** two folds of a made-up five-turn chat (exams, a bedtime goal, a reminder put off, a drop
+in steps) on the small model, twice. $0.0027 in all.
+**Showed:** the first prompt ("keep what still matters") lost the exams, their end date and the
+bedtime goal on the second fold, because it summarised the new turns only. With the prompt asking
+for the whole summary again, and saying the previous summary is the only record of those turns,
+the second fold kept all of it, updated the open point ("ask again after exams") and added the
+steps: 473 characters, $0.0007 to $0.0009 a fold, so about $0.0004 per message in a long chat.
+**Changed:** the prompt. The fold runs after the answer, two turns at a time, and only for turns
+outside the verbatim window, so chats under five turns never pay for it. One made-up chat is
+not an evaluation: the memory set in the chat evaluation measures this properly.

@@ -29,13 +29,14 @@ from sqlalchemy.orm import Session
 from app.actions.schemas import Measured
 from app.actions.tools import proposal_tools
 from app.agent.ask import REMINDERS, ask, default_guard, default_router
-from app.agent.context import Attachment, turns_from
+from app.agent.context import Attachment, ChatState, turns_from
 from app.agent.conversation import DRAFT_NOTE, draft_reply
 from app.agent.experts import EXPERTS, Depth, available
 from app.agent.guard import Guard
 from app.agent.intent import Intent
 from app.agent.llm import LLM, LLMError, OpenAILLM
 from app.agent.router import Router
+from app.agent.summary import FOLD_AT, fold, to_fold
 from app.analysis.day import with_scores
 from app.analysis.habits import with_checkins
 from app.api import schemas
@@ -54,6 +55,7 @@ router = APIRouter(tags=["chat"])
 
 HISTORY_SHOWN = 100  # messages the app gets back
 HISTORY_USED = 20  # messages the agent sees as context; the context builder trims further
+HISTORY_FOLDED = 40  # messages looked at for the running summary
 FAILED = "I couldn't finish answering this time. Please try again in a moment."
 
 Sessions = Callable[[], AbstractContextManager[Session]]
@@ -64,6 +66,7 @@ class AgentParts:
     llm: LLM
     router: Router
     guard: Guard | None
+    summarize: bool = False  # keep each chat's running summary: a small model call in long chats
 
 
 @lru_cache(maxsize=1)
@@ -73,7 +76,7 @@ def _agent() -> AgentParts:
     except LLMError as exc:
         logger.warning("The agent is not available: %s", exc)
         raise ApiError(503, "agent_unavailable", "Answering questions is not set up yet.") from exc
-    return AgentParts(llm, default_router(settings), default_guard(settings))
+    return AgentParts(llm, default_router(settings), default_guard(settings), summarize=True)
 
 
 def get_agent() -> AgentParts:
@@ -214,6 +217,27 @@ def answer_text(summary: str, claims: list[str], notes: list[str]) -> str:
     return "\n\n".join(paragraphs) or FAILED
 
 
+def update_summary(sessions: Sessions, llm: LLM, user_id, conversation_id: uuid.UUID) -> None:
+    """Folds the turns that left the verbatim window into the chat's summary, after the answer."""
+    try:
+        with sessions() as db:
+            conversation = store.get_conversation(db, user_id, conversation_id)
+            if conversation is None:
+                return
+            previous, seen = conversation.summary, conversation.summary_until
+            turns = turns_from(store.history(db, user_id, HISTORY_FOLDED, conversation_id))
+        pending = to_fold(turns, seen)
+        if len(pending) < FOLD_AT:
+            return
+        folded = fold(llm, previous, pending)
+        with sessions() as db:
+            if folded.text is not None:
+                store.save_summary(db, user_id, conversation_id, folded.text, pending[-1].at, seen)
+            store.charge_answer(db, user_id, conversation_id, folded.cost_usd)
+    except Exception:
+        logger.exception("Updating a chat's summary failed")
+
+
 def _answer(
     sessions: Sessions,
     agent: AgentParts,
@@ -228,7 +252,7 @@ def _answer(
     """Runs on a worker thread: answers, stores the answer, and frees the person for the next."""
     try:
         with sessions() as db:
-            # The conversation's own turns; memory, including the other conversations, is shared.
+            # The conversation's own turns and summary; memory is shared with the person's others.
             earlier = [
                 m
                 for m in store.history(db, user_id, HISTORY_USED, conversation_id)
@@ -237,6 +261,12 @@ def _answer(
             turns = turns_from(earlier)
             cited = store.load_evidence(db, user_id, {i for t in turns for i in t.evidence_ids})
             remembered = memory.memory_items(db, user_id, now, conversation_id)
+            own = store.get_conversation(db, user_id, conversation_id) if conversation_id else None
+            chat = ChatState(
+                summary=own.summary if own else None,
+                until=own.summary_until if own else None,
+                waiting=tuple(store.waiting_cards(db, user_id, earlier)),
+            )
             checkins = [
                 (row.day, row.rating, list(row.tags or []))
                 for row in db.scalars(select(CheckIn).where(CheckIn.user_id == user_id))
@@ -294,6 +324,7 @@ def _answer(
                 action_tools=draft_tools,
                 continuing_log=continuing_log,
                 reminder_tools=reminding_tools,
+                chat=chat,
             )
         except Exception:
             logger.exception("Answering failed")
@@ -381,6 +412,9 @@ def _answer(
     finally:
         with _busy_lock:
             _busy.discard(user_id)
+        if agent.summarize and conversation_id:
+            with suppress(RuntimeError):  # the server is shutting down: the next answer folds it
+                _pool.submit(update_summary, sessions, agent.llm, user_id, conversation_id)
 
 
 @router.get("/chat", response_model=list[schemas.ChatMessage], response_model_exclude_none=True)

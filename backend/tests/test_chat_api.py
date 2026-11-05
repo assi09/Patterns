@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
@@ -185,6 +186,27 @@ def test_earlier_turns_are_given_to_the_next_answer(client, engine, agent):
     second_run = json.dumps(agent.llm.requests[-1]["messages"])
     assert "How did I sleep last month?" in second_run
     assert len(client.get("/chat", headers=headers).json()) == 4
+
+
+def test_a_summary_reaches_the_next_answer_in_its_own_chat_and_no_other(client, engine, agent):
+    headers = signed_in(client, engine)
+    first = client.post("/conversations", headers=headers).json()["id"]
+    for n in range(5):
+        agent.llm.turns.append(submission("Nothing stood out."))
+        ask(client, headers, f"Question {n}", conversationId=first)
+    with session_scope(engine) as db:
+        person = db.scalar(select(User)).id
+    agent.llm.turns.append(ScriptedLLM.say("They are preparing for a marathon."))
+    chat.update_summary(lambda: session_scope(engine), agent.llm, person, uuid.UUID(first))
+
+    agent.llm.turns.append(submission("Nothing stood out."))
+    ask(client, headers, "And now?", conversationId=first)
+    assert "preparing for a marathon" in json.dumps(agent.llm.requests[-1]["messages"])
+
+    other = client.post("/conversations", headers=headers).json()["id"]
+    agent.llm.turns.append(submission("Nothing stood out."))
+    ask(client, headers, "Something new", conversationId=other)
+    assert "preparing for a marathon" not in json.dumps(agent.llm.requests[-1]["messages"])
 
 
 def test_people_never_see_each_others_chat(client, engine, agent):

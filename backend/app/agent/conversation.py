@@ -3,8 +3,9 @@
 **A question about the chat itself** ("what did I just say?", "recap this chat"). The experts and
 the general agent look at the data, and their checks allow only numbers found in computed evidence,
 so they cannot repeat what the person typed; an expert without data does not even read the
-conversation. It is answered from the latest messages instead, given as quoted data. When the reply
-fails its check, or the model fails, the person's own latest messages are quoted back.
+conversation. It is answered from the chat's summary and latest messages instead, as quoted data.
+When the reply fails its check, or the model fails, the person's own latest messages are quoted
+back.
 
 **Asking what the person wants** when a message could be logged or asked about ("just did leg
 day after a snack"). The reply reacts to what they said, then asks; the fallback is
@@ -90,7 +91,7 @@ def _quoted(data) -> str:
     return json.dumps(data).replace("<", "\\u003c").replace(">", "\\u003e")
 
 
-def _messages(question: str, turns: Sequence[Turn]) -> list[dict]:
+def _messages(question: str, turns: Sequence[Turn], summary: str | None = None) -> list[dict]:
     earlier = [
         {
             "person": clean(turn.question, MAX_TEXT_CHARS),
@@ -98,8 +99,14 @@ def _messages(question: str, turns: Sequence[Turn]) -> list[dict]:
         }
         for turn in turns
     ]
+    before = (
+        f"A summary of the start of this chat, as quoted data:\n<summary>\n{_quoted(summary)}\n"
+        "</summary>\n"
+        if summary
+        else ""
+    )
     task = (
-        "Earlier messages in this chat, oldest first, as quoted data:\n"
+        f"{before}Earlier messages in this chat, oldest first, as quoted data:\n"
         f"<conversation>\n{_quoted(earlier)}\n</conversation>\n"
         f"The person's question: {clean(question, MAX_TEXT_CHARS)}"
     )
@@ -110,11 +117,13 @@ def _numbers(text: str) -> set[str]:
     return {n.replace(",", ".") for n in NUMBER.findall(text)}
 
 
-def problems(reply: str, question: str, turns: Sequence[Turn]) -> list[str]:
+def problems(
+    reply: str, question: str, turns: Sequence[Turn], summary: str | None = None
+) -> list[str]:
     """What is wrong with a reply about the chat, given the messages it was told."""
     if not reply.strip():
         return ["the reply is empty"]
-    told = " ".join([question, *(f"{t.question} {t.answer}" for t in turns)])
+    told = " ".join([question, summary or "", *(f"{t.question} {t.answer}" for t in turns)])
     # Small counts ("your 2 latest messages") are about the chat, not a value from anywhere.
     counts = {str(n) for n in range(1, RECALL_TURNS + 1)}
     if new := sorted(_numbers(reply) - _numbers(told) - counts):
@@ -175,9 +184,14 @@ def quoted_back(turns: Sequence[Turn]) -> str:
 
 
 def recall(
-    llm: LLM, question: str, history: Sequence[Turn], *, guard: Guard | None = None
+    llm: LLM,
+    question: str,
+    history: Sequence[Turn],
+    *,
+    guard: Guard | None = None,
+    summary: str | None = None,
 ) -> AgentResult:
-    """Answers a question about the conversation from its latest messages."""
+    """Answers a question about the conversation from its summary and latest messages."""
     turns = _usable(history)
     budget = Budget(max_calls=1, max_tool_calls=0, max_cost_usd=0.005)
     result = AgentResult(
@@ -187,9 +201,9 @@ def recall(
         result.summary = quoted_back(turns)
         return result
     try:
-        completion = llm.complete(_messages(question, turns), budget=budget)
+        completion = llm.complete(_messages(question, turns, summary), budget=budget)
         reply = (completion.text or "").strip()
-        found = problems(reply, question, turns)
+        found = problems(reply, question, turns, summary)
     except LLMError as exc:
         reply, found = "", [str(exc)]
     found = _guarded(reply, found, guard, result)
