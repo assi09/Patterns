@@ -358,6 +358,27 @@ class MemoryFact(Base):
     uses: Mapped[int] = mapped_column(default=0)
 
 
+class OutsideLookup(Base):
+    """A food or web lookup: the cache, and what counts against the person's daily searches. The
+    query is general by rule (`app.outside`), so results are shared; the person is kept for the cap.
+    """
+
+    __tablename__ = "outside_lookups"
+    __table_args__ = (
+        CheckConstraint("kind IN ('food', 'web')", name="ck_outside_lookups_kind"),
+        Index("ix_outside_lookups_query", "kind", "query", "created_at"),
+        Index("ix_outside_lookups_user", "user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(8))
+    query: Mapped[str] = mapped_column(String(200))
+    answer: Mapped[dict] = mapped_column(JSON)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class MemoryInterest(Base):
     """What a person keeps coming back to, learned from what they do, not from what they say.
 

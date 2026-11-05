@@ -95,3 +95,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-05 | Memory listener, made-up messages: nine ($0.0050), then eleven with the medical guard after the fixes ($0.0064), plus about $0.0006 of Jev guard calls | $0.0120 |
 | 2026-11-05 | Profile and memory search, synthetic person, four made-up questions (change, lookup, a question about another chat, why) | $0.0353 |
 | 2026-11-05 | Knowledge cards: medical guard on all cards, twice ($0.0003), and "How can I sleep better?" twice on a synthetic person ($0.0067, about $0.008) | $0.0150 |
+| 2026-11-05 | Outside lookups, made-up questions: five (one USDA, two web, two refused, $0.0620), then one web question after the fix ($0.0330). Web cost counts each search at $0.025, the higher published figure; check the OpenAI dashboard for the real charge | $0.0950 |

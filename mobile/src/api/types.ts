@@ -501,7 +501,8 @@ export type HealthLog =
       proteinG?: number | null;
       carbohydrateG?: number | null;
       fatG?: number | null;
-      provenance: 'user_entered';
+      provenance: 'user_entered' | 'estimated'; // estimated: from a food lookup, not the person
+      estimateSource?: string | null;
     }
   | {
       kind: 'workout';

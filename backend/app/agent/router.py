@@ -61,7 +61,7 @@ CRITERIA = {
     "in heart-rate zones)",
     "nutrition": "logging food and drink, or analysing food and drink logged: calories eaten, "
     "protein, carbohydrates, fat, nutrients, "
-    "meals",
+    "meals; what is in a food or dish",
     GENERAL: "the person's own Fitbit data overall, or several areas with no main one, or a "
     "reminder about no particular area",
     # Without it, "what did I just say?" takes the earlier questions' topic and reaches an expert
@@ -71,14 +71,14 @@ CRITERIA = {
     # Coaching on everyday habits ("how can I sleep better?") is in scope since 2026-10-28.
     OUT_OF_SCOPE: "medical matters (a diagnosis, symptoms, an illness or condition, treatment, "
     "medication, supplements, diets, or whether to see a doctor), or anything unrelated to their "
-    "own Fitbit data, improving their everyday habits, logging food, drink or workouts, "
-    "reminders, or this conversation",
+    "own Fitbit data, improving their everyday habits, logging food, drink or workouts, what is "
+    "in a food or dish, what a tracker metric means, reminders, or this conversation",
 }
 INSTRUCTIONS = (
     "A person asks about their own Fitbit data, how to improve their everyday habits, to log "
-    "food, drink or workouts, or for a reminder, possibly following up on earlier "
-    "questions. Which topic is the current question about? Earlier questions, newest first, only "
-    "show what it may refer to."
+    "food, drink or workouts, what is in a food, what a tracker metric means, or for a reminder, "
+    "possibly following up on earlier questions. Which topic is the current question about? "
+    "Earlier questions, newest first, only show what it may refer to."
 )
 
 
@@ -262,6 +262,15 @@ def _question_types(answer) -> dict[str, float]:
 
 # Keyword rules for the question type, tried in order; the first that matches wins.
 QUESTION_WORDS = (
+    (
+        "world",
+        re.compile(
+            r"\b(?:how many calories (?:are |is )?in|calories in|nutrition (?:of|in)|"
+            r"what(?:'s| is) in (?:a|an|the)|what does .+ mean|"
+            r"what (?:is|are) (?:hrv|active zone minutes))",
+            re.I,
+        ),
+    ),
     (
         "coaching",
         re.compile(

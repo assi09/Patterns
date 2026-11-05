@@ -23,12 +23,17 @@ def proposal_tools(
     now: datetime,
     prepared: list[str],
     measurer: Measurer | None = None,
+    estimates: list[str] | None = None,
 ) -> dict[str, list[ExtraTool]]:
+    """`estimates` holds what food lookups found in this answer: a food draft made after one is
+    labelled as an estimate by code, whatever the model says."""
+
     def tool(model: type[FoodLog] | type[WorkoutLog], expert: str) -> ExtraTool:
         schema = model.model_json_schema(by_alias=True)
         schema.pop("title", None)
         # The tracker's reading is the server's to add, so the model is not offered the field.
-        schema.get("properties", {}).pop("measured", None)
+        for owned in ("measured", "provenance", "estimateSource"):
+            schema.get("properties", {}).pop(owned, None)
         for name in ("Measured", "Overlap", "ZoneSeconds"):
             schema.get("$defs", {}).pop(name, None)
         if not schema.get("$defs"):
@@ -36,7 +41,10 @@ def proposal_tools(
 
         def run(arguments: dict | None) -> tuple[str, dict]:
             try:
-                given = {k: v for k, v in (arguments or {}).items() if k != "measured"}
+                owned = ("measured", "provenance", "estimateSource")
+                given = {k: v for k, v in (arguments or {}).items() if k not in owned}
+                if model is FoodLog and estimates:
+                    given |= {"provenance": "estimated", "estimateSource": estimates[-1]}
                 log = model.model_validate(given)
                 payload = with_measurement(
                     log.model_dump(mode="json", by_alias=True, exclude_none=True), measurer
@@ -80,8 +88,9 @@ def proposal_tools(
             "Prepare one draft per message, using supplied values. Write times with the UTC "
             "offset given at the top of the task: 'just now' is the current local time there, "
             "and 'this morning' or 'yesterday at lunch' are worked out from it. Ask only for "
-            "details that are truly missing. Never estimate nutrients, invent measurements or "
-            "claim it was logged. For a workout, pick the exerciseType closest to what they did "
+            "details that are truly missing. Never estimate nutrients yourself: with no values "
+            "given, use food_lookup if you have it, and ask otherwise. Never invent measurements "
+            "or claim it was logged. For a workout, pick the exerciseType closest to what they did "
             "(tennis is TENNIS, kickboxing KICKBOXING; OTHER only if nothing fits); the server "
             "adds what the tracker recorded during it (calories, heart rate and zones, plus "
             "steps, distance or swim lengths where Fitbit records them) and any exercise already "

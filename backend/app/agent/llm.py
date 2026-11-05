@@ -7,7 +7,8 @@ spend real money. `ScriptedLLM` replays canned turns, so tests and CI never need
 
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
@@ -39,6 +40,11 @@ PRICES = {
 }
 
 
+# A web search is priced per call, on top of its tokens. Published figures disagree ($10 or $25 per
+# 1,000), so the higher one is counted: the caps must not undercount.
+WEB_SEARCH_USD = 0.025
+
+
 class LLMError(RuntimeError):
     """The model could not be used; the message is safe to show and to log."""
 
@@ -60,6 +66,13 @@ class Usage:
             + self.cached_input_tokens * price.cached_input
             + self.output_tokens * price.output
         ) / 1_000_000
+
+
+@dataclass(frozen=True)
+class WebAnswer:
+    text: str
+    urls: tuple[str, ...]  # the pages the answer cites
+    cost_usd: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -152,6 +165,10 @@ class LLM(Protocol):
         budget: Budget | None = None,
     ) -> Completion: ...
 
+    def search(
+        self, query: str, domains: Sequence[str], *, budget: Budget | None = None
+    ) -> WebAnswer: ...
+
 
 def _tool_call(raw) -> ToolCall:
     name, arguments = raw.function.name, raw.function.arguments
@@ -173,6 +190,23 @@ def _usage(raw) -> Usage:
         cached_input_tokens=(getattr(details, "cached_tokens", 0) or 0) if details else 0,
         output_tokens=raw.completion_tokens or 0,
     )
+
+
+@contextmanager
+def _safe_errors() -> Generator[None]:
+    """OpenAI's failures as `LLMError`, with a message safe to show and to log."""
+    try:
+        yield
+    except openai.AuthenticationError as exc:
+        raise LLMError("OpenAI rejected the API key.") from exc
+    except openai.RateLimitError as exc:
+        raise LLMError("OpenAI is rate limiting or the account is out of credit.") from exc
+    except openai.APITimeoutError as exc:
+        raise LLMError("OpenAI took too long to answer.") from exc
+    except openai.APIConnectionError as exc:
+        raise LLMError("Could not reach OpenAI.") from exc
+    except openai.APIStatusError as exc:
+        raise LLMError(f"OpenAI returned an error ({exc.status_code}).") from exc
 
 
 class OpenAILLM:
@@ -217,18 +251,8 @@ class OpenAILLM:
         if tools:
             request["tools"] = tools
         started = self._clock()
-        try:
+        with _safe_errors():
             response = self._client.chat.completions.create(**request)
-        except openai.AuthenticationError as exc:
-            raise LLMError("OpenAI rejected the API key.") from exc
-        except openai.RateLimitError as exc:
-            raise LLMError("OpenAI is rate limiting or the account is out of credit.") from exc
-        except openai.APITimeoutError as exc:
-            raise LLMError("OpenAI took too long to answer.") from exc
-        except openai.APIConnectionError as exc:
-            raise LLMError("Could not reach OpenAI.") from exc
-        except openai.APIStatusError as exc:
-            raise LLMError(f"OpenAI returned an error ({exc.status_code}).") from exc
 
         message = response.choices[0].message
         usage = _usage(response.usage)
@@ -245,6 +269,46 @@ class OpenAILLM:
             budget.charge(completion)
         return completion
 
+    def search(
+        self, query: str, domains: Sequence[str], *, budget: Budget | None = None
+    ) -> WebAnswer:
+        """One web search limited to `domains`, on the Responses API; its cost is charged here."""
+        if budget:
+            budget.check()
+        self._ledger.check()
+        model = self._models[Role.SMALL]
+        with _safe_errors():
+            response = self._client.responses.create(
+                model=model,
+                input=query,
+                instructions="Answer in two or three plain sentences, from what you find.",
+                tools=[{"type": "web_search", "filters": {"allowed_domains": list(domains)}}],
+            )
+        searches = sum(
+            item.type == "web_search_call" and getattr(item.action, "type", "") == "search"
+            for item in response.output
+        )
+        details = getattr(response.usage, "input_tokens_details", None)
+        usage = Usage(
+            input_tokens=response.usage.input_tokens,
+            cached_input_tokens=(getattr(details, "cached_tokens", 0) or 0) if details else 0,
+            output_tokens=response.usage.output_tokens,
+        )
+        cost = usage.cost(PRICES[model]) + searches * WEB_SEARCH_USD
+        self._ledger.charge(cost)
+        if budget:
+            budget.calls += 1
+            budget.cost_usd += cost
+        urls = tuple(
+            note.url
+            for item in response.output
+            if item.type == "message"
+            for part in item.content
+            for note in getattr(part, "annotations", None) or ()
+            if note.type == "url_citation"
+        )
+        return WebAnswer(response.output_text or "", urls, cost)
+
 
 @dataclass
 class ScriptedLLM:
@@ -256,6 +320,8 @@ class ScriptedLLM:
 
     turns: list[Completion | Callable[[list[dict]], Completion]] = field(default_factory=list)
     requests: list[dict] = field(default_factory=list)
+    searches: list[WebAnswer] = field(default_factory=list)  # what `search` returns, in order
+    searched: list[str] = field(default_factory=list)
 
     @staticmethod
     def say(text: str, cost_usd: float = 0.0) -> Completion:
@@ -292,3 +358,17 @@ class ScriptedLLM:
         if budget:
             budget.charge(completion)
         return completion
+
+    def search(
+        self, query: str, domains: Sequence[str], *, budget: Budget | None = None
+    ) -> WebAnswer:
+        if budget:
+            budget.check()
+        self.searched.append(query)
+        if not self.searches:
+            raise LLMError("The script has no more searches.")
+        answer = self.searches.pop(0)
+        if budget:
+            budget.calls += 1
+            budget.cost_usd += answer.cost_usd
+        return answer

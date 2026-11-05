@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     openai_large_model: str = "gpt-5.5"
     # The router: TypeSafe's Jev, given the question text only.
     typesafe_api_key: SecretStr | None = None
+    fdc_api_key: SecretStr | None = None  # USDA FoodData Central; without it, no food lookups
     typesafe_model: str = "jev-latest"
     typesafe_base_url: str = "https://api.typesafe.ai"
     # Accounts: who may approve sign-ups, and how long a device stays signed in.

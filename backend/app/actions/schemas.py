@@ -50,8 +50,10 @@ class FoodLog(LogModel):
     protein_g: Number | None = None
     carbohydrate_g: Number | None = None
     fat_g: Number | None = None
-    # This first tool accepts supplied values only. Estimates need a separate provenance path.
-    provenance: Literal["user_entered"] = "user_entered"
+    # Set by code, never by the model: "estimated" when the values came from a food lookup, so the
+    # draft card can say so before the person confirms it.
+    provenance: Literal["user_entered", "estimated"] = "user_entered"
+    estimate_source: str | None = Field(default=None, max_length=160)
 
     @model_validator(mode="after")
     def valid_food(self) -> Self:

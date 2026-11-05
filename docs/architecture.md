@@ -372,6 +372,27 @@ a link would make the turn read like an instruction when quoted back. `eval/know
 checks every card with the medical guard. There are no cards on logging: no public page we found
 supports one.
 
+### Looking things up outside the data
+
+Questions about the world (`world`, the seventh question type: what is in a food, what a metric
+means) get their own short route (`app/agent/world.py`): one call picks `food_lookup` (USDA
+FoodData Central) or `web_lookup` and writes a general query, code runs it, one call writes the
+reply. The result is never `Evidence`, so the verifier's rule stands; the reply has its own check,
+that every number in it is in the result, and the answer says where it came from and that it is not
+from the person's data. When a food reply fails, code states the values; a web reply that fails
+becomes "I couldn't look that up".
+
+`web_lookup` is OpenAI's `web_search` limited to `ALLOWED_DOMAINS` (`app/outside.py`). Medical
+questions are refused by the router first. A query that looks personal or medical is refused
+before it leaves. A result citing nothing on the list is treated as nothing found, links are
+stripped, and text that reads like an instruction is dropped. A person gets 5 searches a day;
+results are cached for a day and shared, as queries hold nothing personal.
+
+When a food is logged without values, `food_lookup` gives typical values, code scales them to the
+portion, and code marks the draft `provenance: estimated` with its source, whatever the model says.
+The card asks the person to check it, and an edit makes the values theirs. Without
+`FA_FDC_API_KEY`, food lookups are off.
+
 ### Retrieval: the context builder
 
 Deterministic, before the model is called:
