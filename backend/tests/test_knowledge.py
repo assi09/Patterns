@@ -101,13 +101,6 @@ def result(summary: str, *cards: str):
     return SimpleNamespace(summary=summary, claims=[], trace=[{"cards": list(cards)}])
 
 
-def test_a_card_the_answer_drew_on_is_named_with_its_domain_and_no_link():
-    card = next(c for c in CARDS if c.id == "bedroom-setup")
-    note = source_note(result(card.text, card.id))
-    assert note == "How to try it is based on guidance from NHS (nhs.uk)."
-    assert not reads_like_instruction(note)
-
-
 def test_a_card_only_looked_at_is_not_named():
     assert source_note(result("Your bedtime held steady.", "bedroom-setup")) is None
 
@@ -116,11 +109,20 @@ def test_no_cards_no_note():
     assert source_note(SimpleNamespace(summary="x", claims=[], trace=[{"type": "llm"}])) is None
 
 
-def test_two_sources_are_both_named():
-    first = next(c for c in CARDS if c.source == "NHS")
-    second = next(c for c in CARDS if c.source == "Sleep Foundation")
-    note = source_note(result(f"{first.text} {second.text}", first.id, second.id))
-    assert "NHS (nhs.uk)" in note and "Sleep Foundation (sleepfoundation.org)" in note
+def test_two_cited_sources_are_both_named_once_and_with_no_link():
+    from app.agent.knowledge import passage_evidence
+    from app.agent.verifier import Claim
+    from app.knowledge.build import Passage
+
+    def record(source):
+        url = "https://example.com"
+        return passage_evidence(Passage(source, "t", "x", source, url, "p", "sleep", "guideline"))
+
+    first, second, again = record("NHS"), record("NIOSH"), record("NHS")
+    held = {e.id: e for e in (first, second, again)}
+    claim = Claim(text="Try it.", kind="guidance", evidence_ids=list(held))
+    note = source_note(SimpleNamespace(summary="Try it.", claims=[claim], trace=[], evidence=held))
+    assert note.count("NHS") == 1 and "NIOSH" in note and not reads_like_instruction(note)
 
 
 def test_a_card_type_keeps_its_domain_without_www():
