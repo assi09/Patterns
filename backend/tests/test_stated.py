@@ -133,3 +133,35 @@ def test_a_draft_is_described_from_its_own_values():
     }
     text = draft_sentence(payload, NOW)
     assert "yesterday at 15:00 for 1 h 30 min" in text
+
+
+def test_a_reply_with_no_duration_is_noticed_before_a_draft_is_tried():
+    from app.actions.stated import lacks_a_duration
+
+    assert lacks_a_duration(["Log a workout", "Weightlifting"])
+    assert not lacks_a_duration(["Log a workout", "45 minutes"])
+    assert not lacks_a_duration(["weights, just finished"])
+
+
+def test_a_time_that_has_not_come_yet_today_means_yesterday():
+    from app.actions.stated import latest_past
+
+    just_after_midnight = datetime(2026, 11, 9, 0, 20, tzinfo=BEIRUT)
+    given = {"startTime": "2026-11-09T07:00:00+02:00", "endTime": "2026-11-09T07:30:00+02:00"}
+    moved = latest_past(given, ["Log a run at 7 am for 30 minutes"], just_after_midnight)
+    assert moved["startTime"].startswith("2026-11-08T07:00")
+    assert moved["endTime"].startswith("2026-11-08T07:30")
+
+
+def test_a_workout_already_started_is_not_moved():
+    from app.actions.stated import latest_past
+
+    given = {"startTime": "2026-11-08T15:00:00+02:00", "endTime": "2026-11-08T19:00:00+02:00"}
+    assert latest_past(given, ["weights at 3 pm for 4 hours"], NOW) == given
+
+
+def test_a_named_day_is_left_alone():
+    from app.actions.stated import latest_past
+
+    given = {"consumedAt": "2026-11-10T07:00:00+02:00"}
+    assert latest_past(given, ["breakfast on Nov 10 at 7 am"], NOW) == given

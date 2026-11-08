@@ -85,8 +85,10 @@ from app.agent.router import (
 )
 from app.agent.strategy import (
     COACHING_OFFER,
+    CROSS_AREA_GUIDE,
     asked_day,
     coaching_evidence,
+    cross_area_evidence,
     eating_context,
     expand_tool,
     scaled,
@@ -144,6 +146,7 @@ class Answer:
     context: Context
 
 
+LINKING_TYPES = ("why", "change", "pattern")
 NO_CONSULT = ("day", "lookup", "coaching")
 MAX_REPLY_WORDS = 12
 NEW_QUESTION = re.compile(
@@ -390,6 +393,22 @@ def ask(
         block = "\n\n".join(part for part in (block, about) if part)
     guidance: list[Card] = []
     retrieved: Guidance | None = None
+    # Linking two areas: run the tests here rather than pay a second expert to choose them.
+    if (
+        plan
+        and route.action == "expert"
+        and route.consult
+        and route.classification.question_type in LINKING_TYPES
+    ):
+        records, text = cross_area_evidence(frame, route.expert, route.consult)
+        if records:
+            evidence |= {record.id: record for record in records}
+            for record in records:  # its driver's expert stands behind what it says of that metric
+                if driver_owner := owner(record.metrics[0]):
+                    owners[record.id] = driver_owner.name
+            block = "\n\n".join(part for part in (block, text) if part)
+            route = replace(route, consult=())
+            plan = replace(plan, guide=CROSS_AREA_GUIDE, tools=("coverage", "correlate"))
     if plan:
         visible = sorted(_scope(route) or frame.columns)
         found: list[tuple[list[Evidence], str]] = []
@@ -491,6 +510,7 @@ def ask(
         and route.expert in ("nutrition", "activity")
         and not continuing
         and route.classification.question_type != "coaching"  # "what should I do?" is no meal
+        and "?" not in question  # someone asking something has not just told you what they ate
     ):
         result = ask_what_they_want(llm, question, expert=route.expert, guard=guard)
     elif route.action == "general":

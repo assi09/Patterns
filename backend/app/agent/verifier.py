@@ -71,7 +71,8 @@ MEDICAL = re.compile(
 # How the answer was made, or what it cannot do, in place of the advice that was asked for.
 ABOUT_ITSELF = re.compile(
     r"\bI (?:can'?t|cannot|can not) (?:give|offer|provide)\b|evidence[- ]based|tested habits?\b|"
-    r"\b(?:with|in) this run\b|\bthe test run\b|\bthis many (?:checks|tests)\b",
+    r"\b(?:with|in) this run\b|\bthe test run\b|\bthis many (?:checks|tests)\b|"
+    r"\bthe person (?:asked|wants|said|has)\b|^\s*Asked when\b",
     re.IGNORECASE,
 )
 UNMETERED = ("memory", "food_log", "knowledge")  # about the person or the world, not one metric
@@ -90,7 +91,9 @@ GENERIC_ADVICE = re.compile(
     re.IGNORECASE,
 )
 # A suggestion is an option the person may take up, never an order.
-OPTION_WORDS = re.compile(r"\b(could|might|may|try|trying|consider|option|if you want)\b", re.I)
+OPTION_WORDS = re.compile(
+    r"\b(could|might|may|try|trying|consider|option|if you want|aim(?:ing)?|worth)\b", re.I
+)
 ORDER_WORDS = re.compile(r"\b(you should|you must|you need to|make sure (?:to|you))\b", re.I)
 CAUSAL = re.compile(
     r"\b(caused|causes|causing|because of|due to|led to|leads to|results? in|proves?)\b",
@@ -252,6 +255,7 @@ def _numbers_in(value) -> list[float]:
 
 
 LEVEL_KEYS = (
+    "target",
     "mean",
     "median",
     "min",
@@ -555,6 +559,9 @@ def text_problems(
             "own numbers and life, or leave it out"
         )
     covered = {metric for evidence in cited for metric in evidence.metrics}
+    # A passage or what they said speaks of steps or sleep in words, with no metric to cover it.
+    if any(evidence.tool in UNMETERED for evidence in cited):
+        covered |= set(MENTIONS)
     if uncovered := [
         m for m, pattern in MENTIONS.items() if m not in covered and pattern.search(text)
     ]:
@@ -638,7 +645,8 @@ def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
     for sentence in SENTENCES.split(summary):
         allowed = tested if HEDGED.search(sentence) else supported
         for clause in CLAUSES.split(sentence):
-            if not clause or NEGATED.search(clause):
+            # "You could try getting more steps" suggests something; it reports no change.
+            if not clause or NEGATED.search(clause) or OPTION_WORDS.search(clause):
                 continue
             if not (
                 UP_WORDS.search(clause) or DOWN_WORDS.search(clause) or SHIFT_WORDS.search(clause)

@@ -14,6 +14,7 @@ from app.analysis.evidence import Evidence, ToolError, Window
 from app.analysis.tools import MIN_DAYS_COMPARE, WEEKEND, _round, _two_sample, _values
 
 MIN_NIGHTS_REGULARITY = 7
+MIN_GOAL_DAYS = 3
 ACUTE_DAYS = 7  # training load: the last week against
 CHRONIC_DAYS = 28  # the last four weeks
 LOAD_BANDS = ((0.8, "lighter than usual"), (1.3, "steady"), (float("inf"), "heavier than usual"))
@@ -242,4 +243,32 @@ def tag_effect(frame: pd.DataFrame, tag: str, metric: str, window: Window) -> Ev
         n=len(with_tag) + len(without),
         sufficient=sufficient,
         stats=stats,
+    )
+
+
+def goal_progress(
+    frame: pd.DataFrame, metric: str, target: float, direction: str, window: Window
+) -> Evidence:
+    """How often a day met a target the person set, overall and over the last week of the period."""
+    if direction not in ("at_least", "at_most"):
+        raise ToolError("direction must be at_least or at_most")
+    values = _values(frame, metric, window)
+    met = values >= target if direction == "at_least" else values <= target
+    last_week = met[met.index > pd.Timestamp(window.end - timedelta(days=7))]
+    return Evidence(
+        tool="goal_progress",
+        metrics=(metric,),
+        windows=(window,),
+        n=len(values),
+        sufficient=len(values) >= MIN_GOAL_DAYS,
+        stats={
+            "target": _round(target),
+            "direction": direction,
+            "days_met": int(met.sum()),
+            "days_counted": len(values),
+            "share_met": _round(met.mean()) if len(met) else None,
+            "last_week_met": int(last_week.sum()),
+            "last_week_counted": len(last_week),
+            "mean": _round(values.mean()) if len(values) else None,
+        },
     )

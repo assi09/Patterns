@@ -234,3 +234,36 @@ def test_a_failed_summary_is_rebuilt_from_the_claims_grouped():
         "Sleep efficiency went down. Time asleep did not clearly change. Bedtime did not clearly "
         "change."
     )
+
+
+def test_two_areas_are_tested_by_code_and_corrected_together():
+    from datetime import date
+
+    from app.agent.strategy import cross_area_evidence
+    from app.synthetic import generate
+
+    frame = generate(date(2026, 8, 1), 90, seed=2).frame
+    frame["strain"] = frame["steps"] / 1000
+    records, text = cross_area_evidence(frame, "sleep", ["activity"])
+    assert records and "evidence_id" in text
+    assert all("tests_in_run" in r.stats for r in records)
+    assert cross_area_evidence(frame, "sleep", []) == ([], "")
+
+
+def test_a_stitched_fallback_is_reworded_when_the_new_words_pass():
+    from app.agent.agent import AgentResult, _reword
+    from app.agent.llm import Budget, ScriptedLLM
+    from app.agent.verifier import Claim
+
+    result = AgentResult(run_id="x", stop_reason="submitted", summary="Stitched.")
+    result.claims = [Claim(text="Sleep held steady.", kind="no_change", evidence_ids=["a"])]
+    _reword(
+        ScriptedLLM([ScriptedLLM.say("Your sleep has held steady.")]),
+        result,
+        "sleep?",
+        None,
+        Budget(),
+    )
+    assert result.summary == "Your sleep has held steady."
+    _reword(ScriptedLLM([ScriptedLLM.say("You slept 99 hours.")]), result, "sleep?", None, Budget())
+    assert result.summary == "Your sleep has held steady."

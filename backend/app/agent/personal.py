@@ -228,7 +228,8 @@ def personal_check(personal_ids: set[str], fit: Fit | None = None):
             if linked
             else [
                 "give at least one suggestion of kind suggestion that cites something specific "
-                "about this person from below: their own numbers or what they told you"
+                "about this person from below: their own numbers or what they told you. Advise "
+                "first; a question alone is not an answer"
             ]
         )
 

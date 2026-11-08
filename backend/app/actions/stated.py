@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 
 from app.actions.schemas import FoodLog, WorkoutLog
 
+NOT_YET_GRACE = timedelta(minutes=15)
 RECENT = timedelta(hours=24)  # with no day named, "at 3 pm" is the latest 3 pm that has passed
 TOLERANCE_S = 60
 
@@ -141,6 +142,33 @@ def clock_times(text: str) -> set[tuple[int, int]]:
 def _on_the_clock(moment: datetime, times: set[tuple[int, int]]) -> bool:
     minutes = moment.hour * 60 + moment.minute
     return any(abs(minutes - (h * 60 + m)) <= 1 for h, m in times)
+
+
+def _shifted(value: object, days: int) -> object:
+    return (datetime.fromisoformat(str(value)) - timedelta(days=days)).isoformat()
+
+
+def latest_past(given: dict, said: Sequence[str], local_now: datetime) -> dict:
+    """A clock time with no day that has not come yet today means yesterday: at 1 am, "at 7 am"
+    is the morning that has gone. Corrected here, so an answer does not depend on the model."""
+    key = "startTime" if "startTime" in given else "consumedAt"
+    try:
+        start = datetime.fromisoformat(str(given[key]))
+    except (KeyError, ValueError):
+        return given
+    named = NAMED_DAY.search("\n".join(said))
+    if named or start.tzinfo is None or start <= local_now + NOT_YET_GRACE:
+        return given
+    moved = {**given, key: _shifted(given[key], 1)}
+    if "endTime" in given:
+        moved["endTime"] = _shifted(given["endTime"], 1)
+    return moved
+
+
+def lacks_a_duration(said: Sequence[str]) -> bool:
+    """Nothing in their words says how long it lasted, so there is no point drafting it yet."""
+    text = "\n".join(said)
+    return not durations(text) and len(clock_times(text)) < 2 and not UNTIL_NOW.search(text)
 
 
 def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime) -> str | None:

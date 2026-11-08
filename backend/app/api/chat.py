@@ -502,7 +502,10 @@ def _answer(
                 # The agent's words when they do not claim it is on; the card holds the details.
                 result.summary, result.claims = reminder_reply(result.summary), []
             refused = reply.route.action == "refuse"
-            heard = not refused and reply.route.classification.intent not in QUIET_INTENTS
+            # "Remember my goal is 8,000 steps" can read as a reminder; it is still worth hearing.
+            heard = not refused and (
+                reply.route.classification.intent not in QUIET_INTENTS or is_explicit(body.text)
+            )
             memory.mark_used(db, user_id, reply.context.memory_used, now)
             if not refused:
                 asked_about = [c.metric for c in result.claims]
@@ -530,10 +533,7 @@ def _answer(
                 conversation_id=conversation_id,
                 # The agent asked for a reminder's missing detail: the reply continues the request.
                 pending_log_expert=REMINDERS
-                if reminding
-                and not reminders
-                and not prepared
-                and result.summary.rstrip().endswith("?")
+                if reminding and not reminders and not prepared
                 else (reply.route.expert or "general")
                 if not prepared
                 and (reply.route.expert in draft_tools or reply.route.action == "general")
