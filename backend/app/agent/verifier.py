@@ -66,6 +66,11 @@ MEDICAL = re.compile(
     re.IGNORECASE,
 )
 # Advice anyone could read anywhere. An answer must speak to this person, or say nothing.
+# How the answer was made, or what it cannot do, in place of the advice that was asked for.
+ABOUT_ITSELF = re.compile(
+    r"\bI (?:can'?t|cannot|can not) (?:give|offer|provide)\b|evidence[- ]based|tested habits?\b",
+    re.IGNORECASE,
+)
 GENERIC_ADVICE = re.compile(
     r"\b(balanced diet|eat(?:ing)? (?:well|healthy|healthier)|stay(?:ing)? hydrated|drink(?:ing)? "
     r"(?:more|enough|plenty of) water|get(?:ting)? enough (?:sleep|rest)|sleep hygiene|"
@@ -513,6 +518,8 @@ def text_problems(text: str, cited: list[Evidence]) -> list[str]:
         reasons.append("mentions dates outside the cited evidence: " + ", ".join(map(str, bad)))
     if EVIDENCE_ID.search(text):
         reasons.append("writes evidence ids in the text; list them only in evidence_ids")
+    if ABOUT_ITSELF.search(text):
+        reasons.append("talks about itself; give the advice its evidence supports, plainly")
     if GENERIC_ADVICE.search(text):
         reasons.append(
             "gives advice anyone could read anywhere; say something specific to this person's "

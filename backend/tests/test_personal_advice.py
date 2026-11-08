@@ -262,3 +262,30 @@ def test_an_alert_is_given_what_the_person_kept():
     llm = ScriptedLLM([ScriptedLLM.say("x")] * 5)
     explain(llm, steady(), kind="streak", context="They have exams this week.", **ALARM)
     assert "They have exams this week." in llm.requests[0]["messages"][-1]["content"]
+
+
+def test_what_stands_out_comes_with_how_to_try_it():
+    from app.agent.knowledge import cards_for
+    from app.analysis.evidence import Evidence, Window
+
+    record = Evidence(
+        tool="personal_options",
+        metrics=("sleep_efficiency",),
+        windows=(Window(start=WINDOW.start, end=WINDOW.end),),
+        n=30,
+        sufficient=True,
+        stats={"options": [{"key": "bedtime_spread", "note": "", "try": ""}]},
+    )
+    assert [card.id for card in cards_for([record])] == ["fixed-wake-time"]
+
+
+def test_an_answer_about_what_it_cannot_do_is_sent_back():
+    from app.agent.verifier import text_problems
+
+    for text in (
+        "I can't give you 5 points from your data.",
+        "Here are the evidence-based points.",
+        "Nothing in your tested habits was clear.",
+    ):
+        assert any("talks about itself" in reason for reason in text_problems(text, []))
+    assert text_problems("You could try one fixed morning alarm.", []) == []

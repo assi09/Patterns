@@ -171,6 +171,8 @@ describe('keyStats', () => {
     expect(evidenceLabel(one)).toBe('Time asleep');
     const pair = { ...one, tool: 'correlate', metrics: ['bedtime_hour', 'sleep_minutes'] };
     expect(evidenceLabel(pair)).toBe('Bedtime & Time asleep');
+    const many = { ...pair, tool: 'personal_options', metrics: ['a', 'b', 'c'] } as typeof pair;
+    expect(evidenceLabel(many)).toBe('What stands out for you');
     const coverage = { ...one, tool: 'coverage', metrics: ['steps', 'sleep_minutes', 'hrv_ms'] };
     expect(evidenceLabel(coverage)).toBe('Data coverage');
     expect(evidenceLabel(undefined)).toBe('Evidence');

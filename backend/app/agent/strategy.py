@@ -117,12 +117,16 @@ STRATEGIES: dict[str, Strategy] = {
             "coverage",
         ),
         guide="How to work: below are the habits tested on this person's days and what stands out "
-        "in their own routine, as evidence you may cite. Give at most two suggestions, as claims "
-        "of kind suggestion: first what tested as supported, otherwise what stands out, said as "
-        "worth trying, not as something proven. Each must use their own numbers, and fit what the "
-        "profile says is going on in their life. With nothing specific below, say that and ask "
-        "what is going on for them; never fill the gap with a general tip. No hypotheses. Then "
-        "call submit_findings.",
+        "in their own routine, as evidence you may cite. Give one or two suggestions, or as many "
+        "as they ask for up to five, as claims of kind suggestion: first what tested as supported, "
+        "then what stands out, said as worth trying, not as something proven. Use everything "
+        "different below before stopping, and never the same point twice. Each must use their own "
+        "numbers, say concretely what to do (the guidance below says how), and fit what the "
+        "profile says is going on in their life. Several suggestions go in the summary one per "
+        "line, each starting with '- '. Start with the advice: with fewer than they asked for, "
+        "give those and say in a few words that this is what their data points to so far, never "
+        "what you cannot do. With nothing specific below, say that and ask what is going on for "
+        "them; never fill the gap with a general tip. No hypotheses. Then call submit_findings.",
         budget=Budget(max_calls=4, max_tool_calls=5, max_cost_usd=0.015),
         snapshot=True,
         coaching=True,

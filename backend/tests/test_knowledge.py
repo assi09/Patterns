@@ -177,7 +177,7 @@ def test_a_coaching_answer_gets_the_card_for_what_the_data_supports():
     )
     assert "Moving bedtime in small steps" in llm.requests[0]["messages"][-1]["content"]
     step = next(s for s in reply.result.trace if s.get("type") == "guidance")
-    assert step["cards"] == ["gradual-bedtime-shift"]
+    assert "gradual-bedtime-shift" in step["cards"]
 
 
 def test_the_tool_is_offered_for_coaching_only():
