@@ -12,7 +12,7 @@ import re
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import pandas as pd
 
@@ -59,8 +59,21 @@ from app.agent.knowledge import (
     source_note,
 )
 from app.agent.listener import is_explicit
-from app.agent.llm import LLM
+from app.agent.llm import LLM, Budget
 from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
+from app.agent.personal import (
+    NOT_ABOUT_EATING_LEVERS,
+    NOT_ABOUT_EATING_OPTIONS,
+    PERSONAL_TOOLS,
+    Fit,
+    Relevant,
+    fit_to_life,
+    food_log_summary,
+    memory_evidence,
+    personal_check,
+    rank_memory,
+    relevant_block,
+)
 from app.agent.router import (
     FallbackRouter,
     JevRouter,
@@ -70,11 +83,11 @@ from app.agent.router import (
     RouterError,
     decide,
 )
-from app.agent.sanitize import clean
 from app.agent.strategy import (
     COACHING_OFFER,
     asked_day,
     coaching_evidence,
+    eating_context,
     expand_tool,
     scaled,
     snapshot,
@@ -141,12 +154,43 @@ COACHING_NO_ANSWER = (
     "I don't see anything specific in your data to build advice on yet. What gets in the way on a "
     "normal day? That would tell me where to look."
 )
+HABIT_OPTIONS = "habit_options"
 ADVICE_TOOLS = ("habit_options", "personal_options")
 
 
 def _just_a_reply(text: str) -> bool:
     """Whether a message in a logging request gives a detail rather than asks something new."""
     return "?" not in text and len(text.split()) <= MAX_REPLY_WORDS and not NEW_QUESTION.match(text)
+
+
+def urgent_free(question: str) -> bool:
+    return not (URGENT_MIND.search(question) or URGENT_BODY.search(question))
+
+
+def _is_personal(record: Evidence) -> bool:
+    """Something specific about this person that a suggestion could stand on."""
+    return (
+        record.tool in PERSONAL_TOOLS
+        or (record.tool == "habit_options" and bool(record.stats.get("supported")))
+        or (record.tool == "personal_options" and bool(record.stats.get("options")))
+    )
+
+
+def _day(moment) -> date:
+    return moment.date() if isinstance(moment, datetime) else moment or datetime.now(UTC).date()
+
+
+def _zone(moment):
+    return moment.tzinfo if isinstance(moment, datetime) and moment.tzinfo else UTC
+
+
+def _food_lines(record: Evidence) -> str:
+    stats = record.stats
+    notes = "; ".join(option["note"] for option in stats["options"]) or "nothing stands out yet"
+    return (
+        f"The food they logged (evidence_id {record.id}): {stats['meals_logged']} meals over "
+        f"{stats['days_logged']} days; {notes}"
+    )
 
 
 def _scope(route: Route) -> set[str] | None:
@@ -232,6 +276,7 @@ def ask(
     archive: Sequence[MemoryItem] = (),
     search_past: Callable[[str], list[dict]] | None = None,
     outside: Outside | None = None,
+    food_logs: Sequence[dict] = (),
     guidance_mode: str = "picked",  # "none" and "all" exist to compare them (eval/advice_compare)
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
@@ -318,22 +363,57 @@ def ask(
         if acting or continuing or reminding or logging_tools or world
         else strategy_for(route.classification.question_type)
     )
+    # Someone with nothing logged can still ask how to eat better: the rest of their data and
+    # what they told you still bear on it, so a general run answers, under the nutrition name.
+    lead_on_no_data = None
+    if (
+        plan
+        and plan.coaching
+        and route.action == "expert"
+        and route.expert in EXPERTS
+        and not available(EXPERTS[route.expert], frame)
+    ):
+        lead_on_no_data = route.expert
+        route = Route("general", None, (), route.routed, route.classification)
     block, evidence, owners = context.block, dict(context.evidence), dict(context.owners)
+    relevant: list[Relevant] = []
+    fit, memory_cost, personal_ids = Fit(), Budget(), set()
+    if plan and plan.coaching and guidance_mode != "none" and urgent_free(question):
+        moment = now or datetime.now(UTC)
+        kept = chat.profile if chat else ()
+        relevant = rank_memory(question, archive, kept, llm, moment, memory_cost)
+        fit = fit_to_life([*kept, *(r.text for r in relevant)])
+        records = [memory_evidence(item) for item in relevant]
+        evidence |= {record.id: record for record in records}
+        personal_ids |= {record.id for record in records}
+        about = relevant_block(relevant, records, fit)
+        block = "\n\n".join(part for part in (block, about) if part)
     guidance: list[Card] = []
     retrieved: Guidance | None = None
     if plan:
         visible = sorted(_scope(route) or frame.columns)
         found: list[tuple[list[Evidence], str]] = []
-        if plan.snapshot:
+        if plan.snapshot and (lead_on_no_data or route.expert) != "nutrition":
             found.append(snapshot(frame, visible, asked_day(question, today, frame)))
         if plan.coaching:
-            found.append(coaching_evidence(frame, route.expert, visible))
+            lead = lead_on_no_data or route.expert
+            eating = lead == "nutrition"
+            skip_levers = fit.levers | (NOT_ABOUT_EATING_LEVERS if eating else frozenset())
+            skip_options = fit.options | (NOT_ABOUT_EATING_OPTIONS if eating else frozenset())
+            found.append(coaching_evidence(frame, lead, visible, skip_levers, skip_options))
+            if food := food_log_summary(food_logs, _day(today or now), _zone(today)):
+                found.append(([food], _food_lines(food)))
+            if lead == "nutrition":
+                found.append(eating_context(frame, skip=fit.options))
         for records, text in found:
             block = "\n\n".join(part for part in (block, text) if part)
             for record in records:
                 evidence[record.id] = record
-                if metric_owner := owner(record.metrics[0]):
+                metric_owner = owner(record.metrics[0]) if record.metrics else None
+                if metric_owner:
                     owners[record.id] = metric_owner.name
+                if plan.coaching and _is_personal(record):
+                    personal_ids.add(record.id)
         if plan.coaching:
             # What their data points to, and what this question is about: retrieved by code, so
             # it costs no model round and cannot be skipped.
@@ -342,7 +422,7 @@ def ask(
             if guidance_mode != "picked":
                 guidance = list(load_cards()) if guidance_mode == "all" else []
             if guidance_mode == "picked":
-                retrieved = guidance_for(question, picked, llm)
+                retrieved = guidance_for(question, picked, llm, " ".join(r.text for r in relevant))
                 evidence |= {record.id: record for record in retrieved.evidence}
                 block = "\n\n".join(part for part in (block, retrieved.text) if part)
             else:
@@ -361,11 +441,14 @@ def ask(
                 if metric_owner:
                     owners.setdefault(record.id, metric_owner.name)
     deep = depth == Depth.DEEP
-    # A profile line far above the question gets ignored: advice has to be told at the point of use.
+    # What they said gets ignored far above the question: it has to be there at the point of use.
     asked = question
-    if plan and plan.coaching and chat and chat.profile:
-        kept = "; ".join(clean(line, 120) for line in chat.profile[:5])
-        asked = f"{question}\n(What they told you, which the advice has to fit: {kept})"
+    if relevant or fit.notes:
+        what = "; ".join([*(r.text for r in relevant), *fit.notes])
+        asked = f"{question}\n(What they told you, which the advice has to fit: {what})"
+    check = personal_check(personal_ids, fit) if plan and plan.coaching else None
+    if plan and fit.levers:  # its own run of this tool would hand the bedtimes back
+        plan = replace(plan, tools=tuple(t for t in plan.tools if t != HABIT_OPTIONS))
     urgent = (
         URGENT_MIND_REPLY
         if URGENT_MIND.search(question)
@@ -425,7 +508,10 @@ def ask(
             tools=plan.tools if plan else None,
             guide=plan.guide if plan else DEFAULT_GUIDE,
             widen=expand_tool if plan else None,
+            answer_check=check,
         )
+        if lead_on_no_data:
+            result.expert = lead_on_no_data
     else:
         result = ask_expert(
             llm,
@@ -452,6 +538,7 @@ def ask(
             extra_tools=tools,
             allow_logging=bool(logging_tools),
             action_prompt=REMINDER_PROMPT if reminding else "",
+            answer_check=check,
         )
         result.notes += _notes(frame, route, result)
     stopped_early = result.stop_reason in ("urgent", "refused", "noted")
@@ -464,6 +551,16 @@ def ask(
         and not OFFERED.search(result.summary)
     ):
         result.notes.append(COACHING_OFFER)  # coaching ends with something to do
+    if plan and plan.coaching and not stopped_early:
+        result.budget.cost_usd += memory_cost.cost_usd
+        result.trace.append(
+            {
+                "type": "personal",
+                "memory": [{"text": r.text[:80], "score": round(r.score, 3)} for r in relevant],
+                "skipped_levers": sorted(fit.levers),
+                "personal_evidence": len(personal_ids),
+            }
+        )
     if retrieved is not None and not stopped_early:
         result.trace.append(retrieved.step)
         result.budget.cost_usd += retrieved.cost_usd

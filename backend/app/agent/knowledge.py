@@ -153,13 +153,18 @@ class Guidance:
     cost_usd: float = 0.0
 
 
-def guidance_for(question: str, picked: Sequence[Card], llm: LLM | None) -> Guidance:
-    """What the question is about and what the person's data points to, retrieved by code, so it
-    costs no model round and cannot be skipped."""
+def guidance_for(
+    question: str, picked: Sequence[Card], llm: LLM | None, about_them: str = ""
+) -> Guidance:
+    """What the question is about, what their situation adds to it ("eat better" for someone on
+    night shifts), and what their data points to, retrieved by code, so it costs no model round
+    and cannot be skipped."""
     budget = Budget()
     retrieved = search(question, llm=llm, budget=budget)
+    situated = search(f"{question} {about_them}", llm=llm, budget=budget) if about_them else None
     by_id = {passage.id: passage for passage in load_index().passages}
-    wanted = [f.passage for f in retrieved.found] + [by_id[c.id] for c in picked if c.id in by_id]
+    found = [*(situated.found[:2] if situated else ()), *retrieved.found]
+    wanted = [f.passage for f in found] + [by_id[c.id] for c in picked if c.id in by_id]
     passages = list({p.id: p for p in wanted}.values())[:MAX_PASSAGES]
     evidence = [passage_evidence(passage) for passage in passages]
     lines = [

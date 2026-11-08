@@ -13,7 +13,7 @@ cannot consult in turn, so a question costs at most one lead run and a few short
 """
 
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import date
 from enum import StrEnum
@@ -241,6 +241,8 @@ def ownership_check(expert: Expert, borrowed: dict[str, str]):
     def check(claim: Claim) -> list[str]:
         if claim.kind == "guidance":  # a public source's words belong to no expert's metrics
             return []
+        if claim.kind == "suggestion" and claim.metric is None:
+            return []  # may rest on what they said, which is about no metric
         metric = claim.metric
         if metric is None:
             if claim.kind == "data_quality":
@@ -399,6 +401,7 @@ def ask_expert(
     tools: tuple[str, ...] | None = None,
     guide: str | None = None,
     widen=None,
+    answer_check: Callable[[list[Claim], str], list[str]] | None = None,
 ) -> AgentResult:
     """Has one expert answer a question about the person's data, with verified claims.
 
@@ -458,6 +461,7 @@ def ask_expert(
         claim_check=ownership_check(expert, borrowed),
         guard=guard,  # consulted runs are not guarded: only the lead's text is shown
         coverage=coverage,
+        answer_check=answer_check,
     )
     carried = carry_consulted(result, consults.verified, borrowed, guard)
     if carried and coverage:

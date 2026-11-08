@@ -53,6 +53,7 @@ from app.db.models import (
     ChatMessage,
     CheckIn,
     Conversation,
+    HealthAction,
     MemoryEpisode,
     User,
 )
@@ -67,6 +68,7 @@ router = APIRouter(tags=["chat"])
 HISTORY_SHOWN = 100  # messages the app gets back
 HISTORY_USED = 20  # messages the agent sees as context; the context builder trims further
 HISTORY_FOLDED = 40  # messages looked at for the running summary
+FOOD_LOG_DAYS = 45  # enough to cover the 30 days the agent summarises
 MAX_THREAD = 6  # the person's messages kept from one logging request still being asked about
 QUIET_INTENTS = (Intent.LOG, Intent.REMIND)  # one-off requests: nothing to listen for
 FAILED = "I couldn't finish answering this time. Please try again in a moment."
@@ -365,6 +367,17 @@ def _answer(
                 profile=person.lines,
                 interests=memory.interests(db, user_id, now),
             )
+            food_logs = [
+                row.payload
+                for row in db.scalars(
+                    select(HealthAction).where(
+                        HealthAction.user_id == user_id,
+                        HealthAction.kind == "food",
+                        HealthAction.status == "succeeded",
+                        HealthAction.updated_at >= now - timedelta(days=FOOD_LOG_DAYS),
+                    )
+                )
+            ]
             checkins = [
                 (row.day, row.rating, list(row.tags or []))
                 for row in db.scalars(select(CheckIn).where(CheckIn.user_id == user_id))
@@ -448,6 +461,7 @@ def _answer(
                 archive=archive,
                 search_past=search_past,
                 outside=outside,
+                food_logs=food_logs,
             )
         except Exception:
             logger.exception("Answering failed")

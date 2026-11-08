@@ -20,10 +20,10 @@ import pandas as pd
 
 from app.agent.agent import DEFAULT_GUIDE, ExtraTool
 from app.agent.llm import Budget
-from app.agent.present import label
+from app.agent.present import clock, label
 from app.agent.strategy_types import DEFAULT_TYPE
 from app.agent.tools import TOOLS, Toolbox, evidence_payload
-from app.analysis.coaching import habit_options, personal_options
+from app.analysis.coaching import WEEKDAYS, habit_options, personal_options
 from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
 
@@ -46,10 +46,11 @@ GOALS = {
     "sleep": ("sleep_efficiency", "sleep_minutes"),
     "recovery": ("recovery_score", "hrv_ms"),
     "activity": ("recovery_score", "steps"),
-    "nutrition": (),
+    "nutrition": ("sleep_efficiency", "recovery_score"),  # how eating shows up in their data
     None: ("sleep_efficiency", "recovery_score"),
 }
 COACHING_DAYS = 60
+MIN_CONTEXT_DAYS = 14
 TEST_TOOLS = ("compare_windows", "change_point", "trend", "correlate", "weekday_split", "coverage")
 
 
@@ -138,10 +139,13 @@ STRATEGIES: dict[str, Strategy] = {
         "profile says is going on in their life. Several suggestions go in the summary one per "
         "line, each starting with '- '. Start with the advice: with fewer than they asked for, "
         "give those and say in a few words that this is what their data points to so far, never "
-        "what you cannot do. Say what they told you about their life first if it changes the "
-        "advice. For a particular moment or situation, call knowledge_lookup. With nothing "
-        "specific below, say that and ask what is going on for them; never fill the gap with a "
-        "general tip. No hypotheses. Then call submit_findings.",
+        "what you cannot do. Each suggestion joins something about this person (their numbers or "
+        "what they told you, cited) with how to act on it (a passage, cited). What they told you "
+        "comes first: it decides what fits. Keep to the subject asked about: advice on eating is "
+        "about eating, not bedtimes. For a particular moment or situation, call "
+        "knowledge_lookup. With nothing about this person below, give the most useful guidance "
+        "from the passages as claims of kind guidance, say plainly that it is general, and ask "
+        "the one question that would make it personal. No hypotheses. Then call submit_findings.",
         budget=Budget(max_calls=6, max_tool_calls=5, max_cost_usd=0.025),
         snapshot=True,
         coaching=True,
@@ -240,8 +244,23 @@ def snapshot(
     return found, header + "\n".join(lines)
 
 
+def _fitting(record: Evidence, levers: frozenset[str], options: frozenset[str]) -> Evidence:
+    """Without the habits that do not fit how this person lives."""
+    stats = dict(record.stats)
+    if "levers" in stats:
+        stats["levers"] = [lever for lever in stats["levers"] if lever["lever"] not in levers]
+        stats["supported"] = any(lever["supported"] for lever in stats["levers"])
+    if "options" in stats:
+        stats["options"] = [o for o in stats["options"] if o["key"] not in options]
+    return record.model_copy(update={"stats": stats, "sufficient": record.sufficient})
+
+
 def coaching_evidence(
-    frame: pd.DataFrame, expert: str | None, metrics: list[str]
+    frame: pd.DataFrame,
+    expert: str | None,
+    metrics: list[str],
+    skip_levers: frozenset[str] = frozenset(),
+    skip_options: frozenset[str] = frozenset(),
 ) -> tuple[list[Evidence], str]:
     """habit_options and personal_options on the goal's metrics over the last 60 days, run before
     the model starts."""
@@ -254,7 +273,7 @@ def coaching_evidence(
         if metric not in metrics or metric not in frame.columns:
             continue
         try:
-            evidence = habit_options(frame, metric, window)
+            evidence = _fitting(habit_options(frame, metric, window), skip_levers, skip_options)
         except ToolError:
             continue
         found.append(evidence)
@@ -263,8 +282,8 @@ def coaching_evidence(
             f"- {label(metric)} (evidence_id {evidence.id}): "
             + (f"supported: {'; '.join(supported)}" if supported else "no habit clearly supported")
         )
-        routine = personal_options(frame, metric, window)
-        if routine.sufficient:
+        routine = _fitting(personal_options(frame, metric, window), skip_levers, skip_options)
+        if routine.sufficient and routine.stats["options"]:
             found.append(routine)
             stands_out.append(
                 f"- {label(metric)} (evidence_id {routine.id}): "
@@ -282,3 +301,55 @@ def coaching_evidence(
             + "\n".join(stands_out)
         )
     return found, text
+
+
+def eating_context(
+    frame: pd.DataFrame, skip: frozenset[str] = frozenset()
+) -> tuple[list[Evidence], str]:
+    """What the rest of their data says about the days they eat around, for someone who has logged
+    no food: when they train hardest and when they go to bed."""
+    if frame.empty:
+        return [], ""
+    end = frame.index.max().date()
+    window = Window(start=end - timedelta(days=COACHING_DAYS - 1), end=end)
+    recent = frame.loc[pd.Timestamp(window.start) : pd.Timestamp(window.end)]
+    options, stats, metrics = [], {}, []
+    if "strain" in recent and recent["strain"].notna().sum() >= MIN_CONTEXT_DAYS:
+        strain = recent["strain"].dropna()
+        hard = strain[strain >= strain.quantile(0.75)]
+        days = hard.groupby(hard.index.dayofweek).size()
+        busiest = WEEKDAYS[int(days.idxmax())]
+        stats |= {"hard_days": len(hard), "hard_days_on_busiest": int(days.max())}
+        metrics.append("strain")
+        options.append(
+            {
+                "key": "training_days",
+                "note": f"your {len(hard)} hardest training days were most often on {busiest}s",
+                "try": "planning what you eat around those days",
+            }
+        )
+    bed = recent["bedtime_hour"].notna().sum() if "bedtime_hour" in recent else 0
+    if "usual_bedtime" not in skip and bed >= MIN_CONTEXT_DAYS:
+        usual = float(recent["bedtime_hour"].median())
+        stats["median"] = round(usual, 3)
+        metrics.append("bedtime_hour")
+        options.append(
+            {
+                "key": "usual_bedtime",
+                "note": f"your usual bedtime is around {clock(usual)}",
+                "try": "timing your last meal around that",
+            }
+        )
+    if not options:
+        return [], ""
+    stats["options"] = options
+    record = Evidence(
+        tool="personal_options",
+        metrics=tuple(metrics),
+        windows=(window,),
+        n=len(recent),
+        sufficient=True,
+        stats=stats,
+    )
+    notes = "; ".join(o["note"] + f" (could try {o['try']})" for o in options)
+    return [record], f"What their days look like (evidence_id {record.id}): {notes}"

@@ -74,6 +74,7 @@ ABOUT_ITSELF = re.compile(
     r"\b(?:with|in) this run\b|\bthe test run\b|\bthis many (?:checks|tests)\b",
     re.IGNORECASE,
 )
+UNMETERED = ("memory", "food_log", "knowledge")  # about the person or the world, not one metric
 YOUR_DATA = re.compile(
     r"\byour (?:sleep|steps?|heart|hrv|recovery|bedtime|strain|data|numbers?|efficiency|average)\b",
     re.IGNORECASE,
@@ -413,7 +414,11 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
 
     if insufficient := [e.id for e in cited if not e.sufficient]:
         reasons.append(f"cites evidence with too little data: {', '.join(insufficient)}")
-    about = [e for e in cited if claim.metric in e.metrics] if claim.metric else cited
+    about = (
+        [e for e in cited if claim.metric in e.metrics or e.tool in UNMETERED]
+        if claim.metric
+        else cited
+    )
     if claim.metric and not about:
         reasons.append(f"none of the cited evidence is about {claim.metric}")
 
@@ -460,6 +465,8 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
             if _significant(e)
             or (e.tool == "habit_options" and e.stats.get("supported"))
             or (e.tool == "personal_options" and e.stats.get("options"))
+            or e.tool == "memory"  # what they told the app, in words
+            or (e.tool == "food_log" and e.stats.get("meals_logged"))
         ]
         if not grounded:
             reasons.append(
