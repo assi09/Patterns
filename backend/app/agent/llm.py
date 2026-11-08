@@ -5,7 +5,9 @@ a process-wide `SpendLedger`, and refused up front once either is spent, so a ru
 spend real money. `ScriptedLLM` replays canned turns, so tests and CI never need a key.
 """
 
+import hashlib
 import json
+import math
 import time
 from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
@@ -40,6 +42,9 @@ PRICES = {
 }
 
 
+EMBED_MODEL = "text-embedding-3-small"
+EMBED_DIMENSIONS = 512
+EMBED_USD_PER_MILLION = 0.02
 # A web search is priced per call, on top of its tokens. Published figures disagree ($10 or $25 per
 # 1,000), so the higher one is counted: the caps must not undercount.
 WEB_SEARCH_USD = 0.025
@@ -72,6 +77,12 @@ class Usage:
 class WebAnswer:
     text: str
     urls: tuple[str, ...]  # the pages the answer cites
+    cost_usd: float = 0.0
+
+
+@dataclass(frozen=True)
+class Embedded:
+    vectors: list[list[float]]  # unit length, one per text
     cost_usd: float = 0.0
 
 
@@ -169,6 +180,8 @@ class LLM(Protocol):
         self, query: str, domains: Sequence[str], *, budget: Budget | None = None
     ) -> WebAnswer: ...
 
+    def embed(self, texts: Sequence[str], *, budget: Budget | None = None) -> Embedded: ...
+
 
 def _tool_call(raw) -> ToolCall:
     name, arguments = raw.function.name, raw.function.arguments
@@ -210,6 +223,24 @@ def _safe_errors() -> Generator[None]:
 
 
 class OpenAILLM:
+    def embed(self, texts: Sequence[str], *, budget: Budget | None = None) -> Embedded:
+        """Vectors for `texts`; charged like any other call, with no model round counted."""
+        if budget:
+            budget.check()
+        self._ledger.check()
+        try:
+            response = self._client.embeddings.create(
+                model=EMBED_MODEL, input=list(texts), dimensions=EMBED_DIMENSIONS
+            )
+        except openai.OpenAIError as exc:
+            raise LLMError(f"The embeddings request failed: {type(exc).__name__}") from exc
+        cost = response.usage.total_tokens * EMBED_USD_PER_MILLION / 1_000_000
+        self._ledger.charge(cost)
+        if budget:
+            budget.cost_usd += cost
+        vectors = [item.embedding for item in sorted(response.data, key=lambda i: i.index)]
+        return Embedded(vectors, cost)
+
     def __init__(
         self,
         client,
@@ -322,6 +353,7 @@ class ScriptedLLM:
     requests: list[dict] = field(default_factory=list)
     searches: list[WebAnswer] = field(default_factory=list)  # what `search` returns, in order
     searched: list[str] = field(default_factory=list)
+    embeddings_fail: bool = False
 
     @staticmethod
     def say(text: str, cost_usd: float = 0.0) -> Completion:
@@ -358,6 +390,20 @@ class ScriptedLLM:
         if budget:
             budget.charge(completion)
         return completion
+
+    def embed(self, texts: Sequence[str], *, budget: Budget | None = None) -> Embedded:
+        """Vectors from hashed words: repeatable, and texts sharing words come out close."""
+        if self.embeddings_fail:
+            raise LLMError("The script's embeddings are down.")
+        vectors = []
+        for text in texts:
+            vector = [0.0] * EMBED_DIMENSIONS
+            for word in text.lower().split():
+                digest = hashlib.sha256(word.strip(".,?!").encode()).digest()
+                vector[int.from_bytes(digest[:4]) % EMBED_DIMENSIONS] += 1.0
+            size = math.sqrt(sum(v * v for v in vector)) or 1.0
+            vectors.append([v / size for v in vector])
+        return Embedded(vectors)
 
     def search(
         self, query: str, domains: Sequence[str], *, budget: Budget | None = None
