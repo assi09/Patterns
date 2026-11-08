@@ -50,11 +50,12 @@ from app.agent.intent import Intent
 from app.agent.jev import JevClient, JevError
 from app.agent.knowledge import (
     Card,
+    Guidance,
     cards_for,
     guidance_block,
+    guidance_for,
     knowledge_tool,
     load_cards,
-    rank_cards,
     source_note,
 )
 from app.agent.listener import is_explicit
@@ -130,7 +131,6 @@ class Answer:
     context: Context
 
 
-QUESTION_CARDS = 2
 NO_CONSULT = ("day", "lookup", "coaching")
 MAX_REPLY_WORDS = 12
 NEW_QUESTION = re.compile(
@@ -320,6 +320,7 @@ def ask(
     )
     block, evidence, owners = context.block, dict(context.evidence), dict(context.owners)
     guidance: list[Card] = []
+    retrieved: Guidance | None = None
     if plan:
         visible = sorted(_scope(route) or frame.columns)
         found: list[tuple[list[Evidence], str]] = []
@@ -337,13 +338,17 @@ def ask(
             # What their data points to, and what this question is about: retrieved by code, so
             # it costs no model round and cannot be skipped.
             picked = cards_for(e for records, _ in found for e in records if e.tool in ADVICE_TOOLS)
-            asked_about = rank_cards(question, (), load_cards())[:QUESTION_CARDS]
-            guidance = list(dict.fromkeys([*asked_about, *picked]))
+            guidance = picked
             if guidance_mode != "picked":
                 guidance = list(load_cards()) if guidance_mode == "all" else []
-            block = "\n\n".join(part for part in (block, guidance_block(guidance)) if part)
+            if guidance_mode == "picked":
+                retrieved = guidance_for(question, picked, llm)
+                evidence |= {record.id: record for record in retrieved.evidence}
+                block = "\n\n".join(part for part in (block, retrieved.text) if part)
+            else:
+                block = "\n\n".join(part for part in (block, guidance_block(guidance)) if part)
     if plan and plan.coaching:
-        tools.append(knowledge_tool())
+        tools.append(knowledge_tool(llm=llm))
     if plan and plan.memory:  # what a search may find can be cited, like the rest of memory
         if archive:
             tools.append(memory_lookup_tool(archive))
@@ -459,6 +464,9 @@ def ask(
         and not OFFERED.search(result.summary)
     ):
         result.notes.append(COACHING_OFFER)  # coaching ends with something to do
+    if retrieved is not None and not stopped_early:
+        result.trace.append(retrieved.step)
+        result.budget.cost_usd += retrieved.cost_usd
     if guidance and not stopped_early:
         result.trace.append({"type": "guidance", "cards": [card.id for card in guidance]})
     if not stopped_early and (note := source_note(result)):

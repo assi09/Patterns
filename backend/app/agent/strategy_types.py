@@ -16,7 +16,8 @@ QUESTION_CRITERIA = {
     "check-in tag's effect",
     "coaching": "how to improve: sleep better, recover faster, train smarter, tips or advice",
     "world": "general knowledge, not their own data: what is in a food or dish, how many calories "
-    "it has, or what a tracker metric means",
+    "it has, what a tracker metric means, how to do an exercise, or how much of something adults "
+    "generally need. Not how they themselves should improve, which is coaching",
 }
 QUESTION_INSTRUCTIONS = (
     "What kind of answer does the current question need? Earlier questions only show what it may "

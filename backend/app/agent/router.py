@@ -75,8 +75,9 @@ CRITERIA = {
     OUT_OF_SCOPE: "medical matters (a diagnosis, symptoms, an illness or condition, treatment, "
     "medication, supplements, diets, or whether to see a doctor), or anything unrelated to their "
     "own Fitbit data, improving their everyday habits, logging food, drink or workouts, what is "
-    "in a food or dish, what a tracker metric means, reminders, what they told the app about "
-    "themselves, or this conversation",
+    "in a food or dish, what a tracker metric means, how to do an exercise, general questions on "
+    "sleep, training, recovery or eating, reminders, what they told the app about themselves, or "
+    "this conversation",
 }
 INSTRUCTIONS = (
     "A person asks about their own Fitbit data, how to improve their everyday habits, to log "

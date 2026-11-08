@@ -167,6 +167,7 @@ const TOOL_LABELS: Record<string, string> = {
   usual_ranges: 'Your usual ranges',
   checkins: 'Your check-ins',
   tag_effect: 'Days you tagged',
+  knowledge: 'Public guidance',
 };
 
 export function toolLabel(tool: string): string {
@@ -179,6 +180,7 @@ export function toolLabel(tool: string): string {
  */
 export function evidenceLabel(evidence: Evidence | undefined): string {
   if (!evidence) return 'Evidence';
+  if (evidence.tool === 'knowledge') return String(evidence.stats.title ?? toolLabel('knowledge'));
   if (evidence.metrics.length > 2 || evidence.tool === 'coverage') return toolLabel(evidence.tool);
   return evidence.metrics.map(metricLabel).join(' & ');
 }

@@ -239,6 +239,8 @@ def ownership_check(expert: Expert, borrowed: dict[str, str]):
     """The claim rule for an expert. `borrowed` maps evidence ids to the expert that made them."""
 
     def check(claim: Claim) -> list[str]:
+        if claim.kind == "guidance":  # a public source's words belong to no expert's metrics
+            return []
         metric = claim.metric
         if metric is None:
             if claim.kind == "data_quality":
