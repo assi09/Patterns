@@ -14,10 +14,13 @@ QUESTION_CRITERIA = {
     "why": "what explains a change or a pattern",
     "pattern": "how metrics relate, weekdays against weekends, which day of the week, or a "
     "check-in tag's effect",
-    "coaching": "how to improve: sleep better, recover faster, train smarter, tips or advice",
+    "coaching": "how to improve: sleep better, recover faster, eat better, train smarter, tips or "
+    "advice, or anything where the right answer depends on the person (how much they need, what "
+    "they should do)",
     "world": "general knowledge, not their own data: what is in a food or dish, how many calories "
     "it has, what a tracker metric means, how to do an exercise, or how much of something adults "
-    "generally need. Not how they themselves should improve, which is coaching",
+    "generally need: answers that are the same for everyone. Not what they themselves should "
+    "do or need, which is coaching",
 }
 QUESTION_INSTRUCTIONS = (
     "What kind of answer does the current question need? Earlier questions only show what it may "

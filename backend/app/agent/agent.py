@@ -271,6 +271,7 @@ def run_agent(
     claim_check: Callable[[Claim], list[str]] | None = None,
     guard: Guard | None = None,
     coverage: Callable[[list[Claim]], list[str]] | None = None,
+    answer_check: Callable[[list[Claim], str], list[str]] | None = None,
 ) -> AgentResult:
     budget = budget or Budget()
     result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="no_submission", budget=budget)
@@ -342,6 +343,7 @@ def run_agent(
                 guard,
                 coverage,
                 said,
+                answer_check,
             )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
             # A verified submission sent back for repair uses up the repair round.
@@ -370,6 +372,7 @@ def _handle(
     guard: Guard | None,
     coverage: Callable[[list[Claim]], list[str]] | None,
     said: str = "",
+    answer_check: Callable[[list[Claim], str], list[str]] | None = None,
 ) -> tuple[str, bool]:
     """Runs one tool call; returns what the model reads and whether the run is finished."""
     if call.name == HYPOTHESES:
@@ -407,6 +410,8 @@ def _handle(
             general=any(c.kind == "guidance" for c in verdict.accepted),
         )
         summary_problems += overstated(submission.summary, run_evidence)
+        if answer_check and repairs_left > 0:  # worth one more try, not an answer lost over it
+            summary_problems += answer_check(list(verdict.accepted), submission.summary)
         if verdict.accepted and all(c.kind == "data_quality" for c in verdict.accepted):
             summary_problems.append(
                 "only says the data was complete; answer the question, or say you could not"
@@ -557,6 +562,7 @@ def answer(
     tools: tuple[str, ...] | None = None,
     guide: str = DEFAULT_GUIDE,
     widen: Callable[[Toolbox, Budget, list[dict]], ExtraTool] | None = None,
+    answer_check: Callable[[list[Claim], str], list[str]] | None = None,
 ) -> AgentResult:
     """Answers a person's question about their data, with verified claims.
 
