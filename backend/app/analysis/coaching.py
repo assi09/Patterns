@@ -239,7 +239,7 @@ def personal_options(frame: pd.DataFrame, metric: str, window: Window) -> Eviden
                     "try": "pulling the weekend bedtime part of the way back",
                 }
             )
-        elif spread is not None and spread >= SPREAD_MINUTES:
+        if spread is not None and spread >= SPREAD_MINUTES:
             stats["bedtime_spread_minutes"] = spread
             metrics.append("bedtime_hour")
             options.append(

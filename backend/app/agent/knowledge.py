@@ -44,6 +44,17 @@ class Card:
         return (urlparse(self.url).hostname or "").removeprefix("www.")
 
 
+# What `personal_options` noticed, and the habit whose cards say how to act on it.
+OPTION_LEVERS = {
+    "best_nights": "earlier_bedtime",
+    "time_in_bed": "earlier_bedtime",
+    "weekend_shift": "regular_bedtime",
+    "bedtime_spread": "regular_bedtime",
+    "heavy_week": "rest_after_hard_day",
+    "quiet_day": "active_days",
+}
+
+
 def _listed(value: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in value.split(",") if part.strip())
 
@@ -82,15 +93,23 @@ def rank_cards(topic: str, metrics: tuple[str, ...], cards: tuple[Card, ...]) ->
 
 
 def cards_for(evidence: Iterable[Evidence]) -> list[Card]:
-    """One card for each habit these `habit_options` results support, first card of each lever."""
-    supported = dict.fromkeys(
+    """How to try what this evidence points to: one card for each habit `habit_options` supports
+    and each thing `personal_options` found, first card of each lever."""
+    records = list(evidence)
+    wanted = dict.fromkeys(
         lever["lever"]
-        for record in evidence
+        for record in records
         for lever in record.stats.get("levers", ())
         if lever["supported"]
     )
+    wanted |= dict.fromkeys(
+        OPTION_LEVERS[option["key"]]
+        for record in records
+        for option in record.stats.get("options", ())
+        if option["key"] in OPTION_LEVERS
+    )
     cards = load_cards()
-    found = (next((c for c in cards if lever in c.levers), None) for lever in supported)
+    found = (next((c for c in cards if lever in c.levers), None) for lever in wanted)
     return list(dict.fromkeys(card for card in found if card))
 
 

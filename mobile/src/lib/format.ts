@@ -159,6 +159,14 @@ const TOOL_LABELS: Record<string, string> = {
   compare_day: 'One day against your usual',
   change_point: 'When a change began',
   weekday_split: 'Weekends and weekdays',
+  habit_options: 'Habits checked on your days',
+  personal_options: 'What stands out for you',
+  sleep_regularity: 'Sleep regularity',
+  training_load: 'Training load',
+  rank_days: 'Best and worst days',
+  usual_ranges: 'Your usual ranges',
+  checkins: 'Your check-ins',
+  tag_effect: 'Days you tagged',
 };
 
 export function toolLabel(tool: string): string {

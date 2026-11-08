@@ -118,7 +118,7 @@ class Answer:
     context: Context
 
 
-HABITS = "habit_options"
+ADVICE_TOOLS = ("habit_options", "personal_options")
 
 
 def _scope(route: Route) -> set[str] | None:
@@ -303,7 +303,9 @@ def ask(
                 if metric_owner := owner(record.metrics[0]):
                     owners[record.id] = metric_owner.name
         if plan.coaching:
-            guidance = cards_for(e for records, _ in found for e in records if e.tool == HABITS)
+            guidance = cards_for(
+                e for records, _ in found for e in records if e.tool in ADVICE_TOOLS
+            )
             if guidance_mode != "picked":
                 guidance = list(load_cards()) if guidance_mode == "all" else []
             block = "\n\n".join(part for part in (block, guidance_block(guidance)) if part)
