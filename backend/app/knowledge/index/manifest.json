@@ -10,10 +10,10 @@
   "exercises": 869
  },
  "by_area": {
-  "sleep": 121,
+  "sleep": 119,
   "recovery": 12,
   "activity": 54,
-  "nutrition": 27,
+  "nutrition": 29,
   "exercise": 869
  },
  "by_kind": {
@@ -81,6 +81,5 @@
    "license": "Unlicense",
    "area": "exercise"
   }
- ],
- "guard_flagged_for_review": 59
+ ]
 }

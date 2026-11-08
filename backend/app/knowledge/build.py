@@ -2,6 +2,7 @@
 
     python -m app.knowledge.build           # parse and filter what is in data/rag_raw/
     python -m app.knowledge.build --guard   # and list what the medical guard would flag
+    python -m app.knowledge.build --embed   # and write the vectors (OpenAI, about a cent)
 
 The result is committed (`index/passages.jsonl`, `index/manifest.json`), so the server and CI never
 need the sources, `pdftotext` or a network. Only everyday habits go in: anything on illness,
@@ -32,6 +33,7 @@ CARDS_DIR = Path(__file__).parent
 
 MAX_WORDS = 300  # about 400 tokens
 MIN_WORDS = 40
+EMBED_BATCH = 128
 KEEP_SHARE = 0.6  # a passage losing more of its sentences than this no longer reads as one
 
 OFF_LIMITS = re.compile(
@@ -171,6 +173,7 @@ MEDLINE_TOPICS = {
 }
 LINKING = {"a", "an", "and", "at", "for", "from", "in", "of", "on", "or", "the", "to", "with", "is"}
 RECOVERY_TITLE = re.compile(r"\b(rest|recover\w*|nap\w*|fatigue|stress|tired)\b", re.IGNORECASE)
+DIET_TITLE = re.compile(r"\bdiet\b", re.IGNORECASE)
 SKIPPED_PAGE = re.compile(
     r"\b(references|questions|answers|quiz|contents|acknowledg\w*|objectives|diseases?|disorders?|"
     r"symptoms?|test dose|otc|epworth|liabilities|supervisor|fatigue risk management|"
@@ -316,6 +319,8 @@ def passages_from(sections: Iterable[Section], source: Source, stats: Counter) -
         area = source.area
         if source.key == "niosh" or RECOVERY_TITLE.search(section.title):
             area = "recovery" if RECOVERY_TITLE.search(section.title) else area
+        if DIET_TITLE.search(section.title):
+            area = "nutrition"
         text, cut = clean(section.text)
         stats.update(cut)
         for piece in chunk(text) if text else ():
@@ -480,6 +485,25 @@ def build() -> tuple[list[Passage], dict]:
     return unique, manifest
 
 
+def embed(passages: list[Passage]) -> float:
+    """Writes one unit vector per passage, in passage order; returns the cost."""
+    import numpy as np
+
+    from app.agent.llm import OpenAILLM
+    from app.config import settings
+
+    llm = OpenAILLM.from_settings(settings)
+    vectors, cost = [], 0.0
+    for start in range(0, len(passages), EMBED_BATCH):
+        batch = passages[start : start + EMBED_BATCH]
+        done = llm.embed([f"{p.title}\n{p.text}" for p in batch])
+        vectors += done.vectors
+        cost += done.cost_usd
+    INDEX_DIR.mkdir(exist_ok=True)
+    np.save(INDEX_DIR / "vectors.npy", np.asarray(vectors, dtype=np.float32))
+    return round(cost, 5)
+
+
 def flagged_by_guard(passages: list[Passage], guard) -> tuple[list[Passage], float]:
     """What the medical guard would flag, for a person to read. It is built for sentences about
     someone's own data, so it also flags plain guidance ("eat whole grains", night-shift tips):
@@ -510,6 +534,8 @@ def main() -> int:
         print(f"Guard flagged {len(flagged)} for review, ${cost:.4f}")
         for passage in flagged:
             print(f"  {passage.id} | {passage.title[:40]} | {passage.text[:100]}")
+    if "--embed" in sys.argv:
+        manifest["embedding_cost_usd"] = embed(passages)
     INDEX_DIR.mkdir(exist_ok=True)
     with (INDEX_DIR / "passages.jsonl").open("w") as file:
         for passage in passages:
