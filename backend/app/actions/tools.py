@@ -1,6 +1,7 @@
 """Agent proposal tools: server-bound owner and request key, and no execution capability."""
 
 import json
+import re
 import uuid
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
@@ -9,13 +10,42 @@ from datetime import datetime
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.actions import store
+from app.actions import exercises, store
 from app.actions.measure import Measurer, with_measurement
 from app.actions.schemas import FoodLog, WorkoutLog
 from app.actions.stated import mismatch
 from app.agent.agent import ExtraTool
 from app.api.errors import ApiError
 
+
+def _when(moment: datetime, local_now: datetime) -> str:
+    local = moment.astimezone(local_now.tzinfo)
+    days = (local_now.date() - local.date()).days
+    day = "today" if days == 0 else "yesterday" if days == 1 else f"{local:%a %-d %b}"
+    return f"{day} at {local:%H:%M}"
+
+
+def draft_sentence(payload: dict, local_now: datetime) -> str:
+    """The draft in a friendly line, from its stored values: code writes it, so it cannot differ
+    from the card."""
+    check = "Have a look at the card and confirm it if it's right."
+    if payload["kind"] == "workout":
+        minutes = round(payload["activeSeconds"] / 60)
+        length = f"{minutes // 60} h {minutes % 60} min" if minutes >= 60 else f"{minutes} min"
+        start = datetime.fromisoformat(payload["startTime"])
+        name = exercises.name(payload["exerciseType"]).lower()
+        return f"Ready to log: {name}, {_when(start, local_now)} for {length}. {check}"
+    when = _when(datetime.fromisoformat(payload["consumedAt"]), local_now)
+    estimate = (
+        " The values are an estimate, so check they look right."
+        if (payload.get("provenance") == "estimated")
+        else ""
+    )
+    return f"Ready to log: {payload['foodName']}, {when}.{estimate} {check}"
+
+
+# Values the person gave are theirs, even if the model also looked the food up.
+STATED_VALUES = re.compile(r"\d\s*(?:kcal|cal(?:ories)?|g|grams?)\b", re.IGNORECASE)
 REFUSED_NOTE = (
     "Tell the person plainly what the problem is and what would fix it, in everyday words. Never "
     "change a time, date or duration they gave to get past it, and never ask for their time zone: "
@@ -33,6 +63,7 @@ def proposal_tools(
     estimates: list[str] | None = None,
     said: Sequence[str] = (),
     local_now: datetime | None = None,
+    described: list[str] | None = None,
 ) -> dict[str, list[ExtraTool]]:
     """`estimates` holds what food lookups found in this answer: a food draft made after one is
     labelled as an estimate by code, whatever the model says. `said` is the person's own words in
@@ -53,7 +84,7 @@ def proposal_tools(
             try:
                 owned = ("measured", "provenance", "estimateSource")
                 given = {k: v for k, v in (arguments or {}).items() if k not in owned}
-                if model is FoodLog and estimates:
+                if model is FoodLog and estimates and not STATED_VALUES.search(" ".join(said)):
                     given |= {"provenance": "estimated", "estimateSource": estimates[-1]}
                 log = model.model_validate(given)
                 if said and local_now and (problem := mismatch(log, said, local_now)):
@@ -103,6 +134,8 @@ def proposal_tools(
                 ), {"error": "draft_storage"}
             if content["draft_id"] not in prepared:
                 prepared.append(content["draft_id"])
+                if described is not None and local_now is not None:
+                    described.append(draft_sentence(row.payload, local_now))
             return json.dumps(content), {k: content[k] for k in ("draft_id", "version", "status")}
 
         return ExtraTool(

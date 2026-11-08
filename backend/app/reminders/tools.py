@@ -8,7 +8,7 @@ pause or delete a reminder; it reads them with `list_reminders` and points to th
 import json
 import re
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime
 
@@ -22,6 +22,11 @@ from app.reminders import store
 from app.reminders.schedule import describe
 
 PROPOSE = "propose_reminder"
+SAID_WHEN = re.compile(
+    r"\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\b\d{1,2}:\d{2}\b|\bat \d{1,2}\b|\bin (?:an?|\d+) |"
+    r"\b(?:morning|noon|afternoon|evening|night|tonight|tomorrow|midnight|bedtime)\b",
+    re.IGNORECASE,
+)
 LIST = "list_reminders"
 MAX_PROPOSALS = 3  # per answer
 # Reminders are for everyday habits; medication is a medical matter, refused like advice.
@@ -76,6 +81,7 @@ def reminder_tools(
     user_id: uuid.UUID,
     now: datetime,
     prepared: list[str],
+    said: Sequence[str] = (),
 ) -> list[ExtraTool]:
     """The two tools for one answer; ids of proposed reminders are appended to `prepared`."""
 
@@ -89,6 +95,10 @@ def reminder_tools(
         if MEDICAL.search(f"{title} {message}") or MEDICINE.search(f"{title} {message}"):
             refusal = "Reminders here are for everyday habits, not medication or treatment."
             return json.dumps({"error": refusal}), {"error": "medical"}
+        if said and not SAID_WHEN.search(" ".join(said)):
+            return json.dumps({"error": "They did not say when. Ask them; never pick a time."}), {
+                "error": "no_time"
+            }
         schedule = arguments.get("schedule") or {}
         if schedule.get("kind") == "once":
             schedule = {k: schedule.get(k) for k in ("kind", "date", "time")}

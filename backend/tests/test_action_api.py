@@ -197,7 +197,7 @@ def test_chat_prepares_a_persisted_nutrition_draft_without_history_or_execution(
     reply = response.json()[-1]
     assert reply["answeredBy"] == "nutrition" and len(reply["actionIds"]) == 1
     # The expert's own words, safe to show: no values, and it says the draft waits for review.
-    assert reply["text"] == "Draft ready for review."
+    assert reply["text"].startswith("Ready to log: Example lunch")
     row = client.get(f"/actions/{reply['actionIds'][0]}", headers=headers).json()
     assert row["status"] == "draft" and row["log"]["proteinG"] == 40
     assert "propose_food_log" in agent.llm.requests[0]["tools"]
@@ -261,7 +261,7 @@ def test_missing_details_can_continue_the_owned_pending_logging_request(setup):
     assert first.status_code == 200 and "actionIds" not in first.json()[-1]
     follow = client.post("/chat", headers=headers, json={"text": "At 12:00 today, UTC+3."})
     assert follow.status_code == 200 and len(follow.json()[-1]["actionIds"]) == 1
-    assert follow.json()[-1]["text"] == "Draft ready for review."
+    assert follow.json()[-1]["text"].startswith("Ready to log: Example lunch")
 
 
 def test_read_only_topic_change_clears_the_pending_log(setup):

@@ -120,3 +120,16 @@ def test_a_meal_at_the_wrong_time_is_refused():
     )
     assert "time" in mismatch(meal, ["Log an apple at 10:30, 95 kcal"], NOW)
     assert mismatch(meal, ["Log an apple at 11:00, 95 kcal"], NOW) is None
+
+
+def test_a_draft_is_described_from_its_own_values():
+    from app.actions.tools import draft_sentence
+
+    payload = {
+        "kind": "workout",
+        "exerciseType": "WEIGHTLIFTING",
+        "startTime": "2026-11-07T15:00:00+02:00",
+        "activeSeconds": 5400,
+    }
+    text = draft_sentence(payload, NOW)
+    assert "yesterday at 15:00 for 1 h 30 min" in text

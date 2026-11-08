@@ -67,12 +67,16 @@ CRITERIA = {
     # Without it, "what did I just say?" takes the earlier questions' topic and reaches an expert
     # that looks only at data.
     CONVERSATION: "this chat itself, not the data: what the person or the assistant said "
-    "earlier in it, a recap of it, or what an earlier answer meant",
+    "earlier in it, a recap of it, or what an earlier answer meant; what the app knows or "
+    "remembers about the person; or a passing remark about something unrelated to health, food, "
+    "exercise or sleep (their dog, their job). Never how they are doing, anything they ate or "
+    "did, or what they should do next: those belong to the topic being discussed",
     # Coaching on everyday habits ("how can I sleep better?") is in scope since 2026-10-28.
     OUT_OF_SCOPE: "medical matters (a diagnosis, symptoms, an illness or condition, treatment, "
     "medication, supplements, diets, or whether to see a doctor), or anything unrelated to their "
     "own Fitbit data, improving their everyday habits, logging food, drink or workouts, what is "
-    "in a food or dish, what a tracker metric means, reminders, or this conversation",
+    "in a food or dish, what a tracker metric means, reminders, what they told the app about "
+    "themselves, or this conversation",
 }
 INSTRUCTIONS = (
     "A person asks about their own Fitbit data, how to improve their everyday habits, to log "

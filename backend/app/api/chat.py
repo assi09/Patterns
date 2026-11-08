@@ -30,7 +30,7 @@ from app.actions.schemas import Measured
 from app.actions.tools import proposal_tools
 from app.agent.ask import REMINDERS, ask, default_guard, default_router
 from app.agent.context import Attachment, ChatState, turns_from
-from app.agent.conversation import DRAFT_NOTE, draft_reply
+from app.agent.conversation import DRAFT_NOTE
 from app.agent.experts import EXPERTS, Depth, available
 from app.agent.guard import Guard
 from app.agent.intent import Intent
@@ -312,6 +312,7 @@ def listen_to(
                         start=heard.start,
                         end=heard.end,
                         same_as=None if heard.same_as is None else known[heard.same_as][0],
+                        replaces=None if heard.replaces is None else known[heard.replaces][0],
                         message_id=question_id,
                         now=now,
                     )
@@ -402,6 +403,7 @@ def _answer(
                 return measure_workout(db, user_id, start, end, exercise_type)
 
         estimates: list[str] = []
+        described: list[str] = []
         outside = Outside(sessions, user_id, now, _day_start(now), food_data())
         draft_tools = proposal_tools(
             sessions,
@@ -413,6 +415,7 @@ def _answer(
             estimates,
             said=[*thread, body.text],
             local_now=local_now,
+            described=described,
         )
         if outside.food_data:
             draft_tools["nutrition"] = [
@@ -420,7 +423,9 @@ def _answer(
                 food_tool(outside, estimates),
             ]
         reminders: list[str] = []
-        reminding_tools = reminder_tools(sessions, user_id, now, reminders)
+        reminding_tools = reminder_tools(
+            sessions, user_id, now, reminders, said=[*thread, body.text]
+        )
         try:
             reply = ask(
                 agent.llm,
@@ -466,12 +471,12 @@ def _answer(
                 return [question, answer]
             result = reply.result
             if prepared:
-                note = DRAFT_NOTE
+                note = " ".join(described) or DRAFT_NOTE
                 if reply.route.classification.intent == Intent.LOG or any(
                     step.get("continuing_log_expert") for step in result.trace
                 ):
                     # The expert's own words when they are safe; the card holds the values.
-                    result.summary, result.claims = draft_reply(result.summary), []
+                    result.summary, result.claims = note, []
                 elif reply.route.expert == "nutrition" and not available(
                     EXPERTS["nutrition"], frame
                 ):

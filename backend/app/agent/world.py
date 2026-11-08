@@ -9,18 +9,21 @@ says it could not look it up.
 """
 
 import json
+import re
 import uuid
 
 from app.agent.agent import AgentResult, ExtraTool
 from app.agent.conversation import _guarded, _numbers, _quoted
 from app.agent.guard import Guard
 from app.agent.llm import LLM, Budget, LLMError
-from app.agent.sanitize import clean, reads_like_instruction
+from app.agent.sanitize import clean, reads_like_instruction, stems
 from app.agent.verifier import MEDICAL
 from app.outside import LookupRefused, Outside
 
 FOOD_LOOKUP = "food_lookup"
 WEB_LOOKUP = "web_lookup"
+LINK = re.compile(r"\(?\[([^\]]*)\]\([^)]*\)\)?")
+BARE_URL = re.compile(r"\(?https?://\S+\)?")
 COULD_NOT = "I couldn't look that up just now, so I'd rather not guess."
 NOT_THIS = (
     "That's one I can't look up: I stick to food values and how your tracker works, and nothing "
@@ -121,6 +124,18 @@ def food_sentence(found: dict) -> str:
     return f"{food['food']}: {', '.join(parts)} per 100 g."
 
 
+def _same_food(query: str, found: dict) -> bool:
+    """Whether the best match shares a word with what was asked: "mloukhieh" is not bulgur."""
+    foods = found.get("foods") or [{}]
+    return bool(stems(query) & stems(str(foods[0].get("food", ""))))
+
+
+def _without_links(text: str) -> str:
+    """Sources are named in a note; a link in the text reads as an instruction to every check."""
+    text = LINK.sub(lambda m: m.group(1) or "", text).replace("**", "")  # the app shows plain text
+    return re.sub(r"\s+([.,)])", r"\1", BARE_URL.sub("", text)).replace("()", "").strip()
+
+
 def reply_problems(reply: str, found: dict) -> list[str]:
     if not reply.strip():
         return ["the reply is empty"]
@@ -137,7 +152,7 @@ def reply_problems(reply: str, found: dict) -> list[str]:
 def answer_world(
     llm: LLM, question: str, outside: Outside, *, guard: Guard | None = None
 ) -> AgentResult:
-    budget = Budget(max_calls=3, max_tool_calls=1, max_cost_usd=0.06)  # choose, search, write
+    budget = Budget(max_calls=3, max_tool_calls=2, max_cost_usd=0.06)  # choose, search, write
     result = AgentResult(
         run_id=uuid.uuid4().hex[:12], stop_reason="looked_up", expert="general", budget=budget
     )
@@ -168,6 +183,13 @@ def answer_world(
         return result
     step["found"] = "error" not in found
     result.trace.append(step)
+    # USDA has no such dish, or its closest match is some other food: try the web once.
+    if call.name == FOOD_LOOKUP and ("error" in found or not _same_food(query, found)):
+        try:
+            found = outside.web(llm, query, budget)
+        except LookupRefused:
+            found = {"error": "refused"}
+        result.trace.append({"type": WEB_LOOKUP, "found": "error" not in found})
     if "error" in found:
         result.stop_reason, result.summary = "lookup_failed", COULD_NOT
         return result
@@ -177,17 +199,22 @@ def answer_world(
             [{"role": "system", "content": REPLY_PROMPT}, {"role": "user", "content": task}],
             budget=budget,
         )
-        reply = (written.text or "").strip()
+        reply = _without_links((written.text or "").strip())
         problems = reply_problems(reply, found)
     except LLMError as exc:
         reply, problems = "", [str(exc)]
     problems = _guarded(reply, problems, guard, result)
     result.trace.append({"type": "reply", "problems": problems})
     if problems:
-        if "foods" not in found:
+        # The search's own words, when the rewording is what failed: already paid for.
+        direct = _without_links(found.get("answer", ""))
+        if "foods" in found:
+            reply = food_sentence(found)
+        elif direct and not reply_problems(direct, found):
+            reply = direct
+        else:
             result.stop_reason, result.summary = "lookup_failed", COULD_NOT
             return result
-        reply = food_sentence(found)
     result.summary = reply
     origin = (
         found["source"]

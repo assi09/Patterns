@@ -12,8 +12,9 @@ gives the agent every tool and one more budget step when its first look is not e
 """
 
 import json
+import re
 from dataclasses import dataclass, replace
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 
@@ -27,10 +28,12 @@ from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
 
 EXPAND = "expand_tools"
+YESTERDAY = re.compile(r"\byesterday\b", re.IGNORECASE)
 SNAPSHOT_METRICS = (
     "sleep_minutes",
     "sleep_efficiency",
     "bedtime_hour",
+    "time_in_bed",
     "recovery_score",
     "resting_hr",
     "hrv_ms",
@@ -62,26 +65,31 @@ class Strategy:
 
 
 _WHY = DEFAULT_GUIDE
+ONE_THING = (
+    "Answer exactly what was asked, in one or two friendly sentences; bring in another metric only "
+    "if it explains the answer. If an earlier answer in the conversation already holds it, say it "
+    "again from there and cite its evidence. "
+)
 
 STRATEGIES: dict[str, Strategy] = {
     "day": Strategy(
         tools=("compare_day", "usual_ranges", "coverage"),
-        guide="How to work: the snapshot below already compares the latest day with the usual "
-        "range, as evidence you may cite. Answer from it if it covers the question; otherwise use "
-        "compare_day for the metrics it lacks. No hypotheses. Then call submit_findings.",
-        budget=Budget(max_calls=4, max_tool_calls=4, max_cost_usd=0.012),
+        guide="How to work: the snapshot below already compares one day with the usual range, as "
+        "evidence you may cite. Answer from it if it covers the day asked about; otherwise use "
+        "compare_day for that day. " + ONE_THING + "No hypotheses. Then call submit_findings.",
+        budget=Budget(max_calls=6, max_tool_calls=5, max_cost_usd=0.02),
         snapshot=True,
         memory=False,
     ),
     "lookup": Strategy(
         tools=("describe", "rank_days", "usual_ranges", "compare_day", "coverage", "checkins"),
         guide="How to work: answer the value asked for with the fewest tool calls (the snapshot "
-        "below may already cover it). No hypotheses. Then call submit_findings.",
-        budget=Budget(max_calls=4, max_tool_calls=4, max_cost_usd=0.012),
+        "below may already cover it). " + ONE_THING + "No hypotheses. Then call submit_findings.",
+        budget=Budget(max_calls=6, max_tool_calls=5, max_cost_usd=0.02),
         snapshot=True,
     ),
     "change": Strategy(
-        tools=("compare_windows", "change_point", "trend", "coverage", "describe"),
+        tools=("compare_windows", "change_point", "trend", "coverage", "describe", "compare_day"),
         guide=_WHY,
         budget=Budget(max_calls=5, max_tool_calls=7, max_cost_usd=0.02),
         deepens=True,
@@ -103,8 +111,12 @@ STRATEGIES: dict[str, Strategy] = {
             "sleep_regularity",
         ),
         guide="How to work: test the relationship asked about directly (correlate, weekday_split, "
-        "tag_effect) and check coverage. No hypotheses needed. Then call submit_findings.",
-        budget=Budget(max_calls=4, max_tool_calls=6, max_cost_usd=0.015),
+        "tag_effect) and check coverage. 'Hard training' is the strain metric, whatever the tags "
+        "say. When it links two areas, use correlate with one as the "
+        "driver and the other as the target; a night is dated by the morning it ends, so a day's "
+        "effect on that night's sleep is max_lag 1. No hypotheses needed. Then call "
+        "submit_findings.",
+        budget=Budget(max_calls=6, max_tool_calls=6, max_cost_usd=0.02),
         deepens=True,
     ),
     "coaching": Strategy(
@@ -125,9 +137,11 @@ STRATEGIES: dict[str, Strategy] = {
         "profile says is going on in their life. Several suggestions go in the summary one per "
         "line, each starting with '- '. Start with the advice: with fewer than they asked for, "
         "give those and say in a few words that this is what their data points to so far, never "
-        "what you cannot do. With nothing specific below, say that and ask what is going on for "
-        "them; never fill the gap with a general tip. No hypotheses. Then call submit_findings.",
-        budget=Budget(max_calls=4, max_tool_calls=5, max_cost_usd=0.015),
+        "what you cannot do. Say what they told you about their life first if it changes the "
+        "advice. For a particular moment or situation, call knowledge_lookup. With nothing "
+        "specific below, say that and ask what is going on for them; never fill the gap with a "
+        "general tip. No hypotheses. Then call submit_findings.",
+        budget=Budget(max_calls=6, max_tool_calls=5, max_cost_usd=0.025),
         snapshot=True,
         coaching=True,
     ),
@@ -182,11 +196,24 @@ def expand_tool(toolbox: Toolbox, budget: Budget, trace: list[dict]) -> ExtraToo
     )
 
 
-def snapshot(frame: pd.DataFrame, metrics: list[str]) -> tuple[list[Evidence], str]:
-    """The latest day against the usual range for the main metrics in scope, as evidence."""
+def asked_day(question: str, today, frame: pd.DataFrame) -> date | None:
+    """Yesterday, when the question is about it and the data has it. "Today's" row is the latest
+    one, so without this a question about yesterday gets today's numbers."""
+    if not YESTERDAY.search(question) or today is None:
+        return None
+    day = (today.date() if isinstance(today, datetime) else today) - timedelta(days=1)
+    return day if pd.Timestamp(day) in frame.index else None
+
+
+def snapshot(
+    frame: pd.DataFrame, metrics: list[str], day: date | None = None
+) -> tuple[list[Evidence], str]:
+    """One day (the latest, unless given) against the usual range for the main metrics in scope,
+    as evidence."""
     if frame.empty:
         return [], ""
-    day = frame.index.max().date()
+    name = "yesterday" if day else "the latest day"
+    day = day or frame.index.max().date()
     found = []
     for metric in SNAPSHOT_METRICS:
         if metric not in metrics:
@@ -207,7 +234,9 @@ def snapshot(frame: pd.DataFrame, metrics: list[str]) -> tuple[list[Evidence], s
             f"{shown.get('usual_low', '')} to {shown.get('usual_high', '')}, "
             f"{e.stats['position']} the usual range"
         )
-    return found, f"Snapshot of the latest day ({day.isoformat()}), computed:\n" + "\n".join(lines)
+    header = f"Snapshot of {name} ({day:%A} {day.isoformat()}; sleep is the night ending that "
+    header += "morning), computed:\n"
+    return found, header + "\n".join(lines)
 
 
 def coaching_evidence(

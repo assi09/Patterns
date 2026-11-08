@@ -241,8 +241,9 @@ def test_what_is_heard_becomes_a_card_only_when_asked_for(client, engine, agent)
     heard = ScriptedLLM.call(
         "record_memories", memories=[{"kind": "routine", "text": "Works night shifts"}]
     )
-    agent.llm.turns.extend([*describe_then_claim("Your time asleep held steady."), heard])
-    ask(client, headers, "Please remember that I work night shifts")
+    agent.llm.turns.append(heard)  # the reply itself needs no model
+    reply = ask(client, headers, "Please remember that I work night shifts").json()[-1]
+    assert "Keep" in reply["text"]
 
     def card():
         return client.get("/memory", headers=headers).json()["waiting"]
@@ -763,3 +764,11 @@ def test_questions_about_data_are_not_offered_reminder_tools(client, engine, age
     agent.llm.turns.append(submission("Nothing stood out."))
     ask(client, headers)
     assert "propose_reminder" not in agent.llm.requests[0]["tools"]
+
+
+def test_a_correction_read_as_data_still_continues_the_logging_request():
+    from app.agent.ask import _just_a_reply
+
+    assert _just_a_reply("40 minutes, no wait it was 50 minutes")
+    assert not _just_a_reply("how did I sleep last night")
+    assert not _just_a_reply("my steps this week?")

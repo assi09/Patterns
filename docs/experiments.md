@@ -706,3 +706,28 @@ agent; code refuses a draft that contradicts the person's words or invents a dur
 **Result:** a finished workout drafted right the first time; an unfinished one explained in plain
 words, then drafted from "10 minutes so far"; details given one at a time ended in a correct draft;
 changing the subject mid-request worked. Two runs, $0.0428.
+
+## The whole agent, through the API (2026-11-08)
+
+**Tested:** 75 turns in 39 conversations on a made-up person with planted facts, through the real API
+with the real model, router, guard, summary and listener: precision on data, routing and consults,
+advice, outside lookups, logging, reminders, follow-ups, a nine-turn chat, memory across chats,
+safety. Facts checked by code against the data; tone scored separately by a small model, because a
+friendly answer can be wrong. `eval/agent_eval.py`; baseline and final results in `eval/results/`.
+
+**Result:** first full pass 56/74, final pass 72/75; friendly 3.3 to 3.8 of 5, clear 4.3 to 4.6.
+Reading the answers found more than the checks: at the start, "yesterday" returning today's number,
+a sleep-guidance source under the chest-pain reply, and correct answers replaced by "coverage was
+complete".
+
+**Main causes fixed:** the verifier had no way to accept a plain value; a false alarm on "in your
+usual range"; the person's own numbers counted as invented; budgets too small to survive one repair;
+a note saying data "was not checked" that was wrong every time it appeared; a consult on simple
+questions; web answers discarded for containing a link; a USDA match for a different food accepted;
+a change to a kept memory not recorded.
+
+**Open:** questions linking two areas are still the weakest answers and the dearest. Advice can
+mention a night-shift worker's schedule and still suggest 23:48. With little to go on, activity advice
+can collapse to one flat sentence. Card retrieval by keywords reaches Recall@3 of 0.64 and MRR 0.61 on
+14 paraphrased queries, and has not been tuned on them. Tone is judged by one small model, and each
+turn was run once, so a pass is an illustration of behaviour, not a rate.

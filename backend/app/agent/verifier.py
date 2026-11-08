@@ -22,7 +22,9 @@ from app.analysis.screen import benjamini_hochberg
 
 ALPHA = 0.05
 
-ClaimKind = Literal["change", "association", "no_change", "data_quality", "day", "suggestion"]
+ClaimKind = Literal[
+    "change", "association", "no_change", "data_quality", "day", "suggestion", "value"
+]
 Direction = Literal["up", "down"]
 
 
@@ -68,7 +70,8 @@ MEDICAL = re.compile(
 # Advice anyone could read anywhere. An answer must speak to this person, or say nothing.
 # How the answer was made, or what it cannot do, in place of the advice that was asked for.
 ABOUT_ITSELF = re.compile(
-    r"\bI (?:can'?t|cannot|can not) (?:give|offer|provide)\b|evidence[- ]based|tested habits?\b",
+    r"\bI (?:can'?t|cannot|can not) (?:give|offer|provide)\b|evidence[- ]based|tested habits?\b|"
+    r"\b(?:with|in) this run\b|\bthe test run\b|\bthis many (?:checks|tests)\b",
     re.IGNORECASE,
 )
 GENERIC_ADVICE = re.compile(
@@ -461,6 +464,8 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
             reasons.append("word a suggestion as an option the person may try (could, might, try)")
         if ORDER_WORDS.search(claim.text):
             reasons.append("do not order the person: offer the habit as an option instead")
+    if claim.kind == "value" and not [e for e in about if e.tool != "coverage"]:
+        reasons.append("a value claim must cite the evidence that holds the value")
     if claim.kind == "data_quality" and not any(e.tool == "coverage" for e in cited):
         reasons.append("a data-quality claim must cite coverage evidence")
     if claim.kind == "day":
@@ -491,10 +496,12 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
     return reasons + text_problems(claim.text, cited)
 
 
-def text_problems(text: str, cited: list[Evidence]) -> list[str]:
-    """What is wrong with a sentence shown to the person, given the evidence it rests on."""
+def text_problems(text: str, cited: list[Evidence], said: str = "") -> list[str]:
+    """What is wrong with a sentence shown to the person, given the evidence it rests on. `said` is
+    the person's own message: repeating their "8 am" or "20 minutes" is not inventing a number."""
     reasons = []
     allowed = _allowed_numbers(cited)
+    allowed = [*allowed, *(n for n, _ in _quoted_numbers(said)), *_quoted_durations(said)]
     unsupported = [n for n, d in _quoted_numbers(text) if not _matches(n, d, allowed)]
     if unsupported:
         reasons.append(
@@ -507,7 +514,7 @@ def text_problems(text: str, cited: list[Evidence]) -> list[str]:
             "quotes durations not found in the cited evidence: "
             + ", ".join(f"{m:g} min" for m in durations)
         )
-    levels = _clock_levels(cited)
+    levels = [*_clock_levels(cited), *_quoted_clock_times(said)]
     times = [t for t in _quoted_clock_times(text) if not any(abs(t - v) <= 0.1 for v in levels)]
     if times:
         reasons.append("quotes times of day not found in the cited evidence")
@@ -566,6 +573,9 @@ HEDGED = re.compile(
 )
 
 
+IN_RANGE = re.compile(r"\b(?:within|in|inside)\b[^.]*\b(?:usual|normal|typical)\b", re.IGNORECASE)
+
+
 def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
     """Metrics a summary describes as changing that no significant test in the run supports.
 
@@ -600,6 +610,8 @@ def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
         for metric in e.metrics
     }
     tested = {metric for e in evidence if e.tool in TEST_TOOLS for metric in e.metrics}
+    # "In your usual range" says where a day sits, which compare_day shows.
+    days = {metric for e in evidence if e.tool == "compare_day" for metric in e.metrics}
     flagged: list[str] = []
     for sentence in SENTENCES.split(summary):
         allowed = tested if HEDGED.search(sentence) else supported
@@ -610,8 +622,9 @@ def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
                 UP_WORDS.search(clause) or DOWN_WORDS.search(clause) or SHIFT_WORDS.search(clause)
             ):
                 continue
+            here = allowed | days if IN_RANGE.search(clause) else allowed
             for metric, pattern in MENTIONS.items():
-                if pattern.search(clause) and metric not in allowed and metric not in flagged:
+                if pattern.search(clause) and metric not in here and metric not in flagged:
                     flagged.append(metric)
     if not flagged:
         return []
