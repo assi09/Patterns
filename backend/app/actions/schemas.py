@@ -142,7 +142,11 @@ class WorkoutLog(LogModel):
             raise ValueError("Active time must fit within the workout interval.")
         if elapsed > MAX_WORKOUT.total_seconds():
             raise ValueError("One workout can last at most 24 hours.")
-        not_future(self.end_time)
+        if self.end_time > now() + FUTURE_GRACE:
+            raise ValueError(
+                "This workout would end in the future, so it is not finished yet. Offer to log it "
+                "once it is done, or ask how long they have done so far."
+            )
         if self.distance_km is not None:
             if self.distance_km > MAX_DISTANCE_KM:
                 raise ValueError(f"One workout can cover at most {MAX_DISTANCE_KM} km.")

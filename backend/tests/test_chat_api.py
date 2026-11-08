@@ -329,6 +329,45 @@ def test_a_reply_to_a_logging_question_is_given_with_its_request(client, engine,
     assert client.get("/chat", headers=headers).json()[-2]["text"] == "at 10:30"
 
 
+def _log_route(agent, intent):
+    from app.agent.intent import Intent
+
+    agent.router.result = Classification(
+        dict.fromkeys(LABELS, 0.0) | {"activity": 0.95},
+        dict.fromkeys(EXPERT_LABELS, 0.0),
+        source="test",
+        intent_probabilities={str(i): float(i == Intent(intent)) for i in Intent},
+    )
+
+
+def test_every_reply_in_a_logging_request_reaches_the_agent(client, engine, agent):
+    headers = signed_in(client, engine)
+    _log_route(agent, "log")
+    agent.llm.turns.append(submission("What type of workout?"))
+    ask(client, headers, "Log a workout, started at 3 pm for 1 hour 30 min")
+    _log_route(agent, "clarify")
+    agent.llm.turns.append(submission("What intensity was it?"))
+    ask(client, headers, "Weightlifting")
+    agent.llm.turns.append(submission("Noted."))
+    ask(client, headers, "hard")
+    task = agent.llm.requests[-1]["messages"][1]["content"]
+    assert "Earlier request: Log a workout, started at 3 pm for 1 hour 30 min" in task
+    assert "They added: Weightlifting" in task
+    assert "You asked: What intensity was it?" in task
+    assert "Their reply: hard" in task
+
+
+def test_the_agent_is_told_the_persons_own_local_time(client, engine, agent):
+    headers = signed_in(client, engine)
+    assert (
+        client.put("/me/timezone", headers=headers, json={"timezone": "Asia/Beirut"}).status_code
+        == 204
+    )
+    agent.llm.turns.append(submission("Noted."))
+    ask(client, headers, "How did I sleep?")
+    assert "Asia/Beirut" in agent.llm.requests[-1]["messages"][1]["content"]
+
+
 def test_a_reply_to_the_log_or_ask_question_continues_with_the_meal(client, engine, agent):
     from app.agent.intent import Intent
 
