@@ -53,7 +53,9 @@ usual. Kinds:
 
 Rules:
 - Only what the person states about themselves, in a few plain words about "they", at most \
-{MAX_FACT_CHARS} characters. Nothing guessed from a question, and nothing about their numbers.
+{MAX_FACT_CHARS} characters. Nothing guessed from a question, and \
+nothing about their tracker's numbers; a target they set is a goal, with its number ("Wants 8,000 \
+steps a day").
 - Leave out one-off things: what they ate today, one workout, how last night went.
 - Leave out illnesses by name, diagnoses, medication and treatment.
 - Note only what this message says. Never repeat a known item the message does not mention. If \

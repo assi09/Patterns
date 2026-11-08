@@ -764,3 +764,23 @@ build time it reports and word filters decide.
 **Open:** "how much protein do adults need?" retrieved general text and missed the guideline's figure.
 Nutrition is the thinnest area (29 passages). The judge's "supported" score is weak evidence: it saw
 truncated material. The blind sample in `eval/results/rag_blind_2026-11-08.md` has not been read.
+
+## Advice that joins data, memory and guidance (2026-11-09)
+
+**Built:** before a coaching answer, code ranks memory by relevance to the question (embeddings),
+recency and importance, adds logged food and what the rest of the data says, searches the passages
+with the person's situation added, and drops what does not fit their life. One suggestion must rest on
+something about the person. Questions linking two areas are tested by code before the model starts.
+
+**Tested** (`eval/personal_eval.py`, the same questions for five made-up people): after the fixes, 10
+of 12 answers used what the person had said and none mentioned another person's details; eating advice
+stayed on eating. Whole agent: 68/79 before the last fixes, with most failures from running past
+midnight, when "at 7 am" had not come yet; the failing scenarios then passed but for one logging
+correction, which is intermittent. A two-area question fell from about $0.03 to $0.004.
+
+**Found:** a question with no food logged got a stock reply; a goal said aloud was never stored because
+it read as a reminder; the goal tool never worked, because an argument named `target` was taken for a
+metric; a reminder lost its thread if the agent's question had no question mark.
+
+**Open:** no full pass since the final fixes; each scenario ran once or twice, so these are not rates.
+Answers often use what was said without citing it. Night work is the only "does not fit" rule so far.

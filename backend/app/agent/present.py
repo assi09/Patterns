@@ -57,6 +57,7 @@ METRICS: dict[str, MetricInfo] = {
 
 # Statistics that are a level of the metric, and ones that are a difference between levels.
 LEVEL_KEYS = (
+    "target",
     "mean",
     "median",
     "min",

@@ -380,3 +380,12 @@ def test_repeating_what_the_person_said_is_not_inventing_a_number():
     text = "What time did that 20 minute walk end?"
     assert text_problems(text, []) != []
     assert text_problems(text, [], "Log a 20 minute walk") == []
+
+
+def test_the_app_talking_about_the_person_in_the_third_person_is_sent_back():
+    from app.agent.verifier import text_problems
+
+    assert any(
+        "talks about itself" in reason
+        for reason in text_problems("The person asked for water.", [])
+    )

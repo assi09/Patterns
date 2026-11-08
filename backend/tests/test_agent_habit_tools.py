@@ -182,3 +182,40 @@ def test_a_summary_may_describe_a_supported_habit_with_direction_words():
     assert overstated(summary, [supported]) == []
     calm = habit_options(person(5), "sleep_efficiency", WINDOW)
     assert not calm.stats["supported"] and overstated(summary, [calm])
+
+
+def test_goal_progress_counts_days_that_met_a_target():
+    from datetime import date
+
+    import pandas as pd
+
+    from app.analysis.evidence import Window
+    from app.analysis.habits import goal_progress
+
+    days = pd.date_range("2026-10-01", periods=10, name="date")
+    frame = pd.DataFrame({"steps": [9000.0] * 4 + [5000.0] * 6}, index=days)
+    window = Window(start=date(2026, 10, 1), end=date(2026, 10, 10))
+    evidence = goal_progress(frame, "steps", 8000, "at_least", window)
+    assert evidence.stats["days_met"] == 4 and evidence.stats["last_week_counted"] == 7
+    assert goal_progress(frame, "steps", 8000, "at_most", window).stats["days_met"] == 6
+
+
+def test_the_agent_can_call_goal_progress():
+    from datetime import date
+
+    import pandas as pd
+
+    from app.agent.llm import ToolCall
+    from app.agent.tools import Toolbox
+
+    days = pd.date_range("2026-10-01", periods=10, name="date")
+    frame = pd.DataFrame({"steps": [9000.0] * 10}, index=days)
+    arguments = {
+        "metric": "steps",
+        "goal_value": 8000,
+        "direction": "at_least",
+        "start": date(2026, 10, 1).isoformat(),
+        "end": date(2026, 10, 10).isoformat(),
+    }
+    result = Toolbox(frame, ["steps"]).run(ToolCall("x", "goal_progress", arguments))
+    assert result.error is None and result.evidence.stats["days_met"] == 10

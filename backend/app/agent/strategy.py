@@ -13,6 +13,7 @@ gives the agent every tool and one more budget step when its first look is not e
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
@@ -23,9 +24,12 @@ from app.agent.llm import Budget
 from app.agent.present import clock, label
 from app.agent.strategy_types import DEFAULT_TYPE
 from app.agent.tools import TOOLS, Toolbox, evidence_payload
+from app.agent.verifier import _significant as is_significant
+from app.agent.verifier import run_adjusted
 from app.analysis.coaching import WEEKDAYS, habit_options, personal_options
 from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
+from app.analysis.tools import correlate
 
 EXPAND = "expand_tools"
 YESTERDAY = re.compile(r"\byesterday\b", re.IGNORECASE)
@@ -83,7 +87,15 @@ STRATEGIES: dict[str, Strategy] = {
         memory=False,
     ),
     "lookup": Strategy(
-        tools=("describe", "rank_days", "usual_ranges", "compare_day", "coverage", "checkins"),
+        tools=(
+            "describe",
+            "rank_days",
+            "usual_ranges",
+            "compare_day",
+            "coverage",
+            "checkins",
+            "goal_progress",
+        ),
         guide="How to work: answer the value asked for with the fewest tool calls (the snapshot "
         "below may already cover it). " + ONE_THING + "No hypotheses. Then call submit_findings.",
         budget=Budget(max_calls=6, max_tool_calls=5, max_cost_usd=0.02),
@@ -123,6 +135,7 @@ STRATEGIES: dict[str, Strategy] = {
     "coaching": Strategy(
         tools=(
             "habit_options",
+            "goal_progress",
             "sleep_regularity",
             "training_load",
             "correlate",
@@ -353,3 +366,65 @@ def eating_context(
     )
     notes = "; ".join(o["note"] + f" (could try {o['try']})" for o in options)
     return [record], f"What their days look like (evidence_id {record.id}): {notes}"
+
+
+# What links two areas, as (driver, target, lag): a night is dated by the morning it ends, so a
+# day's training reaches that night's sleep at lag 1, and last night's sleep today's recovery at 0.
+CROSS_AREA = {
+    frozenset(("sleep", "activity")): (
+        ("strain", "sleep_minutes", 1),
+        ("strain", "sleep_efficiency", 1),
+        ("active_zone_minutes", "sleep_efficiency", 1),
+    ),
+    frozenset(("recovery", "sleep")): (
+        ("sleep_minutes", "recovery_score", 0),
+        ("sleep_efficiency", "recovery_score", 0),
+        ("bedtime_hour", "recovery_score", 0),
+    ),
+    frozenset(("recovery", "activity")): (
+        ("strain", "recovery_score", 1),
+        ("strain", "hrv_ms", 1),
+    ),
+}
+CROSS_DAYS = 90
+CROSS_AREA_GUIDE = (
+    "How to work: the question links two areas, and the tests below answer it. Submit from them "
+    "now, in one or two friendly sentences: an association claim where a test shows a link, a "
+    "no_change claim where it does not, each with metric set to the target of that test and "
+    "citing that test. Write 'went with', never 'because'. Then call submit_findings."
+)
+
+
+def cross_area_evidence(
+    frame: pd.DataFrame, lead: str | None, others: Sequence[str]
+) -> tuple[list[Evidence], str]:
+    """A question linking two areas, tested by code before the model starts: the same few tests
+    for everyone, so it is cheap, and a verdict does not depend on how many the model tried."""
+    if frame.empty or lead is None:
+        return [], ""
+    end = frame.index.max().date()
+    window = Window(start=end - timedelta(days=CROSS_DAYS - 1), end=end)
+    pairs = [p for other in others for p in CROSS_AREA.get(frozenset((lead, other)), ())]
+    found = []
+    for driver, target, lag in pairs:
+        if driver in frame.columns and target in frame.columns:
+            try:
+                record = correlate(frame, driver, target, window, lag)
+            except ToolError:
+                continue
+            if record.sufficient:
+                found.append(record)
+    found = run_adjusted(found)
+    if not found:
+        return [], ""
+    lines = []
+    for record in found:
+        driver, target = record.metrics[:2]
+        rho = record.stats.get("rho") or 0
+        way = "higher" if rho > 0 else "lower"
+        verdict = f"went with {way} {label(target)}" if is_significant(record) else "no clear link"
+        lines.append(f"- {label(driver)} and {label(target)} (evidence_id {record.id}): {verdict}")
+    return found, (
+        "Already tested across these areas over the last 90 days; answer from these first:\n"
+        + "\n".join(lines)
+    )

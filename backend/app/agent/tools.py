@@ -69,6 +69,14 @@ class RankArguments(MetricPeriod):
     count: int = Field(3, ge=1, le=5)
 
 
+class GoalArguments(MetricPeriod):
+    goal_value: float = Field(
+        description="The number from what they said, in the metric's unit; a bedtime is in hours "
+        "from midnight, so 23:00 is -1"
+    )
+    direction: Literal["at_least", "at_most"]
+
+
 class DayOnly(_Arguments):
     day: date = Field(description="The day, YYYY-MM-DD; the last day of data for 'today'")
 
@@ -168,6 +176,15 @@ TOOLS: dict[str, AgentTool] = {
             "The best, worst, highest or lowest days of a metric in a period.",
             RankArguments,
             lambda frame, a: habits.rank_days(frame, a.metric, _window(a), a.order, a.count),
+        ),
+        AgentTool(
+            "goal_progress",
+            "How often days met a target the person set themselves, overall and over the last "
+            "week. The target must come from what they said.",
+            GoalArguments,
+            lambda frame, a: habits.goal_progress(
+                frame, a.metric, a.goal_value, a.direction, _window(a)
+            ),
         ),
         AgentTool(
             "usual_ranges",

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.actions import exercises, store
 from app.actions.measure import Measurer, with_measurement
 from app.actions.schemas import FoodLog, WorkoutLog
-from app.actions.stated import mismatch
+from app.actions.stated import lacks_a_duration, latest_past, mismatch
 from app.agent.agent import ExtraTool
 from app.api.errors import ApiError
 
@@ -49,7 +49,8 @@ STATED_VALUES = re.compile(r"\d\s*(?:kcal|cal(?:ories)?|g|grams?)\b", re.IGNOREC
 REFUSED_NOTE = (
     "Tell the person plainly what the problem is and what would fix it, in everyday words. Never "
     "change a time, date or duration they gave to get past it, and never ask for their time zone: "
-    "the time at the top of the task is already theirs."
+    "the time at the top of the task is already theirs. A clock time with no day that has not "
+    "come yet today means yesterday: prepare it for yesterday rather than refusing."
 )
 
 
@@ -86,6 +87,12 @@ def proposal_tools(
                 given = {k: v for k, v in (arguments or {}).items() if k not in owned}
                 if model is FoodLog and estimates and not STATED_VALUES.search(" ".join(said)):
                     given |= {"provenance": "estimated", "estimateSource": estimates[-1]}
+                if model is WorkoutLog and said and lacks_a_duration(said):
+                    problem = "The person did not say how long it lasted. Ask them, kindly."
+                    content = {"error": "This draft was not prepared.", "problems": [problem]}
+                    return json.dumps(content | {"note": REFUSED_NOTE}), {"error": "not_as_said"}
+                if said and local_now:
+                    given = latest_past(given, said, local_now)
                 log = model.model_validate(given)
                 if said and local_now and (problem := mismatch(log, said, local_now)):
                     content = {"error": "This draft was not prepared.", "problems": [problem]}

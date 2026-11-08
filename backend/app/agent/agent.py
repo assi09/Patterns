@@ -43,6 +43,12 @@ SUBMIT = "submit_findings"
 HYPOTHESES = "record_hypotheses"
 ASKS = "The person asks:"
 REPAIR_ROUNDS = 1
+REWORD_USD = 0.004
+REWORD_PROMPT = (
+    'Answer the person\'s question in one to three friendly sentences, to "you", using only the '
+    "facts given. Keep every number exactly as it is, add nothing, and never mention checks, "
+    "tests or how the answer was made."
+)
 NO_ANSWER = (
     "I couldn't pin that down reliably this time. Could you ask it another way, or name the "
     "days you mean?"
@@ -108,6 +114,7 @@ Rules for claims:
 - What a retrieved passage says in general is a claim of kind guidance citing that passage, with no
   metric, and only its numbers. Advice for this person still needs their own evidence: a suggestion
   cites both when a passage says how to try it.
+- A goal they told you about is measured with goal_progress: the target comes from their words.
 - Answer what was asked, in plain friendly sentences. Say nothing about data coverage or wear time
   unless data is actually missing. Never mention checks, tests, tools or how the answer was made.
 - Only claim a change or an association when the evidence is significant. When it is not, that is
@@ -356,9 +363,43 @@ def run_agent(
     # A run can end during a repair, on its budget or a model failure: what failed its check is
     # never the answer.
     checks = [step for step in result.trace if step["type"] == "verify"]
-    if result.stop_reason != "submitted" and checks and checks[-1]["summary_problems"]:
+    fell_back = bool(checks and checks[-1]["summary_problems"])
+    if result.stop_reason != "submitted" and fell_back:
         result.summary = fallback_summary(result.claims)
+    if fell_back and result.summary != NO_ANSWER and result.claims:
+        _reword(llm, result, said, guard, budget)
     return result
+
+
+def _reword(llm: LLM, result: AgentResult, said: str, guard: Guard | None, budget: Budget) -> None:
+    """Verified claims read stitched together; one small call makes them read like an answer. It
+    may only say what they say, and the same checks apply, so a failure keeps the plain version."""
+    limit = Budget(max_calls=1, max_tool_calls=0, max_cost_usd=REWORD_USD)
+    claims = "\n".join(f"- {claim.text}" for claim in result.claims)
+    try:
+        done = llm.complete(
+            [
+                {"role": "system", "content": REWORD_PROMPT},
+                {"role": "user", "content": f"They asked: {said.strip()}\nFacts:\n{claims}"},
+            ],
+            budget=limit,
+        )
+    except LLMError:
+        return
+    budget.cost_usd += limit.cost_usd
+    text = (done.text or "").strip()
+    evidence = list(result.evidence.values())
+    problems = (
+        text_problems(text, evidence, said) + overstated(text, evidence) if text else ["empty"]
+    )
+    if not problems and guard:
+        try:
+            problems = ["flagged"] if guard.judge([text]).flagged[0] else []
+        except GuardError:
+            problems = ["guard down"]
+    result.trace.append({"type": "reword", "problems": problems})
+    if not problems:
+        result.summary = text
 
 
 def _handle(

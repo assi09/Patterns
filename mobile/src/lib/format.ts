@@ -168,6 +168,7 @@ const TOOL_LABELS: Record<string, string> = {
   checkins: 'Your check-ins',
   tag_effect: 'Days you tagged',
   knowledge: 'Public guidance',
+  goal_progress: 'Your goal',
 };
 
 export function toolLabel(tool: string): string {
