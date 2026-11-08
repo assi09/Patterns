@@ -105,6 +105,9 @@ Rules for claims:
 - A value read from a tool (an average, a best or worst day, two specific days side by side) is a
   claim of kind value citing that tool. To compare two specific days, use compare_day on each,
   never compare_windows.
+- What a retrieved passage says in general is a claim of kind guidance citing that passage, with no
+  metric, and only its numbers. Advice for this person still needs their own evidence: a suggestion
+  cites both when a passage says how to try it.
 - Answer what was asked, in plain friendly sentences. Say nothing about data coverage or wear time
   unless data is actually missing. Never mention checks, tests, tools or how the answer was made.
 - Only claim a change or an association when the evidence is significant. When it is not, that is
@@ -397,7 +400,12 @@ def _handle(
         verdict = verify(claims, toolbox.evidence, claim_check)
         # The summary is shown too: it may only use what the run's evidence holds.
         run_evidence = list(toolbox.evidence.values())
-        summary_problems = text_problems(submission.summary, run_evidence, said)
+        summary_problems = text_problems(
+            submission.summary,
+            run_evidence,
+            said,
+            general=any(c.kind == "guidance" for c in verdict.accepted),
+        )
         summary_problems += overstated(submission.summary, run_evidence)
         if verdict.accepted and all(c.kind == "data_quality" for c in verdict.accepted):
             summary_problems.append(
@@ -440,6 +448,8 @@ def _handle(
 
     if call.name in extras:
         content, step = extras[call.name].run(call.arguments)
+        # What a tool found that the answer may cite, such as retrieved passages.
+        toolbox.evidence.update({e.id: e for e in step.pop("evidence", ())})
         result.trace.append({"type": call.name, **step})
         return content, False
 

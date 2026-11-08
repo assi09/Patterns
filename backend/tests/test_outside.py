@@ -511,3 +511,26 @@ def test_a_usda_match_for_some_other_food_is_not_the_same_food():
 
     assert not _same_food("mloukhieh", {"foods": [{"food": "Bulgur, cooked"}]})
     assert _same_food("chicken breast", {"foods": [{"food": "Chicken, breast, roasted"}]})
+
+
+def test_a_general_question_is_answered_from_the_passages_without_the_web(engine):
+    from app.agent.knowledge import KNOWLEDGE_LOOKUP
+
+    turns = [calling(KNOWLEDGE_LOOKUP, "plank"), ScriptedLLM.say("Hold still.")]
+    llm = ScriptedLLM(turns, embeddings_fail=True)  # the fake vectors mean nothing here
+    result = answer_world(llm, "How do I do a plank?", way_out(engine))
+    assert result.summary == "Hold still." and llm.searched == []
+    assert result.claims[0].kind == "guidance" and result.claims[0].evidence_ids
+    assert "free-exercise-db" in result.notes[0] or "not from your data" in result.notes[0]
+
+
+def test_when_the_passages_have_nothing_the_web_is_tried(engine):
+    from app.agent.knowledge import KNOWLEDGE_LOOKUP
+
+    llm = ScriptedLLM(
+        [calling(KNOWLEDGE_LOOKUP, "zzz qqq xxx"), ScriptedLLM.say("Molokhia is a leafy soup.")],
+        searches=[web()],
+        embeddings_fail=True,
+    )
+    answer_world(llm, "zzz?", way_out(engine))
+    assert llm.searched

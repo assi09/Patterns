@@ -28,7 +28,8 @@ INSTRUCTIONS = (
     "movement breaks, reminders) but is not medical. Is sentence {i} medical: does it diagnose, "
     "name or hint at an illness or condition, read the data as a warning sign about health, or "
     "advise treatment, medication, supplements, a diet, or seeing a doctor? Describing the data "
-    "and suggesting an everyday habit are not medical."
+    "and suggesting an everyday habit are not medical, and neither is passing on what a public "
+    "guideline says about everyday eating, exercise or sleep."
 )
 REASON = (
     "is medical (a diagnosis, a condition, or treatment, medication, supplements, a diet or a "

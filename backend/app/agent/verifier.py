@@ -23,7 +23,7 @@ from app.analysis.screen import benjamini_hochberg
 ALPHA = 0.05
 
 ClaimKind = Literal[
-    "change", "association", "no_change", "data_quality", "day", "suggestion", "value"
+    "change", "association", "no_change", "data_quality", "day", "suggestion", "value", "guidance"
 ]
 Direction = Literal["up", "down"]
 
@@ -72,6 +72,10 @@ MEDICAL = re.compile(
 ABOUT_ITSELF = re.compile(
     r"\bI (?:can'?t|cannot|can not) (?:give|offer|provide)\b|evidence[- ]based|tested habits?\b|"
     r"\b(?:with|in) this run\b|\bthe test run\b|\bthis many (?:checks|tests)\b",
+    re.IGNORECASE,
+)
+YOUR_DATA = re.compile(
+    r"\byour (?:sleep|steps?|heart|hrv|recovery|bedtime|strain|data|numbers?|efficiency|average)\b",
     re.IGNORECASE,
 )
 GENERIC_ADVICE = re.compile(
@@ -314,6 +318,9 @@ def _allowed_numbers(cited: list[Evidence]) -> list[float]:
                 allowed += [n * 100 for n in numbers] + numbers  # shares as percentages
             else:
                 allowed += numbers
+        if evidence.tool == "knowledge":  # a passage's own numbers, as its text gives them
+            text = str(evidence.stats.get("text", ""))
+            allowed += [n for n, _ in _quoted_numbers(text)] + _quoted_durations(text)
         allowed.append(float(evidence.n))
         for window in evidence.windows:
             allowed += [float(window.days), window.days / 7]
@@ -464,6 +471,12 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
             reasons.append("word a suggestion as an option the person may try (could, might, try)")
         if ORDER_WORDS.search(claim.text):
             reasons.append("do not order the person: offer the habit as an option instead")
+    if claim.kind == "guidance":
+        # What a public source says in general; never a statement about this person's data.
+        if not cited or not all(e.tool == "knowledge" for e in cited):
+            reasons.append("a guidance claim must cite only the passages it comes from")
+        if YOUR_DATA.search(claim.text):
+            reasons.append("guidance is what a source says in general, not about their data")
     if claim.kind == "value" and not [e for e in about if e.tool != "coverage"]:
         reasons.append("a value claim must cite the evidence that holds the value")
     if claim.kind == "data_quality" and not any(e.tool == "coverage" for e in cited):
@@ -493,10 +506,12 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
         ):
             reasons.append("the wording contradicts the stated direction")
 
-    return reasons + text_problems(claim.text, cited)
+    return reasons + text_problems(claim.text, cited, general=claim.kind == "guidance")
 
 
-def text_problems(text: str, cited: list[Evidence], said: str = "") -> list[str]:
+def text_problems(
+    text: str, cited: list[Evidence], said: str = "", general: bool = False
+) -> list[str]:
     """What is wrong with a sentence shown to the person, given the evidence it rests on. `said` is
     the person's own message: repeating their "8 am" or "20 minutes" is not inventing a number."""
     reasons = []
@@ -527,7 +542,7 @@ def text_problems(text: str, cited: list[Evidence], said: str = "") -> list[str]
         reasons.append("writes evidence ids in the text; list them only in evidence_ids")
     if ABOUT_ITSELF.search(text):
         reasons.append("talks about itself; give the advice its evidence supports, plainly")
-    if GENERIC_ADVICE.search(text):
+    if GENERIC_ADVICE.search(text) and not general:  # a how-to from a named source is general
         reasons.append(
             "gives advice anyone could read anywhere; say something specific to this person's "
             "own numbers and life, or leave it out"

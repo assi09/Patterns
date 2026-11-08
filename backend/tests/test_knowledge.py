@@ -237,3 +237,71 @@ def test_an_urgent_reply_never_names_a_guidance_source():
         now=datetime(2026, 11, 1, tzinfo=UTC),
     )
     assert reply.result.summary == URGENT_BODY_REPLY and reply.result.notes == []
+
+
+def _passage(text="Hold your body straight for 30 seconds."):
+    from app.knowledge.build import Passage
+
+    return Passage(
+        "p1",
+        "Plank",
+        text,
+        "A public guide",
+        "https://example.com",
+        "public",
+        "exercise",
+        "exercise",
+    )
+
+
+def test_a_guidance_claim_cites_passages_and_only_their_numbers():
+    from app.agent.knowledge import passage_evidence
+    from app.agent.verifier import Claim, check_claim
+
+    record = passage_evidence(_passage())
+    held = {record.id: record}
+    fine = Claim(text="Hold it for 30 seconds.", kind="guidance", evidence_ids=[record.id])
+    assert check_claim(fine, held) == []
+    made_up = Claim(text="Hold it for 90 seconds.", kind="guidance", evidence_ids=[record.id])
+    assert check_claim(made_up, held)
+    about_them = Claim(text="Your sleep will improve.", kind="guidance", evidence_ids=[record.id])
+    assert any("in general" in reason for reason in check_claim(about_them, held))
+
+
+def test_a_how_to_from_a_source_is_not_rejected_as_generic():
+    from app.agent.verifier import text_problems
+
+    text = "Exercise regularly."
+    assert text_problems(text, []) != [] and text_problems(text, [], general=True) == []
+
+
+def test_a_passage_shown_to_the_model_can_be_cited_by_the_answer():
+    from app.agent.llm import ScriptedLLM
+
+    text, step = knowledge_tool(llm=ScriptedLLM(embeddings_fail=True)).run({"topic": "plank"})
+    shown = json.loads(text)["cards"]
+    assert shown and step["evidence"][0].id == shown[0]["evidence_id"]
+
+
+def test_retrieved_guidance_is_capped_and_names_its_sources():
+    from app.agent.knowledge import MAX_PASSAGES, guidance_for
+    from app.agent.llm import ScriptedLLM
+
+    done = guidance_for("how do I do a plank", CARDS[:6], ScriptedLLM([]))
+    assert 0 < len(done.evidence) <= MAX_PASSAGES and "evidence_id" in done.text
+    assert done.step["type"] == "retrieval"
+
+
+def test_the_source_named_is_the_passage_cited():
+    from types import SimpleNamespace
+
+    from app.agent.knowledge import passage_evidence
+    from app.agent.verifier import Claim
+
+    record = passage_evidence(_passage())
+    claim = Claim(text="Hold it.", kind="guidance", evidence_ids=[record.id])
+    held = {record.id: record}
+    result = SimpleNamespace(summary="Hold it.", claims=[claim], trace=[], evidence=held)
+    assert "A public guide" in source_note(result)
+    uncited = SimpleNamespace(summary="Hold it.", claims=[], trace=[], evidence=held)
+    assert source_note(uncited) is None

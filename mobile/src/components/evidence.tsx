@@ -26,6 +26,34 @@ import { fonts, radius, spacing, useColors, useMetricColor } from '@/theme';
 
 /** One computation as a page: its question and answer, a chart, the figures and how it was done. */
 export function EvidenceView({ evidence }: { evidence: Evidence }) {
+  return evidence.tool === 'knowledge' ? (
+    <PassageView evidence={evidence} />
+  ) : (
+    <ComputedView evidence={evidence} />
+  );
+}
+
+/** A passage from public guidance: what it says and where it comes from, nothing computed. */
+function PassageView({ evidence }: { evidence: Evidence }) {
+  return (
+    <View style={styles.page}>
+      <View style={{ gap: spacing.xs }}>
+        <Text variant="label" color="muted">
+          {toolLabel('knowledge')}
+        </Text>
+        <Text variant="title" accessibilityRole="header">
+          {String(evidence.stats.title ?? '')}
+        </Text>
+      </View>
+      <Text selectable>{String(evidence.stats.text ?? '')}</Text>
+      <Text variant="caption" color="muted">
+        From {String(evidence.stats.source ?? '')}. General guidance, not about your own data.
+      </Text>
+    </View>
+  );
+}
+
+function ComputedView({ evidence }: { evidence: Evidence }) {
   const colors = useColors();
   const color = useMetricColor(evidence.metrics[0] ?? '');
   const [showRaw, setShowRaw] = useState(false);
