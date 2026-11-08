@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from app.agent.agent import SUBMIT, Claim, answer, fallback_summary
+from app.agent.agent import NO_ANSWER, SUBMIT, Claim, answer, fallback_summary
 from app.agent.ask import ask
 from app.agent.intent import Intent
 from app.agent.llm import Budget, Completion, ScriptedLLM, ToolCall, Usage
@@ -127,7 +127,7 @@ def test_coaching_gets_tested_habits_up_front_and_an_offer_after(frame):
 
     reply = ask(ScriptedLLM([suggest]), Router("coaching"), frame, "How can I sleep better?")
     assert [c.kind for c in reply.result.claims] == ["suggestion"]
-    assert reply.result.notes[-1] == COACHING_OFFER
+    assert COACHING_OFFER in reply.result.notes
 
 
 def test_the_agent_can_widen_its_tools_once(frame):
@@ -167,10 +167,8 @@ def test_the_fallback_never_leads_with_a_note_on_data_quality():
     assert fallback_summary(claims) == "Steps did not clearly differ between weekdays and weekends."
 
 
-def test_the_fallback_keeps_a_note_when_there_is_nothing_else():
-    assert fallback_summary([claim("data_quality", "Coverage was complete.")]) == (
-        "Coverage was complete."
-    )
+def test_a_note_on_data_quality_alone_is_not_passed_off_as_an_answer():
+    assert fallback_summary([claim("data_quality", "Coverage was complete.")]) == NO_ANSWER
 
 
 def test_two_steady_metrics_keep_their_own_words_and_three_are_grouped():

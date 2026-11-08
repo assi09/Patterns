@@ -358,3 +358,25 @@ def test_an_association_supports_both_of_its_metrics():
         stats={"p_value": 0.001, "p_value_adjusted": 0.003, "rho": -0.6},
     )
     assert overstated("Later bedtimes went with less time asleep.", [link]) == []
+
+
+def test_a_value_needs_evidence_that_holds_it_but_no_significance():
+    from app.agent.verifier import Claim, check_claim
+
+    evidence = _test_evidence("sleep_minutes", 0.9, "rank_days")
+    claim = Claim(
+        text="Your best night was Oct 13.",
+        kind="value",
+        evidence_ids=[evidence.id],
+        metric="sleep_minutes",
+    )
+    reasons = check_claim(claim, {evidence.id: evidence})
+    assert not any("significant" in reason or "value claim" in reason for reason in reasons)
+
+
+def test_repeating_what_the_person_said_is_not_inventing_a_number():
+    from app.agent.verifier import text_problems
+
+    text = "What time did that 20 minute walk end?"
+    assert text_problems(text, []) != []
+    assert text_problems(text, [], "Log a 20 minute walk") == []

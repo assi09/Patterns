@@ -209,3 +209,31 @@ def test_the_tool_is_offered_for_coaching_only():
 
     assert KNOWLEDGE_LOOKUP in offered("coaching")
     assert KNOWLEDGE_LOOKUP not in offered("why")
+
+
+def test_an_urgent_reply_never_names_a_guidance_source():
+    from datetime import UTC, date, datetime
+
+    from app.agent.ask import URGENT_BODY_REPLY, ask
+    from app.agent.llm import ScriptedLLM
+    from app.agent.router import EXPERT_LABELS, LABELS, Classification
+    from app.synthetic import generate
+
+    class Coaching:
+        def classify(self, question, earlier=()):
+            return Classification(
+                dict.fromkeys(LABELS, 0.0) | {"sleep": 0.9},
+                dict.fromkeys(EXPERT_LABELS, 0.0),
+                source="test",
+                question_types={"coaching": 1.0},
+            )
+
+    frame = generate(date(2026, 8, 1), 90, seed=11).frame
+    reply = ask(
+        ScriptedLLM([]),
+        Coaching(),
+        frame,
+        "I have chest pain right now",
+        now=datetime(2026, 11, 1, tzinfo=UTC),
+    )
+    assert reply.result.summary == URGENT_BODY_REPLY and reply.result.notes == []

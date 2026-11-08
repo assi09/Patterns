@@ -348,6 +348,8 @@ class MemoryFact(Base):
     status: Mapped[str] = mapped_column(String(16), default="proposed")
     source_run_id: Mapped[str | None] = mapped_column(String(32), default=None)  # provenance
     source_message_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)  # who said it
+    # What this says is no longer true: removed when the person keeps this one.
+    replaces_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
     start_day: Mapped[date | None] = mapped_column(Date, default=None)  # an event's dates
     end_day: Mapped[date | None] = mapped_column(Date, default=None)
     seen: Mapped[int] = mapped_column(default=1, server_default="1")  # times heard

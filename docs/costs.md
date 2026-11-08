@@ -101,3 +101,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-05 | First real-data check, the owner's Takeout export, six questions (`eval/real_check.py`; answers stay in git-ignored `data/`) | $0.0725 |
 | 2026-11-05 | The no-answer question twice on the owner's export ($0.0107), then the six-question real-data check again ($0.0869) | $0.0976 |
 | 2026-11-08 | Workout logging as in the bug report, made-up person: three conversations ($0.0262), then the request given one detail at a time and a change of topic after the fixes ($0.0166) | $0.0428 |
+| 2026-11-08 | Whole-agent evaluation through the API, made-up person (`eval/agent_eval.py`): a pass stopped by the app's own daily cap ($0.13), three full passes of 74–75 turns around two rounds of fixes ($0.49, $0.52, $0.54), a final pass ($0.52), a smoke run and a diagnostic run (about $0.08), plus about $0.1 of background summaries and memory listening | about $2.40 |

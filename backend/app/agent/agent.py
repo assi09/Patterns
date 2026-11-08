@@ -10,6 +10,7 @@ with their own prompt, metrics, an extra claim rule and the `consult` tool.
 """
 
 import json
+import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -40,7 +41,12 @@ from app.analysis.screen import screen
 
 SUBMIT = "submit_findings"
 HYPOTHESES = "record_hypotheses"
+ASKS = "The person asks:"
 REPAIR_ROUNDS = 1
+NO_ANSWER = (
+    "I couldn't pin that down reliably this time. Could you ask it another way, or name the "
+    "days you mean?"
+)
 NUDGES = 2  # times a reply without a tool call is answered with a reminder to submit
 
 
@@ -96,6 +102,11 @@ Rules for claims:
 - Quote only numbers, times and dates that appear in the cited evidence.
 - Significance is judged after correcting for every test you run, so test what the question
   needs rather than everything you can.
+- A value read from a tool (an average, a best or worst day, two specific days side by side) is a
+  claim of kind value citing that tool. To compare two specific days, use compare_day on each,
+  never compare_windows.
+- Answer what was asked, in plain friendly sentences. Say nothing about data coverage or wear time
+  unless data is actually missing. Never mention checks, tests, tools or how the answer was made.
 - Only claim a change or an association when the evidence is significant. When it is not, that is
   a finding too: make it a no_change claim citing that evidence ("no clear change", "did not
   clearly go with"), never a change or association claim.
@@ -132,6 +143,10 @@ Coaching, when the person asks how to improve (sleep better, recover faster, tra
 - Lead with the advice. With fewer specific things than they asked for, give those and say in a
   few words that this is what their data points to so far. Never open with what you cannot do, and
   never talk about "evidence-based" points, "tested habits", "this run" or how the answer was made.
+- When they ask about a particular situation or moment (the hour before bed, a late session), use
+  knowledge_lookup and answer that situation, tied to their own numbers.
+- What they have told you comes first: a night-shift worker gets no advice built on a 23:00
+  bedtime. If what they told you makes the numbers below a poor fit, say so and ask.
 - With nothing at all specific to stand on, say so plainly and ask what is going on for them, so
   you can look at the right thing. Never fill the gap with a general tip.
 - End by offering to set a reminder for the habit, or to test it.
@@ -263,6 +278,7 @@ def run_agent(
         {"role": "user", "content": task},
     ]
     repairs_left, nudges_left = REPAIR_ROUNDS, NUDGES
+    said = task.rsplit(ASKS, 1)[-1]  # the person's own words, which an answer may repeat
 
     while True:
         if budget.max_calls - budget.calls <= 1:
@@ -322,6 +338,7 @@ def run_agent(
                 claim_check,
                 guard,
                 coverage,
+                said,
             )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
             # A verified submission sent back for repair uses up the repair round.
@@ -349,6 +366,7 @@ def _handle(
     claim_check: Callable[[Claim], list[str]] | None,
     guard: Guard | None,
     coverage: Callable[[list[Claim]], list[str]] | None,
+    said: str = "",
 ) -> tuple[str, bool]:
     """Runs one tool call; returns what the model reads and whether the run is finished."""
     if call.name == HYPOTHESES:
@@ -379,15 +397,19 @@ def _handle(
         verdict = verify(claims, toolbox.evidence, claim_check)
         # The summary is shown too: it may only use what the run's evidence holds.
         run_evidence = list(toolbox.evidence.values())
-        summary_problems = text_problems(submission.summary, run_evidence)
+        summary_problems = text_problems(submission.summary, run_evidence, said)
         summary_problems += overstated(submission.summary, run_evidence)
+        if verdict.accepted and all(c.kind == "data_quality" for c in verdict.accepted):
+            summary_problems.append(
+                "only says the data was complete; answer the question, or say you could not"
+            )
         if guard:
             verdict, summary_problems = _guarded(
                 guard, verdict, submission.summary, summary_problems, result
             )
         uncovered = coverage(list(verdict.accepted)) if coverage else []
         result.uncovered = uncovered
-        result.summary = submission.summary
+        result.summary = without_coverage_talk(submission.summary)
         result.hypotheses = submission.hypotheses
         result.claims = list(verdict.accepted)
         result.rejected = list(verdict.rejected)
@@ -551,6 +573,19 @@ def answer(
     return result
 
 
+COVERAGE_TALK = re.compile(
+    r"[^.!?]*\b(?:coverage (?:was|is) complete|no low[- ]wear days|"
+    r"wear time was (?:complete|solid)|tracking was solid)\b[^.!?]*[.!?]\s*",
+    re.IGNORECASE,
+)
+
+
+def without_coverage_talk(summary: str) -> str:
+    """A person asked about their sleep, not whether the data was complete: when the data is fine
+    that sentence is noise, and the model keeps writing it despite being told not to."""
+    return COVERAGE_TALK.sub("", summary).strip() or summary
+
+
 def fallback_summary(claims: list[Claim]) -> str:
     """A summary from verified claims when the model's failed its checks twice: what changed or
     is suggested first, then the steady metrics together in one sentence, not one each."""
@@ -562,13 +597,13 @@ def fallback_summary(claims: list[Claim]) -> str:
     # Findings lead; a note on data quality only supports them, so it comes last, if at all.
     lead = [sentence(c.text) for c in claims if c.kind not in ("no_change", "data_quality")][:3]
     unchanged = [c for c in claims if c.kind == "no_change"]
-    notes = [sentence(c.text) for c in claims if c.kind == "data_quality"][:1]
     steady = list(dict.fromkeys(label(c.metric) for c in unchanged if c.metric))
     if len(steady) < 3:  # a claim's own words fit its question ("did not differ by weekday")
         said = [sentence(c.text) for c in unchanged]
     else:
         said = [sentence(f"{', '.join(steady[:-1])} and {steady[-1]} showed no clear change")]
-    return " ".join([*lead, *said, *(notes if not lead and not said else [])])
+    # A note on data quality alone answers nothing: better to say so than to pass it off.
+    return " ".join([*lead, *said]) or NO_ANSWER
 
 
 def answer_task(
@@ -588,7 +623,7 @@ def answer_task(
     else:
         when = f"Today is {today}. " if today else ""
     earlier = f"\n\n{context}" if context else ""
-    return f"{guide}\n\n{when}{_describe_range(toolbox)}{earlier}\n\nThe person asks: {question}"
+    return f"{guide}\n\n{when}{_describe_range(toolbox)}{earlier}\n\n{ASKS} {question}"
 
 
 def trace_json(result: AgentResult) -> str:

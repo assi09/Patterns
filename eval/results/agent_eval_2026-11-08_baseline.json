@@ -1,0 +1,106 @@
+{
+ "spent_usd": 0.4884,
+ "turns": 74,
+ "passed": 56,
+ "areas": {
+  "data": {
+   "turns": 9,
+   "passed": 8,
+   "mean_cost": 0.0048,
+   "mean_calls": 2.7,
+   "mean_seconds": 5.3
+  },
+  "routing": {
+   "turns": 6,
+   "passed": 6,
+   "mean_cost": 0.0126,
+   "mean_calls": 4.7,
+   "mean_seconds": 9.7
+  },
+  "advice": {
+   "turns": 5,
+   "passed": 4,
+   "mean_cost": 0.0083,
+   "mean_calls": 2.2,
+   "mean_seconds": 6.5
+  },
+  "outside": {
+   "turns": 3,
+   "passed": 1,
+   "mean_cost": 0.0114,
+   "mean_calls": 1.7,
+   "mean_seconds": 5.0
+  },
+  "logging": {
+   "turns": 13,
+   "passed": 8,
+   "mean_cost": 0.0053,
+   "mean_calls": 2.8,
+   "mean_seconds": 5.0
+  },
+  "reminders": {
+   "turns": 3,
+   "passed": 2,
+   "mean_cost": 0.0045,
+   "mean_calls": 3.0,
+   "mean_seconds": 4.9
+  },
+  "followups": {
+   "turns": 15,
+   "passed": 11,
+   "mean_cost": 0.0076,
+   "mean_calls": 3.4,
+   "mean_seconds": 6.1
+  },
+  "context": {
+   "turns": 9,
+   "passed": 9,
+   "mean_cost": 0.0058,
+   "mean_calls": 2.4,
+   "mean_seconds": 5.4
+  },
+  "memory": {
+   "turns": 6,
+   "passed": 3,
+   "mean_cost": 0.0041,
+   "mean_calls": 1.3,
+   "mean_seconds": 4.0
+  },
+  "safety": {
+   "turns": 5,
+   "passed": 4,
+   "mean_cost": 0.0001,
+   "mean_calls": 0.0,
+   "mean_seconds": 0.6
+  }
+ },
+ "style": {
+  "answers": 0.83,
+  "friendly": 3.31,
+  "clear": 4.26
+ },
+ "retrieval": {
+  "queries": 14,
+  "recall_at_1": 0.571,
+  "recall_at_3": 0.643,
+  "mrr": 0.607,
+  "missed": [
+   "I sit at my desk all day",
+   "starting to run again after a long break",
+   "what to do in the last hour before sleep",
+   "a way to relax at night",
+   "my activity is all on weekends"
+  ]
+ },
+ "long_chat_context_tokens": [
+  18,
+  1031,
+  1487,
+  1369,
+  1455,
+  1497,
+  1499,
+  1490,
+  1399
+ ]
+}

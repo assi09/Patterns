@@ -312,6 +312,7 @@ def propose_fact(
     start: date | None = None,
     end: date | None = None,
     same_as: uuid.UUID | None = None,
+    replaces: uuid.UUID | None = None,
     message_id: uuid.UUID | None = None,
     now: datetime | None = None,
 ) -> MemoryFact | None:
@@ -350,9 +351,12 @@ def propose_fact(
         start_day=start,
         end_day=end,
         last_seen_at=now,
+        replaces_id=replaces,
     )
     session.add(fact)
     session.flush()
+    if replaces is not None:  # a change to something kept is worth asking about at once
+        explicit = True
     if explicit:
         _ask_to_keep(session, fact)
         session.flush()
@@ -388,6 +392,10 @@ def decide_fact(
     )
     fact.status = "approved" if approve else "declined"
     fact.decided_at = now or _now()
+    if approve and fact.replaces_id and (old := session.get(MemoryFact, fact.replaces_id)):
+        if old.user_id == user_id:  # kept the new version: the old one is no longer true
+            session.delete(old)
+        fact.replaces_id = None
     session.flush()
     return fact
 

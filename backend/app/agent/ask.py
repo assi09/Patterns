@@ -16,7 +16,14 @@ from datetime import date, datetime
 
 import pandas as pd
 
-from app.agent.agent import DEFAULT_GUIDE, SYSTEM_PROMPT, AgentResult, ExtraTool, answer
+from app.agent.agent import (
+    DEFAULT_GUIDE,
+    NO_ANSWER,
+    SYSTEM_PROMPT,
+    AgentResult,
+    ExtraTool,
+    answer,
+)
 from app.agent.context import (
     Attachment,
     ChatState,
@@ -47,8 +54,10 @@ from app.agent.knowledge import (
     guidance_block,
     knowledge_tool,
     load_cards,
+    rank_cards,
     source_note,
 )
+from app.agent.listener import is_explicit
 from app.agent.llm import LLM
 from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
 from app.agent.router import (
@@ -60,8 +69,10 @@ from app.agent.router import (
     RouterError,
     decide,
 )
+from app.agent.sanitize import clean
 from app.agent.strategy import (
     COACHING_OFFER,
+    asked_day,
     coaching_evidence,
     expand_tool,
     scaled,
@@ -105,9 +116,10 @@ URGENT_MIND_REPLY = (
     "for this, but you shouldn't carry it alone. Please reach out now to someone you trust, a "
     "local crisis line, or your local emergency number if you might act on these thoughts."
 )
+NOTED = "Got it. Tap Keep on the card and I'll bear that in mind from now on."
 REFUSAL = (
-    "I can only describe patterns in your own Fitbit data, so I can't help with medical "
-    "questions, diagnoses or advice, or with questions about anything else."
+    "That's outside what I can help with. I'm good for your Fitbit data, everyday habits, logging "
+    "food and workouts, and reminders, but not medical questions or other topics."
 )
 
 
@@ -118,7 +130,23 @@ class Answer:
     context: Context
 
 
+QUESTION_CARDS = 2
+NO_CONSULT = ("day", "lookup", "coaching")
+MAX_REPLY_WORDS = 12
+NEW_QUESTION = re.compile(
+    r"\s*(?:how|what|why|when|which|did|do|does|is|are|was|were|can|could|show|tell)\b",
+    re.IGNORECASE,
+)
+COACHING_NO_ANSWER = (
+    "I don't see anything specific in your data to build advice on yet. What gets in the way on a "
+    "normal day? That would tell me where to look."
+)
 ADVICE_TOOLS = ("habit_options", "personal_options")
+
+
+def _just_a_reply(text: str) -> bool:
+    """Whether a message in a logging request gives a detail rather than asks something new."""
+    return "?" not in text and len(text.split()) <= MAX_REPLY_WORDS and not NEW_QUESTION.match(text)
 
 
 def _scope(route: Route) -> set[str] | None:
@@ -175,12 +203,6 @@ def _notes(frame: pd.DataFrame, route: Route, result: AgentResult) -> list[str]:
         name for name in route.consult if name in EXPERTS and not available(EXPERTS[name], frame)
     ]
     notes = [f"There is no {name} data yet, so it is left out here." for name in missing]
-    if result.uncovered:
-        names = " or ".join(result.uncovered)
-        notes.append(
-            f"Your {names} data was not checked for this answer; ask about it if you would "
-            "like it looked at."
-        )
     return notes
 
 
@@ -217,16 +239,25 @@ def ask(
     `history` is the conversation so far (oldest first), `stored_evidence` the evidence its
     answers cite and `memory` the person's stored memory, all loaded by the caller for this person
     only. Routing comes first, so memory is chosen for the metrics the question is about."""
+    reply_text = question.rsplit("Their reply: ", 1)[-1]
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)
+    # A single value, last night or advice is one expert's job; a second expert costs as much again
+    # and, measured, changed nothing. Questions linking areas (why, change, pattern) keep them.
+    if route.classification.question_type in NO_CONSULT and route.consult:
+        route = replace(route, consult=())
     continuing = (
         (continuing_log in (action_tools or {}) or continuing_log == "general")
         and (
             choice in ("auto", continuing_log)
             or (continuing_log == "general" and choice in (action_tools or {}))
         )
-        and route.classification.intent == Intent.CLARIFY
+        and (
+            route.classification.intent == Intent.CLARIFY
+            # "40 minutes, no wait 50" reads as a statement about data; a new question does not.
+            or (route.classification.intent == Intent.READ and _just_a_reply(reply_text))
+        )
         and route.action not in ("refuse", "conversation")
     )
     # A reminder request, or the answer to the agent's question about one ("at 10").
@@ -293,7 +324,7 @@ def ask(
         visible = sorted(_scope(route) or frame.columns)
         found: list[tuple[list[Evidence], str]] = []
         if plan.snapshot:
-            found.append(snapshot(frame, visible))
+            found.append(snapshot(frame, visible, asked_day(question, today, frame)))
         if plan.coaching:
             found.append(coaching_evidence(frame, route.expert, visible))
         for records, text in found:
@@ -303,9 +334,11 @@ def ask(
                 if metric_owner := owner(record.metrics[0]):
                     owners[record.id] = metric_owner.name
         if plan.coaching:
-            guidance = cards_for(
-                e for records, _ in found for e in records if e.tool in ADVICE_TOOLS
-            )
+            # What their data points to, and what this question is about: retrieved by code, so
+            # it costs no model round and cannot be skipped.
+            picked = cards_for(e for records, _ in found for e in records if e.tool in ADVICE_TOOLS)
+            asked_about = rank_cards(question, (), load_cards())[:QUESTION_CARDS]
+            guidance = list(dict.fromkeys([*asked_about, *picked]))
             if guidance_mode != "picked":
                 guidance = list(load_cards()) if guidance_mode == "all" else []
             block = "\n\n".join(part for part in (block, guidance_block(guidance)) if part)
@@ -323,6 +356,11 @@ def ask(
                 if metric_owner:
                     owners.setdefault(record.id, metric_owner.name)
     deep = depth == Depth.DEEP
+    # A profile line far above the question gets ignored: advice has to be told at the point of use.
+    asked = question
+    if plan and plan.coaching and chat and chat.profile:
+        kept = "; ".join(clean(line, 120) for line in chat.profile[:5])
+        asked = f"{question}\n(What they told you, which the advice has to fit: {kept})"
     urgent = (
         URGENT_MIND_REPLY
         if URGENT_MIND.search(question)
@@ -335,6 +373,9 @@ def ask(
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="urgent", summary=urgent)
     elif route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
+    elif is_explicit(question) and "?" not in question and not (logging_tools or reminding):
+        # Keeping it is the person's tap on the card the listener raises; no data to look at.
+        result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="noted", summary=NOTED)
     elif world:
         result = answer_world(llm, question, outside, guard=guard)
     elif route.action == "conversation":
@@ -345,6 +386,7 @@ def ask(
             guard=guard,
             summary=chat.usable_summary if chat else None,
             past=search_past(question) if search_past else (),
+            profile=chat.profile if chat else (),
         )
     elif action_tools and route.classification.intent == Intent.MANAGE:
         result = AgentResult(
@@ -360,13 +402,14 @@ def ask(
         and route.classification.intent == Intent.CLARIFY
         and route.expert in ("nutrition", "activity")
         and not continuing
+        and route.classification.question_type != "coaching"  # "what should I do?" is no meal
     ):
         result = ask_what_they_want(llm, question, expert=route.expert, guard=guard)
     elif route.action == "general":
         result = answer(
             llm,
             frame,
-            question,
+            asked,
             today=today,
             budget=scaled(plan, deep) if plan else replace(BUDGETS[depth]),
             system_prompt=SYSTEM_PROMPT + action_prompt,
@@ -383,7 +426,7 @@ def ask(
             llm,
             frame,
             route.expert,
-            question,
+            asked,
             depth=depth,
             consult=route.consult,
             today=today,
@@ -406,6 +449,9 @@ def ask(
             action_prompt=REMINDER_PROMPT if reminding else "",
         )
         result.notes += _notes(frame, route, result)
+    stopped_early = result.stop_reason in ("urgent", "refused", "noted")
+    if plan and plan.coaching and result.summary == NO_ANSWER:
+        result.summary = COACHING_NO_ANSWER
     if (
         plan
         and plan.coaching
@@ -413,9 +459,9 @@ def ask(
         and not OFFERED.search(result.summary)
     ):
         result.notes.append(COACHING_OFFER)  # coaching ends with something to do
-    if guidance:
+    if guidance and not stopped_early:
         result.trace.append({"type": "guidance", "cards": [card.id for card in guidance]})
-    if note := source_note(result):
+    if not stopped_early and (note := source_note(result)):
         result.notes.append(note)
     result.trace[:0] = [_context_step(context), _route_step(route)]
     if continuing:

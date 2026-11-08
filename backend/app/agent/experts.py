@@ -42,13 +42,16 @@ LOGGING_PROMPT = (
     "at lunch' from the current local time and UTC offset at the top of the task, and write "
     "them with that offset. That is the person's own time zone: never ask for it. "
     "A clock time with no day ('at 3 pm') is the latest one that has passed, usually today. "
-    "The request so far is in the task: never ask again for something it already says. Ask only "
-    "when a time is truly unclear, and for any other missing detail. "
+    "'Just now' with a duration means it has just ended: the end is the current time. "
+    "The request so far is in the task: never ask again for something it already says. Prepare "
+    "the draft only once you have what it needs; until then just ask for what is missing, every "
+    "missing detail in one question. Ask only when a time is truly unclear. "
     "Proposals are not statistics or verified claims. Never infer calories/macros or "
     "measurements. A prepared draft is not logged or sent to Google. Tell the person "
     "it needs review and confirmation; never claim execution. Keep draft values in the "
     "tool result, not in statistical claims or the summary. For mixed requests, analyse "
-    "existing history separately; an unconfirmed draft is not in that history. "
+    "existing history separately; an unconfirmed draft is not in that history. When a message "
+    "both logs something and asks something, do both: prepare the draft first, then answer. "
     "For a logging-only request, do not run statistical investigations. After a successful "
     "proposal, immediately call submit_findings with a short, number-free summary saying "
     "the draft needs review, claims=[], and no hypotheses. If details are missing, call "
@@ -291,6 +294,7 @@ class _Consults:
     borrowed: dict[str, str]
     consulted: list[str]
     verified: dict[str, list[Claim]] = field(default_factory=dict)  # each consult's claims
+    context: str = ""  # the conversation, so a consulted expert knows what is being talked about
 
     def experts(self) -> list[str]:
         return [
@@ -341,6 +345,7 @@ class _Consults:
             depth=Depth.QUICK,
             today=self.today,
             budget=child,
+            context=self.context,
         )
         self.consulted.append(args.expert)
         self.verified[args.expert] = list(result.claims)
@@ -408,14 +413,24 @@ def ask_expert(
             run_id="",
             stop_reason="unavailable",
             expert=name,
-            summary=f"There is no {name} data to look at yet.",
+            summary=(
+                "You haven't logged any food yet, so there's nothing for me to look at. Tell me "
+                "what you ate and I'll set it up for you."
+                if name == "nutrition"
+                else f"I don't have any {name} data for you yet."
+            ),
             budget=budget,
         )
-    toolbox = Toolbox(frame, visible_metrics(expert), tools)
+    # The other areas the router says this needs can be correlated with directly: cheaper than a
+    # consult, and a claim about them still needs their owner's evidence.
+    drivers = [m for other in allowed if other in EXPERTS for m in EXPERTS[other].owns]
+    toolbox = Toolbox(frame, [*visible_metrics(expert), *drivers], tools)
     toolbox.evidence.update(evidence or {})
     steps: list[dict] = []
     borrowed: dict[str, str] = dict(owners or {})
-    consults = _Consults(llm, frame, expert, toolbox, budget, today, allowed, borrowed, [])
+    consults = _Consults(
+        llm, frame, expert, toolbox, budget, today, allowed, borrowed, [], context=context
+    )
     consultable = consults.experts()
     extras = ([consults.tool()] if consultable else []) + list(extra_tools)
     if widen is not None:

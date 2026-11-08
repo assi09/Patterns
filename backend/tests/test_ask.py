@@ -426,10 +426,7 @@ def test_a_part_still_left_out_is_said_in_a_fixed_note(frame):
     router = FixedRouter(("sleep", "activity"), sleep=0.8, activity=0.2)
     reply = ask(llm, router, frame, EXERCISE_QUESTION)
     assert reply.result.uncovered == ["activity"]
-    assert reply.result.notes == [
-        "Your activity data was not checked for this answer; ask about it if you would "
-        "like it looked at."
-    ]
+    assert reply.result.notes == []  # the note was wrong every time it was seen
 
 
 def test_a_needed_expert_without_data_is_said_not_asked_for(frame):

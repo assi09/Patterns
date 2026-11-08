@@ -349,12 +349,12 @@ def test_a_web_question_is_answered_with_its_source(engine):
     assert result.notes == ["From en.wikipedia.org, not from your data."]
 
 
-def test_a_web_reply_that_fails_says_it_could_not(engine):
+def test_a_web_reply_that_fails_falls_back_on_what_the_search_said(engine):
     llm = ScriptedLLM(
         [calling(WEB_LOOKUP, "molokhia"), ScriptedLLM.say("It has 999 kcal.")], searches=[web()]
     )
     result = answer_world(llm, "What is mloukhieh?", way_out(engine))
-    assert result.summary == COULD_NOT and result.stop_reason == "lookup_failed"
+    assert result.summary == "Molokhia is a leafy soup." and result.stop_reason == "looked_up"
 
 
 def test_a_model_query_with_personal_words_is_declined(engine):
@@ -496,3 +496,18 @@ def test_an_llm_error_in_search_is_only_a_failed_lookup(engine):
             raise LLMError("down")
 
     assert "error" in way_out(engine).web(Broken(), "molokhia", Budget())
+
+
+def test_links_are_taken_out_of_a_web_answer():
+    from app.agent.world import _without_links
+
+    text = "It counts heart minutes ([Fitbit](https://example.com/a)). See https://example.com/b."
+    assert "http" not in _without_links(text) and "heart minutes" in _without_links(text)
+    assert _without_links("You earn **1 minute** each.") == "You earn 1 minute each."
+
+
+def test_a_usda_match_for_some_other_food_is_not_the_same_food():
+    from app.agent.world import _same_food
+
+    assert not _same_food("mloukhieh", {"foods": [{"food": "Bulgur, cooked"}]})
+    assert _same_food("chicken breast", {"foods": [{"food": "Chicken, breast, roasted"}]})
