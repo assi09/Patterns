@@ -34,7 +34,7 @@ dev = [
 include = ["app*"]
 
 [tool.setuptools.package-data]
-"app.knowledge" = ["*.md"]
+"app.knowledge" = ["*.md", "index/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

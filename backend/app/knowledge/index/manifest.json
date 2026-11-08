@@ -1,0 +1,86 @@
+{
+ "passages": 1083,
+ "by_source": {
+  "cards": 14,
+  "pag": 39,
+  "dga": 10,
+  "sleep": 23,
+  "niosh": 91,
+  "medlineplus": 37,
+  "exercises": 869
+ },
+ "by_area": {
+  "sleep": 121,
+  "recovery": 12,
+  "activity": 54,
+  "nutrition": 27,
+  "exercise": 869
+ },
+ "by_kind": {
+  "card": 14,
+  "guideline": 200,
+  "exercise": 869
+ },
+ "cut": {
+  "duplicates": 0,
+  "exercise_off_limits": 2,
+  "exercise_without_steps": 5,
+  "passage_mostly_off_limits": 14,
+  "section_off_limits": 5,
+  "sentence_instruction": 8,
+  "sentence_off_limits": 409,
+  "too_short": 6
+ },
+ "raw_sha256": {
+  "dga.pdf": "c34f1bec5c941626",
+  "exercises.json": "5bb747e3fc658f09",
+  "medlineplus.xml": "3a3b4f43552482f0",
+  "pag.pdf": "0147d4dfc5ae7661",
+  "sleep.pdf": "11747c5fed332670"
+ },
+ "sources": [
+  {
+   "key": "pag",
+   "name": "Physical Activity Guidelines for Americans, 2nd edition (HHS)",
+   "url": "https://odphp.health.gov/our-work/nutrition-physical-activity/physical-activity-guidelines",
+   "license": "US government work, public domain",
+   "area": "activity"
+  },
+  {
+   "key": "dga",
+   "name": "Dietary Guidelines for Americans, 2025-2030 (USDA and HHS)",
+   "url": "https://realfood.gov",
+   "license": "US government work, public domain",
+   "area": "nutrition"
+  },
+  {
+   "key": "sleep",
+   "name": "Your Guide to Healthy Sleep (NHLBI, NIH)",
+   "url": "https://www.nhlbi.nih.gov/resources/your-guide-healthy-sleep",
+   "license": "US government work, public domain",
+   "area": "sleep"
+  },
+  {
+   "key": "niosh",
+   "name": "NIOSH, CDC",
+   "url": "https://www.cdc.gov/niosh/work-hour-training-for-nurses/",
+   "license": "US government work, public domain",
+   "area": "sleep"
+  },
+  {
+   "key": "medlineplus",
+   "name": "MedlinePlus, National Library of Medicine",
+   "url": "https://medlineplus.gov",
+   "license": "US government work, public domain",
+   "area": "nutrition"
+  },
+  {
+   "key": "exercises",
+   "name": "free-exercise-db",
+   "url": "https://github.com/yuhonas/free-exercise-db",
+   "license": "Unlicense",
+   "area": "exercise"
+  }
+ ],
+ "guard_flagged_for_review": 59
+}
