@@ -100,3 +100,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-05 | Advice comparison, two synthetic people: 18 coaching answers three ways, 3 plain questions and an alert | $0.3632 |
 | 2026-11-05 | First real-data check, the owner's Takeout export, six questions (`eval/real_check.py`; answers stay in git-ignored `data/`) | $0.0725 |
 | 2026-11-05 | The no-answer question twice on the owner's export ($0.0107), then the six-question real-data check again ($0.0869) | $0.0976 |
+| 2026-11-08 | Workout logging as in the bug report, made-up person: three conversations ($0.0262), then the request given one detail at a time and a change of topic after the fixes ($0.0166) | $0.0428 |

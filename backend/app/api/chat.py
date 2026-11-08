@@ -58,6 +58,7 @@ from app.db.models import (
 )
 from app.db.session import session_scope
 from app.outside import FoodData, Outside
+from app.reminders.store import timezone_of
 from app.reminders.tools import reminder_reply, reminder_tools
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ router = APIRouter(tags=["chat"])
 HISTORY_SHOWN = 100  # messages the app gets back
 HISTORY_USED = 20  # messages the agent sees as context; the context builder trims further
 HISTORY_FOLDED = 40  # messages looked at for the running summary
+MAX_THREAD = 6  # the person's messages kept from one logging request still being asked about
 QUIET_INTENTS = (Intent.LOG, Intent.REMIND)  # one-off requests: nothing to listen for
 FAILED = "I couldn't finish answering this time. Please try again in a moment."
 
@@ -233,6 +235,29 @@ def answer_text(summary: str, claims: list[str], notes: list[str]) -> str:
     return "\n\n".join(paragraphs) or FAILED
 
 
+def logging_thread(earlier: list[ChatMessage]) -> list[str]:
+    """The person's messages so far in the request the agent is still asking about, oldest first.
+    Each reply is one detail; the request is all of them together."""
+    said: list[str] = []
+    at = len(earlier) - 1
+    while (
+        at >= 1
+        and len(said) < MAX_THREAD
+        and earlier[at].role == "assistant"
+        and earlier[at].pending_log_expert
+        and earlier[at - 1].role == "user"
+    ):
+        said.insert(0, earlier[at - 1].text)
+        at -= 2
+    return said
+
+
+def continued_request(thread: list[str], asked: str, reply: str) -> str:
+    """A reply with the request it continues, for the agent and the router."""
+    added = "".join(f"They added: {text}\n" for text in thread[1:])
+    return f"Earlier request: {thread[0]}\n{added}You asked: {asked}\nTheir reply: {reply}"
+
+
 def update_summary(sessions: Sessions, llm: LLM, user_id, conversation_id: uuid.UUID) -> None:
     """Folds the turns that left the verbatim window into the chat's summary, after the answer."""
     try:
@@ -320,6 +345,10 @@ def _answer(
             ]
             turns = turns_from(earlier)
             cited = store.load_evidence(db, user_id, {i for t in turns for i in t.evidence_ids})
+            # Where the person is, from their device: the server's zone is not theirs.
+            owner = db.get(User, user_id)
+            zone = ZoneInfo(timezone_of(owner) if owner else settings.timezone)
+            today = now.astimezone(zone).date()
             person = memory.profile(db, user_id, today, now)
             archive = memory.memory_items(db, user_id, now, conversation_id, with_faded=True)
             remembered = [
@@ -352,16 +381,13 @@ def _answer(
         frame = with_checkins(with_scores(data.daily.frame), checkins, CHECKIN_TAGS)
         # The agent gets the person's local time, so "just now" or "this morning" needs no
         # question; the data range is in the task separately.
-        local_now = now.astimezone(ZoneInfo(settings.timezone))
+        local_now = now.astimezone(zone)
         question = body.text
-        if continuing_log and len(earlier) >= 2 and earlier[-2].role == "user":
+        thread = logging_thread(earlier) if continuing_log else []
+        if thread:
             # A reply to the agent's logging question only makes sense with the request it
-            # answers, so the agent gets all three, not the bare reply.
-            question = (
-                f"Earlier request: {earlier[-2].text}\n"
-                f"You asked: {earlier[-1].text}\n"
-                f"Their reply: {body.text}"
-            )
+            # answers, so the agent gets all of it, not the bare reply.
+            question = continued_request(thread, earlier[-1].text, body.text)
         prepared: list[str] = []
 
         def search_past(query: str) -> list[dict]:
@@ -378,7 +404,15 @@ def _answer(
         estimates: list[str] = []
         outside = Outside(sessions, user_id, now, _day_start(now), food_data())
         draft_tools = proposal_tools(
-            sessions, user_id, question_id, now, prepared, measurer, estimates
+            sessions,
+            user_id,
+            question_id,
+            now,
+            prepared,
+            measurer,
+            estimates,
+            said=[*thread, body.text],
+            local_now=local_now,
         )
         if outside.food_data:
             draft_tools["nutrition"] = [

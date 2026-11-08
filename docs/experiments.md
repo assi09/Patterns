@@ -687,3 +687,22 @@ the verifier refuses them, so that row shows the check works, not the arms' qual
 **Open:** four answers in the picked arm had no suggestion claim, though two of them gave one in
 words; "How can I recover faster?" for the new parent fell back to joined claims. "A little movement
 to help your nights settle" leans towards a cause. Nobody has read the answers blind yet.
+
+## Workout logging that keeps what the person said (2026-11-08)
+
+**Tested:** a real conversation that went wrong: a workout still going, reported at 3 pm for 1 hour
+30. The agent asked for a time zone, lost details between replies, and finally drafted the day
+before with half the duration. Replayed through the API with the real model on a made-up person.
+
+**Found:** four causes. The chat used the server's time zone, not the person's. A refused draft told
+the model nothing about why, so it guessed. A reply carried only the message before it. Nothing
+stopped the model changing a value until it passed. A fifth appeared in the replay: "Log a workout"
+with no details became a one-second entry.
+
+**Changed:** the person's own zone; refusals say what is wrong; every reply in a request reaches the
+agent; code refuses a draft that contradicts the person's words or invents a duration or kind
+(`app/actions/stated.py`).
+
+**Result:** a finished workout drafted right the first time; an unfinished one explained in plain
+words, then drafted from "10 minutes so far"; details given one at a time ended in a correct draft;
+changing the subject mid-request worked. Two runs, $0.0428.

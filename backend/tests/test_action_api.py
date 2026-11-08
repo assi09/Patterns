@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from alembic import command
@@ -21,11 +21,17 @@ from app.db.session import session_scope
 from app.ingest.takeout import DailyData
 from app.synthetic import generate
 
+
+def _hours_ago(hours: float) -> str:
+    """A time a draft may have without naming a day: within the last 24 hours."""
+    return (datetime.now(UTC) - timedelta(hours=hours)).isoformat()
+
+
 FOOD = {
     "kind": "food",
     "foodName": "Example lunch",
     "mealType": "LUNCH",
-    "consumedAt": "2026-10-24T12:00:00+03:00",
+    "consumedAt": _hours_ago(2),
     "energyKcal": 650,
     "proteinG": 40,
 }
@@ -364,8 +370,8 @@ def test_workout_drafts_carry_the_trackers_reading_and_revising_reads_it_again(s
     workout = {
         "kind": "workout",
         "exerciseType": "WALKING",
-        "startTime": "2026-10-24T08:00:00+03:00",
-        "endTime": "2026-10-24T08:20:00+03:00",
+        "startTime": _hours_ago(2),
+        "endTime": _hours_ago(1.5),
         "activeSeconds": 1200,
         "measured": {"status": "measured", "caloriesKcal": 9000},  # never trusted from a client
     }
@@ -389,8 +395,8 @@ def test_without_google_a_workout_draft_is_kept_unmeasured(setup):
     workout = {
         "kind": "workout",
         "exerciseType": "RUNNING",
-        "startTime": "2026-10-24T08:00:00+03:00",
-        "endTime": "2026-10-24T08:20:00+03:00",
+        "startTime": _hours_ago(2),
+        "endTime": _hours_ago(1.5),
         "activeSeconds": 1200,
     }
     created = propose(client, headers, workout)
@@ -404,8 +410,8 @@ def test_a_log_only_workout_request_is_not_told_it_left_activity_uncovered(setup
     workout = {
         "kind": "workout",
         "exerciseType": "KICKBOXING",
-        "startTime": "2026-10-24T18:00:00+03:00",
-        "endTime": "2026-10-24T18:45:00+03:00",
+        "startTime": "2026-10-24T18:00:00+00:00",
+        "endTime": "2026-10-24T18:45:00+00:00",
         "activeSeconds": 2700,
     }
     agent.llm.turns.extend(
