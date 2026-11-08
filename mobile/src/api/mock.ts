@@ -199,6 +199,20 @@ const recent = { start: isoDate(13), end: isoDate(0) };
 const baseline = { start: isoDate(27), end: isoDate(14) };
 
 const evidence: Record<string, Evidence> = {
+  e_passage: {
+    id: 'e_passage',
+    tool: 'knowledge',
+    metrics: [],
+    windows: [],
+    n: 1,
+    sufficient: true,
+    stats: {
+      title: 'Plank',
+      text: 'Lie face down, then lift yourself onto your forearms and toes. Keep your body in a straight line and hold still.',
+      source: 'free-exercise-db',
+      url: 'https://example.com',
+    },
+  },
   ev_eff: {
     id: 'ev_eff',
     tool: 'compare_windows',

@@ -52,16 +52,18 @@ LABELS = (*EXPERT_LABELS, GENERAL, CONVERSATION, OUT_OF_SCOPE)
 # What each label means, for the classifiers. Experts are described by the metrics they own.
 CRITERIA = {
     "sleep": "time asleep, time in bed, bedtime, sleep efficiency, sleep stages (deep, light, "
-    "REM), time awake at night, sleep score",
+    "REM), time awake at night, sleep score; general questions on sleep, naps, jet lag, shift "
+    "work or feeling tired in the day",
     "recovery": "recovery, heart rate variability (HRV), resting heart rate, breathing rate, "
     "skin temperature, readiness, the app's recovery score, the app's stress score (physical "
     "signs of stress in the data, such as heart rate while still)",
-    "activity": "logging workouts; steps, distance, exercise and training, Active Zone Minutes, "
+    "activity": "logging workouts; how to do an exercise or stretch, how much exercise adults "
+    "should do; steps, distance, exercise and training, Active Zone Minutes, "
     "active and sedentary time, calories burned, cardio load, strain (the day's load from time "
     "in heart-rate zones)",
     "nutrition": "logging food and drink, or analysing food and drink logged: calories eaten, "
     "protein, carbohydrates, fat, nutrients, "
-    "meals; what is in a food or dish",
+    "meals; what is in a food or dish; how much of a nutrient adults generally need",
     GENERAL: "the person's own Fitbit data overall, or several areas with no main one, or a "
     "reminder about no particular area",
     # Without it, "what did I just say?" takes the earlier questions' topic and reaches an expert
@@ -81,7 +83,8 @@ CRITERIA = {
 }
 INSTRUCTIONS = (
     "A person asks about their own Fitbit data, how to improve their everyday habits, to log "
-    "food, drink or workouts, what is in a food, what a tracker metric means, or for a reminder, "
+    "food, drink or workouts, what is in a food, what a tracker metric means, how to do an "
+    "exercise, general questions on sleep, training or eating, or for a reminder, "
     "possibly following up on earlier questions. Which topic is the current question about? "
     "Earlier questions, newest first, only show what it may refer to."
 )

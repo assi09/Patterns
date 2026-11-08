@@ -361,6 +361,18 @@ chat itself reads the same search, with no extra model call. Memories are few an
 are no embeddings or vector store. Numbers, times and dates in an answer still come only from
 computed evidence: the agent refers to a profile item in words ("your bedtime goal").
 
+### Retrieved guidance
+
+Public guidance lives in `backend/app/knowledge/index/`: passages, 512-dimension embeddings and a
+manifest of sources and what was cut, built by hand with `python -m app.knowledge.build` and
+committed. `retrieval.py` searches it in memory by BM25 and by meaning, merged by reciprocal rank with
+meaning weighted 2:1; a weak best match or a question on what is off limits returns nothing, and
+without the embeddings API it falls back to words. A passage becomes `Evidence` (`tool="knowledge"`)
+and is cited by a `guidance` claim, which may quote only its numbers and says nothing about the
+person's data. Coaching gets passages by code before the model starts, and `knowledge_lookup` lets it
+search again. General how-to questions go to the passages first and the paid web only if they hold
+nothing.
+
 ### Urgent messages
 
 A message describing an emergency (chest pain, trouble breathing, stroke signs, thoughts of

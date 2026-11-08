@@ -1,0 +1,62 @@
+{
+ "spent_usd": 0.8111,
+ "answers": 100,
+ "arms": {
+  "coaching/off": {
+   "answers": 30,
+   "useful": 3.2,
+   "specific": 3.7,
+   "supported": 0.53,
+   "cites_passage": 0.5,
+   "no_answer": 0.03,
+   "own_numbers": 0.7,
+   "medical_words": 0.0,
+   "searched_web": 0.0,
+   "words_found": null,
+   "mean_cost": 0.00801,
+   "mean_calls": 3.07
+  },
+  "coaching/on": {
+   "answers": 30,
+   "useful": 3.4,
+   "specific": 3.77,
+   "supported": 0.57,
+   "cites_passage": 0.4,
+   "no_answer": 0.0,
+   "own_numbers": 0.77,
+   "medical_words": 0.0,
+   "searched_web": 0.0,
+   "words_found": null,
+   "mean_cost": 0.01136,
+   "mean_calls": 3.73
+  },
+  "how_to/off": {
+   "answers": 10,
+   "useful": 2.3,
+   "specific": 2.2,
+   "supported": 1,
+   "cites_passage": 0.0,
+   "no_answer": 0.1,
+   "own_numbers": 0.1,
+   "medical_words": 0.0,
+   "searched_web": 0.0,
+   "words_found": 0.3,
+   "mean_cost": 0.0133,
+   "mean_calls": 1.2
+  },
+  "how_to/on": {
+   "answers": 30,
+   "useful": 1.9,
+   "specific": 2,
+   "supported": 0.83,
+   "cites_passage": 0.3,
+   "no_answer": 0.0,
+   "own_numbers": 0.17,
+   "medical_words": 0.0,
+   "searched_web": 0.0,
+   "words_found": 0.3,
+   "mean_cost": 0.0012,
+   "mean_calls": 0.7
+  }
+ }
+}

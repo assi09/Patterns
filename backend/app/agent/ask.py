@@ -455,7 +455,7 @@ def ask(
         )
         result.notes += _notes(frame, route, result)
     stopped_early = result.stop_reason in ("urgent", "refused", "noted")
-    if plan and plan.coaching and result.summary == NO_ANSWER:
+    if plan and plan.coaching and result.summary in (NO_ANSWER, ""):
         result.summary = COACHING_NO_ANSWER
     if (
         plan
@@ -469,7 +469,8 @@ def ask(
         result.budget.cost_usd += retrieved.cost_usd
     if guidance and not stopped_early:
         result.trace.append({"type": "guidance", "cards": [card.id for card in guidance]})
-    if not stopped_early and (note := source_note(result)):
+    # A lookup has already said where its answer comes from.
+    if not stopped_early and not world and (note := source_note(result)):
         result.notes.append(note)
     result.trace[:0] = [_context_step(context), _route_step(route)]
     if continuing:

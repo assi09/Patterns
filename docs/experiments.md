@@ -731,3 +731,36 @@ mention a night-shift worker's schedule and still suggest 23:48. With little to 
 can collapse to one flat sentence. Card retrieval by keywords reaches Recall@3 of 0.64 and MRR 0.61 on
 14 paraphrased queries, and has not been tuned on them. Tone is judged by one small model, and each
 turn was run once, so a pass is an illustration of behaviour, not a rate.
+
+## A real RAG, and whether it helps (2026-11-08)
+
+**Built:** 1,083 passages from the Physical Activity Guidelines, the Dietary Guidelines 2025-2030, the
+NHLBI sleep guide, NIOSH shift-work training, 24 MedlinePlus topics, 869 exercises and the 14 cards.
+Illness, treatment, supplements, weight loss, pregnancy and children are cut at build time.
+
+**Retrieval** (`eval/rag_eval.py`, labelled before tuning; the 17 held out were scored once):
+
+| Recall@3, MRR | Tuning, 53 questions | Held out, 17 |
+|---|---|---|
+| Old cards | 0.11, 0.11 | 0.24, 0.21 |
+| Words alone | 0.70, 0.62 | 0.77, 0.59 |
+| Meaning alone | 0.94, 0.90 | 0.88, 0.82 |
+| Both, meaning weighted 2:1 | 0.98, 0.91 | 0.88, 0.77 |
+
+The merge was chosen on the tuning set; on the small held-out set meaning alone ranked a little
+better, within noise at 17 questions. Unanswerable questions found nothing 7 of 8 times; medical ones
+6 of 6. Filtering to the expert's area did not clearly help, so the agent does not use it.
+
+**Whole agent, with and without** (`eval/rag_compare.py`, three repeats; without retrieval once for
+how-to, since each is a paid search). How-to: useful 4.0 against 3.3, no answer 0% against 30%, cost
+$0.0025 against $0.023, no paid web search. Coaching: useful 3.4 against 3.2, specific 3.8 against 3.7,
+cost $0.011 against $0.008. Retrieval plainly helps general questions and barely moves personal advice
+on these scores, while adding a third to its cost.
+
+**Found on the way:** the router refused 60% of how-to questions until its criteria named them. The
+medical guard is built for sentences about someone's data and flagged mostly useful guidance, so at
+build time it reports and word filters decide.
+
+**Open:** "how much protein do adults need?" retrieved general text and missed the guideline's figure.
+Nutrition is the thinnest area (29 passages). The judge's "supported" score is weak evidence: it saw
+truncated material. The blind sample in `eval/results/rag_blind_2026-11-08.md` has not been read.
