@@ -246,7 +246,7 @@ CONVOS = [
         "five points",
         "how do i sleep better overall? give me advice like 5 points",
         expert="sleep",
-        suggestions=3,
+        suggestions=4,
         never=("i can't give", "evidence-based", "tested habits", "this run"),
     ),
     one(
@@ -772,6 +772,7 @@ def main():
                     "type": seen["route"].classification.question_type,
                     "intent": str(seen["route"].classification.intent),
                     "consulted": reply.get("consulted"),
+                    "links": [link["url"] for link in reply.get("sources") or []],
                     "tools": [s["name"] for s in seen["trace"] if s.get("type") == "tool"],
                     "calls": seen["calls"],
                     "tool_calls": seen["tools"],
