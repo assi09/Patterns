@@ -363,10 +363,9 @@ Spent so far on real runs: about $0.67 in all, almost all OpenAI (Jev under $0.0
 28. **Some summaries still fall back to joined claims.** Down from 11 of 53, but 3 of the 8 rerun
     after the fixes still did, mostly on `why` and `change` questions
     ([experiments.md](experiments.md#the-chat-end-to-end-2026-11-05)).
-29. **An answer can repeat the question's premise.** Asked "why has my sleep been worse?", it said it
-    got a bit worse although nothing it found shows that. The summary check does not catch this.
+29. ~~An answer can repeat the question's premise.~~ `check_premise` tests it first (2026-11-09).
 30. ~~A goal cannot be measured.~~ `goal_progress` counts the days that met a target the person set (2026-11-09).
-31. **`day` and `lookup` take about three model calls**, not the one or two planned.
+31. ~~`day` and `lookup` take about three model calls.~~ One or two, measured 2026-11-09.
 32. **Real data is harder than the synthetic sets.** The first real check (six questions) had two
     summaries fall back and one run end with no answer (`no_submission`, on a weekend bedtime
     question). `eval/real_check.py` repeats it, keeping answers in git-ignored `data/`. After a

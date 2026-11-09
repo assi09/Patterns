@@ -446,6 +446,11 @@ PREMISE_METRICS = {
     None: ("sleep_minutes", "recovery_score", "steps"),
 }
 PREMISE_RECENT, PREMISE_BASELINE = 14, 28
+# "Why", or a change over time: "which one is higher?" and "does X go with worse Y?" assume nothing.
+ASSUMES_A_CHANGE = re.compile(
+    r"^\s*(?:why|how come)\b|\b(?:lately|recently|these days|getting|gotten|has been|have been)\b",
+    re.IGNORECASE,
+)
 DENIES = re.compile(
     r"\b(?:no clear|hasn'?t|haven'?t|has not|have not|isn'?t|is not|aren'?t|didn'?t|did not|"
     r"doesn'?t|does not|steady|stable|about the same|not really|not actually)\b",
@@ -483,7 +488,7 @@ def _assumed_direction(question: str, metric: str) -> str | None:
 def check_premise(frame: pd.DataFrame, question: str, lead: str | None) -> Premise | None:
     """Whether what the question takes for granted is true: "why is my sleep worse?" may rest on
     nothing, and an answer that goes along with it invents a problem. Tested before the model."""
-    if frame.empty:
+    if frame.empty or not ASSUMES_A_CHANGE.search(question):
         return None
     named = [m for m, pattern in MENTIONS.items() if pattern.search(question)]
     metrics = [m for m in named or PREMISE_METRICS.get(lead, ()) if m in frame.columns]

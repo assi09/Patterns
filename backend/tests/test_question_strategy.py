@@ -318,3 +318,14 @@ def test_the_answer_must_open_by_correcting_it():
 
     assert premise_answer_check([], "Your late bedtimes explain it.")
     assert premise_answer_check([], "Your sleep hasn't got worse. It looks steady.") == []
+
+
+def test_a_question_that_assumes_no_change_is_not_checked_for_one():
+    import numpy as np
+
+    from app.agent.strategy import check_premise
+
+    frame = _frame(list(420 + np.random.default_rng(4).normal(0, 20, 60)))
+    assert check_premise(frame, "Which one is higher?", "sleep") is None
+    assert check_premise(frame, "Does going to bed late go with worse sleep?", "sleep") is None
+    assert check_premise(frame, "Has my sleep been getting worse lately?", "sleep") is not None

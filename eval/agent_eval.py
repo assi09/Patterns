@@ -653,7 +653,7 @@ def grade(turn, reply, seen, client, headers):
         problems.append("made a draft")
     if turn.reminder and not reply.get("reminderIds"):
         problems.append("no reminder")
-    if turn.asks and "?" not in text and "need" not in low:
+    if turn.asks and "?" not in text and not any(w in low for w in ("need", "send", "tell me")):
         problems.append("did not ask")
     if turn.suggestions:
         count = sum(line.lstrip().startswith(("- ", "• ")) for line in text.splitlines())

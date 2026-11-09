@@ -197,7 +197,8 @@ LINKING = {"a", "an", "and", "at", "for", "from", "in", "of", "on", "or", "the",
 RECOVERY_TITLE = re.compile(r"\b(rest|recover\w*|nap\w*|fatigue|stress|tired)\b", re.IGNORECASE)
 DIET_TITLE = re.compile(r"\bdiet\b", re.IGNORECASE)
 SKIPPED_PAGE = re.compile(
-    r"\b(content reviewed|for more information|related|clinical trials|references|questions|answers|quiz|contents|acknowledg\w*|objectives|diseases?|disorders?|"
+    r"\b(content reviewed|for more information|related|clinical trials|references|questions|"
+    r"answers|quiz|contents|acknowledg\w*|objectives|diseases?|disorders?|"
     r"symptoms?|test dose|otc|epworth|liabilities|supervisor|fatigue risk management|"
     r"organizational|periodic assessments|workload|positive atmosphere|employers|metabolism|"
     r"immune|following)\b",

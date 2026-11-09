@@ -535,3 +535,10 @@ def test_when_the_passages_have_nothing_the_web_is_tried(engine):
     )
     answer_world(llm, "zzz?", way_out(engine))
     assert llm.searched
+
+
+def test_sharing_only_how_it_is_cooked_is_not_the_same_food():
+    from app.agent.world import _same_food
+
+    assert not _same_food("mloukhieh cooked", {"foods": [{"food": "Bulgur, cooked"}]})
+    assert _same_food("jute leaves cooked", {"foods": [{"food": "Jute, potherb, cooked"}]})

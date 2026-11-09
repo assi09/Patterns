@@ -9,6 +9,7 @@ person, or the whole app, has reached its daily cap. The caps count local days.
 """
 
 import logging
+import re
 import threading
 import uuid
 from collections.abc import Callable
@@ -68,6 +69,8 @@ router = APIRouter(tags=["chat"])
 HISTORY_SHOWN = 100  # messages the app gets back
 HISTORY_USED = 20  # messages the agent sees as context; the context builder trims further
 HISTORY_FOLDED = 40  # messages looked at for the running summary
+DRAFT_WITHOUT_ONE = re.compile(r"\bdraft\b", re.IGNORECASE)
+NO_DRAFT_REPLY = "I couldn't get that entry ready. Could you send it once more?"
 FOOD_LOG_DAYS = 45  # enough to cover the 30 days the agent summarises
 MAX_THREAD = 6  # the person's messages kept from one logging request still being asked about
 QUIET_INTENTS = (Intent.LOG, Intent.REMIND)  # one-off requests: nothing to listen for
@@ -498,6 +501,12 @@ def _answer(
                     result.summary = "No nutrition history is available yet. " + note
                 else:
                     result.notes.append(note)
+            elif (
+                reply.route.classification.intent == Intent.LOG
+                and DRAFT_WITHOUT_ONE.search(result.summary)
+                and "?" not in result.summary
+            ):  # it says a card is waiting, and there is none
+                result.summary = NO_DRAFT_REPLY
             reminding = any(step.get("reminding") for step in result.trace)
             if reminders:
                 # The agent's words when they do not claim it is on; the card holds the details.
