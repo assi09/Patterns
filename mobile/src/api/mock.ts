@@ -534,7 +534,7 @@ function attachmentExpert(attachment: Attachment | undefined): Expert | undefine
   return metric ? expertForMetric(metric) : undefined;
 }
 
-type Answer = Pick<ChatMessage, 'text' | 'evidenceIds'>;
+type Answer = Pick<ChatMessage, 'text' | 'evidenceIds' | 'sources'>;
 
 function answerAbout(topic: Expert, depth: Depth, consulted: Expert[]): Answer {
   if (topic === 'sleep') {
@@ -564,6 +564,13 @@ function answerAbout(topic: Expert, depth: Depth, consulted: Expert[]): Answer {
     return {
       text: 'Your steps have been rising steadily, by about 60 a day over four weeks, which adds up to around 1,650 more steps per day.',
       evidenceIds: ['ev_steps'],
+      sources: [
+        {
+          title: 'How Much Exercise Do I Need?',
+          source: 'MedlinePlus, National Library of Medicine',
+          url: 'https://medlineplus.gov/howmuchexercisedoineed.html',
+        },
+      ],
     };
   }
   return {

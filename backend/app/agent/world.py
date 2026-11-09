@@ -273,4 +273,7 @@ def answer_world(
         else (f"{found['source']} ({found['domain']})")
     )
     result.notes.append(f"From {origin}, not from your data.")
+    if found.get("url"):
+        title = found.get("title") or origin
+        result.sources.append({"title": title, "source": origin, "url": found["url"]})
     return result

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { memo, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import Animated, {
   FadeInDown,
   useAnimatedStyle,
@@ -12,7 +12,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import type { ChatMessage, Evidence, ExpertChoice } from '@/api/types';
+import type { ChatMessage, Evidence, ExpertChoice, SourceLink } from '@/api/types';
 import { useEvidence } from '@/api/hooks';
 import { EvidenceChip } from '@/components/evidence';
 import { LogDraftCard } from '@/components/LogDraftCard';
@@ -24,6 +24,32 @@ import { canHover, isHovered } from '@/lib/platform';
 import { fonts, radius, spacing, useColors } from '@/theme';
 
 const ENTER = FadeInDown.duration(260);
+
+/** Where the answer's guidance can be checked: links the server chose, opened outside the app. */
+function SourceLinks({ sources }: { sources: SourceLink[] }) {
+  const colors = useColors();
+  return (
+    <View style={styles.sources}>
+      <Text variant="caption" color="muted">
+        Check it yourself
+      </Text>
+      {sources
+        .filter((link) => link.url.startsWith('https://'))
+        .map((link) => (
+          <Pressable
+            key={link.url}
+            accessibilityRole="link"
+            accessibilityLabel={`${link.title}, from ${link.source}. Opens outside the app.`}
+            onPress={() => Linking.openURL(link.url)}
+          >
+            <Text variant="caption" style={{ color: colors.accent }} numberOfLines={2}>
+              {link.title} · {link.source} ↗
+            </Text>
+          </Pressable>
+        ))}
+    </View>
+  );
+}
 
 /** A chip for evidence the report may not hold (a chat answer's): fetched to name it. */
 function AnswerEvidenceChip({ id, known }: { id: string; known?: Evidence }) {
@@ -198,6 +224,9 @@ export const MessageBubble = memo(function MessageBubble({
           {message.reminderIds?.map((id) => (
             <ReminderDraftCard key={id} id={id} />
           ))}
+          {message.sources && message.sources.length > 0 && (
+            <SourceLinks sources={message.sources} />
+          )}
           {message.evidenceIds.length > 0 && (
             <View style={styles.chips}>
               {message.evidenceIds.map((id) => (
@@ -400,6 +429,7 @@ const styles = StyleSheet.create({
   refused: { padding: spacing.md, borderRadius: radius.md, borderWidth: 1, gap: 4 },
   refusedHeader: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  sources: { gap: 4 },
   dots: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 6 },
   dot: { width: 6, height: 6, borderRadius: 3 },
 });

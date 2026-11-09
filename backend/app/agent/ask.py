@@ -52,6 +52,7 @@ from app.agent.knowledge import (
     Card,
     Guidance,
     cards_for,
+    cited_sources,
     guidance_block,
     guidance_for,
     knowledge_tool,
@@ -586,6 +587,9 @@ def ask(
         result.budget.cost_usd += retrieved.cost_usd
     if guidance and not stopped_early:
         result.trace.append({"type": "guidance", "cards": [card.id for card in guidance]})
+    if not stopped_early:
+        known = {link["url"] for link in result.sources}
+        result.sources += [s for s in cited_sources(result) if s["url"] not in known]
     # A lookup has already said where its answer comes from.
     if not stopped_early and not world and (note := source_note(result)):
         result.notes.append(note)

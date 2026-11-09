@@ -215,6 +215,8 @@ class ChatMessage(Base):
     # What a user turn asked about: {"kind": "finding", "id": ...} or {"kind": "metric", ...}.
     attachment: Mapped[dict | None] = mapped_column(JSON, default=None)
     # Assistant turns only.
+    # Where the person can check it: {"title", "source", "url"}, set by code.
+    sources: Mapped[list[dict] | None] = mapped_column(JSON, default=None)
     claims: Mapped[list[dict]] = mapped_column(JSON, default=list)  # verified claims
     evidence_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     answered_by: Mapped[str | None] = mapped_column(String(32), default=None)  # expert, general

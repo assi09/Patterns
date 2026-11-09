@@ -31,6 +31,7 @@ from app.db.models import OutsideLookup
 
 FDC_URL = "https://api.nal.usda.gov/fdc/v1/foods/search"
 FDC_SOURCE = "USDA FoodData Central"
+FDC_HOME = "https://fdc.nal.usda.gov/"
 FDC_DOMAIN = "fdc.nal.usda.gov"
 FDC_TIMEOUT_S = 8
 FDC_TYPES = "Foundation,SR Legacy"  # measured reference foods, not branded products
@@ -126,7 +127,10 @@ class FoodData:
                 if n.get("nutrientId") in NUTRIENTS
             }
             if food.get("description") and "energy_kcal" in values:
-                found.append({"food": clean(food["description"], 120), "per_100g": values})
+                entry = {"food": clean(food["description"], 120), "per_100g": values}
+                if isinstance(food.get("fdcId"), int):
+                    entry["url"] = f"{FDC_HOME}food-details/{food['fdcId']}/nutrients"
+                found.append(entry)
         return found
 
 
@@ -188,7 +192,13 @@ class Outside:
             foods = self.food_data.search(text)
             if not foods:
                 return {"error": "Nothing found."}
-            result = {"foods": foods, "source": FDC_SOURCE, "domain": FDC_DOMAIN}
+            result = {
+                "foods": foods,
+                "source": FDC_SOURCE,
+                "domain": FDC_DOMAIN,
+                "title": foods[0]["food"],
+                "url": foods[0].get("url", FDC_HOME),
+            }
             self._save("food", text, result, 0.0)
         if grams is not None and 0 < grams <= MAX_GRAMS:
             for food in result["foods"]:
@@ -215,7 +225,7 @@ class Outside:
         result = {"error": "Nothing found on the allowed sites."}
         if sources and answer and not reads_like_instruction(answer):
             host = (urlparse(sources[0]).hostname or "").removeprefix("www.")
-            result = {"answer": answer, "source": host, "domain": host}
+            result = {"answer": answer, "source": host, "domain": host, "url": sources[0]}
         self._save("web", text, result, found.cost_usd)
         return result
 
