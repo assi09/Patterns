@@ -24,12 +24,13 @@ from app.agent.llm import Budget
 from app.agent.present import clock, label
 from app.agent.strategy_types import DEFAULT_TYPE
 from app.agent.tools import TOOLS, Toolbox, evidence_payload
+from app.agent.verifier import MENTIONS, run_adjusted
 from app.agent.verifier import _significant as is_significant
-from app.agent.verifier import run_adjusted
 from app.analysis.coaching import WEEKDAYS, habit_options, personal_options
 from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
-from app.analysis.tools import correlate
+from app.analysis.habits import BETTER
+from app.analysis.tools import compare_windows, correlate
 
 EXPAND = "expand_tools"
 YESTERDAY = re.compile(r"\byesterday\b", re.IGNORECASE)
@@ -428,3 +429,107 @@ def cross_area_evidence(
         "Already tested across these areas over the last 90 days; answer from these first:\n"
         + "\n".join(lines)
     )
+
+
+PREMISE_WORSE = re.compile(
+    r"\b(?:worse|worsen\w*|declin\w*|bad|poor\w*|suffer\w*|struggl\w*)\b", re.IGNORECASE
+)
+PREMISE_BETTER = re.compile(r"\b(?:better|improv\w*)\b", re.IGNORECASE)
+PREMISE_DOWN = re.compile(
+    r"\b(?:drop\w*|fall\w*|fell|lower|less|fewer|down|shorter|decreas\w*)\b", re.IGNORECASE
+)
+PREMISE_UP = re.compile(r"\b(?:ris\w*|rose|higher|more|up|longer|increas\w*)\b", re.IGNORECASE)
+PREMISE_METRICS = {
+    "sleep": ("sleep_efficiency", "sleep_minutes"),
+    "recovery": ("recovery_score", "hrv_ms"),
+    "activity": ("steps", "strain"),
+    None: ("sleep_minutes", "recovery_score", "steps"),
+}
+PREMISE_RECENT, PREMISE_BASELINE = 14, 28
+DENIES = re.compile(
+    r"\b(?:no clear|hasn'?t|haven'?t|has not|have not|isn'?t|is not|aren'?t|didn'?t|did not|"
+    r"doesn'?t|does not|steady|stable|about the same|not really|not actually)\b",
+    re.IGNORECASE,
+)
+PREMISE_GUIDE = (
+    "How to work: they assume something changed, and the check below shows it has not. Say that "
+    "first and kindly: it should reassure them. Use a no_change claim citing that check, with its "
+    "numbers. Do not explain a change that did not happen; ask what made them feel that way, or "
+    "offer what to look at instead. No hypotheses. Then call submit_findings."
+)
+
+
+@dataclass(frozen=True)
+class Premise:
+    holds: bool
+    evidence: list[Evidence]
+    text: str
+
+
+def _assumed_direction(question: str, metric: str) -> str | None:
+    """Which way the question assumes `metric` has moved, or None if it assumes nothing."""
+    good_is_up = BETTER.get(metric, "up") == "up"
+    if PREMISE_WORSE.search(question):
+        return "down" if good_is_up else "up"
+    if PREMISE_BETTER.search(question):
+        return "up" if good_is_up else "down"
+    if PREMISE_DOWN.search(question):
+        return "down"
+    if PREMISE_UP.search(question):
+        return "up"
+    return None
+
+
+def check_premise(frame: pd.DataFrame, question: str, lead: str | None) -> Premise | None:
+    """Whether what the question takes for granted is true: "why is my sleep worse?" may rest on
+    nothing, and an answer that goes along with it invents a problem. Tested before the model."""
+    if frame.empty:
+        return None
+    named = [m for m, pattern in MENTIONS.items() if pattern.search(question)]
+    metrics = [m for m in named or PREMISE_METRICS.get(lead, ()) if m in frame.columns]
+    end = frame.index.max().date()
+    recent = Window(start=end - timedelta(days=PREMISE_RECENT - 1), end=end)
+    baseline = Window(
+        start=recent.start - timedelta(days=PREMISE_BASELINE), end=recent.start - timedelta(days=1)
+    )
+    tests = []
+    for metric in metrics[:3]:
+        if _assumed_direction(question, metric) is None:
+            continue
+        try:
+            record = compare_windows(frame, metric, recent, baseline)
+        except ToolError:
+            continue
+        if record.sufficient:
+            tests.append(record)
+    if not tests:
+        return None
+    tests = run_adjusted(tests)
+
+    def moved(record: Evidence) -> bool:
+        metric = record.metrics[0]
+        change = record.stats["mean_recent"] - record.stats["mean_baseline"]
+        wanted = _assumed_direction(question, metric)
+        return is_significant(record) and (change > 0) == (wanted == "up")
+
+    holds = any(moved(record) for record in tests)
+    lines = []
+    for record in tests:
+        shown = evidence_payload(record)["display"]
+        lines.append(
+            f"- {label(record.metrics[0])} (evidence_id {record.id}): last 14 days "
+            f"{shown.get('mean_recent', '')}, the 28 days before {shown.get('mean_baseline', '')}"
+            f": {'a clear change' if moved(record) else 'no clear change that way'}"
+        )
+    verdict = "It holds." if holds else "It does not hold: nothing shows this change."
+    return Premise(
+        holds, tests, f"Checked what the question assumes. {verdict}\n" + "\n".join(lines)
+    )
+
+
+def premise_answer_check(claims: list, summary: str) -> list[str]:
+    """When the premise is false, the answer has to open by saying so."""
+    opening = re.split(r"(?<=[.!?])\s", summary.strip(), maxsplit=1)[0]
+    if DENIES.search(opening):
+        return []
+    return ["open by saying the change they assume is not in their data, kindly, then go on"]

@@ -1,5 +1,5 @@
 {
- "passages": 1083,
+ "passages": 1137,
  "by_source": {
   "cards": 14,
   "pag": 39,
@@ -7,29 +7,32 @@
   "sleep": 23,
   "niosh": 91,
   "medlineplus": 37,
+  "nia": 30,
+  "fda": 11,
+  "niddk": 13,
   "exercises": 869
  },
  "by_area": {
   "sleep": 119,
-  "recovery": 12,
+  "recovery": 13,
   "activity": 54,
-  "nutrition": 29,
+  "nutrition": 82,
   "exercise": 869
  },
  "by_kind": {
   "card": 14,
-  "guideline": 200,
+  "guideline": 254,
   "exercise": 869
  },
  "cut": {
   "duplicates": 0,
   "exercise_off_limits": 2,
   "exercise_without_steps": 5,
-  "passage_mostly_off_limits": 14,
+  "passage_mostly_off_limits": 15,
   "section_off_limits": 5,
-  "sentence_instruction": 8,
-  "sentence_off_limits": 409,
-  "too_short": 6
+  "sentence_instruction": 12,
+  "sentence_off_limits": 486,
+  "too_short": 9
  },
  "raw_sha256": {
   "dga.pdf": "c34f1bec5c941626",
@@ -81,5 +84,6 @@
    "license": "Unlicense",
    "area": "exercise"
   }
- ]
+ ],
+ "embedding_cost_usd": 0.00407
 }

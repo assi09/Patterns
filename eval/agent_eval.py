@@ -207,6 +207,26 @@ CONVOS = [
         words=("usual", "normal", "typical", "range"),
     ),
     one("data", "general day", "How am I doing today?", words=("sleep", "step", "recovery")),
+    # What a question takes for granted is checked before it is explained.
+    one(
+        "premise",
+        "false: sleep worse",
+        "Why is my sleep worse lately?",
+        words=("hasn't", "has not", "no clear", "steady", "not ", "about the same"),
+        never=("because", "explains"),
+    ),
+    one(
+        "premise",
+        "false: steps dropped",
+        "Why have my steps dropped?",
+        words=("hasn't", "haven't", "no clear", "steady", "not ", "about the same"),
+    ),
+    one(
+        "premise",
+        "true: resting heart rate up",
+        "Why has my resting heart rate gone up?",
+        words=("higher", "up", "risen", "rose", "increase"),
+    ),
     # Routing: the right expert, and a second one only when the question needs it.
     one(
         "routing",
