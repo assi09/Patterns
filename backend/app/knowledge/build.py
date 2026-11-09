@@ -18,7 +18,7 @@ import re
 import subprocess
 import sys
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from xml.etree import ElementTree
@@ -66,6 +66,7 @@ class BuildError(RuntimeError):
 class Section:
     title: str
     text: str
+    url: str = ""  # the exact page, when the source has one for this part
 
 
 @dataclass(frozen=True)
@@ -135,6 +136,12 @@ EXERCISES = Source(
     "exercise",
 )
 
+PDF_URLS = {
+    "pag": "https://odphp.health.gov/sites/default/files/2019-09/"
+    "Physical_Activity_Guidelines_2nd_edition.pdf",
+    "dga": "https://cdn.realfood.gov/DGA.pdf",
+    "sleep": "https://www.nhlbi.nih.gov/files/docs/public/sleep/healthy_sleep.pdf",
+}
 SLEEP_START, SLEEP_END = 10, 35
 # PDF page ranges (from 1, inclusive) that are guidance for adults, not reports or policy.
 PDF_PAGES = {
@@ -228,18 +235,21 @@ def _repeated_lines(pages: list[str]) -> set[str]:
     return {line for line, count in seen.items() if count >= 4 and len(line.split()) <= 12}
 
 
-def sections_from_pages(pages: Iterable[str], running: set[str] = frozenset()) -> list[Section]:
-    """Paragraphs joined back from wrapped lines, under the heading above them."""
+def sections_from_pages(
+    pages: Iterable[str], running: set[str] = frozenset(), links: Sequence[str] = ()
+) -> list[Section]:
+    """Paragraphs joined back from wrapped lines, under the heading above them. `links` holds one
+    address per page: a section links to the page it starts on."""
     found: list[Section] = []
-    title, body, skipping = "", [], False
+    title, body, skipping, opened = "", [], False, ""
 
     def close() -> None:
         nonlocal body
         if body:
-            found.append(Section(title, " ".join(body)))
+            found.append(Section(title, " ".join(body), opened))
         body = []
 
-    for page in pages:
+    for at, page in enumerate(pages):
         for block in re.split(r"\n\s*\n", page):
             lines = [
                 line.strip()
@@ -263,6 +273,8 @@ def sections_from_pages(pages: Iterable[str], running: set[str] = frozenset()) -
                 continue
             else:
                 # A sentence running over the page break is one paragraph, so do not split here.
+                if not body and at < len(links):
+                    opened = links[at]
                 body.append(text)
     close()
     return found
@@ -333,7 +345,7 @@ def passages_from(sections: Iterable[Section], source: Source, stats: Counter) -
                     title=section.title[:120] or source.name,
                     text=piece,
                     source=source.name,
-                    url=source.url,
+                    url=section.url or source.url,
                     license=source.license,
                     area=area,
                     kind="guideline",
@@ -359,8 +371,19 @@ def medline_sections(path: Path) -> list[tuple[Section, str]]:
         if topic.get("language") == "English" and title in MEDLINE_TOPICS:
             summary = _strip_html(topic.findtext("full-summary") or "")
             if summary:
-                found.append((Section(title, summary), MEDLINE_TOPICS[title]))
+                section = Section(title, summary, topic.get("url", ""))
+                found.append((section, MEDLINE_TOPICS[title]))
     return found
+
+
+def _niosh_url(stem: str) -> str:
+    """Where the page saved as `m7_01` or `plain` is published."""
+    match = re.fullmatch(r"m(\d+)_(\d+)", stem)
+    if match:
+        return f"{NIOSH.url}longhours/mod{match[1]}/{match[2]}.html"
+    if stem == "plain":  # the live page turns many visitors away; CDC's own archive does not
+        return "https://archive.cdc.gov/www_cdc_gov/niosh/docs/97-145/default.html"
+    return ""
 
 
 def niosh_sections(folder: Path) -> list[Section]:
@@ -377,7 +400,7 @@ def niosh_sections(folder: Path) -> list[Section]:
         text = re.sub(r"^.*?Print Minus Related Pages\s*", "", text)
         text = re.sub(r"\s*PREVIOUS\b.*$", "", text)
         title = re.sub(r"^Module \d+\.\s*|\s*\(Cont(?:inued|\.)\)|\s+pt \d+$", "", title).strip()
-        found.append(Section(title.split(", ")[-1], text))
+        found.append(Section(title.split(", ")[-1], text, _niosh_url(path.stem)))
     return found
 
 
@@ -408,7 +431,9 @@ def exercise_passages(path: Path, stats: Counter) -> list[Passage]:
                 title=record["name"],
                 text=re.sub(r"\s+", " ", text),
                 source=EXERCISES.name,
-                url=EXERCISES.url,
+                url=f"{EXERCISES.url}/blob/main/exercises/{record.get('id', '')}.json"
+                if record.get("id")
+                else EXERCISES.url,
                 license=EXERCISES.license,
                 area="exercise",
                 kind="exercise",
@@ -441,8 +466,9 @@ def card_passages() -> list[Passage]:
 def _pdf_sections(key: str) -> list[Section]:
     pages = pdf_pages(RAW_DIR / f"{key}.pdf")
     running = _repeated_lines(pages)
-    chosen = [page for start, end in PDF_PAGES[key] for page in pages[start - 1 : end]]
-    return sections_from_pages(chosen, running)
+    numbers = [n for start, end in PDF_PAGES[key] for n in range(start, end + 1) if n <= len(pages)]
+    chosen = [pages[n - 1] for n in numbers]
+    return sections_from_pages(chosen, running, [f"{PDF_URLS[key]}#page={n}" for n in numbers])
 
 
 def build() -> tuple[list[Passage], dict]:

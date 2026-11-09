@@ -194,10 +194,17 @@ class AccessRequest(ApiModel):
     requested_at: datetime
 
 
+class SourceLink(ApiModel):
+    title: str
+    source: str
+    url: str
+
+
 class ChatMessage(ApiModel):
     id: str
     role: Literal["user", "assistant"]
     text: str
+    sources: list[SourceLink] | None = None  # where the person can check it
     evidence_ids: list[str]
     action_ids: list[str] | None = None  # owned drafts, never statistical evidence
     reminder_ids: list[str] | None = None  # reminders prepared here, waiting for one tap

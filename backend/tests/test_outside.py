@@ -224,6 +224,7 @@ def test_a_web_answer_has_its_source_and_its_cost_is_recorded(engine):
         "answer": "Molokhia is a leafy soup.",
         "source": "en.wikipedia.org",
         "domain": "en.wikipedia.org",
+        "url": "https://en.wikipedia.org/wiki/Mulukhiyah",
     }
     with session_scope(engine) as db:
         assert db.scalar(select(OutsideLookup.cost_usd)) == 0.03

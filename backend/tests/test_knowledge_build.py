@@ -165,3 +165,9 @@ def test_every_committed_passage_passes_the_filters():
         assert not reads_like_instruction(row["text"]), row["id"]
         if row["kind"] != "card":
             assert not MEDICAL.search(text) and not OFF_LIMITS.search(text), row["id"]
+
+
+def test_a_section_links_to_the_page_it_starts_on():
+    pages = ["Heading One\n\nFirst page text here.\n", "Heading Two\n\nSecond page text here.\n"]
+    sections = sections_from_pages(pages, set(), ["a#page=1", "a#page=2"])
+    assert [s.url for s in sections] == ["a#page=1", "a#page=2"]

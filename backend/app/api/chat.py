@@ -142,6 +142,7 @@ def _message(row: ChatMessage) -> schemas.ChatMessage:
         id=str(row.id),
         role=row.role,
         text=row.text,
+        sources=[schemas.SourceLink(**link) for link in row.sources or []] or None,
         evidence_ids=list(row.evidence_ids or []),
         action_ids=list(row.action_ids or []) or None,
         reminder_ids=list(row.reminder_ids or []) or None,
@@ -530,6 +531,7 @@ def _answer(
                 cost_usd=result.budget.cost_usd,
                 action_ids=prepared or None,
                 reminder_ids=reminders or None,
+                sources=result.sources or None,
                 conversation_id=conversation_id,
                 # The agent asked for a reminder's missing detail: the reply continues the request.
                 pending_log_expert=REMINDERS

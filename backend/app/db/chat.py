@@ -162,6 +162,7 @@ def add_answer(
     pending_log_expert: str | None = None,
     conversation_id: uuid.UUID | None = None,
     reminder_ids: list[str] | None = None,
+    sources: list[dict] | None = None,
 ) -> ChatMessage:
     """Stores an answer, its verified claims, and the evidence they cite (once per id)."""
     cited = {i for claim in claims for i in claim.get("evidence_ids", [])}
@@ -171,6 +172,7 @@ def add_answer(
         role="assistant",
         text=text,
         claims=claims,
+        sources=sources,
         evidence_ids=sorted(cited),
         answered_by=answered_by,
         routed=routed,

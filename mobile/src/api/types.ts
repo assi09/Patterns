@@ -176,10 +176,18 @@ export interface SendOptions {
   replaces?: string; // editing or retrying: this question and what followed it are replaced
 }
 
+/** Where the person can check an answer's guidance; set by the server, never by the model. */
+export interface SourceLink {
+  title: string;
+  source: string;
+  url: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
   text: string;
+  sources?: SourceLink[];
   actionIds?: string[]; // owned logging drafts to review; never statistical evidence
   reminderIds?: string[]; // reminders the agent prepared here, each waiting for one tap
   evidenceIds: string[]; // what the assistant's statements are based on

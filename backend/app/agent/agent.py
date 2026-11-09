@@ -193,6 +193,8 @@ class AgentResult:
     expert: str = "general"
     consulted: list[str] = field(default_factory=list)
     summary: str = ""
+    # Where the person can check it: set by code from cited passages and lookups, never the model.
+    sources: list[dict] = field(default_factory=list)
     claims: list[Claim] = field(default_factory=list)
     rejected: list[Rejection] = field(default_factory=list)
     hypotheses: list[Hypothesis] = field(default_factory=list)

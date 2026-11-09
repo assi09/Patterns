@@ -307,3 +307,42 @@ def test_the_source_named_is_the_passage_cited():
     assert "A public guide" in source_note(result)
     uncited = SimpleNamespace(summary="Hold it.", claims=[], trace=[], evidence=held)
     assert source_note(uncited) is None
+
+
+def _result_citing(url):
+    from app.agent.agent import AgentResult
+    from app.agent.knowledge import passage_evidence
+    from app.agent.verifier import Claim
+    from app.knowledge.build import Passage
+
+    record = passage_evidence(
+        Passage("p", "Caffeine", "x", "A guide", url, "p", "sleep", "guideline")
+    )
+    result = AgentResult(run_id="x", stop_reason="submitted", evidence={record.id: record})
+    result.claims = [Claim(text="Try it.", kind="guidance", evidence_ids=[record.id])]
+    return result
+
+
+def test_a_cited_passage_gives_a_link_to_check():
+    from app.agent.knowledge import cited_sources
+
+    [link] = cited_sources(_result_citing("https://example.com/caffeine"))
+    assert link == {"title": "Caffeine", "source": "A guide", "url": "https://example.com/caffeine"}
+
+
+def test_a_passage_only_looked_at_or_without_a_safe_link_gives_none():
+    from app.agent.knowledge import cited_sources
+
+    uncited = _result_citing("https://example.com/caffeine")
+    uncited.claims = []
+    assert cited_sources(uncited) == []
+    assert cited_sources(_result_citing("javascript:alert(1)")) == []
+
+
+def test_every_committed_passage_links_somewhere_checkable():
+    from app.agent.retrieval import load_index
+
+    passages = load_index().passages
+    assert all(p.url.startswith("https://") for p in passages)
+    guidelines = [p for p in passages if p.kind == "guideline" and "#page=" in p.url]
+    assert guidelines
