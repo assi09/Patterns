@@ -210,3 +210,17 @@ def test_a_list_stays_a_list_of_lines():
     assert without_filler(joined) == "- You could try one thing.\n- You could try another."
     lines = "- Try one.\n- Try two."
     assert without_filler(lines) == lines
+
+
+def test_each_life_rule_rules_out_what_it_should():
+    from app.agent.personal import fit_to_life
+
+    baby = fit_to_life(["Has a newborn at home"])
+    assert "regular_bedtime" in baby.levers and not baby.no_clock_bedtime and baby.notes
+    hurt = fit_to_life(["Sprained an ankle last week"])
+    assert "quiet_day" in hurt.options
+    away = fit_to_life(["Travelling for work until Friday"])
+    assert "weekend_shift" in away.options
+    assert fit_to_life(["Has a dog"]).notes == []
+    both = fit_to_life(["Works night shifts", "Has a newborn at home"])
+    assert len(both.notes) == 2 and both.no_clock_bedtime

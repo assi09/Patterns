@@ -128,6 +128,21 @@ MEDLINE = Source(
     US_GOVERNMENT,
     "nutrition",
 )
+NUTRITION_PAGES = {
+    "nia": (
+        "National Institute on Aging, NIH",
+        "https://www.nia.nih.gov/health/healthy-eating-nutrition-and-diet/",
+    ),
+    "fda": (
+        "U.S. Food and Drug Administration",
+        "https://www.fda.gov/food/nutrition-education-resources-materials/",
+    ),
+    "niddk": (
+        "NIDDK, NIH",
+        "https://www.niddk.nih.gov/health-information/weight-management/"
+        "healthy-eating-physical-activity-for-life/",
+    ),
+}
 EXERCISES = Source(
     "exercises",
     "free-exercise-db",
@@ -182,7 +197,8 @@ LINKING = {"a", "an", "and", "at", "for", "from", "in", "of", "on", "or", "the",
 RECOVERY_TITLE = re.compile(r"\b(rest|recover\w*|nap\w*|fatigue|stress|tired)\b", re.IGNORECASE)
 DIET_TITLE = re.compile(r"\bdiet\b", re.IGNORECASE)
 SKIPPED_PAGE = re.compile(
-    r"\b(references|questions|answers|quiz|contents|acknowledg\w*|objectives|diseases?|disorders?|"
+    r"\b(content reviewed|for more information|related|clinical trials|references|questions|"
+    r"answers|quiz|contents|acknowledg\w*|objectives|diseases?|disorders?|"
     r"symptoms?|test dose|otc|epworth|liabilities|supervisor|fatigue risk management|"
     r"organizational|periodic assessments|workload|positive atmosphere|employers|metabolism|"
     r"immune|following)\b",
@@ -404,6 +420,25 @@ def niosh_sections(folder: Path) -> list[Section]:
     return found
 
 
+def page_sections(path: Path, base: str) -> list[Section]:
+    """A public web page, one section per heading, each linking to the page."""
+    markup = path.read_text(encoding="utf8", errors="ignore")
+    main = re.search(r"(?is)<main.*?</main>", markup)
+    parts = re.split(r"(?is)<h2[^>]*>(.*?)</h2>", main.group(0) if main else markup)
+    url = base + path.stem.split("__", 1)[1]
+    found = []
+    for title, body in zip(parts[1::2], parts[2::2], strict=True):
+        name, text = _strip_html(title), _strip_html(body)
+        if (
+            name
+            and text
+            and not SKIPPED_PAGE.search(name)
+            and not name.lower().startswith("you may")
+        ):
+            found.append(Section(name, text, url))
+    return found
+
+
 def exercise_passages(path: Path, stats: Counter) -> list[Passage]:
     try:
         records = json.loads(path.read_text())
@@ -490,6 +525,14 @@ def build() -> tuple[list[Passage], dict]:
         medline += len(found)
         passages += found
     sources["medlineplus"] = medline
+    for key, (name, base) in NUTRITION_PAGES.items():
+        source = Source(key, name, base, US_GOVERNMENT, "nutrition")
+        count = 0
+        for path in sorted((RAW_DIR / "nutrition").glob(f"{key}__*.html")):
+            found = passages_from(page_sections(path, base), source, stats)
+            count += len(found)
+            passages += found
+        sources[key] = count
     found = exercise_passages(RAW_DIR / "exercises.json", stats)
     sources["exercises"] = len(found)
     passages += found

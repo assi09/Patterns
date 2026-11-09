@@ -52,20 +52,61 @@ class Fit:
     levers: frozenset[str] = frozenset()
     options: frozenset[str] = frozenset()
     notes: list[str] = field(default_factory=list)
+    no_clock_bedtime: bool = False
+
+
+@dataclass(frozen=True)
+class LifeRule:
+    says: re.Pattern
+    levers: frozenset[str]
+    options: frozenset[str]
+    note: str
+    no_clock_bedtime: bool = False
+
+
+REGULAR = frozenset(("regular_bedtime",))
+ROUTINE_OPTIONS = frozenset(("weekend_shift", "bedtime_spread"))
+LIFE_RULES = (
+    LifeRule(
+        NIGHT_WORK,
+        BEDTIME_LEVERS,
+        BEDTIME_OPTIONS,
+        "They work nights, so advice built on a clock-time bedtime does not fit: plan around "
+        "their shifts and their sleep after them.",
+        no_clock_bedtime=True,
+    ),
+    LifeRule(
+        re.compile(r"\b(?:newborn|new baby|baby at home|feed(?:s|ing)? the baby)\b", re.I),
+        REGULAR,
+        ROUTINE_OPTIONS | frozenset(("best_nights",)),
+        "Their nights are set by a baby, so a regular bedtime is not theirs to choose: keep to "
+        "what they can control, such as naps and sharing the night feeds.",
+    ),
+    LifeRule(
+        re.compile(r"\b(?:injur\w*|sprain\w*|broke|broken|torn|hurt (?:my|their))\b", re.I),
+        frozenset(("active_days",)),
+        frozenset(("quiet_day", "heavy_week")),
+        "They are injured, so nothing that asks them to move more or train harder.",
+    ),
+    LifeRule(
+        re.compile(r"\b(?:travel\w*|on a trip|abroad|jet ?lag|flying)\b", re.I),
+        REGULAR,
+        ROUTINE_OPTIONS,
+        "They are travelling, so their usual routine is not a fair yardstick for now.",
+    ),
+)
 
 
 def fit_to_life(lines: Sequence[str]) -> Fit:
-    """Night work makes a clock-time bedtime the wrong advice, however well it scores."""
-    if any(NIGHT_WORK.search(line) and not NO_LONGER.search(line) for line in lines):
-        return Fit(
-            BEDTIME_LEVERS,
-            BEDTIME_OPTIONS,
-            [
-                "They work nights, so advice built on a clock-time bedtime does not fit: plan "
-                "around their shifts and their sleep after them."
-            ],
-        )
-    return Fit()
+    """What someone's life rules out, however well it scores in their numbers."""
+    fit = Fit()
+    for rule in LIFE_RULES:
+        if any(rule.says.search(line) and not NO_LONGER.search(line) for line in lines):
+            fit.levers |= rule.levers
+            fit.options |= rule.options
+            fit.notes.append(rule.note)
+            fit.no_clock_bedtime = fit.no_clock_bedtime or rule.no_clock_bedtime
+    return fit
 
 
 # About eating, sleep habits are a different subject: only the lever about meals stays.
@@ -266,7 +307,7 @@ def personal_check(
     them, it gives what they asked for, it is concrete, and its how-to names where it came from."""
 
     def check(claims: list, summary: str = "") -> list[str]:
-        if fit and fit.levers and BED_BY_THE_CLOCK.search(summary):
+        if fit and fit.no_clock_bedtime and BED_BY_THE_CLOCK.search(summary):
             return ["a clock-time bedtime does not fit how they live; plan around their shifts"]
         problems = []
         points = [c for c in claims if c.kind in ("suggestion", "guidance")]

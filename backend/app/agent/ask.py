@@ -89,11 +89,14 @@ from app.agent.router import (
 from app.agent.strategy import (
     COACHING_OFFER,
     CROSS_AREA_GUIDE,
+    PREMISE_GUIDE,
     asked_day,
+    check_premise,
     coaching_evidence,
     cross_area_evidence,
     eating_context,
     expand_tool,
+    premise_answer_check,
     scaled,
     snapshot,
     strategy_for,
@@ -150,6 +153,7 @@ class Answer:
 
 
 LINKING_TYPES = ("why", "change", "pattern")
+ASKS_WHY = ("why", "change")
 NO_CONSULT = ("day", "lookup", "coaching")
 MAX_REPLY_WORDS = 12
 NEW_QUESTION = re.compile(
@@ -397,6 +401,17 @@ def ask(
         block = "\n\n".join(part for part in (block, about) if part)
     guidance: list[Card] = []
     retrieved: Guidance | None = None
+    # What the question takes for granted, checked before anyone sets out to explain it.
+    false_premise = False
+    if plan and route.classification.question_type in ASKS_WHY and urgent_free(question):
+        premise = check_premise(frame, question, route.expert)
+        if premise:
+            evidence |= {record.id: record for record in premise.evidence}
+            block = "\n\n".join(part for part in (block, premise.text) if part)
+            false_premise = not premise.holds
+            if false_premise:
+                route = replace(route, consult=())
+                plan = replace(plan, guide=PREMISE_GUIDE, tools=("describe", "compare_windows"))
     # Linking two areas: run the tests here rather than pay a second expert to choose them.
     if (
         plan
@@ -474,11 +489,17 @@ def ask(
     check = (
         personal_check(personal_ids, fit, wanted, passage_ids) if plan and plan.coaching else None
     )
+    if false_premise:
+        check = premise_answer_check
     if wanted:
-        asked += f"\n(They asked for {wanted} points: give {wanted} different ones.)"
+        asked += (
+            f"\n(They asked for {wanted} points: give {wanted} different ones. Everything needed "
+            "is above, so submit now without calling other tools, and start each with 'You could "
+            "try'.)"
+        )
         extra = replace(plan.budget, max_calls=plan.budget.max_calls + WANTED_EXTRA_CALLS)
         plan = replace(plan, budget=extra)
-    if plan and fit.levers:  # its own run of this tool would hand the bedtimes back
+    if plan and fit.levers:  # its own run of this tool would hand what was ruled out back
         plan = replace(plan, tools=tuple(t for t in plan.tools if t != HABIT_OPTIONS))
     urgent = (
         URGENT_MIND_REPLY
@@ -492,7 +513,7 @@ def ask(
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="urgent", summary=urgent)
     elif route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
-    elif is_explicit(question) and "?" not in question and not (logging_tools or reminding):
+    elif is_explicit(question) and "?" not in question and not logging_tools:
         # Keeping it is the person's tap on the card the listener raises; no data to look at.
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="noted", summary=NOTED)
     elif world:

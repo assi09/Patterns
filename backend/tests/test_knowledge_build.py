@@ -171,3 +171,14 @@ def test_a_section_links_to_the_page_it_starts_on():
     pages = ["Heading One\n\nFirst page text here.\n", "Heading Two\n\nSecond page text here.\n"]
     sections = sections_from_pages(pages, set(), ["a#page=1", "a#page=2"])
     assert [s.url for s in sections] == ["a#page=1", "a#page=2"]
+
+
+def test_a_web_page_gives_one_section_per_heading(tmp_path):
+    from app.knowledge.build import page_sections
+
+    path = tmp_path / "nia__healthy-meals.html"
+    path.write_text(
+        "<main><h2>Plan Your Meals</h2><p>Cook at home.</p><h2>References</h2><p>x</p></main>"
+    )
+    [section] = page_sections(path, "https://example.gov/")
+    assert section.title == "Plan Your Meals" and section.url.endswith("/healthy-meals")

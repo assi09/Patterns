@@ -792,3 +792,18 @@ words are sent back; sentences about numbers holding steady are cut from advice;
 passage, which is also what creates a link to check; after "no wait" only the correction counts; "just
 now" ends now. **Measured:** nine scenarios, then the two that failed: five points given, links on the
 answers that cite a passage. Each ran once or twice, so these show behaviour, not rates.
+
+## Three full runs, and checking what a question assumes (2026-11-09)
+
+**Changed:** the premise of a "why" or "has it changed" question is tested before it is explained, and
+a false one is corrected first (`check_premise`). Rules for a new baby, an injury and travel join night
+work. Nutrition passages rose from 29 to 82 (National Institute on Aging, FDA, NIDDK).
+
+**Result:** the whole agent three times, 246 turns on a made-up person: **94.3% passed** (`eval/repeat_summary.py`).
+Routing, memory, context, premise and safety passed every time. Mean 2.4 model calls and $0.0058 a
+turn; one-day questions took 1 or 2 calls. Three failures were a dropped connection while the machine
+slept. After fixes the failing scenarios were run once more, costing $0.05.
+
+**Open:** "five points" often gives three. "Log a banana" sometimes makes no draft; the reply now says
+so instead of claiming one exists. A follow-up like "which one is higher?" can lose what "one" meant.
+There has been no full run since these last fixes, and the person is made up.

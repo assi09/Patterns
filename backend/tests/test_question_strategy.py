@@ -267,3 +267,65 @@ def test_a_stitched_fallback_is_reworded_when_the_new_words_pass():
     assert result.summary == "Your sleep has held steady."
     _reword(ScriptedLLM([ScriptedLLM.say("You slept 99 hours.")]), result, "sleep?", None, Budget())
     assert result.summary == "Your sleep has held steady."
+
+
+def _frame(values):
+    import pandas as pd
+
+    days = pd.date_range("2026-09-01", periods=len(values), name="date")
+    return pd.DataFrame({"sleep_minutes": values, "sleep_efficiency": values}, index=days)
+
+
+def test_a_change_that_did_not_happen_is_caught_before_it_is_explained():
+    import numpy as np
+
+    from app.agent.strategy import check_premise
+
+    steady = list(420 + np.random.default_rng(1).normal(0, 20, 60))
+    premise = check_premise(_frame(steady), "Why is my sleep worse lately?", "sleep")
+    assert premise and not premise.holds and "does not hold" in premise.text
+
+
+def test_a_change_that_did_happen_stands():
+    import numpy as np
+
+    from app.agent.strategy import check_premise
+
+    noise = np.random.default_rng(2).normal(0, 10, 60)
+    dropped = [420 + n if i < 46 else 330 + n for i, n in enumerate(noise)]
+    premise = check_premise(_frame(dropped), "Why is my sleep worse lately?", "sleep")
+    assert premise and premise.holds
+
+
+def test_the_wrong_direction_does_not_confirm_it():
+    import numpy as np
+
+    from app.agent.strategy import check_premise
+
+    noise = np.random.default_rng(3).normal(0, 10, 60)
+    rose = [330 + n if i < 46 else 420 + n for i, n in enumerate(noise)]
+    assert not check_premise(_frame(rose), "Why is my sleep worse?", "sleep").holds
+
+
+def test_a_question_assuming_nothing_is_not_checked():
+    from app.agent.strategy import check_premise
+
+    assert check_premise(_frame([420.0] * 60), "What affects my sleep?", "sleep") is None
+
+
+def test_the_answer_must_open_by_correcting_it():
+    from app.agent.strategy import premise_answer_check
+
+    assert premise_answer_check([], "Your late bedtimes explain it.")
+    assert premise_answer_check([], "Your sleep hasn't got worse. It looks steady.") == []
+
+
+def test_a_question_that_assumes_no_change_is_not_checked_for_one():
+    import numpy as np
+
+    from app.agent.strategy import check_premise
+
+    frame = _frame(list(420 + np.random.default_rng(4).normal(0, 20, 60)))
+    assert check_premise(frame, "Which one is higher?", "sleep") is None
+    assert check_premise(frame, "Does going to bed late go with worse sleep?", "sleep") is None
+    assert check_premise(frame, "Has my sleep been getting worse lately?", "sleep") is not None

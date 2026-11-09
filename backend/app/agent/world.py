@@ -25,6 +25,8 @@ from app.outside import LookupRefused, Outside
 
 FOOD_LOOKUP = "food_lookup"
 WEB_LOOKUP = "web_lookup"
+# Shared by nearly every food: "mloukhieh cooked" matching "bulgur, cooked" is not the same food.
+HOW_COOKED = stems("cooked boiled roasted baked fried grilled steamed drained raw calories protein")
 SENTENCE = re.compile(r"(?<=[.!?])\s+")
 LINK = re.compile(r"\(?\[([^\]]*)\]\([^)]*\)\)?")
 BARE_URL = re.compile(r"\(?https?://\S+\)?")
@@ -40,8 +42,8 @@ CHOOSE_PROMPT = f"""A person asked a general question: about a food or dish, or 
 tracker metric means. Look it up with exactly one tool.
 
 - {FOOD_LOOKUP}: calories or nutrients of any food. It is free and exact, so always use it for \
-those, with the plain English name of the food or its main ingredient ("jute leaves cooked" for \
-mloukhieh, "hummus").
+those, with the plain English name of the food or its main ingredient and never a dish's own name \
+("jute leaves cooked" for mloukhieh, "hummus").
 - {KNOWLEDGE_LOOKUP}: general guidance on how to do an exercise, sleep, training, recovery, or how \
 much of something adults need. Vetted and free, so use it before the web for these.
 - {WEB_LOOKUP}: anything else, such as what a dish is made of or how a metric works.
@@ -161,7 +163,7 @@ def _from_passages(records: list[Evidence]) -> dict:
 def _same_food(query: str, found: dict) -> bool:
     """Whether the best match shares a word with what was asked: "mloukhieh" is not bulgur."""
     foods = found.get("foods") or [{}]
-    return bool(stems(query) & stems(str(foods[0].get("food", ""))))
+    return bool((stems(query) - HOW_COOKED) & stems(str(foods[0].get("food", ""))))
 
 
 def _without_links(text: str) -> str:
