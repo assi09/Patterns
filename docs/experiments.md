@@ -784,3 +784,11 @@ metric; a reminder lost its thread if the agent's question had no question mark.
 
 **Open:** no full pass since the final fixes; each scenario ran once or twice, so these are not rates.
 Answers often use what was said without citing it. Night work is the only "does not fit" rule so far.
+
+## What people notice in daily use (2026-11-09)
+
+**Changed, from a real screenshot:** a request for five points gets five (`asked_count`); vague eating
+words are sent back; sentences about numbers holding steady are cut from advice; a how-to must cite its
+passage, which is also what creates a link to check; after "no wait" only the correction counts; "just
+now" ends now. **Measured:** nine scenarios, then the two that failed: five points given, links on the
+answers that cite a passage. Each ran once or twice, so these show behaviour, not rates.

@@ -75,6 +75,26 @@ NOT_ABOUT_EATING_LEVERS = frozenset(
 NOT_ABOUT_EATING_OPTIONS = frozenset(
     ("best_nights", "weekend_shift", "bedtime_spread", "time_in_bed", "heavy_week", "recent_dip")
 )
+MAX_POINTS = 5
+NUMBER_WORDS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8}
+ASKED_POINTS = re.compile(
+    r"\b(\d+|two|three|four|five|six|seven|eight)\s+(?:\w+\s+)?"
+    r"(?:points?|tips?|things?|ways?|suggestions?|ideas?)\b",
+    re.IGNORECASE,
+)
+VAGUE = re.compile(
+    r"\b(?:balanced (?:meals?|diet)|enough nutrients|healthy (?:meals?|foods?|eating)|"
+    r"eat(?:ing)? well|good nutrition)\b",
+    re.IGNORECASE,
+)
+FILLER = re.compile(
+    r"\b(?:held steady|stayed steady|(?:with)?in your usual range|no clear change|"
+    r"did not clearly)\b",
+    re.IGNORECASE,
+)
+ACTIONABLE = re.compile(r"\b(?:could|try|might|worth|aim)\b", re.IGNORECASE)
+INLINE_BULLET = re.compile(r"(?<=[.!?])\s+-\s+")
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z-])")
 BED_BY_THE_CLOCK = re.compile(
     r"\b(?:in bed|asleep|bedtime|go(?:ing)? to bed)\b[^.\n]{0,40}\b(?:[01]?\d|2[0-3]):[0-5]\d\b",
     re.IGNORECASE,
@@ -210,27 +230,67 @@ def relevant_block(relevant: Sequence[Relevant], records: Sequence[Evidence], fi
     return "\n".join(part for part in (text, *fit.notes) if part)
 
 
-def personal_check(personal_ids: set[str], fit: Fit | None = None):
-    """When there is something personal to say, one suggestion has to say it; and nothing may say
-    what does not fit their life."""
+def asked_count(question: str) -> int:
+    """How many points the person asked for, at most `MAX_POINTS`; 0 if they named no number."""
+    match = ASKED_POINTS.search(question)
+    if not match:
+        return 0
+    word = match[1].lower()
+    return min(int(word) if word.isdigit() else NUMBER_WORDS[word], MAX_POINTS)
+
+
+def without_filler(summary: str) -> str:
+    """Advice does not need telling that other numbers held steady; the model keeps adding it. A
+    list stays a list, one point per line."""
+    if summary.lstrip().startswith("- "):
+        summary = INLINE_BULLET.sub("\n- ", summary)
+    lines = []
+    for line in summary.splitlines():
+        kept = [
+            sentence
+            for sentence in SENTENCE_END.split(line)
+            if not FILLER.search(sentence) or ACTIONABLE.search(sentence)
+        ]
+        if kept or not line.strip():
+            lines.append(" ".join(kept))
+    return "\n".join(lines).strip() or summary
+
+
+def personal_check(
+    personal_ids: set[str],
+    fit: Fit | None = None,
+    wanted: int = 0,
+    passage_ids: frozenset[str] = frozenset(),
+):
+    """What makes a coaching answer one worth giving: it fits their life, it says something about
+    them, it gives what they asked for, it is concrete, and its how-to names where it came from."""
 
     def check(claims: list, summary: str = "") -> list[str]:
         if fit and fit.levers and BED_BY_THE_CLOCK.search(summary):
             return ["a clock-time bedtime does not fit how they live; plan around their shifts"]
-        if not personal_ids:
-            return []
-        linked = any(
-            claim.kind == "suggestion" and personal_ids & set(claim.evidence_ids)
-            for claim in claims
-        )
-        return (
-            []
-            if linked
-            else [
+        problems = []
+        points = [c for c in claims if c.kind in ("suggestion", "guidance")]
+        if wanted and len(points) < wanted:
+            problems.append(
+                f"they asked for {wanted} points and there are {len(points)}: give {wanted} "
+                "different ones, personal ones first, then what the passages say to do, each as a "
+                "claim and one per line in the summary, starting with '- '"
+            )
+        if VAGUE.search(summary):
+            problems.append(
+                "too vague: say which foods, how much or when, using the passages, instead of "
+                "general words like balanced meals or enough nutrients"
+            )
+        if passage_ids and points and not any(passage_ids & set(c.evidence_ids) for c in points):
+            problems.append("cite in evidence_ids the passage each how-to comes from")
+        if personal_ids and not any(
+            c.kind == "suggestion" and personal_ids & set(c.evidence_ids) for c in claims
+        ):
+            problems.append(
                 "give at least one suggestion of kind suggestion that cites something specific "
                 "about this person from below: their own numbers or what they told you. Advise "
                 "first; a question alone is not an answer"
-            ]
-        )
+            )
+        return problems
 
     return check

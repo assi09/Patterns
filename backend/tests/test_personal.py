@@ -160,3 +160,53 @@ def test_how_do_i_eat_better_is_answered_with_no_food_logged():
         chat=ChatState(profile=("Works night shifts",)),
     )
     assert done.result.expert == "nutrition" and done.result.stop_reason != "unavailable"
+
+
+def test_how_many_points_were_asked_for():
+    from app.agent.personal import asked_count
+
+    assert asked_count("give me advice like 5 points") == 5
+    assert asked_count("four tips to sleep better") == 4
+    assert asked_count("give me 3 quick ideas") == 3
+    assert asked_count("20 ways to sleep") == 5  # no more than can be said well
+    assert asked_count("How can I sleep better?") == 0
+
+
+def _point(kind="suggestion", ids=("a",)):
+    return Claim(text="You could.", kind=kind, evidence_ids=list(ids))
+
+
+def test_an_answer_must_give_the_number_asked_for():
+    check = personal_check(set(), wanted=3)
+    assert check([_point()], "x")
+    assert check([_point(), _point("guidance"), _point("guidance")], "x") == []
+
+
+def test_vague_eating_advice_is_sent_back():
+    check = personal_check(set())
+    assert check([_point()], "Aim for balanced meals with enough nutrients.")
+    assert check([_point()], "Add a vegetable to dinner and protein to breakfast.") == []
+
+
+def test_a_how_to_must_cite_its_passage_for_a_link_to_exist():
+    check = personal_check(set(), passage_ids=frozenset(("p",)))
+    assert check([_point()], "x")
+    assert check([_point(ids=("a", "p"))], "x") == []
+
+
+def test_filler_about_steady_numbers_is_cut_and_advice_kept():
+    from app.agent.personal import without_filler
+
+    text = "You could try more time in bed. Your bedtime held steady within your usual range."
+    assert without_filler(text) == "You could try more time in bed."
+    only = "Your bedtime held steady."
+    assert without_filler(only) == only
+
+
+def test_a_list_stays_a_list_of_lines():
+    from app.agent.personal import without_filler
+
+    joined = "- You could try one thing. - You could try another."
+    assert without_filler(joined) == "- You could try one thing.\n- You could try another."
+    lines = "- Try one.\n- Try two."
+    assert without_filler(lines) == lines

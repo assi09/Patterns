@@ -68,12 +68,14 @@ from app.agent.personal import (
     PERSONAL_TOOLS,
     Fit,
     Relevant,
+    asked_count,
     fit_to_life,
     food_log_summary,
     memory_evidence,
     personal_check,
     rank_memory,
     relevant_block,
+    without_filler,
 )
 from app.agent.router import (
     FallbackRouter,
@@ -159,6 +161,7 @@ COACHING_NO_ANSWER = (
     "normal day? That would tell me where to look."
 )
 HABIT_OPTIONS = "habit_options"
+WANTED_EXTRA_CALLS = 2  # more points take a longer submission, and sometimes a second try
 ADVICE_TOOLS = ("habit_options", "personal_options")
 
 
@@ -466,7 +469,15 @@ def ask(
     if relevant or fit.notes:
         what = "; ".join([*(r.text for r in relevant), *fit.notes])
         asked = f"{question}\n(What they told you, which the advice has to fit: {what})"
-    check = personal_check(personal_ids, fit) if plan and plan.coaching else None
+    wanted = asked_count(question) if plan and plan.coaching else 0
+    passage_ids = frozenset(e.id for e in retrieved.evidence) if retrieved else frozenset()
+    check = (
+        personal_check(personal_ids, fit, wanted, passage_ids) if plan and plan.coaching else None
+    )
+    if wanted:
+        asked += f"\n(They asked for {wanted} points: give {wanted} different ones.)"
+        extra = replace(plan.budget, max_calls=plan.budget.max_calls + WANTED_EXTRA_CALLS)
+        plan = replace(plan, budget=extra)
     if plan and fit.levers:  # its own run of this tool would hand the bedtimes back
         plan = replace(plan, tools=tuple(t for t in plan.tools if t != HABIT_OPTIONS))
     urgent = (
@@ -563,6 +574,8 @@ def ask(
         )
         result.notes += _notes(frame, route, result)
     stopped_early = result.stop_reason in ("urgent", "refused", "noted")
+    if plan and plan.coaching:
+        result.summary = without_filler(result.summary)
     if plan and plan.coaching and result.summary in (NO_ANSWER, ""):
         result.summary = COACHING_NO_ANSWER
     if (

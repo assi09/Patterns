@@ -91,6 +91,8 @@ REQUEST_WORDS = set(
         "its",
     ]
 )
+JUST_NOW = re.compile(r"\bjust (?:now|did|finished|ended|got back)\b", re.IGNORECASE)
+CORRECTION = re.compile(r"\b(?:no wait|actually|sorry|i mean|make that|correction)\b", re.I)
 OWN_OFFSET = re.compile(r"\b(?:utc|gmt)\b|[+-]\d{2}:\d{2}\b", re.IGNORECASE)
 NAMED_DAY = re.compile(
     r"\b(?:yesterday|last (?:night|week)|\d+ days? ago|(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|"
@@ -156,8 +158,24 @@ def latest_past(given: dict, said: Sequence[str], local_now: datetime) -> dict:
         start = datetime.fromisoformat(str(given[key]))
     except (KeyError, ValueError):
         return given
-    named = NAMED_DAY.search("\n".join(said))
-    if named or start.tzinfo is None or start <= local_now + NOT_YET_GRACE:
+    words = "\n".join(said)
+    named = NAMED_DAY.search(words)
+    if start.tzinfo is None:
+        return given
+    if "endTime" in given and JUST_NOW.search(words):
+        # "20 minutes just now" ended now; the model often starts it now instead.
+        try:
+            over = datetime.fromisoformat(str(given["endTime"])) - local_now
+        except ValueError:
+            return given
+        if over > timedelta(0) and start <= local_now + NOT_YET_GRACE:
+            return {
+                **given,
+                key: (start - over).isoformat(),
+                "endTime": local_now.isoformat(),
+            }
+        return given
+    if named or start <= local_now + NOT_YET_GRACE:
         return given
     moved = {**given, key: _shifted(given[key], 1)}
     if "endTime" in given:
@@ -171,6 +189,15 @@ def lacks_a_duration(said: Sequence[str]) -> bool:
     return not durations(text) and len(clock_times(text)) < 2 and not UNTIL_NOW.search(text)
 
 
+def _corrected(said: Sequence[str]) -> set[int]:
+    """After "no wait" or "actually", only what comes next counts as the duration."""
+    for words in reversed(said):
+        parts = CORRECTION.split(words)
+        if len(parts) > 1 and (latest := durations(parts[-1])):
+            return latest
+    return set()
+
+
 def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime) -> str | None:
     """What the draft gets wrong against the person's words, for the model to put right; None if
     nothing contradicts them."""
@@ -180,7 +207,7 @@ def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime
     moments = [start]
     if isinstance(log, WorkoutLog):
         moments.append(log.end_time.astimezone(zone))
-        stated = durations(text)
+        stated = _corrected(said) or durations(text)
         if not stated and len(clock_times(text)) < 2 and not UNTIL_NOW.search(text):
             return "The person did not say how long it lasted. Ask them; never make up a duration."
         if log.exercise_type in GENERIC_TYPES and not _names_an_activity(text):

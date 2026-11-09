@@ -165,3 +165,18 @@ def test_a_named_day_is_left_alone():
 
     given = {"consumedAt": "2026-11-10T07:00:00+02:00"}
     assert latest_past(given, ["breakfast on Nov 10 at 7 am"], NOW) == given
+
+
+def test_after_a_correction_only_the_corrected_duration_counts():
+    said = ["Log a swim at 3 pm", "40 minutes, no wait it was 50 minutes"]
+    assert "duration" in mismatch(workout(AT_THREE, 40), said, NOW)
+    assert mismatch(workout(AT_THREE, 50), said, NOW) is None
+
+
+def test_a_workout_just_finished_ends_now_not_later():
+    from app.actions.stated import latest_past
+
+    given = {"startTime": NOW.isoformat(), "endTime": (NOW + timedelta(minutes=20)).isoformat()}
+    moved = latest_past(given, ["Log a 20 minute walk just now"], NOW)
+    assert datetime.fromisoformat(moved["endTime"]) == NOW
+    assert datetime.fromisoformat(moved["startTime"]) == NOW - timedelta(minutes=20)
