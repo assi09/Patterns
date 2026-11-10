@@ -275,7 +275,9 @@ def compare_day(frame: pd.DataFrame, metric: str, day: date) -> Evidence:
     """One day's value against the person's usual range: the middle half of the 28 days before.
 
     Descriptive, like the Today screen: "above usual" says where the day sits, not that anything
-    changed. Sufficient only with a value that day and at least MIN_USUAL_DAYS days before it.
+    changed. Sufficient with a value that day, so the value can be stated; a position against the
+    usual range needs MIN_USUAL_DAYS days before it as well, and is absent without them. With no
+    value that day, `latest_day_with_value` says which earlier day has one: real data has gaps.
     """
     if metric not in frame.columns:
         raise ToolError(f"Unknown metric {metric!r}")
@@ -292,11 +294,15 @@ def compare_day(frame: pd.DataFrame, metric: str, day: date) -> Evidence:
         stats["position"] = (
             "above" if value > range_.high else "below" if value < range_.low else "within"
         )
+    if value is None:
+        earlier = frame[metric].loc[:stamp].dropna()
+        if not earlier.empty:
+            stats["latest_day_with_value"] = earlier.index.max().date().isoformat()
     return Evidence(
         tool="compare_day",
         metrics=(metric,),
         windows=(Window(start=day, end=day), window),
         n=stats["usual_days"],
-        sufficient="position" in stats,
+        sufficient=value is not None,
         stats=stats,
     )

@@ -6,7 +6,7 @@ import pytest
 from app.agent.agent import AgentResult
 from app.agent.experts import carry_consulted
 from app.agent.guard import GuardError, Judgement
-from app.agent.verifier import Claim, check_claim, overstated
+from app.agent.verifier import Claim, check_claim, overstated, text_problems
 from app.analysis.day import MIN_USUAL_DAYS, USUAL_DAYS, compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
 
@@ -32,7 +32,8 @@ def test_a_day_is_placed_against_the_middle_half_of_the_weeks_before(last, posit
 def test_without_enough_days_or_a_value_it_is_not_sufficient():
     short = frame(60.0, [60.0] * (MIN_USUAL_DAYS - 1))
     day = START + timedelta(days=MIN_USUAL_DAYS - 1)
-    assert not compare_day(short, "resting_hr", day).sufficient
+    assert compare_day(short, "resting_hr", day).sufficient  # the value alone can be stated
+    assert "position" not in compare_day(short, "resting_hr", day).stats
     assert not compare_day(frame(float("nan")), "resting_hr", DAY).sufficient
     with pytest.raises(ToolError):
         compare_day(frame(60.0), "made_up", DAY)
@@ -132,3 +133,38 @@ def test_carried_claims_go_through_the_guard():
     assert carry_consulted(result, {"sleep": [flagged]}, {}, Guard("doctor")) == []
     down = lead("Your time asleep was stable.")
     assert carry_consulted(down, {"sleep": [sleep_claim()]}, {}, Guard(fail=True))
+
+
+def test_a_day_without_a_value_says_which_earlier_day_has_one():
+    evidence = compare_day(frame(float("nan")), "resting_hr", DAY)
+    assert evidence.stats["latest_day_with_value"] == (DAY - timedelta(days=1)).isoformat()
+
+
+def test_a_day_with_no_usual_range_can_be_stated_but_not_placed():
+    short = frame(60.0, [60.0] * (MIN_USUAL_DAYS - 1))
+    day = START + timedelta(days=MIN_USUAL_DAYS - 1)
+    evidence = compare_day(short, "resting_hr", day)
+    said = {evidence.id: evidence}
+    value = Claim(
+        text="Your resting heart rate was 60 bpm.",
+        kind="value",
+        metric="resting_hr",
+        evidence_ids=[evidence.id],
+    )
+    placed = Claim(
+        text="Your resting heart rate was within your usual range.",
+        kind="day",
+        metric="resting_hr",
+        evidence_ids=[evidence.id],
+    )
+    assert check_claim(value, said) == []
+    assert any("usual range" in r for r in check_claim(placed, said))
+
+
+def test_a_date_with_no_year_stands_if_either_year_fits():
+    window = Window(start=date(2021, 12, 20), end=date(2022, 1, 22))
+    evidence = Evidence(
+        tool="describe", metrics=("steps",), windows=(window,), n=30, sufficient=True, stats={}
+    )
+    assert not any("dates" in r for r in text_problems("From Dec 20 to Jan 22.", [evidence]))
+    assert any("dates" in r for r in text_problems("On Mar 3 it rose.", [evidence]))

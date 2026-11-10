@@ -242,7 +242,7 @@ def snapshot(
             evidence = compare_day(frame, metric, day)
         except ToolError:
             continue
-        if evidence.sufficient:
+        if "position" in evidence.stats:
             found.append(evidence)
     if not found:
         return [], ""

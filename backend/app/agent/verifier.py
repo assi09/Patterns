@@ -384,19 +384,26 @@ def _clock_levels(cited: list[Evidence]) -> list[float]:
     ]
 
 
-def _quoted_dates(text: str, years: set[int]) -> list[date]:
-    dates = []
-    for y, m, d in ISO_DATE.findall(text):
-        dates.append(date(int(y), int(m), int(d)))
+def _unsupported_dates(text: str, years: set[int], cited: list[Evidence]) -> list[date]:
+    """Dates in the text that the evidence does not cover. "Jan 22" names no year, so it stands if
+    any year the evidence touches fits: across New Year it can only be one of them."""
+    bad = [
+        day
+        for y, m, d in ISO_DATE.findall(text)
+        if not _date_supported(day := date(int(y), int(m), int(d)), cited)
+    ]
     pairs = [(MONTHS[m.lower()], int(d)) for m, d in MONTH_DAY.findall(text)]
     pairs += [(MONTHS[m.lower()], int(d)) for d, m in DAY_MONTH.findall(text)]
     for month, day in pairs:
+        possible = []
         for year in years:
             try:
-                dates.append(date(year, month, day))
+                possible.append(date(year, month, day))
             except ValueError:
                 continue
-    return dates
+        if not any(_date_supported(d, cited) for d in possible):
+            bad.extend(possible)
+    return bad
 
 
 def _date_supported(day: date, cited: list[Evidence]) -> bool:
@@ -498,6 +505,8 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
         expected = {"above": "up", "below": "down", "within": None}
         if not days:
             reasons.append("a day claim must cite compare_day evidence about its metric")
+        elif any("position" not in e.stats for e in days):
+            reasons.append("too few earlier days for a usual range; state only the day's value")
         elif {expected.get(e.stats.get("position")) for e in days} != {claim.direction}:
             position = days[0].stats.get("position")
             reasons.append(
@@ -547,7 +556,7 @@ def text_problems(
     years = {w.start.year for e in cited for w in e.windows} | {
         w.end.year for e in cited for w in e.windows
     }
-    if bad := [d for d in _quoted_dates(text, years) if not _date_supported(d, cited)]:
+    if bad := _unsupported_dates(text, years, cited):
         reasons.append("mentions dates outside the cited evidence: " + ", ".join(map(str, bad)))
     if EVIDENCE_ID.search(text):
         reasons.append("writes evidence ids in the text; list them only in evidence_ids")
@@ -640,7 +649,12 @@ def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
     }
     tested = {metric for e in evidence if e.tool in TEST_TOOLS for metric in e.metrics}
     # "In your usual range" says where a day sits, which compare_day shows.
-    days = {metric for e in evidence if e.tool == "compare_day" for metric in e.metrics}
+    days = {
+        metric
+        for e in evidence
+        if e.tool == "compare_day" and "position" in e.stats
+        for metric in e.metrics
+    }
     flagged: list[str] = []
     for sentence in SENTENCES.split(summary):
         allowed = tested if HEDGED.search(sentence) else supported
