@@ -273,3 +273,33 @@ So stress is never presented as how stressed a team feels: supervisors read "phy
 (The consent text still says "stress" and is versioned, so changing it means asking members again.) Limits: one dataset of recreational athletes; the score was rebuilt without HRV and with
 "no steps" standing in for Fitbit's still minutes; which end of the rating means stressed is inferred
 from its link with mood.
+
+## The team agent (built: backend)
+
+The supervisor talks to an agent about the team (`app/teams/agent.py`; `POST /teams/{id}/chat`). It
+has its own tools, all over the whole team and never a chosen subset, with the floor of 5 in code:
+
+| Tool | Gives |
+|---|---|
+| `team_overview` | every area over the last four full weeks: lasting, new or steady (`team_scan`) |
+| `team_week` | one full week's changes and weekday patterns |
+| `team_alerts` | alerts of the last 60 days, open or ended |
+| `team_notes`, `save_team_note` | team memory: events the supervisor mentions (a deadline, a release), with dates |
+| `propose_team_action` | a team challenge or an anonymous message, saved as a proposal |
+| `action_result` | whether an approved challenge moved its metric, once it ended |
+
+Every claim in an answer cites that evidence and is checked like the personal agent's: a change must
+be one the team statistics found, in its direction; numbers and dates must come from the evidence. A
+question about a person ("who", "which member", "is someone struggling") or a medical one gets a fixed
+reply without a model call. A claim, note or proposal is refused if it singles anyone out ("two
+members", "some of the team", he or she) or records someone's health ("off sick"). Names alone are not
+caught by these checks, which is a known limit.
+
+**Actions wait for approval.** A proposal does nothing until the supervisor approves it
+(`POST /teams/{id}/actions/{id}/approve` or `decline`). An approved message reaches every active
+member's inbox, unsigned; an approved challenge tells every member what it is and for which days.
+Each decision is made once.
+
+**Memory** is the supervisor's notes (`GET`, `POST`, `DELETE /teams/{id}/notes`), shown to the agent as
+quoted data, and the last six messages of the conversation. **Alerts** are listed for the app at
+`GET /teams/{id}/alerts`. The team agent shares the chat's daily cap per supervisor.

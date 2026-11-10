@@ -416,6 +416,53 @@ export interface SharedLevels {
   levels: Record<string, { mean: number | null; level: TeamLevel | null }>;
 }
 
+/** The supervisor's conversation with the team agent: team figures only, never a person. */
+export interface TeamChatMessage {
+  role: 'supervisor' | 'agent';
+  text: string;
+  evidence: Evidence[];
+  createdAt: ISODateTime;
+}
+
+/** A team-wide action the agent proposed; nothing reaches members until it is approved. */
+export interface TeamAction {
+  id: string;
+  kind: 'challenge' | 'message';
+  title: string;
+  body: string;
+  metric: string | null;
+  startsOn: ISODate | null;
+  endsOn: ISODate | null;
+  status: 'proposed' | 'approved' | 'declined';
+  proposedAt: ISODateTime;
+  decidedAt: ISODateTime | null;
+}
+
+export interface TeamChatReply {
+  messages: TeamChatMessage[]; // the question and its answer
+  proposed: TeamAction[];
+}
+
+/** Something the supervisor told the agent about the team's work, such as a deadline. */
+export interface TeamNote {
+  id: string;
+  text: string;
+  startsOn: ISODate | null;
+  endsOn: ISODate | null;
+  createdAt: ISODateTime;
+}
+
+/** A change in a team aggregate, raised once; ended when it no longer holds. */
+export interface TeamAlert {
+  id: string;
+  metric: string;
+  label: string;
+  direction: 'up' | 'down';
+  text: string;
+  raisedAt: ISODateTime;
+  resolvedAt: ISODateTime | null;
+}
+
 export interface TeamReport extends TeamReportSummary {
   membersTotal: number;
   minimumMembers: number;
@@ -497,6 +544,23 @@ export interface ApiClient {
   getTeamReports(teamId: string): Promise<TeamReportSummary[]>; // newest first
   getTeamReport(teamId: string, week: ISODate): Promise<TeamReport>;
   makeTeamReport(teamId: string, week?: ISODate): Promise<TeamReport>; // the last full week
+  getTeamChat(teamId: string): Promise<TeamChatMessage[]>; // oldest first
+  askTeamAgent(teamId: string, text: string): Promise<TeamChatReply>;
+  getTeamNotes(teamId: string): Promise<TeamNote[]>;
+  addTeamNote(
+    teamId: string,
+    text: string,
+    startsOn?: ISODate | null,
+    endsOn?: ISODate | null,
+  ): Promise<TeamNote>;
+  deleteTeamNote(teamId: string, noteId: string): Promise<void>;
+  getTeamAlerts(teamId: string): Promise<TeamAlert[]>; // newest first
+  getTeamActions(teamId: string): Promise<TeamAction[]>; // newest first
+  decideTeamAction(
+    teamId: string,
+    actionId: string,
+    approve: boolean,
+  ): Promise<{ membersTold: number; action: TeamAction }>;
 }
 
 export type HealthLog =

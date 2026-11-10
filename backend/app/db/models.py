@@ -563,6 +563,71 @@ class TeamEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+TEAM_ACTION_KINDS = ("challenge", "message")
+TEAM_ACTION_STATUSES = ("proposed", "approved", "declined")
+
+
+class TeamNote(Base):
+    """Something the supervisor told the team agent about the team's work: a deadline, a release,
+    an offsite. It explains timing; it never holds anything about a member."""
+
+    __tablename__ = "team_notes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    )
+    text: Mapped[str] = mapped_column(String(300))
+    starts_on: Mapped[date | None] = mapped_column(Date, default=None)
+    ends_on: Mapped[date | None] = mapped_column(Date, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class TeamAction(Base):
+    """Something the team agent proposed for the whole team; nothing happens until approved."""
+
+    __tablename__ = "team_actions"
+    __table_args__ = (
+        CheckConstraint(
+            f"kind IN ({', '.join(repr(k) for k in TEAM_ACTION_KINDS)})",
+            name="ck_team_actions_kind",
+        ),
+        CheckConstraint(
+            f"status IN ({', '.join(repr(s) for s in TEAM_ACTION_STATUSES)})",
+            name="ck_team_actions_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16))
+    title: Mapped[str] = mapped_column(String(80))
+    body: Mapped[str] = mapped_column(String(400))
+    metric: Mapped[str | None] = mapped_column(String(32), default=None)
+    starts_on: Mapped[date | None] = mapped_column(Date, default=None)
+    ends_on: Mapped[date | None] = mapped_column(Date, default=None)
+    status: Mapped[str] = mapped_column(String(16), default="proposed")
+    proposed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class TeamChatMessage(Base):
+    """The supervisor's conversation with the team agent: team figures only."""
+
+    __tablename__ = "team_chat_messages"
+    __table_args__ = (Index("ix_team_chat_team_created", "team_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(16))  # supervisor or agent
+    text: Mapped[str] = mapped_column(String(2000))
+    evidence: Mapped[list | None] = mapped_column(JSON, default=None)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class TeamAlert(Base):
     """A change in a team's aggregate, raised once. Holds team figures only, never a member."""
 

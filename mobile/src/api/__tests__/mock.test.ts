@@ -1,4 +1,5 @@
-import { mockClient, routeQuestion } from '../mock';
+import { DEMO_SUPERVISOR, mockClient, routeQuestion } from '../mock';
+import { saveToken } from '../token';
 import type { SendOptions } from '../types';
 
 const AUTO: SendOptions = { expert: 'auto', depth: 'quick' };
@@ -414,3 +415,40 @@ describe('memory', () => {
   });
 });
 
+
+describe('the team agent in the mock', () => {
+  async function teamId(): Promise<string> {
+    const signed = await mockClient.logIn(DEMO_SUPERVISOR);
+    await saveToken(signed.token);
+    const teams = await mockClient.getTeams();
+    return (teams[0] ?? (await mockClient.createTeam('Design'))).id;
+  }
+
+  it('never answers about one person', async () => {
+    const id = await teamId();
+    const reply = await mockClient.askTeamAgent(id, 'Who is sleeping the worst?');
+    expect(reply.messages.map((m) => m.role)).toEqual(['supervisor', 'agent']);
+    expect(reply.messages[1].text).toMatch(/as a whole/);
+    expect(reply.proposed).toEqual([]);
+  });
+
+  it('proposes an action that waits for approval and is decided once', async () => {
+    const id = await teamId();
+    const { proposed } = await mockClient.askTeamAgent(id, 'What could we try?');
+    expect(proposed[0].status).toBe('proposed');
+    const done = await mockClient.decideTeamAction(id, proposed[0].id, true);
+    expect(done.action.status).toBe('approved');
+    await expect(mockClient.decideTeamAction(id, proposed[0].id, false)).rejects.toThrow(
+      /already decided/,
+    );
+  });
+
+  it('keeps notes about the team and refuses ones about a person', async () => {
+    const id = await teamId();
+    const note = await mockClient.addTeamNote(id, 'Release deadline', '2026-11-03');
+    expect((await mockClient.getTeamNotes(id)).map((n) => n.id)).toContain(note.id);
+    await expect(mockClient.addTeamNote(id, 'She is off sick')).rejects.toThrow(/Not saved/);
+    await mockClient.deleteTeamNote(id, note.id);
+    expect((await mockClient.getTeamNotes(id)).map((n) => n.id)).not.toContain(note.id);
+  });
+});
