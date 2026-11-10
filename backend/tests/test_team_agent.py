@@ -130,6 +130,7 @@ def test_a_lasting_drop_is_answered_from_team_evidence_and_stored(engine):
         ({"text": "Time asleep rose across the team.", "direction": "up"}, "does not point up"),
         ({"text": "Two members slept far less.", "direction": "down"}, "single out"),
         ({"text": "Time asleep fell, a sign of insomnia.", "direction": "down"}, "medical"),
+        ({"text": "Time asleep fell for everyone.", "direction": "down"}, "single out"),
     ],
 )
 def test_a_wrong_or_unsafe_claim_is_sent_back_then_dropped(engine, claim, why):
@@ -154,7 +155,9 @@ def test_a_wrong_or_unsafe_claim_is_sent_back_then_dropped(engine, claim, why):
     )
     repair = json.loads(llm.requests[2]["messages"][-1]["content"])
     assert any(why in r for r in repair["rejected"])
-    assert reply.stop != "answered" and reply.evidence == []
+    assert (
+        reply.stop != "answered" and reply.evidence == []
+    )  # the bad claim's evidence is not shown
 
 
 def test_too_few_people_means_no_figures_at_all(engine):
@@ -285,3 +288,25 @@ def test_only_the_teams_supervisor_reaches_its_agent(engine, client):
     assert note.status_code == 201
     unsafe = client.post(f"/teams/{team_id}/notes", headers=boss, json={"text": "He is unwell"})
     assert unsafe.status_code == 422
+
+
+def test_a_good_summary_is_kept_when_one_claim_still_fails(engine):
+    team_id = make_team(engine, effects=LATE)
+
+    def submit(messages):
+        sleep = sleep_evidence(messages)
+        good = {
+            "text": "Time asleep fell across the team.",
+            "kind": "change",
+            "metric": "sleep_minutes",
+            "direction": "down",
+            "evidence_ids": [sleep["evidence_id"]],
+        }
+        bad = {**good, "kind": "pattern", "text": "Mondays were shortest."}
+        return answer("Time asleep has been lower across the team lately.", [good, bad])
+
+    reply, _ = ask(
+        engine, team_id, "How is the team?", [ScriptedLLM.call("team_overview"), submit, submit]
+    )
+    assert reply.stop == "answered_in_part" and reply.text.startswith("Time asleep")
+    assert [e.tool for e in reply.evidence] == ["team_scan"]

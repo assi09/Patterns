@@ -51,7 +51,9 @@ ABOUT_A_PERSON = re.compile(
 # "Some of the team" picks out a group smaller than the team; "off sick" is someone's health.
 PART_OF_TEAM = re.compile(
     r"\b(?:some|several|a few|certain|part|half|most|many|none) of (?:the )?(?:team|you|us|them)\b|"
-    r"\bsome (?:people|folks|of you)\b",
+    r"\bsome (?:people|folks|of you)\b|"
+    # "for everyone" describes each person; the evidence is the team's median and counts.
+    r"\b(?:everyone|everybody|every (?:member|person|one of)|all (?:members|of them|of you))\b",
     re.IGNORECASE,
 )
 HEALTH_STATE = re.compile(
@@ -432,7 +434,7 @@ def check_claim(claim: TeamClaim, evidence: dict[str, Evidence]) -> list[str]:
     if claim.kind == "no_change" and (not moved or any(moved)):
         reasons.append("no_change must cite team evidence that shows no change")
     if claim.kind == "pattern" and not any(e.tool == "team_weekday" for e in about):
-        reasons.append("a weekday pattern must cite weekday evidence")
+        reasons.append("a weekday pattern must cite a team_weekday evidence id from team_week")
     if claim.kind == "note" and not any(e.tool == "team_note" for e in cited):
         reasons.append("a note claim must cite the note")
     if claim.kind == "action" and not any(e.tool == "team_action" for e in cited):
@@ -555,8 +557,15 @@ def _answer(
                     {"role": "tool", "tool_call_id": call.id, "content": json.dumps(content)}
                 )
             else:
+                # A second try still failing: keep what passed, as the personal agent does, rather
+                # than lose a good summary over one bad claim.
                 reply.trace.append({"rejected": problems})
                 finished = True
+                if answer is not None and not any(p.startswith("summary") for p in problems):
+                    kept = [c for c in answer.claims if not check_claim(c, box.evidence)]
+                    cited = {i for c in kept for i in c.evidence_ids}
+                    reply.text, reply.stop = answer.summary, "answered_in_part"
+                    reply.evidence = [e for i, e in box.evidence.items() if i in cited]
             reply.trace.append({"answer": "accepted" if not problems else "rejected"})
         if finished:
             break
