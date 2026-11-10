@@ -177,6 +177,13 @@ def guidance_for(
     return Guidance(evidence, text if lines else "", retrieved.trace(question), budget.cost_usd)
 
 
+def more_passages(question: str, llm: LLM | None, count: int) -> tuple[list[Evidence], float]:
+    """Further passages on the question, when an answer needs more points than it found."""
+    budget = Budget()
+    found = search(question, llm=llm, budget=budget, k=count)
+    return [passage_evidence(f.passage) for f in found.found], budget.cost_usd
+
+
 def knowledge_tool(cards: tuple[Card, ...] | None = None, llm: LLM | None = None) -> ExtraTool:
     def run(arguments: dict | None) -> tuple[str, dict]:
         arguments = arguments or {}

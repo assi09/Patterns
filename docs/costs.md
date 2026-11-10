@@ -106,3 +106,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-08/09 | Personalization and open fixes, made-up people: five people and five questions ($0.24), three questions again ($0.14), whole-agent pass ($0.61), two targeted passes ($0.19, $0.08), two traced questions (about $0.02) | about $1.28 |
 | 2026-11-09 | Everyday advice quality, made-up person: nine scenarios ($0.11), two again after the fixes ($0.03) | about $0.14 |
 | 2026-11-09 | Life rules, premise check and more nutrition: embeddings ($0.004), a look at simple questions ($0.03), the whole agent three times, 246 turns ($0.57, $0.48, $0.45), and the failed scenarios again ($0.05) | about $1.58 |
+| 2026-11-10 | Points, drafts and follow-ups: the banana request five times ($0.02), nine scenarios after the fixes ($0.06) | about $0.08 |

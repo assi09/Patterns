@@ -466,6 +466,7 @@ def _answer(
                 search_past=search_past,
                 outside=outside,
                 food_logs=food_logs,
+                made_a_draft=lambda: bool(prepared),
             )
         except Exception:
             logger.exception("Answering failed")

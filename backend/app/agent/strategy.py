@@ -125,7 +125,8 @@ STRATEGIES: dict[str, Strategy] = {
             "sleep_regularity",
         ),
         guide="How to work: test the relationship asked about directly (correlate, weekday_split, "
-        "tag_effect) and check coverage. 'Hard training' is the strain metric, whatever the tags "
+        "tag_effect) and check coverage, unless an earlier answer already holds it: then say it "
+        "again and cite its evidence. 'Hard training' is the strain metric, whatever the tags "
         "say. When it links two areas, use correlate with one as the "
         "driver and the other as the target; a night is dated by the morning it ends, so a day's "
         "effect on that night's sleep is max_lag 1. No hypotheses needed. Then call "

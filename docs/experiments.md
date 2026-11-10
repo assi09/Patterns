@@ -807,3 +807,15 @@ slept. After fixes the failing scenarios were run once more, costing $0.05.
 **Open:** "five points" often gives three. "Log a banana" sometimes makes no draft; the reply now says
 so instead of claiming one exists. A follow-up like "which one is higher?" can lose what "one" meant.
 There has been no full run since these last fixes, and the person is made up.
+
+## Points asked for, drafts promised, and what "one" means (2026-11-10)
+
+**Changed:** when an answer falls short of the points asked for, code adds what the retrieved sources
+say, marked general and linked. A log request must end in a draft or a question, checked inside the
+run. A short follow-up is rewritten into a full question by one small call before routing, and may
+not add numbers; the person's own words are what is stored.
+
+**Tested:** nine scenarios, once: five points given, "which one is higher?" answered with weekdays
+against weekends, 8 of 9 passed. The ninth asked which kind of banana instead of making a draft. The
+false "please confirm this draft" could not be reproduced in five tries, so its cause is inferred:
+in two of the five the first draft was refused for having no values before the model recovered.

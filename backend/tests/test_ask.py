@@ -187,7 +187,7 @@ def steady_sleep_claim(evidence) -> dict:
 def test_a_follow_up_is_routed_with_earlier_questions_and_sees_the_conversation(
     frame, sleep_evidence
 ):
-    llm = ScriptedLLM([empty_submission()])
+    llm = ScriptedLLM([ScriptedLLM.say("And last week?"), empty_submission()])
     router = FixedRouter(("sleep",), sleep=0.9, general=0.1)
     history = [earlier_sleep_turn(sleep_evidence)]
     reply = ask(
@@ -199,7 +199,7 @@ def test_a_follow_up_is_routed_with_earlier_questions_and_sees_the_conversation(
         stored_evidence={sleep_evidence.id: sleep_evidence},
     )
     assert router.earlier == [["How is my sleep?"]]
-    task = llm.requests[0]["messages"][1]["content"]
+    task = llm.requests[1]["messages"][1]["content"]
     assert "<context>" in task and "How is my sleep?" in task
     assert task.index("<context>") < task.index("The person asks: And last week?")
     step = reply.result.trace[0]
@@ -210,7 +210,8 @@ def test_a_follow_up_is_routed_with_earlier_questions_and_sees_the_conversation(
 def test_a_follow_up_may_cite_an_earlier_answers_evidence_without_recomputing(
     frame, sleep_evidence
 ):
-    llm = ScriptedLLM([submit_claims([steady_sleep_claim(sleep_evidence)])])
+    claims = submit_claims([steady_sleep_claim(sleep_evidence)])
+    llm = ScriptedLLM([ScriptedLLM.say("Is that still true?"), claims])
     reply = ask(
         llm,
         FixedRouter(("sleep",), sleep=1.0),
