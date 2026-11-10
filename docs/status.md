@@ -1,6 +1,42 @@
 # Project status
 
-The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-10-27.
+The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-11-11.
+
+## Where we are (2026-11-11)
+
+**Presentations are on 2026-12-05.** Our own finish target stays 2026-11-23, with the time after it
+as buffer. What is left, what still has to be tested and the order of work are in
+[plan.md](plan.md#where-we-are-and-what-is-left-2026-11-11).
+
+**Done since the plan of 2026-10-27** (PRs #100-#149):
+
+| Area | What was built | Where |
+|---|---|---|
+| Reminders and alarms | automatic sync every 3 hours, reminders set in the app or by asking the agent, delivery in the app and by email, smart alarms from the data with an expert's checked explanation | #100-#111 |
+| Smarter chat | a way of working per question type, seven new tools, coaching that stays non-medical, a premise check, goal progress, outside lookups (USDA, web) | #112-#129, #134-#139 |
+| Memory | a running summary per chat; long-term memory (episodes, facts, a profile, interests) from a listener after each answer, approved by one tap; memory screens | #115-#121 |
+| RAG | 1,083 public lifestyle passages, hybrid search (BM25 and embeddings), cited as evidence | #130-#133 |
+| Experts | after three comparisons, the **hybrid**: experts answer inside their own area, and "why" questions go to the general agent with the experts' notes | #144, #147, #149 |
+| Evaluation | real public data (PMData, LifeSnaps; 46 people), an independent oracle, a plain chatbot baseline, the PHIA benchmark, planted causes, decisions with rules set in advance | #141, #143, #147, #149, [evaluation.md](evaluation.md) |
+| Teams | a check across every area (`team_scan`), daily alerts when the team's aggregate changes, and the **team agent**: supervisor chat, team notes, proposals that wait for approval, all on the Team tab | #145, #146, #148, [teams.md](teams.md) |
+
+**Headline results** (details and limits in [evaluation.md](evaluation.md)):
+
+- Real data, full system: **82% correct** on 472 questions from 46 people; on the same 187
+  questions, **83% against 62%** for a plain chatbot given the data.
+- The hybrid against no experts, 95 real-people questions: data questions **92% against 89%**,
+  the whole agent 82 of 85 turns, 2% cheaper. It stays, narrowly.
+- **"Why" questions are the weak spot:** about 55-60% right, and a cause is named in about half the
+  cases where none was planted.
+- Team stress score: **no link** with self-reported stress (median rho -0.03), so it is shown as
+  "physical stress signs". Time asleep tracks reported sleep well (0.75).
+- Team alerts on made-up teams: a false alarm in 12% of 8-person teams a month; a 1.2 SD sleep drop
+  found in 20 of 24 such teams, typically by day 8; 5-person teams rarely get one.
+
+**On hold or not built:** personal experiments (on hold since 2026-11-08 at Karim's request); the
+weekly team report written by the team agent; phone push notifications; stored traces and a
+metrics page (AgentOps); the Failure Matrix and threat model; account deletion, email
+verification and password reset; the pilot.
 
 ## Objective
 
@@ -23,16 +59,15 @@ priority**; the UI and data plumbing exist to serve them.
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic, request intent and a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers; questions about one day use `compare_day` with its own `day` claim kind; a consulted expert's verified claims are carried into the answer when the summary uses them; claims from the person's other conversations are memory items (kind `chat`). Reachable through `POST /chat` |
 | API | `/health`, `/data/status`, `/days/{date|latest}` (with the recovery score and its parts), `/days/{date}/workouts` and `/days/{date}/hourly` (read live from Google, kept 5 minutes), `/checkins/{day}`, `/metrics/{metric}`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: conversations (`GET`/`POST /conversations`, `PATCH` (rename, pin) and `DELETE /conversations/{id}`; editing or retrying a question with `replaces`), `GET /chat?conversation=`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps of $0.10 per person and $0.50 in all from stored answer costs); **Google Health per person**: `POST /google/connect`, `GET /google/callback`, `POST /google/sync`, `POST /google/disconnect`, `GET /google/status` (tokens encrypted with `FA_TOKEN_KEY`, PKCE, first sync of the whole history newest first, later syncs reread the last 3 days) |
 | App | landing page; sign up / sign in (keychain, or localStorage on the web), waiting screen, Access requests for the owner; tabs **Today** (day switcher; Recovery, Sleep, Steps and, on wide screens, Resting heart rate in large figures against the usual range; morning check-in; sleep stages; steps by hour; the day's workouts with a page each; heart and body; what changed lately; a page per metric with 7/30/90 days and the usual band; two columns on wide screens), **Ask** (separate chats with a collapsible sidebar on the web, pin, rename, delete; copy, edit and retry on messages; attach a metric or finding; expert picker, quick/deep), **Reminders** (mock data) and **Settings** (account, appearance, Google Health, data coverage, logged entries); an evidence page per computation (question, answer, chart, figures, method); flat sections and rows in the "Track day" palette, light and dark; Expo SDK 58, Expo Go and web |
-| Engineering | protected `main`, PRs with both CI jobs required, 1194 backend and 146 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, about 1,080 backend test functions (more with parameters) and 143 mobile tests, 25 migrations |
 
-**Not built yet:** **personal experiments**, the headline agentic feature
-([product.md](product.md#personal-experiments-headline-agentic-feature-planned)); the evaluation
-on real data, tracing and metrics, the failure matrix and threat model; the daily run (and the
-agent's note on Today, skipped for now at the user's request);
-the journal with habit impact; fitness age; the weekly workout summary; nutrition columns.
-Deployment (Railway and Vercel, see
-[deployment.md](deployment.md)) and teams with weekly supervisor reports ([teams.md](teams.md))
-are built.
+The table above dates from 2026-10-27; what was added since is in [Where we are](#where-we-are-2026-11-11).
+
+**Not built yet:** personal experiments (on hold); stored traces and the metrics page; the
+Failure Matrix and threat model; the daily run with the agent's note on Today (skipped at the
+user's request); phone push; account deletion, email verification and reset; the journal with
+habit impact; fitness age; the weekly workout summary. Deployment (Railway and Vercel, see
+[deployment.md](deployment.md)) and teams ([teams.md](teams.md)) are built.
 
 ## Core logging: first local implementation
 
@@ -178,11 +213,14 @@ To let someone else sign in, add their Google account as a test user in the cons
 
 ## Next
 
-**The smarter chat is built** (2026-10-28 to 11-05, #112-#122): coaching that stays non-medical,
-seven new tools, a way of working per question type, a running summary per chat, long-term memory
-(episodes, a listener with one-tap cards, a profile, memory search, interests), knowledge cards,
-food and web lookups, and the app screens for all of it. Next: personal experiments, then traces,
-the evaluation on real data, the failure matrix, the bonus practices and the pilot.
+See [plan.md](plan.md#where-we-are-and-what-is-left-2026-11-11). In short: fix how "why" questions
+are investigated and retest them; evaluate the team agent; blind grading; the pilot; traces and a
+metrics page; the Failure Matrix, threat model and red team; then the report, poster and demo.
+
+Earlier: **the smarter chat was built** (2026-10-28 to 11-05, #112-#122): coaching that stays
+non-medical, seven new tools, a way of working per question type, a running summary per chat,
+long-term memory (episodes, a listener with one-tap cards, a profile, memory search, interests),
+knowledge cards, food and web lookups, and the app screens for all of it.
 
 **The plan for the last four weeks is [plan.md](plan.md)** (2026-10-27 to 11-23, then two weeks of
 buffer): join the parts into one agentic loop (daily run, proposals inbox, shared memory), personal
@@ -228,7 +266,9 @@ the Team tab and the Monday email.
 ## What has been tested
 
 Unit and scenario tests run in CI with the scripted model and fake HTTP transports, so they never
-spend money. Real runs, all on synthetic people, are logged with their findings in
+spend money. **The evaluation on real public data (2026-11-10) is in
+[evaluation.md](evaluation.md)**; its headline numbers are [above](#where-we-are-2026-11-11).
+The earlier real runs, on synthetic people, are logged with their findings in
 [experiments.md](experiments.md); in short:
 
 - **Experts:** three real runs; the third consulted another expert and passed every claim. Two
@@ -264,7 +304,8 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   the owner's 119 tracked workouts; real agent runs drafted `KICKBOXING` and `TENNIS` at the right
   local times. Fitbit labels our writes "Cronometer" (issue 22).
 
-Spent so far on real runs: about $0.67 in all, almost all OpenAI (Jev under $0.005) ([costs.md](costs.md)).
+Spent on real runs: about $0.67 up to 2026-10-25, and about $21 in all by 2026-11-10, almost all
+OpenAI ([costs.md](costs.md) has every run).
 
 ## Open issues
 
@@ -370,5 +411,22 @@ Spent so far on real runs: about $0.67 in all, almost all OpenAI (Jev under $0.0
     summaries fall back and one run end with no answer (`no_submission`, on a weekend bedtime
     question). `eval/real_check.py` repeats it, keeping answers in git-ignored `data/`. After a
     second reminder to submit, a rerun answered all six with no fallback, but that is one run, one
-    still ended on its budget, and a `why` question took 15 calls and $0.05.
+    still ended on its budget, and a `why` question took 15 calls and $0.05. Since measured at scale
+    ([evaluation.md](evaluation.md)): 82% on 46 real people.
+33. **"Why" answers stop early.** About 55-60% right; a cause is named in about half the cases with
+    none planted, and a cause in another area is found about half the time. Read from the wrong
+    answers: the agent does not test every candidate before and after the change, scores are still
+    explained by their own inputs in `compare_windows`, and some premises are missed. Planned fix:
+    code tests every likely cause ([plan.md](plan.md#where-we-are-and-what-is-left-2026-11-11)).
+34. **The team stress score does not track reported stress** (median rho -0.03 on PMData). Shown as
+    "physical stress signs"; the consent text still says "stress" and changing it means asking
+    members again. Undecided.
+35. **Team checks do not catch names.** A claim, note or proposal that singles out "two members" or
+    "he" is refused, but a first name alone passes.
+36. **Five-person teams rarely get an alert** (4 of 24 for a 1.2 SD sleep drop). A smaller team
+    needs a bigger change; the floor cannot go lower.
+37. **The team screens have only run on the mock.** The API is tested, and the Team tab was clicked
+    through on the mock with Playwright, but not yet against the real backend.
+38. **Blind grading is not done.** `eval/results/phia_blind_2026-11-10.csv` (51 answers) waits for
+    Karim and Jad, and about 30 of the grader's readings should be checked by hand.
 

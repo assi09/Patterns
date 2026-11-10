@@ -209,9 +209,16 @@ Small PRs, each green and verified:
 
 ## Next
 
-Invite by link, participation counts, trends over weeks, "Ask about the team" for supervisors
-(aggregates only, the same floor of 5), a team challenge, a verified sending domain, and a pilot
-with a real team of about 10: see [plan.md](plan.md#d-teams-improved).
+Built since: the check across every area, daily alerts, and the team agent with chat, notes and
+challenges or messages that wait for approval (sections below). Left, as of 2026-11-11:
+
+- **An evaluation of the team agent**: planted team changes, privacy attacks (singling out,
+  differencing, names, medical questions, instructions in notes), and alerts on PMData as one team.
+  The rules are in [plan.md](plan.md#what-still-has-to-be-tested).
+- **The team screens against the real backend** (so far only on the mock).
+- **The weekly report written by the agent with its tools**, with the template as fallback.
+- **The consent wording**: "stress" or "physical stress signs" (see below). Undecided.
+- Invite by link, participation counts in the app, a verified sending domain, and a pilot team.
 
 ## Open
 
@@ -274,7 +281,7 @@ So stress is never presented as how stressed a team feels: supervisors read "phy
 "no steps" standing in for Fitbit's still minutes; which end of the rating means stressed is inferred
 from its link with mood.
 
-## The team agent (built: backend)
+## The team agent (built: backend and Team tab)
 
 The supervisor talks to an agent about the team (`app/teams/agent.py`; `POST /teams/{id}/chat`). It
 has its own tools, all over the whole team and never a chosen subset, with the floor of 5 in code:
