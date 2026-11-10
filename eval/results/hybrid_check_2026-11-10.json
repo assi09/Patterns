@@ -1,0 +1,253 @@
+{
+ "spent_usd": {
+  "main": 1.781,
+  "before_fixes": 0.411
+ },
+ "asked": 95,
+ "planned": 103,
+ "failed_to_run": 0,
+ "data_questions": {
+  "hybrid": {
+   "n": 65,
+   "rate": 0.923,
+   "wilson_95": [
+    0.832,
+    0.967
+   ]
+  },
+  "no_experts": {
+   "n": 65,
+   "rate": 0.892,
+   "wilson_95": [
+    0.794,
+    0.947
+   ]
+  },
+  "hybrid_vs_no_experts": {
+   "only_first_right": 3,
+   "only_second_right": 1,
+   "p": 0.625
+  },
+  "by_kind": {
+   "change": {
+    "hybrid": {
+     "n": 17,
+     "rate": 0.941,
+     "wilson_95": [
+      0.73,
+      0.99
+     ]
+    },
+    "no_experts": {
+     "n": 17,
+     "rate": 1.0,
+     "wilson_95": [
+      0.816,
+      1.0
+     ]
+    }
+   },
+   "link": {
+    "hybrid": {
+     "n": 14,
+     "rate": 0.857,
+     "wilson_95": [
+      0.601,
+      0.96
+     ]
+    },
+    "no_experts": {
+     "n": 14,
+     "rate": 0.857,
+     "wilson_95": [
+      0.601,
+      0.96
+     ]
+    }
+   },
+   "planted": {
+    "hybrid": {
+     "n": 12,
+     "rate": 0.917,
+     "wilson_95": [
+      0.646,
+      0.985
+     ]
+    },
+    "no_experts": {
+     "n": 12,
+     "rate": 0.833,
+     "wilson_95": [
+      0.552,
+      0.953
+     ]
+    }
+   },
+   "planted_control": {
+    "hybrid": {
+     "n": 10,
+     "rate": 1.0,
+     "wilson_95": [
+      0.722,
+      1.0
+     ]
+    },
+    "no_experts": {
+     "n": 10,
+     "rate": 0.9,
+     "wilson_95": [
+      0.596,
+      0.982
+     ]
+    }
+   },
+   "weekend": {
+    "hybrid": {
+     "n": 12,
+     "rate": 0.917,
+     "wilson_95": [
+      0.646,
+      0.985
+     ]
+    },
+    "no_experts": {
+     "n": 12,
+     "rate": 0.833,
+     "wilson_95": [
+      0.552,
+      0.953
+     ]
+    }
+   }
+  }
+ },
+ "causes": {
+  "note": "Both systems send every why question to the general agent, so any gap here is run-to-run variation.",
+  "hybrid": {
+   "n": 30,
+   "rate": 0.567,
+   "wilson_95": [
+    0.392,
+    0.726
+   ]
+  },
+  "no_experts": {
+   "n": 30,
+   "rate": 0.633,
+   "wilson_95": [
+    0.455,
+    0.781
+   ]
+  },
+  "before_fixes_same_questions": {
+   "n": 30,
+   "rate": 0.533,
+   "wilson_95": [
+    0.361,
+    0.698
+   ]
+  },
+  "hybrid_vs_before": {
+   "only_first_right": 7,
+   "only_second_right": 6,
+   "p": 1.0
+  }
+ },
+ "causes_by_group": {
+  "other_area": {
+   "before": {
+    "n": 14,
+    "rate": 0.5,
+    "wilson_95": [
+     0.268,
+     0.732
+    ]
+   },
+   "hybrid": {
+    "n": 14,
+    "rate": 0.5,
+    "wilson_95": [
+     0.268,
+     0.732
+    ]
+   },
+   "no_experts": {
+    "n": 14,
+    "rate": 0.5,
+    "wilson_95": [
+     0.268,
+     0.732
+    ]
+   }
+  },
+  "same_area": {
+   "before": {
+    "n": 4,
+    "rate": 0.75,
+    "wilson_95": [
+     0.301,
+     0.954
+    ]
+   },
+   "hybrid": {
+    "n": 4,
+    "rate": 1.0,
+    "wilson_95": [
+     0.51,
+     1.0
+    ]
+   },
+   "no_experts": {
+    "n": 4,
+    "rate": 0.75,
+    "wilson_95": [
+     0.301,
+     0.954
+    ]
+   }
+  },
+  "none_to_find": {
+   "before": {
+    "n": 12,
+    "rate": 0.5,
+    "wilson_95": [
+     0.254,
+     0.746
+    ]
+   },
+   "hybrid": {
+    "n": 12,
+    "rate": 0.5,
+    "wilson_95": [
+     0.254,
+     0.746
+    ]
+   },
+   "no_experts": {
+    "n": 12,
+    "rate": 0.75,
+    "wilson_95": [
+     0.468,
+     0.911
+    ]
+   }
+  }
+ },
+ "named_a_cause_when_none": {
+  "before": 6,
+  "hybrid": 6,
+  "no_experts": 3,
+  "of": 12
+ },
+ "cost_per_answer": {
+  "hybrid": 0.0089,
+  "no_experts": 0.00909
+ },
+ "data_routes_hybrid": {
+  "activity": 23,
+  "recovery": 9,
+  "sleep": 22,
+  "general": 11
+ },
+ "whole_agent_hybrid": "82 of 85 (eval/results/agent_eval_2026-11-10_hybrid.json); earlier separated experts 82, no experts 81"
+}

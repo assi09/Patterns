@@ -1,6 +1,6 @@
 """How the agent works on each kind of question: tools, guide, up-front evidence, widening."""
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -329,3 +329,32 @@ def test_a_question_that_assumes_no_change_is_not_checked_for_one():
     assert check_premise(frame, "Which one is higher?", "sleep") is None
     assert check_premise(frame, "Does going to bed late go with worse sleep?", "sleep") is None
     assert check_premise(frame, "Has my sleep been getting worse lately?", "sleep") is not None
+
+
+def test_the_premise_check_starts_where_a_change_began():
+    # Time asleep fell 21 days before the end: with a fixed 14 days, a week of it sits in the
+    # baseline. Found over many seeds, not one lucky one.
+    from app.agent.strategy import check_premise
+    from app.synthetic import Step
+
+    end_offset = 90
+    held = 0
+    for seed in range(30):
+        start = date(2026, 6, 1)
+        frame = generate(
+            start, end_offset, (Step("sleep_minutes", start + timedelta(days=69), -45.0),), seed
+        ).frame
+        premise = check_premise(frame, "Why am I sleeping less lately?", "sleep")
+        held += bool(premise and premise.holds)
+    assert held >= 27
+
+
+def test_the_premise_check_does_not_find_a_change_that_is_not_there():
+    from app.agent.strategy import check_premise
+
+    wrong = 0
+    for seed in range(60):
+        frame = generate(date(2026, 6, 1), 90, seed=seed).frame
+        premise = check_premise(frame, "Why am I sleeping less lately?", "sleep")
+        wrong += bool(premise and premise.holds)
+    assert wrong / 60 < 0.12

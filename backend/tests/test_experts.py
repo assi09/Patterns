@@ -3,6 +3,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from app.agent import knowledge
 from app.agent.agent import SUBMIT
 from app.agent.experts import (
     BUDGETS,
@@ -15,9 +16,14 @@ from app.agent.experts import (
     lead_budget,
     owner,
     visible_metrics,
+    withheld_tools,
 )
 from app.agent.llm import Budget, Completion, ScriptedLLM, ToolCall, Usage
 from app.agent.present import METRICS
+from app.agent.retrieval import Retrieved
+from app.agent.strategy import CROSS_AREA, expand_tool
+from app.agent.tools import Toolbox
+from app.analysis.evidence import ToolError
 from app.synthetic import Coupling, Step, generate
 
 START = date(2026, 7, 1)
@@ -97,11 +103,31 @@ def test_every_metric_has_one_owner_except_wear_time():
         assert set(expert.reads) <= set(EXPERTS) and expert.name not in expert.reads
 
 
-def test_an_expert_sees_its_metrics_and_the_ones_it_reads():
+def test_an_expert_sees_only_its_own_metrics():
     sleep = visible_metrics(EXPERTS["sleep"])
-    assert "sleep_minutes" in sleep and "steps" in sleep  # it reads activity
-    assert "hrv_ms" not in sleep  # but not recovery
+    assert "sleep_minutes" in sleep
+    assert "steps" not in sleep and "hrv_ms" not in sleep
     assert owner("hrv_ms").name == "recovery" and owner("wear_minutes") is None
+    # Nutrition has no columns of its own, so it still reads the others.
+    assert "steps" in visible_metrics(EXPERTS["nutrition"])
+
+
+def test_another_area_comes_only_through_a_consult_the_router_allowed(frame):
+    def tools_offered(consult):
+        llm = ScriptedLLM([lambda m: submit([])])
+        ask_expert(llm, frame, "sleep", "Did it move?", consult=consult)
+        return llm.requests[0]["tools"]
+
+    alone, joined = tools_offered([]), tools_offered(["activity"])
+    assert "sleep_regularity" in alone and "training_load" not in alone
+    assert "training_load" in joined
+
+
+def test_widening_the_tools_does_not_bring_back_another_experts(frame):
+    toolbox = Toolbox(frame, ["sleep_minutes"], ("describe",))
+    toolbox.withhold(withheld_tools(EXPERTS["sleep"]))
+    expand_tool(toolbox, Budget(), []).run({"reason": "need more"})
+    assert "compare_windows" in toolbox.tools and "training_load" not in toolbox.tools
 
 
 def test_an_expert_answers_with_claims_about_its_own_metrics(frame):
@@ -135,7 +161,7 @@ def test_claims_about_another_experts_metric_are_sent_back_then_dropped(frame):
             about_steps,
         ]
     )
-    result = ask_expert(llm, frame, "sleep", "How are my steps?")
+    result = ask_expert(llm, frame, "sleep", "How are my steps?", consult=["activity"])
     assert result.claims == [] and len(result.rejected) == 1
     assert "activity expert's metric" in result.rejected[0].reasons[0]
     assert "activity expert's metric" in llm.requests[2]["messages"][-1]["content"]
@@ -343,3 +369,32 @@ def test_a_summary_about_a_metric_no_evidence_covers_is_sent_back(frame):
     repair = json.loads(llm.requests[2]["messages"][-1]["content"])
     assert "heart rate variability (HRV)" in repair["summary_problems"][0]
     assert result.summary == "Your time asleep went down."  # replaced by a verified claim
+
+
+def test_no_cross_area_test_measures_a_score_against_its_own_inputs():
+    # The recovery score is built partly from sleep, so sleep would always seem to explain it.
+    pairs = [pair for group in CROSS_AREA.values() for pair in group]
+    assert not any(target == "recovery_score" for _, target, _ in pairs)
+    assert ("active_zone_minutes", "resting_hr", 1) in pairs
+
+
+def test_guidance_is_searched_within_the_experts_topics(monkeypatch):
+    seen = []
+
+    def search(question, **kwargs):
+        seen.append(kwargs.get("area"))
+        return Retrieved(method="words")
+
+    monkeypatch.setattr(knowledge, "search", search)
+    knowledge.guidance_for("How can I sleep better?", [], None, "works nights", area="sleep")
+    assert seen == ["sleep", None]  # their situation may reach beyond the expert's topics
+
+
+def test_a_score_is_never_explained_by_its_own_inputs(frame):
+    from app.agent.tools import _not_built_from
+
+    with pytest.raises(ToolError, match="built partly from resting_hr"):
+        _not_built_from("resting_hr", "recovery_score")
+    with pytest.raises(ToolError):
+        _not_built_from("strain", "active_zone_minutes")
+    assert _not_built_from("sleep_minutes", "resting_hr") == ("sleep_minutes", "resting_hr")

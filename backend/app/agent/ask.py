@@ -43,6 +43,7 @@ from app.agent.experts import (
     available,
     lead_budget,
     owner,
+    specialist_notes,
     visible_metrics,
 )
 from app.agent.followup import standalone
@@ -379,6 +380,20 @@ def ask(
                 route = Route("general", None, (), True, route.classification)
         else:
             route = Route("expert", continuing_log, (), choice == "auto", route.classification)
+    # Experts answer inside their area, where they matched the general agent at less cost. A why
+    # question, or one the router says spans areas, goes to the general agent with every metric:
+    # measured, experts kept to their own metrics found a cause in another area 11% of the time
+    # against 56% (docs/evaluation.md). The expert it would have gone to is kept as the advisor.
+    advisor = None
+    if (
+        route.action == "expert"
+        and route.routed  # an expert the person picked answers, as asked
+        and not continuing
+        and route.classification.intent not in (Intent.LOG, Intent.MIXED, Intent.REMIND)
+        and (route.classification.question_type == "why" or route.consult)
+    ):
+        advisor = route.expert
+        route = Route("general", None, (), route.routed, route.classification)
     context = build(
         history,
         stored_evidence or {},
@@ -448,10 +463,13 @@ def ask(
         block = "\n\n".join(part for part in (block, about) if part)
     guidance: list[Card] = []
     retrieved: Guidance | None = None
+    # The public guidance on this expert's topics; `search` widens if nothing there fits, and an
+    # answer that crosses areas or has no expert searches everything.
+    topics = route.expert if route.action == "expert" and not route.consult else None
     # What the question takes for granted, checked before anyone sets out to explain it.
     false_premise = False
     if plan and route.classification.question_type in ASKS_WHY and urgent_free(question):
-        premise = check_premise(frame, question, route.expert)
+        premise = check_premise(frame, question, route.expert or advisor)
         if premise:
             evidence |= {record.id: record for record in premise.evidence}
             block = "\n\n".join(part for part in (block, premise.text) if part)
@@ -474,7 +492,11 @@ def ask(
                     owners[record.id] = driver_owner.name
             block = "\n\n".join(part for part in (block, text) if part)
             route = replace(route, consult=())
-            plan = replace(plan, guide=CROSS_AREA_GUIDE, tools=("coverage", "correlate"))
+            plan = replace(
+                plan,
+                guide=CROSS_AREA_GUIDE,
+                tools=("coverage", "correlate", "compare_windows", "change_point"),
+            )
     if plan:
         visible = sorted(_scope(route) or frame.columns)
         found: list[tuple[list[Evidence], str]] = []
@@ -507,13 +529,15 @@ def ask(
             if guidance_mode != "picked":
                 guidance = list(load_cards()) if guidance_mode == "all" else []
             if guidance_mode == "picked":
-                retrieved = guidance_for(question, picked, llm, " ".join(r.text for r in relevant))
+                retrieved = guidance_for(
+                    question, picked, llm, " ".join(r.text for r in relevant), area=topics
+                )
                 evidence |= {record.id: record for record in retrieved.evidence}
                 block = "\n\n".join(part for part in (block, retrieved.text) if part)
             else:
                 block = "\n\n".join(part for part in (block, guidance_block(guidance)) if part)
     if plan and plan.coaching:
-        tools.append(knowledge_tool(llm=llm))
+        tools.append(knowledge_tool(llm=llm, area=topics))
     if plan and plan.memory:  # what a search may find can be cited, like the rest of memory
         if archive:
             tools.append(memory_lookup_tool(archive))
@@ -602,7 +626,9 @@ def ask(
             asked,
             today=today,
             budget=scaled(plan, deep) if plan else replace(BUDGETS[depth]),
-            system_prompt=SYSTEM_PROMPT + action_prompt,
+            system_prompt=SYSTEM_PROMPT
+            + action_prompt
+            + (specialist_notes(frame) if route.classification.question_type == "why" else ""),
             context=block,
             evidence=evidence,
             guard=guard,

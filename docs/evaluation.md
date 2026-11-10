@@ -138,6 +138,62 @@ meant to be for, and are not clearly better at anything.
 No experts is not good at causes either: 53%, and it named a cause in 5 of 6 cases with none to find.
 Each question ran once, the causes were read from replies by a model, and 30 is few.
 
+## The hybrid: experts inside their area, the general agent for why
+
+**The design** (#149): an expert answers inside its own area (lookups, changes, patterns, logging);
+a why question, or one the router says spans areas, goes to the general agent with every metric and
+the experts' notes. An expert the person picked still answers. Three fixes came with it, for every
+route: a score is never offered as the reason for its own inputs in a correlation, the premise check
+starts where a change began, and a cause must have changed in the same period.
+
+**The questions** (`eval/hybrid_check.py`, seed 2027, none asked before, 36 real people):
+
+| Kind | How many | What it asks | The right answer, and who decides it |
+|---|---|---|---|
+| change | 18 | "Has my time asleep changed in the last 21 days compared with the 28 days before?" | `eval/oracle.py`: a Mann-Whitney test at 5%, up, down or none |
+| link | 16 | "Does my steps go with my time asleep the next day?" | the oracle: a Spearman test at 5%, positive, negative or none |
+| weekend | 12 | "Is my HRV different on weekends compared with weekdays?" | the oracle: weekends against weekdays at 5% |
+| planted | 14 | a change question after we moved the last 14 days by 1.2 of the person's spread | the direction we planted |
+| planted control | 10 | the same question on the untouched data, where the oracle finds nothing | "no change" |
+| why, cause in another area | 14 | "Why has my HRV dropped lately?" after we cut their time asleep, and HRV with it, over 21 days | the planted cause (time asleep, or training) |
+| why, cause in the same area | 4 | "Why am I sleeping less lately?" after we moved bedtime later | later bedtime |
+| why, no cause to find | 12 | "Why has my resting heart rate gone up lately?" after we moved only that | "nothing explains it" |
+
+A planted case is kept only if the oracle confirms the change, and for "no cause" only if sleep,
+activity and bedtime did not change. The reply's number, verdict or named cause is read by a small
+model that sees neither the system nor the answer key. Credit stopped the run at 95 of 103.
+
+**Results** (`eval/results/hybrid_check_2026-11-10.json`):
+
+| | Hybrid | No experts | Before the fixes |
+|---|---|---|---|
+| Data questions (65) | **92%** | 89% (only hybrid right 3, only no experts 1; p = 0.63) | |
+| Why, all (30) | 57% | 63% | 53% (same questions) |
+| Why, cause in another area (14) | 50% | 50% | 50% |
+| Why, no cause to find (12): named one anyway | 6 | 3 | 6 |
+| Whole agent (85 turns) | 82 | 81 (earlier run) | |
+| Cost per answer | $0.0089 | $0.0091 | |
+
+**Verdict by the rule: the hybrid stays, narrowly.** It is at least as accurate as no experts on data
+questions and the whole agent, and 2% cheaper; nothing it does is measurably better. Both send every
+why question down the same path, so their 57% and 63% differ only by chance: a useful measure of how
+much one run varies (two answers in 30).
+
+**The fixes did not fix why.** 53% before, 57% after, the same 50% with a cause in another area, and
+a cause named in half the cases where there was none. Reading the wrong answers:
+
+1. **The investigation stops early.** For a resting heart rate raised by training it checked sleep,
+   found it steady, and never looked at activity; for HRV lowered by short sleep it checked time in
+   bed and efficiency but not time asleep.
+2. **Scores still explain their inputs in comparisons.** "Your recovery score fell too" explains HRV
+   with a score built from HRV; the fix covered correlations only.
+3. **The premise check still misses some changes** ("held steady, 74.1 against 72.3").
+4. **Some "wrong" answers are arguable.** "No other clear cause stands out" alongside a breathing rate
+   that also moved is graded as naming a cause, and in real data it may really have moved.
+
+The next step for why is to have code test every candidate cause before and after the change, as
+the premise check does for the metric itself, rather than leave the choice to the model.
+
 ## Blind grading
 
 `eval/results/phia_blind_2026-11-10.csv` has 51 answers, three each to 17 open questions, shuffled and

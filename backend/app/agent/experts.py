@@ -78,6 +78,7 @@ class Expert:
     reads: tuple[str, ...]  # other experts whose metrics it may use to explain its own
     focus: str  # what to look at first, added to the prompt
     notes: str = ""  # guardrails specific to these metrics
+    own_tools: tuple[str, ...] = ()  # analysis tools only this expert gets
 
 
 EXPERTS: dict[str, Expert] = {
@@ -96,9 +97,10 @@ EXPERTS: dict[str, Expert] = {
                 "awake_in_bed_minutes",
                 "bedtime_hour",
             ),
-            reads=("activity",),
+            reads=(),
             focus="Check bedtime and time in bed before anything else: most changes in time "
             "asleep come from going to bed later or earlier.",
+            own_tools=("sleep_regularity",),
         ),
         Expert(
             "recovery",
@@ -113,9 +115,9 @@ EXPERTS: dict[str, Expert] = {
                 "still_minutes",
                 "still_hr_above_resting",
             ),
-            reads=("sleep", "activity"),
-            focus="Look at the nights and training before a change: shorter sleep and hard "
-            "training days often show up in HRV and resting heart rate a day or two later.",
+            reads=(),
+            focus="Shorter sleep and hard training days often show up in HRV and resting heart "
+            "rate a day or two later, so a change may need the sleep or activity expert.",
             notes="Readiness is Fitbit's own score, kept for comparison; describe it, do not "
             "build on it. The recovery and stress scores are the app's own estimates, built from "
             "other metrics: recovery from last night's HRV, resting heart rate and time asleep; "
@@ -141,9 +143,10 @@ EXPERTS: dict[str, Expert] = {
                 "hr_zone_vigorous_minutes",
                 "hr_zone_peak_minutes",
             ),
-            reads=("recovery", "sleep"),
+            reads=(),
             focus="Check wear time first: days the device was barely worn lower every activity "
             "total. Then look for weekday and weekend patterns.",
+            own_tools=("training_load",),
             notes="Calories burned is a low-confidence estimate: describe only relative changes "
             '("about 15% above your usual"), never claims built on its absolute value. Strain is '
             "the app's own 0 to 21 score of the day's load, from minutes in Fitbit's heart-rate "
@@ -189,14 +192,35 @@ def available(expert: Expert, frame: pd.DataFrame) -> bool:
     return any(m in frame.columns and frame[m].notna().any() for m in expert.owns)
 
 
+def withheld_tools(expert: Expert, consulted: Iterable[str] = ()) -> frozenset[str]:
+    """Tools owned by experts not involved in this answer."""
+    involved = {expert.name, *consulted}
+    return frozenset(
+        tool for e in EXPERTS.values() if e.name not in involved for tool in e.own_tools
+    )
+
+
 def visible_metrics(expert: Expert) -> list[str]:
-    """What the expert's tools may compute on: its own metrics and the ones it reads."""
+    """What the expert's tools may compute on: its own metrics. Another area comes through a
+    consult the router allowed; only nutrition, with no columns of its own, reads others."""
     read = [m for name in expert.reads for m in EXPERTS[name].owns]
     return [*expert.owns, *read]
 
 
 def _names(metrics) -> str:
     return ", ".join(label(m) for m in metrics) or "none"
+
+
+def specialist_notes(frame: pd.DataFrame) -> str:
+    """What each expert knows about its area, for the general agent answering a why question:
+    the knowledge, without the narrow view that kept causes in another area out of sight."""
+    lines = [
+        f"- {e.name} ({_names(m for m in e.owns if m in frame.columns)}): {e.focus}"
+        + (f" {e.notes}" if e.notes else "")
+        for e in EXPERTS.values()
+        if e.owns and available(e, frame)
+    ]
+    return "\n\nWhat the specialists know about their areas:\n" + "\n".join(lines) if lines else ""
 
 
 def system_prompt(expert: Expert, frame: pd.DataFrame, consultable: list[str]) -> str:
@@ -431,6 +455,7 @@ def ask_expert(
     # consult, and a claim about them still needs their owner's evidence.
     drivers = [m for other in allowed if other in EXPERTS for m in EXPERTS[other].owns]
     toolbox = Toolbox(frame, [*visible_metrics(expert), *drivers], tools)
+    toolbox.withhold(withheld_tools(expert, allowed))
     toolbox.evidence.update(evidence or {})
     steps: list[dict] = []
     borrowed: dict[str, str] = dict(owners or {})

@@ -20,7 +20,7 @@ from app.agent.llm import ToolCall
 from app.agent.present import display, label
 from app.analysis import coaching, habits
 from app.analysis import tools as analysis
-from app.analysis.day import compare_day
+from app.analysis.day import RECOVERY_INPUTS, STRESS_SIGNS, ZONE_WEIGHTS, compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
 from app.analysis.habits import CHECKIN_RATING, TAG_PREFIX
 from app.db.models import CHECKIN_TAGS
@@ -97,6 +97,26 @@ def _window(args: _Arguments, prefix: str = "") -> Window:
     return Window(start=getattr(args, f"{prefix}start"), end=getattr(args, f"{prefix}end"))
 
 
+# The app's scores are built from other metrics, so a score always "goes with" its own inputs: that
+# says nothing about a cause, and offered as one it explained resting heart rate by recovery.
+BUILT_FROM = {
+    "recovery_score": frozenset(RECOVERY_INPUTS),
+    "stress_score": frozenset({*STRESS_SIGNS, "still_hr_above_resting", "still_minutes"}),
+    "strain": frozenset({*ZONE_WEIGHTS, "active_zone_minutes"}),
+}
+
+
+def _not_built_from(driver: str, target: str) -> tuple[str, str]:
+    for score, inputs in BUILT_FROM.items():
+        other = target if driver == score else driver if target == score else None
+        if other in inputs:
+            raise ToolError(
+                f"{score} is built partly from {other}, so they always move together and a link "
+                "between them explains nothing. Test the score's inputs against other metrics."
+            )
+    return driver, target
+
+
 TOOLS: dict[str, AgentTool] = {
     tool.name: tool
     for tool in (
@@ -141,7 +161,9 @@ TOOLS: dict[str, AgentTool] = {
             "Whether the target moves with a driver on the same day or up to max_lag days later "
             "(Spearman, adjusted for the lags tried). Shows association, not cause.",
             CorrelateArguments,
-            lambda frame, a: analysis.correlate(frame, a.driver, a.target, _window(a), a.max_lag),
+            lambda frame, a: analysis.correlate(
+                frame, *_not_built_from(a.driver, a.target), _window(a), a.max_lag
+            ),
         ),
         AgentTool(
             "compare_day",
@@ -259,11 +281,17 @@ class Toolbox:
         context += [c for c in frame.columns if c.startswith(TAG_PREFIX) and c not in allowed]
         self.frame = frame[[*self.metrics, *context]]
         self.tools = {name: TOOLS[name] for name in (tools or TOOLS)}
+        self.withheld: frozenset[str] = frozenset()
         self.evidence: dict[str, Evidence] = {}
         self.produced: list[str] = []  # ids of the evidence this run's own tool calls made
         days = frame.index
         self.first_day = days.min().date() if len(days) else None
         self.last_day = days.max().date() if len(days) else None
+
+    def withhold(self, names: frozenset[str]) -> None:
+        """Removes tools, and keeps them out if the toolbox is widened later."""
+        self.withheld = names
+        self.tools = {name: tool for name, tool in self.tools.items() if name not in names}
 
     def schemas(self) -> list[dict]:
         """The tools in the format the model API expects, with the allowed metrics listed."""
