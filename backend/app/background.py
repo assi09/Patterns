@@ -23,6 +23,7 @@ from app.db.memory import maintain_all
 from app.db.models import GoogleConnection, SyncRun
 from app.db.session import session_scope
 from app.reminders.loop import _mailer, run_once
+from app.teams.alerts import run_due as run_team_alerts
 
 logger = logging.getLogger(__name__)
 
@@ -125,3 +126,10 @@ class Background:
             return
         if synced or counts:
             logger.info("Background syncs started: %d; alarms: %s", synced, dict(counts))
+        try:
+            team_counts = run_team_alerts(session_scope, now, _mailer(), settings.app_url)
+        except Exception:
+            logger.exception("The team alert pass failed")
+            return
+        if team_counts:
+            logger.info("Team alerts: %s", dict(team_counts))

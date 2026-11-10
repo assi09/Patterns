@@ -20,8 +20,8 @@ from pydantic import BaseModel, Field, ValidationError
 from app.agent.llm import LLM, Budget, LLMError
 from app.agent.verifier import DOWN_WORDS, UP_WORDS, text_problems
 from app.analysis.evidence import Evidence
-from app.analysis.report import change_text, info
-from app.analysis.team import TeamStatistics
+from app.analysis.report import change_text
+from app.analysis.team import TeamStatistics, team_info
 
 WRITE = "write_team_report"
 MAX_CALLS = 2  # the report, and one repair round
@@ -35,7 +35,8 @@ INDIVIDUAL = re.compile(
 )
 
 SYSTEM_PROMPT = """You write a short weekly report for a team's supervisor about the team's own \
-Fitbit data: sleep, activity and the app's recovery, strain and stress scores.
+Fitbit data: sleep, activity and the app's recovery, strain and physical stress signs scores. \
+That last score is physical signs only, never how anyone feels: call it physical stress signs.
 
 You get only team statistics: each member's week was compared with their own four weeks before, \
 and the team's changes were tested together. You never see or mention any individual.
@@ -109,7 +110,7 @@ def payload(statistics: TeamStatistics) -> list[dict]:
         item = {
             "evidence_id": evidence.id,
             "metric": metric,
-            "label": info(metric).label,
+            "label": team_info(metric).label,
             "kind": "team_change",
             "members": evidence.stats["members"],
         }
@@ -132,7 +133,7 @@ def payload(statistics: TeamStatistics) -> list[dict]:
                 {
                     "evidence_id": evidence.id,
                     "metric": metric,
-                    "label": info(metric).label,
+                    "label": team_info(metric).label,
                     "kind": "weekday_pattern",
                     "median_against_usual_by_weekday": {
                         day: change_text(metric, value)
@@ -190,7 +191,7 @@ def _keys(narrative: TeamNarrative, statistics: TeamStatistics) -> list[str]:
     """Labels written where keys belong ("Time asleep" for sleep_minutes) are read as their keys;
     anything else unknown is a problem."""
     keys = {m for e in [*statistics.changes, *statistics.weekdays] for m in e.metrics}
-    by_label = {info(m).label.lower(): m for m in keys}
+    by_label = {team_info(m).label.lower(): m for m in keys}
     problems = []
     for i, paragraph in enumerate(narrative.paragraphs, start=1):
         if paragraph.metric in keys:
@@ -215,7 +216,7 @@ def check(narrative: TeamNarrative, statistics: TeamStatistics) -> list[str]:
         ]
     covered = {i for p in narrative.paragraphs if p.kind == "change" for i in p.evidence_ids}
     if missed := [e for e in statistics.changed if e.id not in covered]:
-        names = ", ".join(info(e.metrics[0]).label for e in missed)
+        names = ", ".join(team_info(e.metrics[0]).label for e in missed)
         problems.append(f"leaves out changes the statistics found: {names}")
     every = list(evidence.values())
     headline = text_problems(narrative.headline, every)
