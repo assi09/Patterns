@@ -156,13 +156,18 @@ class Guidance:
 
 
 def guidance_for(
-    question: str, picked: Sequence[Card], llm: LLM | None, about_them: str = ""
+    question: str,
+    picked: Sequence[Card],
+    llm: LLM | None,
+    about_them: str = "",
+    area: str | None = None,
 ) -> Guidance:
     """What the question is about, what their situation adds to it ("eat better" for someone on
     night shifts), and what their data points to, retrieved by code, so it costs no model round
     and cannot be skipped."""
     budget = Budget()
-    retrieved = search(question, llm=llm, budget=budget)
+    retrieved = search(question, llm=llm, budget=budget, area=area)
+    # Someone's situation may reach beyond the expert's topics, so that search stays open.
     situated = search(f"{question} {about_them}", llm=llm, budget=budget) if about_them else None
     by_id = {passage.id: passage for passage in load_index().passages}
     found = [*(situated.found[:2] if situated else ()), *retrieved.found]
@@ -184,14 +189,16 @@ def more_passages(question: str, llm: LLM | None, count: int) -> tuple[list[Evid
     return [passage_evidence(f.passage) for f in found.found], budget.cost_usd
 
 
-def knowledge_tool(cards: tuple[Card, ...] | None = None, llm: LLM | None = None) -> ExtraTool:
+def knowledge_tool(
+    cards: tuple[Card, ...] | None = None, llm: LLM | None = None, area: str | None = None
+) -> ExtraTool:
     def run(arguments: dict | None) -> tuple[str, dict]:
         arguments = arguments or {}
         topic = clean(str(arguments.get("topic", "")), 200)
         named = arguments.get("metrics")
         metrics = tuple(str(m) for m in named) if isinstance(named, list) else ()
         if cards is None and llm is not None:
-            retrieved = search(topic, llm=llm)
+            retrieved = search(topic, llm=llm, area=area)
             records = [passage_evidence(f.passage) for f in retrieved.found]
             shown = [
                 {

@@ -259,11 +259,17 @@ class Toolbox:
         context += [c for c in frame.columns if c.startswith(TAG_PREFIX) and c not in allowed]
         self.frame = frame[[*self.metrics, *context]]
         self.tools = {name: TOOLS[name] for name in (tools or TOOLS)}
+        self.withheld: frozenset[str] = frozenset()
         self.evidence: dict[str, Evidence] = {}
         self.produced: list[str] = []  # ids of the evidence this run's own tool calls made
         days = frame.index
         self.first_day = days.min().date() if len(days) else None
         self.last_day = days.max().date() if len(days) else None
+
+    def withhold(self, names: frozenset[str]) -> None:
+        """Removes tools, and keeps them out if the toolbox is widened later."""
+        self.withheld = names
+        self.tools = {name: tool for name, tool in self.tools.items() if name not in names}
 
     def schemas(self) -> list[dict]:
         """The tools in the format the model API expects, with the allowed metrics listed."""

@@ -195,13 +195,15 @@ def expand_tool(toolbox: Toolbox, budget: Budget, trace: list[dict]) -> ExtraToo
         if any(step.get("expanded") for step in trace):
             return json.dumps({"error": "You already widened your tools in this answer."}), {}
         reason = str((arguments or {}).get("reason", ""))[:200]
-        toolbox.tools = dict(TOOLS)
+        toolbox.tools = {k: v for k, v in TOOLS.items() if k not in toolbox.withheld}
         budget.max_calls += 3
         budget.max_tool_calls += 5
         budget.max_cost_usd += 0.01
         step = {"expanded": True, "reason": reason}
         trace.append({"type": "expand", **step})
-        return json.dumps({"tools": sorted(TOOLS), "note": "All tools are available now."}), step
+        return json.dumps(
+            {"tools": sorted(toolbox.tools), "note": "More tools are available."}
+        ), step
 
     return ExtraTool(
         EXPAND,
@@ -379,19 +381,26 @@ CROSS_AREA = {
         ("active_zone_minutes", "sleep_efficiency", 1),
     ),
     frozenset(("recovery", "sleep")): (
-        ("sleep_minutes", "recovery_score", 0),
-        ("sleep_efficiency", "recovery_score", 0),
-        ("bedtime_hour", "recovery_score", 0),
+        # HRV and resting heart rate, not the recovery score: that is built partly from sleep, so
+        # sleep would always appear to explain it.
+        ("sleep_minutes", "hrv_ms", 0),
+        ("sleep_minutes", "resting_hr", 0),
+        ("sleep_efficiency", "hrv_ms", 0),
+        ("bedtime_hour", "hrv_ms", 0),
     ),
     frozenset(("recovery", "activity")): (
-        ("strain", "recovery_score", 1),
         ("strain", "hrv_ms", 1),
+        ("strain", "resting_hr", 1),
+        ("active_zone_minutes", "resting_hr", 1),
     ),
 }
 CROSS_DAYS = 90
 CROSS_AREA_GUIDE = (
-    "How to work: the question links two areas, and the tests below answer it. Submit from them "
-    "now, in one or two friendly sentences: an association claim where a test shows a link, a "
+    "How to work: the question links two areas, and the tests below show whether they go together "
+    "over the months. If it asks why something changed, also compare before and after with "
+    "compare_windows or change_point on the metric and on the possible cause: a link alone is no "
+    "reason, so name a cause only if it changed too, and otherwise say nothing explains it yet. "
+    "Answer in one or two friendly sentences: an association claim where a test shows a link, a "
     "no_change claim where it does not, each with metric set to the target of that test and "
     "citing that test. Write 'went with', never 'because'. Then call submit_findings."
 )
