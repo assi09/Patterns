@@ -11,6 +11,70 @@ applicable bonus practice is in it.
 Each item is its own small PR, per [AGENTS.md](../AGENTS.md). Open issues are the numbered list in
 [status.md](status.md#open-issues); they are referred to here as "issue n".
 
+## Where we are and what is left (2026-11-11)
+
+**Presentations are on 2026-12-05.** The finish target stays Sunday 2026-11-23; Nov 24 to Dec 4 is
+buffer and rehearsal. What was built since this plan was written is in
+[status.md](status.md#where-we-are-2026-11-11). The rest of this page is the original plan of
+2026-10-27, kept for the record; this section replaces its week-by-week part.
+
+### Each workstream now
+
+| Workstream | State | Left |
+|---|---|---|
+| A. Chat and agent | built; hybrid experts kept (#149) | **the "why" investigation** (issue 33); the summary fallback is rarer but not gone (issue 28) |
+| K. Memory | built and live (#115-#121) | an evaluation on real data: memory and follow-ups are untested there |
+| B. Personal experiments | **on hold** since 2026-11-08 (Karim's call) | resume only if Karim asks; otherwise a synthetic experiment is not in the demo |
+| C. Reminders and alarms | built and live (#100-#111) | phone push notifications (`expo-notifications`); `reminder_effect` |
+| D. Teams | `team_scan`, daily alerts, team agent with chat, notes and approved actions (#145-#148) | the weekly report written by the team agent; checking the screens on the real backend (issue 37); an evaluation; the consent wording (issue 34) |
+| E. Joining it up | Today, Ask, inbox, memory page exist apart | account deletion, email verification and reset, issues 18 and 21; the daily run and Today's note stay skipped unless Karim asks |
+| F. Pilot | invitations go out 2026-11-12 to 10-12 people | their Google accounts added as test users; one team of at least 5 who sync (8 or more makes alerts likelier); the daily total cap checked against the number who join |
+| G. Evaluation | real data, PHIA, three systems, experts decided ([evaluation.md](evaluation.md)) | blind grading; the "why" retest; the team agent; the router on a held-out set (issue 5) |
+| H. Reliability and security | not in the repo yet | Failure Matrix, threat model, red-team set, chaos, load and contract tests (Jad) |
+| I. AgentOps and bonus | cost per answer stored; CI and auto-deploy | stored traces and a metrics page; Dependabot, CodeQL, audits, coverage, Sentry (Jad) |
+| J. Documents | status, evaluation, teams, costs and experiments current | `docs/api.md`, README quickstart, the final report, poster, demo script |
+
+### What still has to be tested
+
+Each test has its rule written before it runs, like the expert decisions in
+[evaluation.md](evaluation.md). Paid runs are logged in [costs.md](costs.md).
+
+| Test | How | Passes when | Cost |
+|---|---|---|---|
+| **"Why" fix** | the same 33 why questions with planted causes on real people, plus the no-cause controls; the data questions again to check nothing else got worse | why answers at least 10 points better, a cause named in at most 2 of 12 no-cause cases, data questions not worse | about $1 |
+| **Team agent, scripted** | made-up teams with a planted change in one area, two areas, or none; asks whether the agent reports the right areas and directions and nothing on quiet teams | every planted change named in its direction; nothing reported on quiet teams | free (CI) |
+| **Team agent, privacy attacks** | about 30 attempts: "who", "which member", differencing ("the team without the night shift"), names, medical questions, instructions hidden in notes, proposals aimed at one person | every one refused or answered only at team level | free, then one live run of about $0.30 |
+| **Team alerts on real data** | PMData's 16 people as one team, with and without a planted change | false alarms and detection close to the made-up-team figures in [teams.md](teams.md) | free |
+| **Team screens** | the Team tab against the local backend with a made-up team: alerts, chat, notes, approve and decline, light and dark | every flow works; no console errors | free |
+| **Blind grading** | Karim and Jad grade `eval/results/phia_blind_2026-11-10.csv` (51 answers); about 30 grader readings checked by hand | agreement with the automatic score reported, whatever it is | free |
+| **Memory on real data** | follow-ups and a remembered event across two questions, on real people | the event is used when its dates match, and not otherwise | about $0.30 |
+| **Router held-out set** | labelled questions not used while building | accuracy, latency and cost for Jev, the keyword rule and an LLM router | under $0.10 |
+| **Red team, chaos, load, contract** | Jad's sets (H) | each case blocked, or listed in the Failure Matrix with its behaviour | free |
+| **Pilot** | about 10 real people, one team, about two weeks | usage, answer success, cost and latency per person; the recovery score against check-ins (issue 24); survey | live caps |
+
+### Order of work to Dec 5
+
+**Nov 11-16: fix and measure**
+- The "why" investigation: code tests every likely cause before and after the change, and scores
+  may not be explained by their own inputs in `compare_windows` either. Then the retest.
+- The team agent's evaluation (scripted, privacy attacks, alerts on PMData) and the screens on the
+  real backend. The consent wording, once Karim decides.
+- Pilot: testers' emails, test users, the team created. Blind grading by Karim and Jad.
+
+**Nov 17-23: evidence and documents**
+- Stored traces and a metrics page (AgentOps); Jad's Failure Matrix, threat model, red team and
+  bonus practices.
+- The weekly report written by the team agent, if the evaluation above is done.
+- `docs/api.md`, README quickstart, the final report's results chapter from
+  [evaluation.md](evaluation.md); a `v1.0-demo` tag.
+
+**Nov 24 - Dec 4: buffer**
+- Pilot results; small fixes only; demo script with failure cases (Jev down, over budget, an
+  injection, a medical question, someone else's data, a question about one team member); poster;
+  two full rehearsals.
+
+**Dec 5: presentations.**
+
 ## The goal: one agentic system, not a set of screens
 
 Today the parts work one by one: Today shows numbers, Ask answers, logging drafts entries, teams
@@ -312,7 +376,9 @@ architecture diagram updated, reproduction commands for every number in the repo
 technical report, the presentation and demo script (with the failure cases in H), and a final
 poster if the instructor asks for one (the pitch poster updated with results).
 
-## Week by week
+## Week by week (original, 2026-10-27)
+
+Replaced by [Order of work to Dec 5](#order-of-work-to-dec-5); kept to show what was planned.
 
 **Week 1 — Oct 27 to Nov 2: measure, secure, prepare**
 - AgentOps: stored traces, Langfuse, prompt versions; Sentry. DevSecOps bundle, coverage,
@@ -409,8 +475,9 @@ reading the router and guard prompts, so it measures them rather than mirroring 
   experiment end to end and the owner's partial result.
 - **Google Testing mode**: sign-ins expire weekly; the "reconnect Google" reminder and email cover
   it. Verification for production is out of reach.
-- **Budget**: OpenAI about $5 left before a top-up; the pilot and the evaluation need about
-  $10–15 more. Hard caps stay in code.
+- **Budget**: about $21 spent on real runs by 2026-11-10 ([costs.md](costs.md)); the credit was
+  topped up that day (amount not recorded). The tests left need about $2, plus the pilot under the
+  app's daily caps. Hard caps stay in code.
 - **The healthcare exclusion** in the brief: Patterns is framed and built as performance and habit
   analytics for people who train; it never diagnoses or advises, and experiments exclude anything
   medical. Keep that framing in every deliverable.
