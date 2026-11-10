@@ -843,7 +843,7 @@ happened the agent was right 96% of the time and the chatbot 25%; where it says 
 lookups: best day 100%, day value 96%, average 96%. Weak: "the most recent day" 34% (the latest row is
 often empty, and it says so instead of giving the last day with a value), links 74% (a question ending
 "on the same day" is routed as a one-day question), weekends 74%, planted changes 67% (the answer key
-itself finds 77%). Refusals 15 of 15, no data 18 of 20, no medical wording. 29 replies were the
+itself finds 77%). Refusals 15 of 15, no data 18 of 20, no medical wording. About 29 replies were the
 fallback "couldn't pin that down". $0.0055 and 3.1 calls per answer.
 
 **Grading had faults, found by reading the wrong answers.** The first score was 78% against 60%. An
@@ -852,7 +852,7 @@ change, a little lower" was read as a claimed drop. `eval/real_regrade.py` fixes
 systems alike; its first version also flipped clear "Yes" answers, so it now reads only the opening
 sentence, and all 13 answers it changes were checked by eye. Both scores are in `eval/results`.
 
-**Limits:** the 92 advice and "why" answers have no answer key. An automatic judge rated the chatbot
+**Limits:** the 51 advice and "why" answers have no answer key. An automatic judge rated the chatbot
 more useful (4.8 against 4.0), and it cannot see which is true, so people still have to read a blind
 sample. The agent corrects for several tests and the answer key does not, so some "misses" are that
 difference. Each question ran once, after two fixes the pilot suggested. PMData's training and
