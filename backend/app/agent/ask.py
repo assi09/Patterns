@@ -45,10 +45,12 @@ from app.agent.experts import (
     owner,
     visible_metrics,
 )
-from app.agent.guard import Guard, JevGuard
+from app.agent.followup import standalone
+from app.agent.guard import Guard, GuardError, JevGuard
 from app.agent.intent import Intent
 from app.agent.jev import JevClient, JevError
 from app.agent.knowledge import (
+    KNOWLEDGE,
     Card,
     Guidance,
     cards_for,
@@ -57,6 +59,7 @@ from app.agent.knowledge import (
     guidance_for,
     knowledge_tool,
     load_cards,
+    more_passages,
     source_note,
 )
 from app.agent.listener import is_explicit
@@ -68,13 +71,16 @@ from app.agent.personal import (
     PERSONAL_TOOLS,
     Fit,
     Relevant,
+    as_points,
     asked_count,
+    draft_check,
     fit_to_life,
     food_log_summary,
     memory_evidence,
     personal_check,
     rank_memory,
     relevant_block,
+    top_up,
     without_filler,
 )
 from app.agent.router import (
@@ -101,6 +107,7 @@ from app.agent.strategy import (
     snapshot,
     strategy_for,
 )
+from app.agent.verifier import Claim
 from app.agent.world import answer_world
 from app.analysis.evidence import Evidence
 from app.outside import Outside
@@ -164,6 +171,7 @@ COACHING_NO_ANSWER = (
     "I don't see anything specific in your data to build advice on yet. What gets in the way on a "
     "normal day? That would tell me where to look."
 )
+EXTRA_PASSAGES = 4
 HABIT_OPTIONS = "habit_options"
 WANTED_EXTRA_CALLS = 2  # more points take a longer submission, and sometimes a second try
 ADVICE_TOOLS = ("habit_options", "personal_options")
@@ -202,6 +210,41 @@ def _food_lines(record: Evidence) -> str:
         f"The food they logged (evidence_id {record.id}): {stats['meals_logged']} meals over "
         f"{stats['days_logged']} days; {notes}"
     )
+
+
+def _fill_points(llm: LLM, result: AgentResult, question: str, wanted: int, guard) -> None:
+    """When an answer falls short of the points asked for, the rest come straight from the sources
+    it retrieved, marked as general and linked."""
+    points = [c for c in result.claims if c.kind in ("suggestion", "guidance")]
+    if len(points) >= wanted:
+        result.summary = as_points(result.summary)
+        return
+    cited = {i for c in result.claims for i in c.evidence_ids}
+    records = [e for e in result.evidence.values() if e.tool == KNOWLEDGE and e.id not in cited]
+    extra, cost = more_passages(question, llm, wanted + EXTRA_PASSAGES)
+    result.budget.cost_usd += cost
+    known = {e.stats["passage_id"] for e in result.evidence.values() if e.tool == KNOWLEDGE}
+    records += [e for e in extra if e.stats["passage_id"] not in known]
+    base = "" if result.summary in (NO_ANSWER, "", COACHING_NO_ANSWER) else result.summary
+    added = top_up(base, wanted, len(points), records)
+    if added and guard:
+        try:
+            flags = guard.judge([a.tip for a in added]).flagged
+        except GuardError:
+            return
+        added = [a for a, bad in zip(added, flags, strict=True) if not bad]
+    lines = [as_points(base)] if base else []
+    lines += [f"- {a.tip}" for a in added]
+    if added:
+        closing = "The last points are general guidance from the sources."
+        result.summary = "\n".join(lines) + f"\n\n{closing}"
+    elif base:
+        result.summary = as_points(base)
+    for item in added:
+        result.evidence[item.record.id] = item.record
+        result.claims.append(
+            Claim(text=item.tip[:600], kind="guidance", evidence_ids=[item.record.id])
+        )
 
 
 def _scope(route: Route) -> set[str] | None:
@@ -288,6 +331,7 @@ def ask(
     search_past: Callable[[str], list[dict]] | None = None,
     outside: Outside | None = None,
     food_logs: Sequence[dict] = (),
+    made_a_draft: Callable[[], bool] | None = None,
     guidance_mode: str = "picked",  # "none" and "all" exist to compare them (eval/advice_compare)
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
@@ -296,6 +340,9 @@ def ask(
     answers cite and `memory` the person's stored memory, all loaded by the caller for this person
     only. Routing comes first, so memory is chosen for the metrics the question is about."""
     reply_text = question.rsplit("Their reply: ", 1)[-1]
+    rewrite_cost = 0.0
+    if urgent_free(question):  # what a follow-up refers to, before routing or an expert sees it
+        question, rewrite_cost = standalone(llm, question, history)
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)
@@ -491,6 +538,8 @@ def ask(
     )
     if false_premise:
         check = premise_answer_check
+    if made_a_draft and logging_tools and route.classification.intent == Intent.LOG:
+        check = draft_check(made_a_draft)
     if wanted:
         asked += (
             f"\n(They asked for {wanted} points: give {wanted} different ones. Everything needed "
@@ -597,6 +646,8 @@ def ask(
     stopped_early = result.stop_reason in ("urgent", "refused", "noted")
     if plan and plan.coaching:
         result.summary = without_filler(result.summary)
+        if wanted and not stopped_early:
+            _fill_points(llm, result, question, wanted, guard)
     if plan and plan.coaching and result.summary in (NO_ANSWER, ""):
         result.summary = COACHING_NO_ANSWER
     if (
@@ -627,6 +678,7 @@ def ask(
     # A lookup has already said where its answer comes from.
     if not stopped_early and not world and (note := source_note(result)):
         result.notes.append(note)
+    result.budget.cost_usd += rewrite_cost
     result.trace[:0] = [_context_step(context), _route_step(route)]
     if continuing:
         result.trace[1]["continuing_log_expert"] = continuing_log

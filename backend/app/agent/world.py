@@ -115,7 +115,8 @@ def food_tool(outside: Outside, estimates: list[str]) -> ExtraTool:
     return ExtraTool(
         FOOD_LOOKUP,
         "When the person logs a food without its values: typical USDA values for it. Give the "
-        "portion in grams if they said it, and copy the scaled values into the draft. The draft "
+        "portion in grams if they said it, and copy the scaled values into the draft; use the "
+        "closest match rather than asking which variety. The draft "
         "is labelled an estimate for them to check.",
         {
             "type": "object",

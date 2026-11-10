@@ -134,6 +134,13 @@ FILLER = re.compile(
     re.IGNORECASE,
 )
 ACTIONABLE = re.compile(r"\b(?:could|try|might|worth|aim)\b", re.IGNORECASE)
+TIP_LENGTH = (30, 200)
+MAX_SHARED = 0.6
+DOES_SOMETHING = re.compile(
+    r"^(?:try|avoid|keep|limit|make|choose|eat|drink|add|get|go|set|plan|start|use|walk|stretch|"
+    r"take|cut|swap|include|have|put|finish|do)\b|\b(?:try to|can help|helps?|it is best)\b",
+    re.IGNORECASE,
+)
 INLINE_BULLET = re.compile(r"(?<=[.!?])\s+-\s+")
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z-])")
 BED_BY_THE_CLOCK = re.compile(
@@ -295,6 +302,57 @@ def without_filler(summary: str) -> str:
         if kept or not line.strip():
             lines.append(" ".join(kept))
     return "\n".join(lines).strip() or summary
+
+
+def _tip(text: str, said: set[str]) -> str:
+    """A passage's most actionable sentence, if it adds something not already said."""
+    for sentence in SENTENCE_END.split(text):
+        if TIP_LENGTH[0] <= len(sentence) <= TIP_LENGTH[1] and DOES_SOMETHING.search(sentence):
+            words = set(tokens(sentence))
+            if words and len(words & said) / len(words) < MAX_SHARED:
+                return sentence.strip()
+    return ""
+
+
+@dataclass(frozen=True)
+class Added:
+    tip: str
+    record: Evidence
+
+
+def top_up(summary: str, wanted: int, have: int, records: Sequence[Evidence]) -> list[Added]:
+    """Points from passages already retrieved, when the answer fell short of what was asked: code
+    picks them, so they are exactly what the source says."""
+    said = set(tokens(summary))
+    added: list[Added] = []
+    for record in records:
+        if have + len(added) >= wanted:
+            break
+        if tip := _tip(str(record.stats.get("text", "")), said):
+            added.append(Added(tip, record))
+            said |= set(tokens(tip))
+    return added
+
+
+def as_points(summary: str) -> str:
+    """One point per line."""
+    if summary.lstrip().startswith("- "):
+        return summary
+    return "\n".join(f"- {s.strip()}" for s in SENTENCE_END.split(summary) if s.strip())
+
+
+def draft_check(made_a_draft):
+    """A request to log ends with a draft, or with a question about what is missing."""
+
+    def check(claims: list, summary: str = "") -> list[str]:
+        if made_a_draft() or "?" in summary:
+            return []
+        return [
+            "no draft was prepared: call the tool again with what it said was missing (look up "
+            "the food if it has no values), or ask for the missing detail"
+        ]
+
+    return check
 
 
 def personal_check(

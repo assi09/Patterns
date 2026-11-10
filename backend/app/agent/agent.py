@@ -115,6 +115,8 @@ Rules for claims:
   metric, and only its numbers. Advice for this person still needs their own evidence: a suggestion
   cites both when a passage says how to try it.
 - A goal they told you about is measured with goal_progress: the target comes from their words.
+- If an earlier answer in the conversation already holds what is asked, answer from it and cite its
+  evidence instead of running a new test.
 - Answer what was asked, in plain friendly sentences. Say nothing about data coverage or wear time
   unless data is actually missing. Never mention checks, tests, tools or how the answer was made.
 - Only claim a change or an association when the evidence is significant. When it is not, that is

@@ -794,6 +794,11 @@ def main():
                     "consulted": reply.get("consulted"),
                     "links": [link["url"] for link in reply.get("sources") or []],
                     "tools": [s["name"] for s in seen["trace"] if s.get("type") == "tool"],
+                    "actions": [
+                        {"type": s["type"], **{k: str(s[k])[:120] for k in ("error",) if k in s}}
+                        for s in seen["trace"]
+                        if str(s.get("type", "")).startswith(("propose_", "food_lookup"))
+                    ],
                     "calls": seen["calls"],
                     "tool_calls": seen["tools"],
                     "cost": round(seen["cost"] + jev, 5),
