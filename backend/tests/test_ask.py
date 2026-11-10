@@ -65,10 +65,19 @@ def test_a_clear_question_goes_to_its_expert_without_consults(frame):
     assert CONSULT not in llm.requests[0]["tools"]
 
 
-def test_a_cross_domain_question_lets_the_lead_consult_the_other_expert(frame):
+def test_a_question_across_areas_goes_to_the_general_agent_with_every_metric(frame):
     llm = ScriptedLLM([empty_submission()])
     router = FixedRouter(("recovery", "sleep"), recovery=0.75, sleep=0.25)
     reply = ask(llm, router, frame, "Did my late nights hurt my recovery?")
+    assert reply.route.action == "general" and reply.route.consult == ()
+    assert reply.result.expert == "general"
+    assert CONSULT not in llm.requests[0]["tools"]  # no narrow view to reach out of
+
+
+def test_a_cross_domain_question_lets_a_chosen_lead_consult_the_other_expert(frame):
+    llm = ScriptedLLM([empty_submission()])
+    router = FixedRouter(("recovery", "sleep"), recovery=0.75, sleep=0.25)
+    reply = ask(llm, router, frame, "Did my late nights hurt my recovery?", choice="recovery")
     assert reply.result.expert == "recovery" and reply.route.consult == ("sleep",)
     assert CONSULT in llm.requests[0]["tools"]
     step = route_step(reply)
@@ -414,7 +423,7 @@ EXERCISE_QUESTION = "Does exercising more change how I sleep?"
 def test_a_part_of_the_question_left_out_is_sent_back(frame):
     llm = ScriptedLLM([DESCRIBE_SLEEP, SLEEP_ONLY, CORRELATE_STEPS, WITH_STEPS])
     router = FixedRouter(("sleep", "activity"), sleep=0.8, activity=0.2)
-    reply = ask(llm, router, frame, EXERCISE_QUESTION)
+    reply = ask(llm, router, frame, EXERCISE_QUESTION, choice="sleep")
     repair = json.loads(llm.requests[2]["messages"][-1]["content"])
     assert repair["uncovered"] == ["activity"]
     assert "one of your own metrics" in repair["instruction"]  # a claim the ownership rule allows
@@ -425,7 +434,7 @@ def test_a_part_of_the_question_left_out_is_sent_back(frame):
 def test_a_part_still_left_out_is_said_in_a_fixed_note(frame):
     llm = ScriptedLLM([DESCRIBE_SLEEP, SLEEP_ONLY, SLEEP_ONLY])
     router = FixedRouter(("sleep", "activity"), sleep=0.8, activity=0.2)
-    reply = ask(llm, router, frame, EXERCISE_QUESTION)
+    reply = ask(llm, router, frame, EXERCISE_QUESTION, choice="sleep")
     assert reply.result.uncovered == ["activity"]
     assert reply.result.notes == []  # the note was wrong every time it was seen
 
@@ -433,7 +442,7 @@ def test_a_part_still_left_out_is_said_in_a_fixed_note(frame):
 def test_a_needed_expert_without_data_is_said_not_asked_for(frame):
     llm = ScriptedLLM([DESCRIBE_SLEEP, SLEEP_ONLY])
     router = FixedRouter(("sleep", "nutrition"), sleep=0.8, nutrition=0.2)
-    reply = ask(llm, router, frame, "Does eating late change how I sleep?")
+    reply = ask(llm, router, frame, "Does eating late change how I sleep?", choice="sleep")
     assert reply.result.uncovered == [] and len(reply.result.claims) == 1
     assert reply.result.notes == ["There is no nutrition data yet, so it is left out here."]
 
@@ -474,3 +483,21 @@ def test_memory_is_chosen_for_the_metrics_the_question_is_routed_to(frame):
     assert reply.context.memory_used == ["f-sleep"]  # sleep reads activity, not recovery
     task = llm.requests[0]["messages"][1]["content"]
     assert "Your time asleep went down." in task and "Your HRV went down." not in task
+
+
+def test_a_why_question_goes_to_the_general_agent_with_the_specialists_notes(frame):
+    llm = ScriptedLLM([empty_submission()])
+    router = FixedRouter((), recovery=0.9)
+    router.result = replace(router.result, question_types={"why": 1.0})
+    reply = ask(llm, router, frame, "Why has my HRV dropped lately?")
+    assert reply.route.action == "general"
+    prompt = llm.requests[0]["messages"][0]["content"]
+    assert "What the specialists know about their areas" in prompt and "recovery (" in prompt
+
+
+def test_a_question_inside_one_area_stays_with_its_expert(frame):
+    llm = ScriptedLLM([empty_submission()])
+    router = FixedRouter((), sleep=0.9)
+    router.result = replace(router.result, question_types={"lookup": 1.0})
+    reply = ask(llm, router, frame, "What was my average sleep last week?")
+    assert reply.route.action == "expert" and reply.result.expert == "sleep"

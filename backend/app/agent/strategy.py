@@ -30,7 +30,7 @@ from app.analysis.coaching import WEEKDAYS, habit_options, personal_options
 from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
 from app.analysis.habits import BETTER
-from app.analysis.tools import compare_windows, correlate
+from app.analysis.tools import change_point, compare_windows, correlate
 
 EXPAND = "expand_tools"
 YESTERDAY = re.compile(r"\byesterday\b", re.IGNORECASE)
@@ -456,6 +456,8 @@ PREMISE_METRICS = {
     None: ("sleep_minutes", "recovery_score", "steps"),
 }
 PREMISE_RECENT, PREMISE_BASELINE = 14, 28
+PREMISE_SEARCH = 70  # days searched for when a change began; the last 42 may hold its start
+MIN_PREMISE_DAYS = 7
 # "Why", or a change over time: "which one is higher?" and "does X go with worse Y?" assume nothing.
 ASSUMES_A_CHANGE = re.compile(
     r"^\s*(?:why|how come)\b|\b(?:lately|recently|these days|getting|gotten|has been|have been)\b",
@@ -495,6 +497,27 @@ def _assumed_direction(question: str, metric: str) -> str | None:
     return None
 
 
+def _premise_windows(frame: pd.DataFrame, metric: str, end: date) -> tuple[Window, Window]:
+    """The last 14 days against the 28 before, unless the metric clearly shifted on a day in the
+    last six weeks: then from that day on against the 28 days before it. With a fixed 14 days, a
+    change that began three weeks ago had a week of itself in the baseline and was missed."""
+    recent = Window(start=end - timedelta(days=PREMISE_RECENT - 1), end=end)
+    try:
+        found = change_point(
+            frame, metric, Window(start=end - timedelta(days=PREMISE_SEARCH - 1), end=end)
+        )
+    except ToolError:
+        found = None
+    if found is not None and found.sufficient and is_significant(found):
+        start = date.fromisoformat(found.stats["change_date"])
+        if (end - start).days + 1 >= MIN_PREMISE_DAYS and (end - start).days < PREMISE_SEARCH - 28:
+            recent = Window(start=start, end=end)
+    baseline = Window(
+        start=recent.start - timedelta(days=PREMISE_BASELINE), end=recent.start - timedelta(days=1)
+    )
+    return recent, baseline
+
+
 def check_premise(frame: pd.DataFrame, question: str, lead: str | None) -> Premise | None:
     """Whether what the question takes for granted is true: "why is my sleep worse?" may rest on
     nothing, and an answer that goes along with it invents a problem. Tested before the model."""
@@ -503,14 +526,11 @@ def check_premise(frame: pd.DataFrame, question: str, lead: str | None) -> Premi
     named = [m for m, pattern in MENTIONS.items() if pattern.search(question)]
     metrics = [m for m in named or PREMISE_METRICS.get(lead, ()) if m in frame.columns]
     end = frame.index.max().date()
-    recent = Window(start=end - timedelta(days=PREMISE_RECENT - 1), end=end)
-    baseline = Window(
-        start=recent.start - timedelta(days=PREMISE_BASELINE), end=recent.start - timedelta(days=1)
-    )
     tests = []
     for metric in metrics[:3]:
         if _assumed_direction(question, metric) is None:
             continue
+        recent, baseline = _premise_windows(frame, metric, end)
         try:
             record = compare_windows(frame, metric, recent, baseline)
         except ToolError:
@@ -532,7 +552,8 @@ def check_premise(frame: pd.DataFrame, question: str, lead: str | None) -> Premi
     for record in tests:
         shown = evidence_payload(record)["display"]
         lines.append(
-            f"- {label(record.metrics[0])} (evidence_id {record.id}): last 14 days "
+            f"- {label(record.metrics[0])} (evidence_id {record.id}): "
+            f"{record.windows[0].start:%b %-d} to {record.windows[0].end:%b %-d} "
             f"{shown.get('mean_recent', '')}, the 28 days before {shown.get('mean_baseline', '')}"
             f": {'a clear change' if moved(record) else 'no clear change that way'}"
         )

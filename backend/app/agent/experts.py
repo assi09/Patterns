@@ -211,6 +211,18 @@ def _names(metrics) -> str:
     return ", ".join(label(m) for m in metrics) or "none"
 
 
+def specialist_notes(frame: pd.DataFrame) -> str:
+    """What each expert knows about its area, for the general agent answering a why question:
+    the knowledge, without the narrow view that kept causes in another area out of sight."""
+    lines = [
+        f"- {e.name} ({_names(m for m in e.owns if m in frame.columns)}): {e.focus}"
+        + (f" {e.notes}" if e.notes else "")
+        for e in EXPERTS.values()
+        if e.owns and available(e, frame)
+    ]
+    return "\n\nWhat the specialists know about their areas:\n" + "\n".join(lines) if lines else ""
+
+
 def system_prompt(expert: Expert, frame: pd.DataFrame, consultable: list[str]) -> str:
     owned = [m for m in expert.owns if m in frame.columns]
     read = [m for m in visible_metrics(expert) if m in frame.columns and m not in expert.owns]

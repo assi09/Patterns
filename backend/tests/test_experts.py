@@ -23,6 +23,7 @@ from app.agent.present import METRICS
 from app.agent.retrieval import Retrieved
 from app.agent.strategy import CROSS_AREA, expand_tool
 from app.agent.tools import Toolbox
+from app.analysis.evidence import ToolError
 from app.synthetic import Coupling, Step, generate
 
 START = date(2026, 7, 1)
@@ -387,3 +388,13 @@ def test_guidance_is_searched_within_the_experts_topics(monkeypatch):
     monkeypatch.setattr(knowledge, "search", search)
     knowledge.guidance_for("How can I sleep better?", [], None, "works nights", area="sleep")
     assert seen == ["sleep", None]  # their situation may reach beyond the expert's topics
+
+
+def test_a_score_is_never_explained_by_its_own_inputs(frame):
+    from app.agent.tools import _not_built_from
+
+    with pytest.raises(ToolError, match="built partly from resting_hr"):
+        _not_built_from("resting_hr", "recovery_score")
+    with pytest.raises(ToolError):
+        _not_built_from("strain", "active_zone_minutes")
+    assert _not_built_from("sleep_minutes", "resting_hr") == ("sleep_minutes", "resting_hr")

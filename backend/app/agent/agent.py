@@ -70,7 +70,10 @@ DEFAULT_GUIDE = """How to work:
 2. Test each hypothesis with the analysis tools. Date a change with change_point, size it with
    compare_windows, check data quality with coverage, and look for metrics that move with it with
    correlate. Every tool returns evidence with an evidence_id.
-3. Call submit_findings once, with a short summary, your claims and each hypothesis's status."""
+3. Name something as behind the change only if it changed in the same period too (compare_windows
+   or change_point on it shows a clear change). A link over the months alone is no reason, and if
+   nothing changed with it, say no cause stands out in their data.
+4. Call submit_findings once, with a short summary, your claims and each hypothesis's status."""
 
 SYSTEM_PROMPT = """You analyze one person's own Fitbit data: what changed and why, what is usual
 for them, and which everyday habits their own data supports. Each task says how to work on it.
