@@ -82,8 +82,12 @@ These are causes read from traces, and none has been fixed or re-tested.
 
 - On real people, single data questions are right about 82% of the time, and more accurate than a
   plain chatbot given the same table. The agent rarely invents a change and misses some real ones.
-- A bare agent costs about twice as much per answer and refuses nothing, including questions an
-  app with no medical scope should not answer.
+- Routing is what keeps health questions out. The full system refused 12 of 60 open questions; the
+  bare agent refused none. It told someone citing kidney issues their data showed no clear reason
+  to avoid heavy lifting, and called another person's heart health stable. A word filter caught
+  neither, so "no medical wording" is a weak check. Some refusals look too strict (a question about
+  a meditation practice).
+- A bare agent costs about twice as much per answer.
 
 ## What cannot be claimed
 
