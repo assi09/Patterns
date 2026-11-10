@@ -108,3 +108,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-09 | Life rules, premise check and more nutrition: embeddings ($0.004), a look at simple questions ($0.03), the whole agent three times, 246 turns ($0.57, $0.48, $0.45), and the failed scenarios again ($0.05) | about $1.58 |
 | 2026-11-10 | Points, drafts and follow-ups: the banana request five times ($0.02), nine scenarios after the fixes ($0.06) | about $0.08 |
 | 2026-11-10 | Real-data evaluation, LifeSnaps and PMData: a 15-question pilot ($0.11), tracing its failures ($0.03), the full run, 472 questions from 46 people with a plain chatbot on 187 of them ($3.33) | about $3.47 |
+| 2026-11-10 | Three systems on PHIA's questions and planted causes: a six-question try ($0.10), full system and bare agent on 160 ($1.97), no experts on 136 and 20 planted-cause questions on all three ($1.27), a baseline trial stopped early ($0.01) | about $3.35 |

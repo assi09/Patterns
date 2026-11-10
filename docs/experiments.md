@@ -857,3 +857,17 @@ more useful (4.8 against 4.0), and it cannot see which is true, so people still 
 sample. The agent corrects for several tests and the answer key does not, so some "misses" are that
 difference. Each question ran once, after two fixes the pilot suggested. PMData's training and
 wellness logs and LifeSnaps' check-ins are not used yet.
+
+## Three systems, on questions we did not write (2026-11-10)
+
+**Tested:** the full system, the same app with no experts, and a bare agent, on PHIA's published
+questions and on "why" questions with a planted cause. Method and tables are in
+[evaluation.md](evaluation.md).
+
+**Showed:** the experts did not help. On PHIA's exact questions the full system got 60%, no experts 65%,
+the bare agent 70% (83 questions; only the last gap approaches significance). On "why" questions with
+a known cause: 25%, 70%, 90% of 20. The bare agent cost about twice as much per answer.
+
+**Changed:** nothing in the app yet. A circular test (sleep against a recovery score built from sleep)
+and a plan that drops the before-and-after comparison on "why" questions are the likely causes. The
+OpenAI credit is nearly gone, so a re-test needs more.

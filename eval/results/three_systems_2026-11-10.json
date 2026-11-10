@@ -1,0 +1,331 @@
+{
+ "spent_usd": 1.272,
+ "exact_questions_with_all_three": 83,
+ "open_questions_with_all_three": 53,
+ "exact_strict": {
+  "experts": {
+   "n": 83,
+   "rate": 0.53,
+   "wilson_95": [
+    0.424,
+    0.634
+   ]
+  },
+  "pipeline": {
+   "n": 83,
+   "rate": 0.578,
+   "wilson_95": [
+    0.471,
+    0.679
+   ]
+  },
+  "general": {
+   "n": 83,
+   "rate": 0.627,
+   "wilson_95": [
+    0.519,
+    0.723
+   ]
+  },
+  "experts_vs_pipeline": {
+   "only_first_right": 4,
+   "only_second_right": 8,
+   "p": 0.3877
+  },
+  "pipeline_vs_general": {
+   "only_first_right": 5,
+   "only_second_right": 9,
+   "p": 0.424
+  },
+  "experts_vs_general": {
+   "only_first_right": 2,
+   "only_second_right": 10,
+   "p": 0.0386
+  }
+ },
+ "exact_fair": {
+  "experts": {
+   "n": 83,
+   "rate": 0.602,
+   "wilson_95": [
+    0.495,
+    0.701
+   ]
+  },
+  "pipeline": {
+   "n": 83,
+   "rate": 0.651,
+   "wilson_95": [
+    0.543,
+    0.744
+   ]
+  },
+  "general": {
+   "n": 83,
+   "rate": 0.699,
+   "wilson_95": [
+    0.593,
+    0.787
+   ]
+  },
+  "experts_vs_pipeline": {
+   "only_first_right": 4,
+   "only_second_right": 8,
+   "p": 0.3877
+  },
+  "pipeline_vs_general": {
+   "only_first_right": 5,
+   "only_second_right": 9,
+   "p": 0.424
+  },
+  "experts_vs_general": {
+   "only_first_right": 2,
+   "only_second_right": 10,
+   "p": 0.0386
+  }
+ },
+ "why_all": {
+  "experts": {
+   "n": 20,
+   "rate": 0.25,
+   "wilson_95": [
+    0.112,
+    0.469
+   ]
+  },
+  "pipeline": {
+   "n": 20,
+   "rate": 0.7,
+   "wilson_95": [
+    0.481,
+    0.855
+   ]
+  },
+  "general": {
+   "n": 20,
+   "rate": 0.9,
+   "wilson_95": [
+    0.699,
+    0.972
+   ]
+  },
+  "experts_vs_pipeline": {
+   "only_first_right": 0,
+   "only_second_right": 9,
+   "p": 0.0039
+  },
+  "pipeline_vs_general": {
+   "only_first_right": 2,
+   "only_second_right": 6,
+   "p": 0.2891
+  },
+  "experts_vs_general": {
+   "only_first_right": 0,
+   "only_second_right": 13,
+   "p": 0.0002
+  }
+ },
+ "why_crossing_areas": {
+  "experts": {
+   "n": 10,
+   "rate": 0.2,
+   "wilson_95": [
+    0.057,
+    0.51
+   ]
+  },
+  "pipeline": {
+   "n": 10,
+   "rate": 0.6,
+   "wilson_95": [
+    0.313,
+    0.832
+   ]
+  },
+  "general": {
+   "n": 10,
+   "rate": 0.8,
+   "wilson_95": [
+    0.49,
+    0.943
+   ]
+  },
+  "experts_vs_pipeline": {
+   "only_first_right": 0,
+   "only_second_right": 4,
+   "p": 0.125
+  },
+  "pipeline_vs_general": {
+   "only_first_right": 2,
+   "only_second_right": 4,
+   "p": 0.6875
+  },
+  "experts_vs_general": {
+   "only_first_right": 0,
+   "only_second_right": 6,
+   "p": 0.0312
+  }
+ },
+ "why_within_one_area": {
+  "experts": {
+   "n": 5,
+   "rate": 0.6,
+   "wilson_95": [
+    0.231,
+    0.882
+   ]
+  },
+  "pipeline": {
+   "n": 5,
+   "rate": 0.8,
+   "wilson_95": [
+    0.376,
+    0.964
+   ]
+  },
+  "general": {
+   "n": 5,
+   "rate": 1.0,
+   "wilson_95": [
+    0.566,
+    1.0
+   ]
+  },
+  "experts_vs_pipeline": {
+   "only_first_right": 0,
+   "only_second_right": 1,
+   "p": 1.0
+  },
+  "pipeline_vs_general": {
+   "only_first_right": 0,
+   "only_second_right": 1,
+   "p": 1.0
+  },
+  "experts_vs_general": {
+   "only_first_right": 0,
+   "only_second_right": 2,
+   "p": 0.5
+  }
+ },
+ "why_no_cause_planted": {
+  "experts": {
+   "n": 5,
+   "rate": 0.0,
+   "wilson_95": [
+    0.0,
+    0.434
+   ]
+  },
+  "pipeline": {
+   "n": 5,
+   "rate": 0.8,
+   "wilson_95": [
+    0.376,
+    0.964
+   ]
+  },
+  "general": {
+   "n": 5,
+   "rate": 1.0,
+   "wilson_95": [
+    0.566,
+    1.0
+   ]
+  },
+  "experts_vs_pipeline": {
+   "only_first_right": 0,
+   "only_second_right": 4,
+   "p": 0.125
+  },
+  "pipeline_vs_general": {
+   "only_first_right": 0,
+   "only_second_right": 1,
+   "p": 1.0
+  },
+  "experts_vs_general": {
+   "only_first_right": 0,
+   "only_second_right": 5,
+   "p": 0.0625
+  }
+ },
+ "how_each_system_ran": {
+  "exact": {
+   "experts": {
+    "cost_per_answer": 0.00348,
+    "calls_per_answer": 2.77,
+    "fallback_replies": 2,
+    "ran_out_of_budget": 0,
+    "refused": 0,
+    "medical_words": 0
+   },
+   "pipeline": {
+    "cost_per_answer": 0.00312,
+    "calls_per_answer": 2.61,
+    "fallback_replies": 4,
+    "ran_out_of_budget": 0,
+    "refused": 0,
+    "medical_words": 0
+   },
+   "general": {
+    "cost_per_answer": 0.0064,
+    "calls_per_answer": 4.66,
+    "fallback_replies": 5,
+    "ran_out_of_budget": 11,
+    "refused": 0,
+    "medical_words": 0
+   }
+  },
+  "open": {
+   "experts": {
+    "cost_per_answer": 0.00552,
+    "calls_per_answer": 2.34,
+    "fallback_replies": 1,
+    "ran_out_of_budget": 1,
+    "refused": 11,
+    "medical_words": 0
+   },
+   "pipeline": {
+    "cost_per_answer": 0.00533,
+    "calls_per_answer": 2.53,
+    "fallback_replies": 4,
+    "ran_out_of_budget": 3,
+    "refused": 11,
+    "medical_words": 0
+   },
+   "general": {
+    "cost_per_answer": 0.00934,
+    "calls_per_answer": 4.75,
+    "fallback_replies": 6,
+    "ran_out_of_budget": 9,
+    "refused": 0,
+    "medical_words": 0
+   }
+  },
+  "why": {
+   "experts": {
+    "cost_per_answer": 0.00885,
+    "calls_per_answer": 3.05,
+    "fallback_replies": 0,
+    "ran_out_of_budget": 1,
+    "refused": 0,
+    "medical_words": 0
+   },
+   "pipeline": {
+    "cost_per_answer": 0.01184,
+    "calls_per_answer": 3.55,
+    "fallback_replies": 0,
+    "ran_out_of_budget": 0,
+    "refused": 0,
+    "medical_words": 0
+   },
+   "general": {
+    "cost_per_answer": 0.01222,
+    "calls_per_answer": 4.1,
+    "fallback_replies": 0,
+    "ran_out_of_budget": 0,
+    "refused": 0,
+    "medical_words": 0
+   }
+  }
+ }
+}
