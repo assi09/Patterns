@@ -103,7 +103,7 @@ export const LEVEL_METRICS: [string, string][] = [
   ['recovery_score', 'Recovery'],
   ['sleep_minutes', 'Sleep'],
   ['strain', 'Strain'],
-  ['stress_score', 'Stress'],
+  ['stress_score', 'Stress signs'], // a narrow column; physical signs, not how anyone feels
 ];
 
 /** How a shared level reads in the table: an arrow and a word, never color alone. */

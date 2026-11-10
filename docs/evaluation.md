@@ -106,6 +106,38 @@ These are causes read from traces, and none has been fixed or re-tested.
 - The real-data score was regraded after reading it; both scores are kept. The planted-cause questions
   are ours, as is the template for reading the cause.
 
+## The deciding test: separated experts against no experts
+
+After the runs above, the experts were truly separated (draft #144, commit f9f9ea8): each sees only its
+own metrics, reaches another area through a consult the router allows, keeps its own tools and
+searches public guidance on its own topics first. Two faults in their path were fixed. The rule was
+written down before this ran: experts stay only if they match no experts on data questions and on
+causes, cost at most 10% more, and are clearly better at something.
+
+**Real people** (`eval/decide_experts.py`; 100 fresh questions, 38 people from PMData and LifeSnaps;
+`eval/results/decide_experts_2026-11-10.json`):
+
+| Set | Experts | No experts | Only experts right / only no experts right |
+|---|---|---|---|
+| Data questions (70) | 84.3% | 84.3% | 3 / 3 |
+| Why, known cause planted in real data (30) | 27% | 53% | 3 / 11, p = 0.06 |
+| Why, cause in another area (18) | 11% | 56% | 0 / 8, p = 0.008 |
+| Why, cause in the same area (6) | 50% | 83% | 1 / 3 |
+| Why, no cause to find (6) | 50% | 17% | 2 / 0 |
+| Cost per answer | $0.0071 | $0.0081 | |
+
+**Whole agent** on a made-up person, through the real API (`eval/agent_eval.py`, 85 turns each: logging,
+memory, follow-ups, routing, advice, reminders, safety): 82 of 85 with experts, 81 of 85 without. The
+raw output says 42 for no experts, because 40 of its checks ask which expert answered, which a
+system without experts fails by definition; those are not counted. Logging: 13 of 13, and 12 of 13.
+
+**Verdict by the rule: the experts do not stay.** They tie on data questions and on the whole agent and
+cost 13% less, but lose clearly when a cause sits in another expert's area, which is what they were
+meant to be for, and are not clearly better at anything.
+
+No experts is not good at causes either: 53%, and it named a cause in 5 of 6 cases with none to find.
+Each question ran once, the causes were read from replies by a model, and 30 is few.
+
 ## Blind grading
 
 `eval/results/phia_blind_2026-11-10.csv` has 51 answers, three each to 17 open questions, shuffled and

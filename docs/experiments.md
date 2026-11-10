@@ -871,3 +871,12 @@ a known cause: 25%, 70%, 90% of 20. The bare agent cost about twice as much per 
 **Changed:** nothing in the app yet. A circular test (sleep against a recovery score built from sleep)
 and a plan that drops the before-and-after comparison on "why" questions are the likely causes. The
 OpenAI credit is nearly gone, so a re-test needs more.
+
+## Separated experts against no experts (2026-11-10)
+
+**Tested:** experts that see only their own metrics, against the same app with no experts, on 38 real
+people and through the whole agent. The rule for keeping them was fixed before the run. Tables are in
+[evaluation.md](evaluation.md).
+
+**Showed:** tied on data questions (84.3% each) and the whole agent (82 and 81 of 85), but 11% against
+56% when the cause is in another area. By the rule, the experts do not stay.

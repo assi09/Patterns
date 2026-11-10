@@ -218,3 +218,58 @@ with a real team of about 10: see [plan.md](plan.md#d-teams-improved).
 - A verified sending domain for Resend, so reports can reach any supervisor's address.
 - Whether 5 is the right floor for a demo team; it can only go up, never down.
 - Whether a supervisor can run more than one team (the model allows it; the first UI shows one).
+
+## The Monday check across every area (built, no agent on it yet)
+
+`team_scan` in `backend/app/analysis/team.py` looks at every team metric for the last four weeks, each
+against one fixed baseline, the 28 days before those weeks, so a lasting change is not absorbed by its
+own baseline. One correction covers every metric and week. A metric is **lasting** when it changed the
+same way two weeks or more in a row up to the latest, and **new** after one week. `areas` groups what
+moved into sleep, activity, recovery, load and stress, so several areas moving together for one team
+can be seen at once. Groups are fixed (everyone with data), never chosen, so nobody can be isolated by
+comparing two of them; a week with fewer than 5 contributors carries no figures.
+
+Tests over made-up teams with all six plain metrics: under 8% of 200 teams of 8 where nothing changed
+showed a lasting change, and at least 80% of 60 teams of 10 had a lasting 1.2 SD drop in sleep found.
+
+## Alerts when the team changes (built)
+
+`app/teams/alerts.py`, once a day after 06:00 UTC, from the background loop. Each team's last seven
+full days are compared with the 28 days before. A metric is raised when it moved the same way, after
+correction across metrics, in four daily checks in a row. Code writes the alert, with team figures
+from at least five people; no model is involved. The supervisor gets it in the inbox and by email.
+Each change is raised once, closes when it ends, and cannot return for 14 days, so there is no daily
+series from which one person's day could be worked out.
+
+Measured on made-up teams:
+
+| Setting chosen | Result |
+|---|---|
+| Nothing changed, teams of 8 | an alert in 7 of 60 teams over 30 days (12%) |
+| Sleep down 1.2 SD, 12 people | found in 24 of 24, typically on day 7 |
+| Sleep down 1.2 SD, 8 people | found in 20 of 24, typically on day 8 |
+| Sleep down 0.8 SD, 8 people | found in 10 of 24 |
+| Sleep down 1.2 SD, **5 people** | found in only 4 of 24 |
+
+A smaller team needs a bigger change, so five-person teams will rarely get an alert. Stricter settings
+cut false alarms but miss far more; looser ones raised false alarms in up to 26 of 60 teams.
+
+## What the scores can be claimed to mean
+
+Checked against PMData's morning self-reports, each person against themselves (`eval/stress_check.py`,
+`eval/results/stress_check_2026-11-10.json`; 13 to 16 people; rank correlations, medians across people):
+
+| Team metric | Compared with | Result |
+|---|---|---|
+| Time asleep | Reported hours slept | 0.75, positive in 15 of 15: strong |
+| Time asleep | Reported sleep quality | 0.26, positive in 14 of 15 |
+| Recovery score | Reported fatigue | 0.20, positive in 13 of 14 |
+| Recovery score | Reported readiness | 0.11, positive in 10 of 13: not clear |
+| Strain, day before | Reported fatigue | 0.04: no link |
+| **Stress score**, day before | **Reported stress** | **-0.03, positive in 4 of 13: no link** |
+| One team of 16, week by week | Stress score against reported stress | -0.06 over 20 weeks: no link |
+
+So stress is never presented as how stressed a team feels: supervisors read "physical stress signs".
+(The consent text still says "stress" and is versioned, so changing it means asking members again.) Limits: one dataset of recreational athletes; the score was rebuilt without HRV and with
+"no steps" standing in for Fitbit's still minutes; which end of the rating means stressed is inferred
+from its link with mood.

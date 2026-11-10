@@ -13,13 +13,14 @@ from sqlalchemy.orm import Session
 
 from app.agent.llm import LLM
 from app.analysis.evidence import Evidence, Window
-from app.analysis.report import change_text, info
+from app.analysis.report import change_text
 from app.analysis.team import (
     LEVEL_METRICS,
     MIN_MEMBERS,
     Level,
     TeamStatistics,
     member_levels,
+    team_info,
     team_statistics,
     week_of,
 )
@@ -38,7 +39,7 @@ def last_full_week(today: date) -> Window:
 
 def _section(evidence: Evidence, changed: bool) -> dict:
     metric = evidence.metrics[0]
-    label = info(metric).label
+    label = team_info(metric).label
     base = {"metric": metric, "label": label, "evidence_id": evidence.id}
     if not evidence.sufficient:
         members = evidence.stats["members"]
@@ -75,7 +76,7 @@ def _weekday(evidence: Evidence) -> dict | None:
         "metric": metric,
         "evidence_id": evidence.id,
         "text": (
-            f"{info(metric).label} by weekday: highest on {high.capitalize()}s "
+            f"{team_info(metric).label} by weekday: highest on {high.capitalize()}s "
             f"({change_text(metric, medians[high])} against each person's usual), lowest on "
             f"{low.capitalize()}s ({change_text(metric, medians[low])})."
         ),
@@ -88,7 +89,8 @@ def template(statistics: TeamStatistics) -> tuple[str, dict]:
     sections = [_section(e, e.id in changed_ids) for e in statistics.changes]
     weekdays = [w for e in statistics.weekdays if (w := _weekday(e))]
     changed = [
-        f"{info(e.metrics[0]).label.lower()} {_direction(e.metrics[0], e.stats['median_change'])}"
+        f"{team_info(e.metrics[0]).label.lower()} "
+        f"{_direction(e.metrics[0], e.stats['median_change'])}"
         for e in statistics.changed
     ]
     if changed:

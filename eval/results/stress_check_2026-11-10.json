@@ -1,0 +1,101 @@
+{
+ "people_loaded": 16,
+ "people_with_enough_stress_scores": 13,
+ "stress_score_days": 1181,
+ "scale": {
+  "stress_with_mood": {
+   "people": 14,
+   "median_rho": 0.329,
+   "positive": 14,
+   "sign_test_p": 0.0001
+  },
+  "stress_with_fatigue": {
+   "people": 14,
+   "median_rho": 0.245,
+   "positive": 13,
+   "sign_test_p": 0.0018
+  },
+  "read_as": "5 is relaxed"
+ },
+ "primary_previous_day_score_vs_morning_rating": {
+  "people": 13,
+  "median_rho": -0.027,
+  "positive": 4,
+  "sign_test_p": 0.2668
+ },
+ "same_day": {
+  "people": 13,
+  "median_rho": 0.029,
+  "positive": 8,
+  "sign_test_p": 0.5811
+ },
+ "simpler_signals_previous_day": {
+  "resting_hr": {
+   "people": 14,
+   "median_rho": -0.017,
+   "positive": 6,
+   "sign_test_p": 0.7905
+  },
+  "sleep_minutes_negated": {
+   "people": 15,
+   "median_rho": 0.029,
+   "positive": 11,
+   "sign_test_p": 0.1185
+  },
+  "still_hr_above_resting": {
+   "people": 14,
+   "median_rho": -0.093,
+   "positive": 5,
+   "sign_test_p": 0.424
+  },
+  "strain": {
+   "people": 16,
+   "median_rho": -0.121,
+   "positive": 3,
+   "sign_test_p": 0.0213
+  },
+  "recovery_score_negated": {
+   "people": 14,
+   "median_rho": 0.05,
+   "positive": 9,
+   "sign_test_p": 0.424
+  }
+ },
+ "other_areas_same_morning": {
+  "sleep_minutes_vs_reported_hours": {
+   "people": 15,
+   "median_rho": 0.746,
+   "positive": 15,
+   "sign_test_p": 0.0001
+  },
+  "sleep_minutes_vs_sleep_quality": {
+   "people": 15,
+   "median_rho": 0.257,
+   "positive": 14,
+   "sign_test_p": 0.001
+  },
+  "recovery_score_vs_readiness": {
+   "people": 13,
+   "median_rho": 0.113,
+   "positive": 10,
+   "sign_test_p": 0.0923
+  },
+  "recovery_score_vs_fatigue_5_is_good": {
+   "people": 14,
+   "median_rho": 0.201,
+   "positive": 13,
+   "sign_test_p": 0.0018
+  },
+  "strain_day_before_vs_fatigue_5_is_good": {
+   "people": 16,
+   "median_rho": 0.044,
+   "positive": 9,
+   "sign_test_p": 0.8036
+  }
+ },
+ "one_team_week_by_week": {
+  "weeks": 20,
+  "rho": -0.06,
+  "p": 0.8011
+ }
+}

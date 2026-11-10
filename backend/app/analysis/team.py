@@ -9,7 +9,7 @@ serves the named levels a member chose to share.
 Deterministic: no language model is involved, and every number in a report comes from here.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 import numpy as np
@@ -18,6 +18,7 @@ from scipy import stats
 
 from app.analysis.day import with_scores
 from app.analysis.evidence import Evidence, Window
+from app.analysis.report import MetricInfo, info
 from app.analysis.screen import FDR, benjamini_hochberg, without_low_wear
 
 MIN_MEMBERS = 5  # no team figure is built from fewer people
@@ -39,11 +40,32 @@ TEAM_METRICS = (
     "stress_score",
 )
 WEEKDAY_METRICS = ("sleep_minutes", "steps", "stress_score")
+AREAS = {
+    "sleep": ("sleep_minutes", "bedtime_hour"),
+    "activity": ("steps", "active_zone_minutes"),
+    "recovery": ("resting_hr", "hrv_ms", "recovery_score"),
+    "load": ("strain",),
+    "stress": ("stress_score",),
+}
+AREA_OF = {metric: area for area, metrics in AREAS.items() for metric in metrics}
+# What a supervisor reads. The score is physical signs and showed no link with how stressed people
+# said they were (docs/teams.md), so it is not called stress, and "strain" is another score.
+TEAM_LABELS = {"stress_score": "Physical stress signs"}
+SCAN_WEEKS = 4
+ALERT_DAYS_HELD = 4  # chosen on made-up teams to keep false alarms rare (docs/teams.md)
+ALERT_FDR = 0.05
+SUSTAINED_WEEKS = 2  # changed this many weeks in a row before it counts as lasting
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 # The four weekly levels a member may share with their supervisor, by name.
 LEVEL_METRICS = ("recovery_score", "sleep_minutes", "strain", "stress_score")
 LEVEL_WEEKS = 4  # the usual range is the middle half of the person's previous weekly means
+
+
+def team_info(metric: str) -> MetricInfo:
+    """How a metric is named to a supervisor."""
+    known = info(metric)
+    return replace(known, label=TEAM_LABELS[metric]) if metric in TEAM_LABELS else known
 
 
 def week_of(day: date) -> Window:
@@ -73,9 +95,14 @@ class MemberChange:
     standardized: float  # the same, in units of the person's own spread over the 28 days
 
 
-def member_change(frame: pd.DataFrame, metric: str, week: Window) -> MemberChange | None:
+def member_change(
+    frame: pd.DataFrame, metric: str, week: Window, baseline: Window | None = None
+) -> MemberChange | None:
     """One member's change on one metric, or None with too little data either side."""
-    recent, before = _values(frame, metric, week), _values(frame, metric, baseline_of(week))
+    recent, before = (
+        _values(frame, metric, week),
+        _values(frame, metric, baseline or baseline_of(week)),
+    )
     if len(recent) < MIN_WEEK_DAYS or len(before) < MIN_BASELINE_DAYS:
         return None
     change = float(recent.mean() - before.mean())
@@ -206,6 +233,201 @@ def team_statistics(frames: list[pd.DataFrame], week: Window) -> TeamStatistics:
     ]
     weekdays = [team_weekdays(prepared, metric, week) for metric in WEEKDAY_METRICS]
     return TeamStatistics(week, len(prepared), changes, weekdays)
+
+
+# Several weeks across every area, for the agent's Monday check
+
+
+@dataclass(frozen=True)
+class TeamScan:
+    weeks: tuple[Window, ...]  # oldest first
+    baseline: Window
+    members: int
+    metrics: list[Evidence]  # one per metric, "team_scan"; no figures below MIN_MEMBERS
+
+    @property
+    def lasting(self) -> list[Evidence]:
+        return [e for e in self.metrics if e.stats.get("status") == "lasting"]
+
+    @property
+    def areas(self) -> dict[str, list[str]]:
+        """The areas where something changed in the latest week, and which metrics."""
+        moving: dict[str, list[str]] = {}
+        for evidence in self.metrics:
+            if evidence.stats.get("status") in ("lasting", "new"):
+                moving.setdefault(evidence.stats["area"], []).append(evidence.metrics[0])
+        return moving
+
+
+def _week_ending(last: Window, back: int) -> Window:
+    return _shift(last, -back)
+
+
+def team_scan(frames: list[pd.DataFrame], last: Window, weeks: int = SCAN_WEEKS) -> TeamScan:
+    """Each metric, week by week, against one fixed baseline: the 28 days before the first week.
+
+    A rolling baseline would absorb a lasting change and hide it after a few weeks. The groups are
+    fixed (everyone with data), never chosen, so nobody can be isolated by comparing two of them.
+    One correction covers every metric and week tested. "Lasting" means changed, the same way, in
+    at least SUSTAINED_WEEKS weeks in a row up to the latest; one bad week is "new", not lasting.
+    """
+    span = tuple(_week_ending(last, back) for back in reversed(range(weeks)))
+    baseline = baseline_of(span[0])
+    prepared = [prepare(frame) for frame in frames]
+    if len(prepared) < MIN_MEMBERS:
+        return TeamScan(span, baseline, len(prepared), [])
+    tested: list[tuple[str, int, Evidence]] = []
+    for metric in TEAM_METRICS:
+        for at, week in enumerate(span):
+            found = [member_change(frame, metric, week, baseline) for frame in prepared]
+            evidence = team_change([c for c in found if c is not None], metric, week)
+            tested.append((metric, at, evidence))
+    usable = [t for t in tested if t[2].sufficient]
+    adjusted = dict(
+        zip(
+            ((m, at) for m, at, _ in usable),
+            benjamini_hochberg([e.stats["p_value"] for _, _, e in usable]),
+            strict=True,
+        )
+    )
+    scanned = []
+    for metric in TEAM_METRICS:
+        rows, signs = [], []
+        for at, week in enumerate(span):
+            evidence = next(e for m, a, e in tested if m == metric and a == at)
+            row: dict = {"start": week.start.isoformat(), "end": week.end.isoformat()}
+            if evidence.sufficient:
+                moved = adjusted[(metric, at)] < FDR
+                sign = (1 if evidence.stats["mean_standardized_change"] > 0 else -1) if moved else 0
+                row |= {
+                    "members": evidence.stats["members"],
+                    "median_change": evidence.stats["median_change"],
+                    "members_up": evidence.stats["members_up"],
+                    "members_down": evidence.stats["members_down"],
+                    "changed": moved,
+                    "direction": ("up" if sign > 0 else "down") if moved else None,
+                }
+            else:
+                sign = 0
+                row["enough_people"] = False
+            rows.append(row)
+            signs.append(sign)
+        running = 0
+        for sign in reversed(signs):
+            if sign == 0 or sign != signs[-1]:
+                break
+            running += 1
+        known = [row for row in rows if "members" in row]
+        status = (
+            "too_little_data"
+            if not known
+            else "lasting"
+            if running >= SUSTAINED_WEEKS
+            else "new"
+            if running == 1
+            else "steady"
+        )
+        scanned.append(
+            Evidence(
+                tool="team_scan",
+                metrics=(metric,),
+                windows=(Window(start=span[0].start, end=span[-1].end), baseline),
+                n=min((row["members"] for row in known), default=0),
+                sufficient=bool(known),
+                stats={
+                    "area": AREA_OF[metric],
+                    "status": status,
+                    "weeks_running": running,
+                    "direction": ("up" if signs[-1] > 0 else "down") if running else None,
+                    "metric_weeks_tested": len(usable),
+                    "weeks": rows,
+                },
+            )
+        )
+    return TeamScan(span, baseline, len(prepared), scanned)
+
+
+def team_participation(frames: list[pd.DataFrame], week: Window) -> Evidence | None:
+    """How many members have enough days this week, as a count. None below the floor of people."""
+    if len(frames) < MIN_MEMBERS:
+        return None
+    active = sum(
+        any(len(_values(frame, m, week)) >= MIN_WEEK_DAYS for m in ("sleep_minutes", "steps"))
+        for frame in frames
+    )
+    return Evidence(
+        tool="team_participation",
+        metrics=(),
+        windows=(week,),
+        n=len(frames),
+        sufficient=True,
+        stats={"members": len(frames), "with_enough_data": int(active)},
+    )
+
+
+# A change while the week is still going, for an alert that does not wait for Monday
+
+
+@dataclass(frozen=True)
+class TeamAlerts:
+    raised: list[Evidence]  # held for ALERT_DAYS_HELD daily checks in a row
+    still_moving: set[tuple[str, str]]  # (metric, direction) seen in any of those checks
+
+
+def _rolling(prepared: list[pd.DataFrame], end: date) -> dict[str, Evidence]:
+    """Each metric's team change over the 7 days ending `end`, flagged after correction."""
+    window = Window(start=end - timedelta(days=WEEK_DAYS - 1), end=end)
+    found = {}
+    for metric in TEAM_METRICS:
+        changes = [member_change(frame, metric, window) for frame in prepared]
+        found[metric] = team_change([c for c in changes if c is not None], metric, window)
+    tested = [metric for metric, evidence in found.items() if evidence.sufficient]
+    adjusted = benjamini_hochberg([found[m].stats["p_value"] for m in tested])
+    return {m: found[m] for m, p in zip(tested, adjusted, strict=True) if p < ALERT_FDR}
+
+
+def alerts_from_prepared(prepared: list[pd.DataFrame], end: date) -> TeamAlerts:
+    """Metrics that moved the same way in each of the last few daily checks.
+
+    Checking every day gives many more chances of a false alarm than a weekly report, so a change
+    has to hold for ALERT_DAYS_HELD checks in a row, at a stricter level. Only the group of everyone
+    with data is ever tested, and an alert is raised once, so no series of daily figures exists
+    from which one person's day could be worked out.
+    """
+    if len(prepared) < MIN_MEMBERS:
+        return TeamAlerts([], set())
+    days = [_rolling(prepared, end - timedelta(days=back)) for back in range(ALERT_DAYS_HELD)]
+
+    def way(evidence: Evidence) -> str:
+        return "up" if evidence.stats["mean_standardized_change"] > 0 else "down"
+
+    still = {(metric, way(e)) for day in days for metric, e in day.items()}
+    raised = []
+    for metric, evidence in days[0].items():
+        direction = way(evidence)
+        if all(metric in day and way(day[metric]) == direction for day in days):
+            stats = evidence.stats
+            raised.append(
+                evidence.model_copy(
+                    update={
+                        "tool": "team_alert",
+                        "stats": {
+                            "area": AREA_OF[metric],
+                            "direction": direction,
+                            "held_days": ALERT_DAYS_HELD,
+                            "members": stats["members"],
+                            "median_change": stats["median_change"],
+                            "members_up": stats["members_up"],
+                            "members_down": stats["members_down"],
+                        },
+                    }
+                )
+            )
+    return TeamAlerts(raised, still)
+
+
+def team_alerts(frames: list[pd.DataFrame], end: date) -> TeamAlerts:
+    return alerts_from_prepared([prepare(frame) for frame in frames], end)
 
 
 # Named levels, only for a member who chose to share them
