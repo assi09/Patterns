@@ -9,7 +9,7 @@ serves the named levels a member chose to share.
 Deterministic: no language model is involved, and every number in a report comes from here.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 import numpy as np
@@ -18,6 +18,7 @@ from scipy import stats
 
 from app.analysis.day import with_scores
 from app.analysis.evidence import Evidence, Window
+from app.analysis.report import MetricInfo, info
 from app.analysis.screen import FDR, benjamini_hochberg, without_low_wear
 
 MIN_MEMBERS = 5  # no team figure is built from fewer people
@@ -47,13 +48,24 @@ AREAS = {
     "stress": ("stress_score",),
 }
 AREA_OF = {metric: area for area, metrics in AREAS.items() for metric in metrics}
+# What a supervisor reads. The score is physical signs and showed no link with how stressed people
+# said they were (docs/teams.md), so it is not called stress, and "strain" is another score.
+TEAM_LABELS = {"stress_score": "Physical stress signs"}
 SCAN_WEEKS = 4
+ALERT_DAYS_HELD = 4  # chosen on made-up teams to keep false alarms rare (docs/teams.md)
+ALERT_FDR = 0.05
 SUSTAINED_WEEKS = 2  # changed this many weeks in a row before it counts as lasting
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 # The four weekly levels a member may share with their supervisor, by name.
 LEVEL_METRICS = ("recovery_score", "sleep_minutes", "strain", "stress_score")
 LEVEL_WEEKS = 4  # the usual range is the middle half of the person's previous weekly means
+
+
+def team_info(metric: str) -> MetricInfo:
+    """How a metric is named to a supervisor."""
+    known = info(metric)
+    return replace(known, label=TEAM_LABELS[metric]) if metric in TEAM_LABELS else known
 
 
 def week_of(day: date) -> Window:
@@ -351,6 +363,71 @@ def team_participation(frames: list[pd.DataFrame], week: Window) -> Evidence | N
         sufficient=True,
         stats={"members": len(frames), "with_enough_data": int(active)},
     )
+
+
+# A change while the week is still going, for an alert that does not wait for Monday
+
+
+@dataclass(frozen=True)
+class TeamAlerts:
+    raised: list[Evidence]  # held for ALERT_DAYS_HELD daily checks in a row
+    still_moving: set[tuple[str, str]]  # (metric, direction) seen in any of those checks
+
+
+def _rolling(prepared: list[pd.DataFrame], end: date) -> dict[str, Evidence]:
+    """Each metric's team change over the 7 days ending `end`, flagged after correction."""
+    window = Window(start=end - timedelta(days=WEEK_DAYS - 1), end=end)
+    found = {}
+    for metric in TEAM_METRICS:
+        changes = [member_change(frame, metric, window) for frame in prepared]
+        found[metric] = team_change([c for c in changes if c is not None], metric, window)
+    tested = [metric for metric, evidence in found.items() if evidence.sufficient]
+    adjusted = benjamini_hochberg([found[m].stats["p_value"] for m in tested])
+    return {m: found[m] for m, p in zip(tested, adjusted, strict=True) if p < ALERT_FDR}
+
+
+def alerts_from_prepared(prepared: list[pd.DataFrame], end: date) -> TeamAlerts:
+    """Metrics that moved the same way in each of the last few daily checks.
+
+    Checking every day gives many more chances of a false alarm than a weekly report, so a change
+    has to hold for ALERT_DAYS_HELD checks in a row, at a stricter level. Only the group of everyone
+    with data is ever tested, and an alert is raised once, so no series of daily figures exists
+    from which one person's day could be worked out.
+    """
+    if len(prepared) < MIN_MEMBERS:
+        return TeamAlerts([], set())
+    days = [_rolling(prepared, end - timedelta(days=back)) for back in range(ALERT_DAYS_HELD)]
+
+    def way(evidence: Evidence) -> str:
+        return "up" if evidence.stats["mean_standardized_change"] > 0 else "down"
+
+    still = {(metric, way(e)) for day in days for metric, e in day.items()}
+    raised = []
+    for metric, evidence in days[0].items():
+        direction = way(evidence)
+        if all(metric in day and way(day[metric]) == direction for day in days):
+            stats = evidence.stats
+            raised.append(
+                evidence.model_copy(
+                    update={
+                        "tool": "team_alert",
+                        "stats": {
+                            "area": AREA_OF[metric],
+                            "direction": direction,
+                            "held_days": ALERT_DAYS_HELD,
+                            "members": stats["members"],
+                            "median_change": stats["median_change"],
+                            "members_up": stats["members_up"],
+                            "members_down": stats["members_down"],
+                        },
+                    }
+                )
+            )
+    return TeamAlerts(raised, still)
+
+
+def team_alerts(frames: list[pd.DataFrame], end: date) -> TeamAlerts:
+    return alerts_from_prepared([prepare(frame) for frame in frames], end)
 
 
 # Named levels, only for a member who chose to share them

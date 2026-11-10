@@ -57,7 +57,7 @@ def other_changes(statistics) -> list[dict]:
         down = evidence.stats["median_change"] < 0
         paragraphs.append(
             {
-                "text": f"{narrative.info(metric).label} {'fell' if down else 'rose'} across "
+                "text": f"{narrative.team_info(metric).label} {'fell' if down else 'rose'} across "
                 "the team.",
                 "kind": "change",
                 "metric": metric,

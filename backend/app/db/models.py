@@ -563,6 +563,24 @@ class TeamEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class TeamAlert(Base):
+    """A change in a team's aggregate, raised once. Holds team figures only, never a member."""
+
+    __tablename__ = "team_alerts"
+    __table_args__ = (Index("ix_team_alerts_team_metric", "team_id", "metric"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    )
+    metric: Mapped[str] = mapped_column(String(32))
+    direction: Mapped[str] = mapped_column(String(8))
+    text: Mapped[str] = mapped_column(String(300))
+    evidence: Mapped[dict] = mapped_column(JSON)
+    raised_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
 class TeamReport(Base):
     """One team's week: aggregates and text only. Named levels are read fresh when the report is
     opened, never stored, so a member who stops sharing disappears from past weeks too."""
