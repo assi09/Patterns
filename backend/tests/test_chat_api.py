@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 import uuid
 from datetime import UTC, date, datetime, timedelta
@@ -495,8 +496,11 @@ def test_a_slow_answer_is_stored_when_it_is_ready(client, engine, agent, monkeyp
     monkeypatch.setattr(settings, "chat_wait_s", 0.05)
     headers = signed_in(client, engine)
 
+    # The answer finishes only when told to: a fixed pause raced the second request on slow CI.
+    release = threading.Event()
+
     def slow(messages):
-        time.sleep(0.3)
+        release.wait(10)
         return submission("Nothing stood out.")
 
     agent.llm.turns.append(slow)
@@ -506,6 +510,7 @@ def test_a_slow_answer_is_stored_when_it_is_ready(client, engine, agent, monkeyp
     busy = ask(client, headers)  # the first is still running
     assert busy.status_code == 409 and busy.json()["error"]["code"] == "busy"
 
+    release.set()
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline and len(client.get("/chat", headers=headers).json()) < 2:
         time.sleep(0.05)
