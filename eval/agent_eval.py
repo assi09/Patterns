@@ -662,7 +662,7 @@ def grade(turn, reply, seen, client, headers):
     return problems
 
 
-def setup(llm):
+def setup(llm, no_experts=False):
     url = f"sqlite:///{tempfile.mkdtemp()}/eval.db"
     config = Config("backend/alembic.ini")
     config.set_main_option("script_location", "backend/migrations")
@@ -679,7 +679,12 @@ def setup(llm):
     app.dependency_overrides[chat.get_sessions] = lambda: lambda: session_scope(engine)
     data = analyze(DailyData(frame=FRAME), datetime.now(UTC))
     app.dependency_overrides[get_data] = lambda: data
-    agent = AgentParts(llm, default_router(settings), default_guard(settings), background=True)
+    router = default_router(settings)
+    if no_experts:  # from eval/, so run with PYTHONPATH=backend:eval
+        from phia import NoExperts
+
+        router = NoExperts(router)
+    agent = AgentParts(llm, router, default_guard(settings), background=True)
     app.dependency_overrides[chat.get_agent] = lambda: agent
     chat._pool = Inline()
     client = TestClient(app)
@@ -714,6 +719,7 @@ def main():
     parser.add_argument("--names", default="")
     parser.add_argument("--stop", type=float, default=1.9)
     parser.add_argument("--tag", default="")
+    parser.add_argument("--no-experts", action="store_true", help="send everything to the general agent")
     args = parser.parse_args()
     only = set(filter(None, args.only.split(",")))
     names = set(filter(None, args.names.split(";")))
@@ -721,7 +727,7 @@ def main():
     llm = OpenAILLM.from_settings(settings)
     # The app's own daily caps would end the test after a dozen questions.
     settings.chat_daily_cap_per_user_usd = settings.chat_daily_cap_total_usd = 100.0
-    client, headers = setup(llm)
+    client, headers = setup(llm, args.no_experts)
     seen: dict = {}
     original = chat.ask
 
