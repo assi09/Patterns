@@ -341,3 +341,64 @@ class TeamReport(TeamReportSummary):
 
 class GenerateReport(ApiModel):
     week: date | None = None  # any day of the week; the last full week when left out
+
+
+# The supervisor's team agent
+
+
+class TeamChatIn(ApiModel):
+    text: str = Field(min_length=1, max_length=600)
+
+
+class TeamChatMessage(ApiModel):
+    role: Literal["supervisor", "agent"]
+    text: str
+    evidence: list[Evidence] = Field(default_factory=list)
+    created_at: datetime
+
+
+class TeamAction(ApiModel):
+    id: str
+    kind: Literal["challenge", "message"]
+    title: str
+    body: str
+    metric: str | None = None
+    starts_on: date | None = None
+    ends_on: date | None = None
+    status: Literal["proposed", "approved", "declined"]
+    proposed_at: datetime
+    decided_at: datetime | None = None
+
+
+class TeamChatReply(ApiModel):
+    messages: list[TeamChatMessage]
+    proposed: list[TeamAction] = Field(default_factory=list)
+
+
+class TeamNoteIn(ApiModel):
+    text: str = Field(min_length=1, max_length=300)
+    starts_on: date | None = None
+    ends_on: date | None = None
+
+
+class TeamNote(ApiModel):
+    id: str
+    text: str
+    starts_on: date | None = None
+    ends_on: date | None = None
+    created_at: datetime
+
+
+class TeamAlert(ApiModel):
+    id: str
+    metric: str
+    label: str
+    direction: Literal["up", "down"]
+    text: str
+    raised_at: datetime
+    resolved_at: datetime | None = None
+
+
+class TeamActionDecision(ApiModel):
+    members_told: int
+    action: TeamAction

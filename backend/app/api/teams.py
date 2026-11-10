@@ -12,13 +12,21 @@ from sqlalchemy import select
 
 from app.agent.llm import LLM, OpenAILLM
 from app.analysis.evidence import Evidence, Window
-from app.analysis.team import MIN_MEMBERS, week_of
+from app.analysis.team import MIN_MEMBERS, team_info, week_of
 from app.api import schemas
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
 from app.auth.accounts import LoginThrottle
 from app.config import settings
 from app.db.models import Team, TeamEvent, TeamMembership, TeamReport, User
+from app.db.models import TeamAction as TeamActionRow
+from app.db.models import TeamAlert as TeamAlertRow
+from app.db.models import TeamChatMessage as TeamChatMessageRow
+from app.db.models import TeamNote as TeamNoteRow
+from app.reminders import store
+from app.reminders.schedule import zone
+from app.teams import actions as team_actions
+from app.teams import agent as team_agent
 from app.teams import memberships as teams
 from app.teams import reports
 
@@ -193,6 +201,166 @@ def make_report(
 def report_writer() -> LLM | None:
     """The model that writes reports' prose, when switched on; tests replace it."""
     return OpenAILLM.from_settings(settings) if settings.team_report_narrative else None
+
+
+# The supervisor's team agent: chat, notes, alerts and proposed actions
+
+
+def team_agent_llm() -> LLM:
+    """The model the team agent uses; tests replace it."""
+    return OpenAILLM.from_settings(settings)
+
+
+TeamLLM = Annotated[LLM, Depends(team_agent_llm)]
+
+
+def _local_today(user: User, clock) -> date:
+    return clock.astimezone(zone(store.timezone_of(user))).date()
+
+
+def _chat_message(row: TeamChatMessageRow) -> schemas.TeamChatMessage:
+    return schemas.TeamChatMessage(
+        role=row.role,
+        text=row.text,
+        evidence=[_evidence(e) for e in row.evidence or []],
+        created_at=row.created_at,
+    )
+
+
+def _action(row: TeamActionRow) -> schemas.TeamAction:
+    return schemas.TeamAction(
+        id=str(row.id),
+        kind=row.kind,
+        title=row.title,
+        body=row.body,
+        metric=row.metric,
+        starts_on=row.starts_on,
+        ends_on=row.ends_on,
+        status=row.status,
+        proposed_at=row.proposed_at,
+        decided_at=row.decided_at,
+    )
+
+
+def _note(row: TeamNoteRow) -> schemas.TeamNote:
+    return schemas.TeamNote(
+        id=str(row.id),
+        text=row.text,
+        starts_on=row.starts_on,
+        ends_on=row.ends_on,
+        created_at=row.created_at,
+    )
+
+
+@router.get("/teams/{team_id}/chat", response_model=list[schemas.TeamChatMessage])
+def team_chat(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamChatMessage]:
+    team = teams.supervised_team(db, user, team_id)
+    return [_chat_message(m) for m in team_agent.history_of(db, team, limit=100)]
+
+
+@router.post("/teams/{team_id}/chat", response_model=schemas.TeamChatReply)
+def ask_team_agent(
+    team_id: str, body: schemas.TeamChatIn, db: Db, clock: Now, user: Supervisor, llm: TeamLLM
+) -> schemas.TeamChatReply:
+    team = teams.supervised_team(db, user, team_id)
+    day_start = clock - timedelta(hours=24)
+    spent = sum(
+        db.scalars(
+            select(TeamChatMessageRow.cost_usd).where(
+                TeamChatMessageRow.team_id == team.id, TeamChatMessageRow.created_at >= day_start
+            )
+        ).all()
+    )
+    if spent >= settings.chat_daily_cap_per_user_usd:
+        raise ApiError(429, "daily_limit", "The team agent has reached today's limit.")
+    reply = team_agent.answer_supervisor(llm, db, team, body.text, _local_today(user, clock), clock)
+    return schemas.TeamChatReply(
+        messages=[_chat_message(m) for m in team_agent.history_of(db, team, limit=2)],
+        proposed=[_action(a) for a in reply.actions],
+    )
+
+
+@router.get("/teams/{team_id}/notes", response_model=list[schemas.TeamNote])
+def list_notes(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamNote]:
+    team = teams.supervised_team(db, user, team_id)
+    return [_note(n) for n in team_agent.notes_of(db, team)]
+
+
+@router.post("/teams/{team_id}/notes", response_model=schemas.TeamNote, status_code=201)
+def add_note(
+    team_id: str, body: schemas.TeamNoteIn, db: Db, clock: Now, user: Supervisor
+) -> schemas.TeamNote:
+    team = teams.supervised_team(db, user, team_id)
+    if problem := team_agent._unsafe(body.text):
+        raise ApiError(422, "unsafe_note", f"Not saved: {problem}")
+    note = TeamNoteRow(
+        team_id=team.id,
+        text=body.text.strip(),
+        starts_on=body.starts_on,
+        ends_on=body.ends_on,
+        created_at=clock,
+    )
+    db.add(note)
+    db.flush()
+    return _note(note)
+
+
+@router.delete("/teams/{team_id}/notes/{note_id}", status_code=204)
+def delete_note(team_id: str, note_id: str, db: Db, user: Supervisor) -> Response:
+    team = teams.supervised_team(db, user, team_id)
+    for note in team_agent.notes_of(db, team):
+        if str(note.id) == note_id:
+            db.delete(note)
+            return Response(status_code=204)
+    raise ApiError(404, "not_found", "There is no such note.")
+
+
+@router.get("/teams/{team_id}/alerts", response_model=list[schemas.TeamAlert])
+def list_alerts(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamAlert]:
+    team = teams.supervised_team(db, user, team_id)
+    rows = db.scalars(
+        select(TeamAlertRow)
+        .where(TeamAlertRow.team_id == team.id)
+        .order_by(TeamAlertRow.raised_at.desc())
+        .limit(30)
+    ).all()
+    return [
+        schemas.TeamAlert(
+            id=str(a.id),
+            metric=a.metric,
+            label=team_info(a.metric).label,
+            direction=a.direction,
+            text=a.text,
+            raised_at=a.raised_at,
+            resolved_at=a.resolved_at,
+        )
+        for a in rows
+    ]
+
+
+@router.get("/teams/{team_id}/actions", response_model=list[schemas.TeamAction])
+def list_actions(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamAction]:
+    team = teams.supervised_team(db, user, team_id)
+    rows = db.scalars(
+        select(TeamActionRow)
+        .where(TeamActionRow.team_id == team.id)
+        .order_by(TeamActionRow.proposed_at.desc())
+    ).all()
+    return [_action(a) for a in rows]
+
+
+@router.post(
+    "/teams/{team_id}/actions/{action_id}/{decision}", response_model=schemas.TeamActionDecision
+)
+def decide_action(
+    team_id: str, action_id: str, decision: str, db: Db, clock: Now, user: Supervisor
+) -> schemas.TeamActionDecision:
+    if decision not in ("approve", "decline"):
+        raise ApiError(404, "not_found", "Approve or decline.")
+    team = teams.supervised_team(db, user, team_id)
+    action = team_actions.action_of(db, team, action_id)
+    told = team_actions.decide(db, team, action, decision == "approve", clock)
+    return schemas.TeamActionDecision(members_told=told, action=_action(action))
 
 
 # Members
