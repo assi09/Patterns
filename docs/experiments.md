@@ -819,3 +819,41 @@ not add numbers; the person's own words are what is stored.
 against weekends, 8 of 9 passed. The ninth asked which kind of banana instead of making a draft. The
 false "please confirm this draft" could not be reproduced in five tries, so its cause is inferred:
 in two of the five the first draft was refused for having no values before the model recovered.
+
+## The agent on real people's data (2026-11-10)
+
+**Data:** all 16 people of PMData (Fitbit Versa 2) and 30 of the 51 usable people of LifeSnaps (Fitbit
+Sense), drawn at random with a fixed seed, because keeping the most complete would favour the most
+diligent. Both are CC BY 4.0, stay in the git-ignored `data/eval/`, and only totals are committed.
+There is no public Fitbit Air data.
+
+**Tested:** 472 questions drawn at random by template, 40 edge cases among them, once each. Numbers,
+dates and verdicts are read from each reply by one extractor and compared with `eval/oracle.py`,
+written separately from the app. It agreed with the app's statistics on 243 of 243 change checks and
+110 of 110 links. A plain chatbot given the person's whole table answered a random 187.
+
+**The pilot found two bugs synthetic data never showed**, fixed before the full run: a date with no
+year failed when the evidence crossed New Year, and a day's value could not be stated without seven
+earlier days.
+
+**Showed (regraded):** correct 82% (346 of 421; 95% interval resampling people, 79 to 86%). On the
+same 187 questions the agent got 83% and the plain chatbot 62%. Where the answer key says nothing
+happened the agent was right 96% of the time and the chatbot 25%; where it says something happened,
+55% against 83%. The agent is cautious and the chatbot reports nearly every difference as real. Exact
+lookups: best day 100%, day value 96%, average 96%. Weak: "the most recent day" 34% (the latest row is
+often empty, and it says so instead of giving the last day with a value), links 74% (a question ending
+"on the same day" is routed as a one-day question), weekends 74%, planted changes 67% (the answer key
+itself finds 77%). Refusals 15 of 15, no data 18 of 20, no medical wording. 29 replies were the
+fallback "couldn't pin that down". $0.0055 and 3.1 calls per answer.
+
+**Grading had faults, found by reading the wrong answers.** The first score was 78% against 60%. An
+honest "I can’t tell" missed its keyword because of the curly apostrophe, and "did not clearly
+change, a little lower" was read as a claimed drop. `eval/real_regrade.py` fixes both for the two
+systems alike; its first version also flipped clear "Yes" answers, so it now reads only the opening
+sentence, and all 13 answers it changes were checked by eye. Both scores are in `eval/results`.
+
+**Limits:** the 92 advice and "why" answers have no answer key. An automatic judge rated the chatbot
+more useful (4.8 against 4.0), and it cannot see which is true, so people still have to read a blind
+sample. The agent corrects for several tests and the answer key does not, so some "misses" are that
+difference. Each question ran once, after two fixes the pilot suggested. PMData's training and
+wellness logs and LifeSnaps' check-ins are not used yet.
