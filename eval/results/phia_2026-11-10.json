@@ -1,0 +1,213 @@
+{
+ "source": "PHIA questions and answer key, CC BY-NC 4.0; four synthetic users, about 30 days",
+ "spent_usd": 1.965,
+ "questions_asked": 160,
+ "failed_to_run": 0,
+ "phia_files": {
+  "published": 4000,
+  "eligible": 1603,
+  "agree": 1603,
+  "owners": {
+   "active_achiver": 41,
+   "health_behavior": 465,
+   "inactive_insomniacs": 171,
+   "sedentary_sleeper": 333
+  }
+ },
+ "exact": {
+  "experts": {
+   "n": 100,
+   "rate": 0.54,
+   "wilson_95": [
+    0.443,
+    0.634
+   ]
+  },
+  "general_agent": {
+   "n": 100,
+   "rate": 0.61,
+   "wilson_95": [
+    0.512,
+    0.7
+   ]
+  },
+  "paired_test": {
+   "only_experts_right": 3,
+   "only_general_right": 10,
+   "p": 0.0923
+  },
+  "fair_score_any_reading_of_last_n_days": {
+   "experts": {
+    "n": 100,
+    "rate": 0.62,
+    "wilson_95": [
+     0.522,
+     0.709
+    ]
+   },
+   "general_agent": {
+    "n": 100,
+    "rate": 0.69,
+    "wilson_95": [
+     0.594,
+     0.772
+    ]
+   },
+   "paired_test": {
+    "only_experts_right": 3,
+    "only_general_right": 10,
+    "p": 0.0923
+   }
+  },
+  "by_kind": {
+   "filtered: how many days": {
+    "experts": {
+     "n": 15,
+     "rate": 0.067,
+     "wilson_95": [
+      0.012,
+      0.298
+     ]
+    },
+    "general_agent": {
+     "n": 15,
+     "rate": 0.333,
+     "wilson_95": [
+      0.152,
+      0.583
+     ]
+    }
+   },
+   "max": {
+    "experts": {
+     "n": 9,
+     "rate": 0.778,
+     "wilson_95": [
+      0.453,
+      0.937
+     ]
+    },
+    "general_agent": {
+     "n": 9,
+     "rate": 0.889,
+     "wilson_95": [
+      0.565,
+      0.98
+     ]
+    }
+   },
+   "mean": {
+    "experts": {
+     "n": 14,
+     "rate": 0.857,
+     "wilson_95": [
+      0.601,
+      0.96
+     ]
+    },
+    "general_agent": {
+     "n": 14,
+     "rate": 0.857,
+     "wilson_95": [
+      0.601,
+      0.96
+     ]
+    }
+   },
+   "median": {
+    "experts": {
+     "n": 22,
+     "rate": 0.682,
+     "wilson_95": [
+      0.473,
+      0.836
+     ]
+    },
+    "general_agent": {
+     "n": 22,
+     "rate": 0.727,
+     "wilson_95": [
+      0.518,
+      0.868
+     ]
+    }
+   },
+   "min": {
+    "experts": {
+     "n": 21,
+     "rate": 0.667,
+     "wilson_95": [
+      0.454,
+      0.828
+     ]
+    },
+    "general_agent": {
+     "n": 21,
+     "rate": 0.667,
+     "wilson_95": [
+      0.454,
+      0.828
+     ]
+    }
+   },
+   "sum": {
+    "experts": {
+     "n": 19,
+     "rate": 0.263,
+     "wilson_95": [
+      0.118,
+      0.488
+     ]
+    },
+    "general_agent": {
+     "n": 19,
+     "rate": 0.316,
+     "wilson_95": [
+      0.154,
+      0.54
+     ]
+    }
+   }
+  },
+  "experts_detail": {
+   "cost_per_answer": 0.00336,
+   "calls_per_answer": 2.69,
+   "fallback_replies": 2,
+   "ran_out_of_budget": 0,
+   "refused": 0,
+   "medical_words": 0,
+   "auto_judge_useful": 3.98
+  },
+  "general_detail": {
+   "cost_per_answer": 0.00643,
+   "calls_per_answer": 4.67,
+   "fallback_replies": 5,
+   "ran_out_of_budget": 14,
+   "refused": 0,
+   "medical_words": 0,
+   "auto_judge_useful": 4.21
+  }
+ },
+ "open_ended": {
+  "n": 60,
+  "experts_detail": {
+   "cost_per_answer": 0.00545,
+   "calls_per_answer": 2.35,
+   "fallback_replies": 1,
+   "ran_out_of_budget": 1,
+   "refused": 12,
+   "medical_words": 0,
+   "auto_judge_useful": 2.85
+  },
+  "general_detail": {
+   "cost_per_answer": 0.00932,
+   "calls_per_answer": 4.67,
+   "fallback_replies": 6,
+   "ran_out_of_budget": 9,
+   "refused": 0,
+   "medical_words": 0,
+   "auto_judge_useful": 2.45
+  },
+  "note": "No answer key. The auto judge is unvalidated: people grade the blind sheet."
+ }
+}
