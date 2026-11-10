@@ -880,3 +880,15 @@ people and through the whole agent. The rule for keeping them was fixed before t
 
 **Showed:** tied on data questions (84.3% each) and the whole agent (82 and 81 of 85), but 11% against
 56% when the cause is in another area. By the rule, the experts do not stay.
+
+## The hybrid, and why answers (2026-11-10)
+
+**Tested:** experts inside their area with the general agent for why, against no experts, on 95 fresh
+real-people questions, and the same why questions on the code before the fixes. Tables and the
+question catalogue are in [evaluation.md](evaluation.md).
+
+**Showed:** data questions 92% against 89%, the whole agent 82 of 85, 2% cheaper: by the rule the
+hybrid stays. Why answers barely moved with the fixes (53% to 57%), and a cause was still named in
+half the cases with none.
+
+**Changed:** the hybrid is kept. Why answers need code to test each candidate cause.
