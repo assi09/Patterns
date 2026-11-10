@@ -1,0 +1,60 @@
+{
+ "spent_usd": 0.109,
+ "people": 11,
+ "answers": 15,
+ "failed_to_run": 0,
+ "agent_correct_overall": {
+  "n": 13,
+  "rate": 0.462
+ },
+ "by_kind": {
+  "average": {
+   "n": 1,
+   "rate": 1.0
+  },
+  "best_day": {
+   "n": 2,
+   "rate": 0.5
+  },
+  "change": {
+   "n": 2,
+   "rate": 1.0
+  },
+  "coaching": null,
+  "edge_refuse": {
+   "n": 2,
+   "rate": 1.0
+  },
+  "latest": {
+   "n": 3,
+   "rate": 0.0
+  },
+  "link": {
+   "n": 2,
+   "rate": 0.0
+  },
+  "planted_control": {
+   "n": 1,
+   "rate": 0.0
+  }
+ },
+ "same_questions": {
+  "n": 5,
+  "agent": {
+   "n": 5,
+   "rate": 0.0
+  },
+  "plain_chatbot": {
+   "n": 5,
+   "rate": 0.6
+  }
+ },
+ "usefulness": {
+  "agent": 2.67,
+  "plain_chatbot": 4.83
+ },
+ "medical_words": 0,
+ "mean_cost": 0.00585,
+ "mean_calls": 3.33,
+ "no_submission": 0
+}

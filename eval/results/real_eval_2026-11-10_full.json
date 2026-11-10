@@ -1,0 +1,81 @@
+{
+ "spent_usd": 3.33,
+ "people": 46,
+ "answers": 472,
+ "failed_to_run": 0,
+ "agent_correct_overall": {
+  "n": 421,
+  "rate": 0.777
+ },
+ "by_kind": {
+  "average": {
+   "n": 51,
+   "rate": 0.961
+  },
+  "best_day": {
+   "n": 41,
+   "rate": 1.0
+  },
+  "change": {
+   "n": 39,
+   "rate": 0.769
+  },
+  "coaching": null,
+  "day_value": {
+   "n": 53,
+   "rate": 0.962
+  },
+  "edge_any": {
+   "n": 5,
+   "rate": 1.0
+  },
+  "edge_no_data": {
+   "n": 20,
+   "rate": 0.5
+  },
+  "edge_refuse": {
+   "n": 15,
+   "rate": 1.0
+  },
+  "latest": {
+   "n": 44,
+   "rate": 0.341
+  },
+  "link": {
+   "n": 54,
+   "rate": 0.704
+  },
+  "planted": {
+   "n": 39,
+   "rate": 0.718
+  },
+  "planted_control": {
+   "n": 25,
+   "rate": 0.8
+  },
+  "weekend": {
+   "n": 35,
+   "rate": 0.714
+  },
+  "why": null
+ },
+ "same_questions": {
+  "n": 187,
+  "agent": {
+   "n": 187,
+   "rate": 0.781
+  },
+  "plain_chatbot": {
+   "n": 187,
+   "rate": 0.604
+  }
+ },
+ "usefulness": {
+  "agent": 3.98,
+  "plain_chatbot": 4.79
+ },
+ "medical_words": 0,
+ "mean_cost": 0.00552,
+ "mean_calls": 3.12,
+ "no_submission": 6
+}

@@ -1,0 +1,187 @@
+{
+ "note": "Regraded with the same rule for both systems; see real_eval_*_full.json for the first score (0.777 agent, 0.604 plain on shared questions).",
+ "agent_all": {
+  "n": 421,
+  "rate": 0.822,
+  "wilson_95": [
+   0.782,
+   0.855
+  ],
+  "by_person_95": [
+   0.785,
+   0.855
+  ]
+ },
+ "agent_data_questions_only": {
+  "n": 317,
+  "rate": 0.814,
+  "wilson_95": [
+   0.767,
+   0.853
+  ]
+ },
+ "by_kind": {
+  "average": {
+   "n": 51,
+   "rate": 0.961,
+   "wilson_95": [
+    0.868,
+    0.989
+   ]
+  },
+  "best_day": {
+   "n": 41,
+   "rate": 1.0,
+   "wilson_95": [
+    0.914,
+    1.0
+   ]
+  },
+  "change": {
+   "n": 39,
+   "rate": 0.923,
+   "wilson_95": [
+    0.797,
+    0.973
+   ]
+  },
+  "day_value": {
+   "n": 53,
+   "rate": 0.962,
+   "wilson_95": [
+    0.872,
+    0.99
+   ]
+  },
+  "edge_any": {
+   "n": 5,
+   "rate": 1.0,
+   "wilson_95": [
+    0.566,
+    1.0
+   ]
+  },
+  "edge_no_data": {
+   "n": 20,
+   "rate": 0.9,
+   "wilson_95": [
+    0.699,
+    0.972
+   ]
+  },
+  "edge_refuse": {
+   "n": 15,
+   "rate": 1.0,
+   "wilson_95": [
+    0.796,
+    1.0
+   ]
+  },
+  "latest": {
+   "n": 44,
+   "rate": 0.341,
+   "wilson_95": [
+    0.219,
+    0.489
+   ]
+  },
+  "link": {
+   "n": 54,
+   "rate": 0.741,
+   "wilson_95": [
+    0.611,
+    0.839
+   ]
+  },
+  "planted": {
+   "n": 39,
+   "rate": 0.667,
+   "wilson_95": [
+    0.51,
+    0.794
+   ]
+  },
+  "planted_control": {
+   "n": 25,
+   "rate": 0.96,
+   "wilson_95": [
+    0.805,
+    0.993
+   ]
+  },
+  "weekend": {
+   "n": 35,
+   "rate": 0.743,
+   "wilson_95": [
+    0.579,
+    0.858
+   ]
+  }
+ },
+ "same_questions": {
+  "agent": {
+   "n": 187,
+   "rate": 0.834,
+   "wilson_95": [
+    0.774,
+    0.881
+   ]
+  },
+  "plain_chatbot": {
+   "n": 187,
+   "rate": 0.615,
+   "wilson_95": [
+    0.544,
+    0.682
+   ]
+  },
+  "only_agent_right": 60,
+  "only_plain_right": 19
+ },
+ "correct_when_key_says_no_effect": {
+  "agent": {
+   "n": 102,
+   "rate": 0.961,
+   "wilson_95": [
+    0.903,
+    0.985
+   ]
+  },
+  "plain_chatbot": {
+   "n": 53,
+   "rate": 0.245,
+   "wilson_95": [
+    0.149,
+    0.376
+   ]
+  }
+ },
+ "correct_when_key_says_an_effect": {
+  "agent": {
+   "n": 51,
+   "rate": 0.549,
+   "wilson_95": [
+    0.414,
+    0.677
+   ]
+  },
+  "plain_chatbot": {
+   "n": 29,
+   "rate": 0.828,
+   "wilson_95": [
+    0.655,
+    0.924
+   ]
+  }
+ },
+ "planted_change_found_by_the_answer_key": {
+  "n": 39,
+  "rate": 0.769,
+  "wilson_95": [
+   0.617,
+   0.874
+  ],
+  "opposite": 2
+ },
+ "mean_hit_per_person": 0.816
+}
