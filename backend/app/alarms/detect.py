@@ -76,7 +76,7 @@ def _compare(frame: pd.DataFrame, metric: str, day: date) -> Evidence | None:
         evidence = compare_day(frame, metric, day)
     except ToolError:
         return None
-    return evidence if evidence.sufficient else None
+    return evidence if "position" in evidence.stats else None
 
 
 def _beyond(evidence: Evidence, direction: str) -> float:
