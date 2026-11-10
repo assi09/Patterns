@@ -28,6 +28,11 @@ import type {
   Report,
   SignedIn,
   SupervisedTeam,
+  TeamAction,
+  TeamAlert,
+  TeamChatMessage,
+  TeamChatReply,
+  TeamNote,
   TeamPreview,
   TeamReport,
   TeamReportSummary,
@@ -199,6 +204,35 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       request<TeamReportSummary[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/reports`),
     getTeamReport: (teamId, week) =>
       request<TeamReport>(baseUrl, `/teams/${encodeURIComponent(teamId)}/reports/${week}`),
+    getTeamChat: (teamId) =>
+      request<TeamChatMessage[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/chat`),
+    askTeamAgent: (teamId, text) =>
+      post<TeamChatReply>(baseUrl, `/teams/${encodeURIComponent(teamId)}/chat`, { text }, 60_000),
+    getTeamNotes: (teamId) =>
+      request<TeamNote[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/notes`),
+    addTeamNote: (teamId, text, startsOn, endsOn) =>
+      post<TeamNote>(baseUrl, `/teams/${encodeURIComponent(teamId)}/notes`, {
+        text,
+        startsOn: startsOn ?? null,
+        endsOn: endsOn ?? null,
+      }),
+    deleteTeamNote: (teamId, noteId) =>
+      request<void>(
+        baseUrl,
+        `/teams/${encodeURIComponent(teamId)}/notes/${encodeURIComponent(noteId)}`,
+        { method: 'DELETE' },
+      ),
+    getTeamAlerts: (teamId) =>
+      request<TeamAlert[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/alerts`),
+    getTeamActions: (teamId) =>
+      request<TeamAction[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/actions`),
+    decideTeamAction: (teamId, actionId, approve) =>
+      post<{ membersTold: number; action: TeamAction }>(
+        baseUrl,
+        `/teams/${encodeURIComponent(teamId)}/actions/${encodeURIComponent(actionId)}/${
+          approve ? 'approve' : 'decline'
+        }`,
+      ),
     makeTeamReport: (teamId, week) =>
       post<TeamReport>(baseUrl, `/teams/${encodeURIComponent(teamId)}/reports`, { week }, 60_000),
     getLatestReport: () => request<Report>(baseUrl, '/reports/latest'),

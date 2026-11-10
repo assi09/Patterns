@@ -514,3 +514,70 @@ export function useMakeTeamReport() {
     onSuccess: (_, teamId) => client.invalidateQueries({ queryKey: [...keys.teams, teamId] }),
   });
 }
+
+// The supervisor's team agent
+
+export function useTeamChat(teamId: string) {
+  return useQuery({
+    queryKey: [...keys.teams, teamId, 'chat'],
+    queryFn: () => api.getTeamChat(teamId),
+  });
+}
+
+export function useAskTeamAgent(teamId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (text: string) => api.askTeamAgent(teamId, text),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'chat'] });
+      client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'actions'] });
+      client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'notes'] });
+    },
+  });
+}
+
+export function useTeamNotes(teamId: string) {
+  return useQuery({
+    queryKey: [...keys.teams, teamId, 'notes'],
+    queryFn: () => api.getTeamNotes(teamId),
+  });
+}
+
+export function useAddTeamNote(teamId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (text: string) => api.addTeamNote(teamId, text),
+    onSuccess: () => client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'notes'] }),
+  });
+}
+
+export function useDeleteTeamNote(teamId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (noteId: string) => api.deleteTeamNote(teamId, noteId),
+    onSuccess: () => client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'notes'] }),
+  });
+}
+
+export function useTeamAlerts(teamId: string) {
+  return useQuery({
+    queryKey: [...keys.teams, teamId, 'alerts'],
+    queryFn: () => api.getTeamAlerts(teamId),
+  });
+}
+
+export function useTeamActions(teamId: string) {
+  return useQuery({
+    queryKey: [...keys.teams, teamId, 'actions'],
+    queryFn: () => api.getTeamActions(teamId),
+  });
+}
+
+export function useDecideTeamAction(teamId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ actionId, approve }: { actionId: string; approve: boolean }) =>
+      api.decideTeamAction(teamId, actionId, approve),
+    onSuccess: () => client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'actions'] }),
+  });
+}

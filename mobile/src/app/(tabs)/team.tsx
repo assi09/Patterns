@@ -19,6 +19,12 @@ import type {
   TeamReportSummary,
 } from '@/api/types';
 import { Row, Section } from '@/components/list';
+import {
+  AlertsSection,
+  NotesSection,
+  ProposalsSection,
+  TeamChatSection,
+} from '@/components/teamAgent';
 import { ChangeChart, KeyFigures, LevelsTable, WeekdayChart } from '@/components/teamReport';
 import { QueryState, Screen } from '@/components/Screen';
 import { Skeleton } from '@/components/Skeleton';
@@ -85,9 +91,17 @@ function TeamView({ team }: { team: SupervisedTeam }) {
   const week = chosen ?? reports.data?.[0]?.week.start;
   const report = useTeamReport(team.id, week);
 
-  const main = <ReportSection team={team} reports={reports.data} report={report.data} />;
+  const main = (
+    <>
+      <AlertsSection teamId={team.id} />
+      <TeamChatSection teamId={team.id} />
+      <ReportSection team={team} reports={reports.data} report={report.data} />
+    </>
+  );
   const side = (
     <>
+      <ProposalsSection teamId={team.id} />
+      <NotesSection teamId={team.id} />
       {report.data ? <LevelsSection levels={report.data.levels} /> : null}
       <InviteSection team={team} />
       <PastWeeks

@@ -41,6 +41,10 @@ import type {
   TeamPreview,
   Membership,
   SupervisedTeam,
+  TeamAction,
+  TeamAlert,
+  TeamChatMessage,
+  TeamNote,
   TeamReport,
 } from './types';
 
@@ -829,6 +833,62 @@ function ownMembership(teamId: string): Membership {
 // week, aggregates only, as the backend would make it.
 let supervisedTeams: SupervisedTeam[] = [];
 const teamReports = new Map<string, TeamReport[]>();
+const teamChats = new Map<string, TeamChatMessage[]>();
+const teamNotes = new Map<string, TeamNote[]>();
+const teamActions = new Map<string, TeamAction[]>();
+
+// The demo team agent: canned team-level answers, a fixed reply about any one person, and a
+// proposal that waits for approval, as the real one behaves (docs/teams.md).
+const ABOUT_A_PERSON =
+  /\b(who|whom|which (person|member|employee)|names?|individual|someone|anyone|he|she)\b/i;
+const PERSON_REPLY =
+  "I only ever see the team as a whole, from at least five people, so I can't say anything about one person. If you're worried about someone, the best step is a conversation with them.";
+
+function mockTeamAlerts(teamId: string): TeamAlert[] {
+  const day = new Date(Date.now() - 2 * 86_400_000).toISOString();
+  return [
+    {
+      id: `${teamId}-alert1`,
+      metric: 'sleep_minutes',
+      label: 'Time asleep',
+      direction: 'down',
+      text: 'Time asleep fell across the team over the past week: median change -38 min (6 of 8 people).',
+      raisedAt: day,
+      resolvedAt: null,
+    },
+  ];
+}
+
+function mockTeamAnswer(teamId: string, text: string): { reply: string; proposed: TeamAction[] } {
+  if (ABOUT_A_PERSON.test(text)) return { reply: PERSON_REPLY, proposed: [] };
+  if (/\b(try|do|change|help|suggest|improve)\b/i.test(text)) {
+    const start = new Date(Date.now() + 86_400_000);
+    const end = new Date(start.getTime() + 13 * 86_400_000);
+    const action: TeamAction = {
+      id: `${teamId}-action${(teamActions.get(teamId)?.length ?? 0) + 1}`,
+      kind: 'challenge',
+      title: 'Lights out by 23:00',
+      body: 'For two weeks, try to be in bed by 23:00 on weeknights, and keep evenings after 21:30 free of meetings.',
+      metric: 'sleep_minutes',
+      startsOn: start.toISOString().slice(0, 10),
+      endsOn: end.toISOString().slice(0, 10),
+      status: 'proposed',
+      proposedAt: new Date().toISOString(),
+      decidedAt: null,
+    };
+    teamActions.set(teamId, [action, ...(teamActions.get(teamId) ?? [])]);
+    return {
+      reply:
+        'Time asleep has been lower across the team for three weeks, so a two-week sleep challenge could help. I proposed one under Proposals: nothing reaches the team until you approve it.',
+      proposed: [action],
+    };
+  }
+  return {
+    reply:
+      'Time asleep has been lower across the team for the past three weeks (median -38 min, 6 of 8 people lower), and resting heart rate is up a little. Activity and load look steady.',
+    proposed: [],
+  };
+}
 
 function supervisorAccount(): MockAccount {
   const account = currentAccount();
@@ -1057,6 +1117,78 @@ export const mockClient: ApiClient = {
       );
       if (!found) throw new ApiError('There is no report for that week.', 'not_found', 404);
       return found;
+    }),
+  getTeamChat: (teamId) =>
+    later(() => {
+      ownTeam(teamId);
+      return teamChats.get(teamId) ?? [];
+    }),
+  askTeamAgent: (teamId, text) =>
+    later(() => {
+      ownTeam(teamId);
+      const now = new Date().toISOString();
+      const { reply, proposed } = mockTeamAnswer(teamId, text);
+      const pair: TeamChatMessage[] = [
+        { role: 'supervisor', text: text.trim(), evidence: [], createdAt: now },
+        { role: 'agent', text: reply, evidence: [], createdAt: now },
+      ];
+      teamChats.set(teamId, [...(teamChats.get(teamId) ?? []), ...pair]);
+      return { messages: pair, proposed };
+    }),
+  getTeamNotes: (teamId) =>
+    later(() => {
+      ownTeam(teamId);
+      return teamNotes.get(teamId) ?? [];
+    }),
+  addTeamNote: (teamId, text, startsOn, endsOn) =>
+    later(() => {
+      ownTeam(teamId);
+      if (ABOUT_A_PERSON.test(text) || /\b(sick|ill|unwell)\b/i.test(text)) {
+        throw new ApiError(
+          "Not saved: it would single out a person; keep it about the whole team.",
+          'unsafe_note',
+          422,
+        );
+      }
+      const note: TeamNote = {
+        id: `${teamId}-note${(teamNotes.get(teamId)?.length ?? 0) + 1}-${Date.now()}`,
+        text: text.trim(),
+        startsOn: startsOn ?? null,
+        endsOn: endsOn ?? null,
+        createdAt: new Date().toISOString(),
+      };
+      teamNotes.set(teamId, [...(teamNotes.get(teamId) ?? []), note]);
+      return note;
+    }),
+  deleteTeamNote: (teamId, noteId) =>
+    later(() => {
+      ownTeam(teamId);
+      teamNotes.set(
+        teamId,
+        (teamNotes.get(teamId) ?? []).filter((n) => n.id !== noteId),
+      );
+    }),
+  getTeamAlerts: (teamId) =>
+    later(() => {
+      ownTeam(teamId);
+      return mockTeamAlerts(teamId);
+    }),
+  getTeamActions: (teamId) =>
+    later(() => {
+      ownTeam(teamId);
+      return teamActions.get(teamId) ?? [];
+    }),
+  decideTeamAction: (teamId, actionId, approve) =>
+    later(() => {
+      const team = ownTeam(teamId);
+      const action = (teamActions.get(teamId) ?? []).find((a) => a.id === actionId);
+      if (!action) throw new ApiError('There is no such proposal.', 'not_found', 404);
+      if (action.status !== 'proposed') {
+        throw new ApiError('This proposal was already decided.', 'already_decided', 409);
+      }
+      action.status = approve ? 'approved' : 'declined';
+      action.decidedAt = new Date().toISOString();
+      return { membersTold: approve ? team.members : 0, action };
     }),
   makeTeamReport: (teamId) =>
     later(() => {
