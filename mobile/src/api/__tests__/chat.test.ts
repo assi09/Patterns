@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import { storeAnswer, withAnswer } from '../hooks';
+import { storeAnswer, withAnswer, withRating } from '../hooks';
 import type { ChatMessage } from '../types';
 
 function message(id: string, role: ChatMessage['role'] = 'user', conversationId = 'c1') {
@@ -68,5 +68,22 @@ describe('storing an answer in the cache', () => {
     client.setQueryData(['chat', 'latest'], [message('x1', 'user', 'other')]);
     storeAnswer(client, [message('q1', 'user', 'c2'), message('a1', 'assistant', 'c2')], 'new');
     expect(ids(client.getQueryData(['chat', 'c2']))).toEqual(['q1', 'a1']);
+  });
+});
+
+describe('withRating', () => {
+  const chat = [message('q1'), message('a1', 'assistant'), message('a2', 'assistant')];
+
+  it('sets one answer and leaves the rest as they were', () => {
+    const rated = withRating(chat, 'a1', 'up');
+    expect(rated?.map((m) => m.rating)).toEqual([undefined, 'up', undefined]);
+    expect(rated?.[0]).toBe(chat[0]);
+    expect(chat[1].rating).toBeUndefined(); // the cached chat is not changed in place
+  });
+
+  it('clears a rating with null, and leaves an empty cache empty', () => {
+    const rated = withRating(withRating(chat, 'a2', 'down'), 'a2', null);
+    expect(rated?.[2].rating).toBeUndefined();
+    expect(withRating(undefined, 'a1', 'up')).toBeUndefined();
   });
 });

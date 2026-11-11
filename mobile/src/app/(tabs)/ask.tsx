@@ -21,6 +21,7 @@ import {
   useConversations,
   useDay,
   useNoData,
+  useRateAnswer,
   useReport,
   useSendMessage,
 } from '@/api/hooks';
@@ -109,6 +110,7 @@ export default function AskScreen() {
     target === 'new' ? 'New chat' : conversations.data?.find((x) => x.id === openId)?.title;
   const report = useReport();
   const send = useSendMessage();
+  const rate = useRateAnswer();
   const [draft, setDraft] = useState('');
   // A suggested question fills the composer; the person reads it and sends it.
   const [seenQuestion, setSeenQuestion] = useState<string>();
@@ -289,6 +291,11 @@ export default function AskScreen() {
                       message.role === 'user' ? (text) => resend(text, message.id) : undefined
                     }
                     onRetry={question ? () => resend(question.text, question.id) : undefined}
+                    onRate={
+                      message.role === 'assistant'
+                        ? (rating) => rate.mutate({ id: message.id, rating })
+                        : undefined
+                    }
                   />
                 );
               })}

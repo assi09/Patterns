@@ -7,12 +7,14 @@ import {
   useAskTeamAgent,
   useDecideTeamAction,
   useDeleteTeamNote,
+  useRateTeamAnswer,
   useTeamActions,
   useTeamAlerts,
   useTeamChat,
   useTeamNotes,
 } from '@/api/hooks';
 import type { TeamAction } from '@/api/types';
+import { RatingButtons } from '@/components/chat';
 import { Row, Section } from '@/components/list';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
@@ -62,6 +64,7 @@ export function TeamChatSection({ teamId }: { teamId: string }) {
   const colors = useColors();
   const chat = useTeamChat(teamId);
   const ask = useAskTeamAgent(teamId);
+  const rate = useRateTeamAnswer(teamId);
   const [text, setText] = useState('');
   const send = (question: string) => {
     if (!question.trim() || ask.isPending) return;
@@ -82,13 +85,21 @@ export function TeamChatSection({ teamId }: { teamId: string }) {
       ) : null}
       {messages.slice(-8).map((message, at) => (
         <View
-          key={`${message.createdAt}-${at}`}
+          key={message.id ?? `${message.createdAt}-${at}`}
           style={[styles.message, { borderColor: colors.border }]}
         >
           <Text variant="caption" color="faint">
             {message.role === 'supervisor' ? 'You' : 'Team agent'}
           </Text>
           <Text color={message.role === 'supervisor' ? 'muted' : 'text'}>{message.text}</Text>
+          {message.role === 'agent' && message.id ? (
+            <View style={styles.rating}>
+              <RatingButtons
+                rating={message.rating}
+                onRate={(rating) => rate.mutate({ id: message.id, rating })}
+              />
+            </View>
+          ) : null}
         </View>
       ))}
       {ask.isPending ? (
@@ -250,6 +261,7 @@ function ErrorLine({ error }: { error: Error }) {
 
 const styles = StyleSheet.create({
   suggestions: { gap: spacing.sm, paddingVertical: spacing.md, alignItems: 'flex-start' },
+  rating: { flexDirection: 'row', gap: spacing.xs, marginLeft: -spacing.xs },
   message: {
     gap: 2,
     paddingVertical: spacing.md,

@@ -19,7 +19,7 @@ from app.api.main import create_app
 from app.api.store import analyze, get_data
 from app.auth.accounts import LoginThrottle
 from app.config import settings
-from app.db.models import ChatMessage, EvidenceRecord, User
+from app.db.models import AnswerTrace, ChatMessage, EvidenceRecord, User
 from app.db.session import session_scope
 from app.ingest.takeout import DailyData
 from app.synthetic import generate
@@ -777,3 +777,84 @@ def test_a_correction_read_as_data_still_continues_the_logging_request():
     assert _just_a_reply("40 minutes, no wait it was 50 minutes")
     assert not _just_a_reply("how did I sleep last night")
     assert not _just_a_reply("my steps this week?")
+
+
+# Traces and thumbs
+
+
+def test_every_answer_keeps_its_trace(client, engine, agent):
+    agent.llm.turns.extend(describe_then_claim("Your time asleep held steady."))
+    headers = signed_in(client, engine)
+    answer = ask(client, headers).json()[1]
+    with session_scope(engine) as session:
+        trace = session.scalar(select(AnswerTrace))
+        assert str(trace.message_id) == answer["id"]
+        assert trace.outcome == "answered" and trace.stop_reason == "submitted"
+        assert trace.model_calls == 2 and trace.tool_calls == 1 and trace.tool_errors == 0
+        assert trace.latency_ms >= 0 and set(trace.stages_ms) >= {"model", "router", "other"}
+        assert trace.cost_usd == pytest.approx(0.004)
+        assert [s["type"] for s in trace.steps][:2] == ["context", "route"]
+        assert trace.run_id == session.scalar(
+            select(ChatMessage.run_id).where(ChatMessage.role == "assistant")
+        )
+
+
+def test_a_refusal_and_a_failure_keep_their_traces_too(client, engine, agent):
+    headers = signed_in(client, engine)
+    ask(client, headers)  # the script is empty: the model call fails
+    agent.router.result = Classification(
+        dict.fromkeys(LABELS, 0.0) | {"out_of_scope": 0.95},
+        dict.fromkeys(EXPERT_LABELS, 0.0),
+        source="test",
+    )
+    ask(client, headers, "Do I have apnea?")
+    with session_scope(engine) as session:
+        outcomes = session.scalars(select(AnswerTrace.outcome).order_by(AnswerTrace.created_at))
+        assert list(outcomes) == ["failed", "refused"]
+
+
+def test_a_crash_while_answering_keeps_a_failed_trace(client, engine, agent, monkeypatch):
+    def broken(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(chat, "ask", broken)
+    answer = ask(client, signed_in(client, engine)).json()[1]
+    assert answer["text"] == chat.FAILED
+    with session_scope(engine) as session:
+        trace = session.scalar(select(AnswerTrace))
+        assert trace.outcome == "failed" and trace.stop_reason == "error"
+        assert str(trace.message_id) == answer["id"]
+
+
+def test_a_person_can_rate_an_answer_and_take_it_back(client, engine, agent):
+    agent.llm.turns.append(submission("Nothing stood out."))
+    headers = signed_in(client, engine)
+    question, answer = ask(client, headers).json()
+    assert "rating" not in answer
+
+    rated = client.put(f"/chat/{answer['id']}/rating", json={"rating": "up"}, headers=headers)
+    assert rated.status_code == 200 and rated.json()["rating"] == "up"
+    assert client.get("/chat", headers=headers).json()[1]["rating"] == "up"
+    changed = client.put(f"/chat/{answer['id']}/rating", json={"rating": "down"}, headers=headers)
+    assert changed.json()["rating"] == "down"
+    cleared = client.put(f"/chat/{answer['id']}/rating", json={"rating": None}, headers=headers)
+    assert "rating" not in cleared.json()
+    with session_scope(engine) as session:
+        row = session.get(ChatMessage, uuid.UUID(answer["id"]))
+        assert row.rating is None and row.rated_at is None
+
+
+def test_only_ones_own_answers_can_be_rated(client, engine, agent):
+    agent.llm.turns.append(submission("Nothing stood out."))
+    headers = signed_in(client, engine)
+    question, answer = ask(client, headers).json()
+    other = signed_in(client, engine, "other@example.com")
+    url = f"/chat/{answer['id']}/rating"
+    assert client.put(url, json={"rating": "up"}, headers=other).status_code == 404
+    own_question = f"/chat/{question['id']}/rating"
+    assert client.put(own_question, json={"rating": "up"}, headers=headers).status_code == 404
+    missing = f"/chat/{uuid.uuid4()}/rating"
+    assert client.put(missing, json={"rating": "up"}, headers=headers).status_code == 404
+    assert client.put(url, json={"rating": "meh"}, headers=headers).status_code == 422
+    assert client.put(url, json={}, headers=headers).status_code == 422
+    assert client.put(url, json={"rating": "up"}).status_code == 401

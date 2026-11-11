@@ -34,8 +34,8 @@ as buffer. What is left, what still has to be tested and the order of work are i
   found in 20 of 24 such teams, typically by day 8; 5-person teams rarely get one.
 
 **On hold or not built:** personal experiments (on hold since 2026-11-08 at Karim's request); the
-weekly team report written by the team agent; phone push notifications; stored traces and a
-metrics page (AgentOps); the Failure Matrix and threat model; account deletion, email
+weekly team report written by the team agent; phone push notifications; a metrics page
+(AgentOps; each answer's trace and the person's thumbs are stored since #151); the Failure Matrix and threat model; account deletion, email
 verification and password reset; the pilot.
 
 ## Objective
@@ -63,7 +63,7 @@ priority**; the UI and data plumbing exist to serve them.
 
 The table above dates from 2026-10-27; what was added since is in [Where we are](#where-we-are-2026-11-11).
 
-**Not built yet:** personal experiments (on hold); stored traces and the metrics page; the
+**Not built yet:** personal experiments (on hold); the metrics page; the
 Failure Matrix and threat model; the daily run with the agent's note on Today (skipped at the
 user's request); phone push; account deletion, email verification and reset; the journal with
 habit impact; fitness age; the weekly workout summary. Deployment (Railway and Vercel, see
@@ -214,7 +214,7 @@ To let someone else sign in, add their Google account as a test user in the cons
 ## Next
 
 See [plan.md](plan.md#where-we-are-and-what-is-left-2026-11-11). In short: fix how "why" questions
-are investigated and retest them; evaluate the team agent; blind grading; the pilot; traces and a
+are investigated and retest them; evaluate the team agent; blind grading; the pilot report; a
 metrics page; the Failure Matrix, threat model and red team; then the report, poster and demo.
 
 Earlier: **the smarter chat was built** (2026-10-28 to 11-05, #112-#122): coaching that stays

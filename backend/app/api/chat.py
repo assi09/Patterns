@@ -19,6 +19,7 @@ from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from functools import lru_cache
+from time import monotonic
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
@@ -39,6 +40,7 @@ from app.agent.listener import MAX_KNOWN, fit_to_keep, is_explicit, listen, wort
 from app.agent.llm import LLM, LLMError, OpenAILLM
 from app.agent.router import Router
 from app.agent.summary import FOLD_AT, fold, to_fold
+from app.agent.trace import failed_trace, personal_trace
 from app.agent.world import food_tool
 from app.analysis.day import with_scores
 from app.analysis.habits import with_checkins
@@ -155,6 +157,7 @@ def _message(row: ChatMessage) -> schemas.ChatMessage:
         consulted=list(row.consulted or []) or None,
         refused=row.refused or None,
         conversation_id=str(row.conversation_id) if row.conversation_id else None,
+        rating=row.rating if row.role == "assistant" else None,
         created_at=_aware(row.created_at),
     )
 
@@ -443,6 +446,7 @@ def _answer(
         reminding_tools = reminder_tools(
             sessions, user_id, now, reminders, said=[*thread, body.text]
         )
+        started = monotonic()
         try:
             reply = ask(
                 agent.llm,
@@ -471,6 +475,7 @@ def _answer(
         except Exception:
             logger.exception("Answering failed")
             reply = None
+        elapsed = monotonic() - started
         with sessions() as db:
             question = db.get(ChatMessage, question_id)
             if reply is None:
@@ -487,6 +492,7 @@ def _answer(
                     run_id=None,
                     conversation_id=conversation_id,
                 )
+                store.add_trace(db, failed_trace(elapsed), message_id=answer.id)
                 return [question, answer]
             result = reply.result
             if prepared:
@@ -557,6 +563,12 @@ def _answer(
                 )
                 else None,
             )
+            store.add_trace(
+                db,
+                personal_trace(result, elapsed, refused=refused),
+                run_id=result.run_id,
+                message_id=answer.id,
+            )
             logger.info(
                 "Answered run %s: %s, %d claims, $%.4f",
                 result.run_id,
@@ -624,6 +636,24 @@ def update_conversation(
     db.flush()
     count = next((n for row, n in store.conversations(db, user.id) if row.id == conversation.id), 0)
     return _conversation(conversation, count)
+
+
+@router.put(
+    "/chat/{message_id}/rating",
+    response_model=schemas.ChatMessage,
+    response_model_exclude_none=True,
+)
+def rate_answer(
+    message_id: uuid.UUID,
+    body: schemas.RatingIn,
+    db: Db,
+    user: Annotated[User, Depends(approved_user)],
+) -> schemas.ChatMessage:
+    """The person's thumbs up or down on one of their answers, counted in the pilot report."""
+    rated = store.rate_answer(db, user.id, message_id, body.rating, datetime.now(UTC))
+    if rated is None:
+        raise ApiError(404, "not_found", "That answer is no longer in this chat.")
+    return _message(rated)
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)

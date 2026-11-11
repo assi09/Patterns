@@ -4,6 +4,7 @@ Only a supervisor's own teams are visible to them, and only as a count of member
 their own memberships. Reports come later (docs/teams.md, build order).
 """
 
+import uuid
 from datetime import date, timedelta
 from typing import Annotated
 
@@ -220,9 +221,11 @@ def _local_today(user: User, clock) -> date:
 
 def _chat_message(row: TeamChatMessageRow) -> schemas.TeamChatMessage:
     return schemas.TeamChatMessage(
+        id=str(row.id),
         role=row.role,
         text=row.text,
         evidence=[_evidence(e) for e in row.evidence or []],
+        rating=row.rating if row.role == "agent" else None,
         created_at=row.created_at,
     )
 
@@ -278,6 +281,24 @@ def ask_team_agent(
         messages=[_chat_message(m) for m in team_agent.history_of(db, team, limit=2)],
         proposed=[_action(a) for a in reply.actions],
     )
+
+
+@router.put("/teams/{team_id}/chat/{message_id}/rating", response_model=schemas.TeamChatMessage)
+def rate_team_answer(
+    team_id: str, message_id: str, body: schemas.RatingIn, db: Db, clock: Now, user: Supervisor
+) -> schemas.TeamChatMessage:
+    """The supervisor's thumbs up or down on one of the team agent's answers."""
+    team = teams.supervised_team(db, user, team_id)
+    try:
+        key = uuid.UUID(message_id)
+    except ValueError:
+        key = None
+    message = db.get(TeamChatMessageRow, key) if key else None
+    if message is None or message.team_id != team.id or message.role != "agent":
+        raise ApiError(404, "not_found", "That answer is no longer in this chat.")
+    message.rating, message.rated_at = body.rating, clock if body.rating else None
+    db.flush()
+    return _chat_message(message)
 
 
 @router.get("/teams/{team_id}/notes", response_model=list[schemas.TeamNote])

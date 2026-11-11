@@ -1128,12 +1128,36 @@ export const mockClient: ApiClient = {
       ownTeam(teamId);
       const now = new Date().toISOString();
       const { reply, proposed } = mockTeamAnswer(teamId, text);
+      const count = teamChats.get(teamId)?.length ?? 0;
       const pair: TeamChatMessage[] = [
-        { role: 'supervisor', text: text.trim(), evidence: [], createdAt: now },
-        { role: 'agent', text: reply, evidence: [], createdAt: now },
+        {
+          id: `${teamId}-m${count + 1}`,
+          role: 'supervisor',
+          text: text.trim(),
+          evidence: [],
+          createdAt: now,
+        },
+        {
+          id: `${teamId}-m${count + 2}`,
+          role: 'agent',
+          text: reply,
+          evidence: [],
+          rating: null,
+          createdAt: now,
+        },
       ];
       teamChats.set(teamId, [...(teamChats.get(teamId) ?? []), ...pair]);
       return { messages: pair, proposed };
+    }),
+  rateTeamAnswer: (teamId, messageId, rating) =>
+    later(() => {
+      ownTeam(teamId);
+      const messages = teamChats.get(teamId) ?? [];
+      const at = messages.findIndex((m) => m.id === messageId && m.role === 'agent');
+      if (at < 0) throw new ApiError('That answer is no longer in this chat.', 'not_found', 404);
+      const rated = { ...messages[at], rating };
+      teamChats.set(teamId, messages.map((m, i) => (i === at ? rated : m)));
+      return rated;
     }),
   getTeamNotes: (teamId) =>
     later(() => {
@@ -1609,6 +1633,20 @@ export const mockClient: ApiClient = {
       ];
     }
     return delay([...added, answer]);
+  },
+
+  rateAnswer: (messageId, rating) => {
+    // Like the backend: only an answer can be rated, and null takes the rating back.
+    const found = chat.find((m) => m.id === messageId && m.role === 'assistant');
+    if (!found) {
+      return Promise.reject(
+        new ApiError('That answer is no longer in this chat.', 'not_found', 404),
+      );
+    }
+    const { rating: _old, ...rest } = found;
+    const rated: ChatMessage = rating ? { ...rest, rating } : rest;
+    chat = chat.map((m) => (m === found ? rated : m));
+    return delay(rated);
   },
 
   getReminders: () =>
