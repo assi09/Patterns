@@ -31,7 +31,7 @@ buffer and rehearsal. What was built since this plan was written is in
 | F. Pilot | invitations go out 2026-11-12 to 10-12 people | their Google accounts added as test users; one team of at least 5 who sync (8 or more makes alerts likelier); the daily total cap checked against the number who join |
 | G. Evaluation | real data, PHIA, three systems, experts decided ([evaluation.md](evaluation.md)) | blind grading; the "why" retest; the team agent; the router on a held-out set (issue 5) |
 | H. Reliability and security | not in the repo yet | Failure Matrix, threat model, red-team set, chaos, load and contract tests (Jad) |
-| I. AgentOps and bonus | cost, trace and thumbs per answer stored (#151); CI and auto-deploy | a metrics page and the pilot report; Dependabot, CodeQL, audits, coverage, Sentry (Jad) |
+| I. AgentOps and bonus | cost, trace and thumbs per answer stored (#151); CI and auto-deploy | a metrics page (the pilot report, `python -m app.pilot_report`, is in #152); Dependabot, CodeQL, audits, coverage, Sentry (Jad) |
 | J. Documents | status, evaluation, teams, costs and experiments current | `docs/api.md`, README quickstart, the final report, poster, demo script |
 
 ### What still has to be tested
