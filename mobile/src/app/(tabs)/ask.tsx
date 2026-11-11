@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -10,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   View,
-  type ScrollViewInstance,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,6 +37,7 @@ import { Chip } from '@/components/ui';
 import { expertInfo, useExpertColor } from '@/lib/experts';
 import { metricLabel } from '@/lib/format';
 import { DURATION, EASE_OUT } from '@/lib/motion';
+import { useStickToBottom } from '@/lib/stickToBottom';
 import { useWide } from '@/lib/layout';
 import { floatingTabBar } from '@/lib/platform';
 import { column, radius, spacing, useColors } from '@/theme';
@@ -131,7 +131,7 @@ export default function AskScreen() {
   const available = latest.data?.metrics
     .filter((m) => m.value !== null || m.usual !== null)
     .map((m) => m.metric);
-  const scroll = useRef<ScrollViewInstance>(null);
+  const scroll = useStickToBottom();
   const insets = useSafeAreaInsets();
   const barHeight = useContext(BottomTabBarHeightContext) ?? 0;
   const tabBarHeight = floatingTabBar ? barHeight : 0;
@@ -188,9 +188,13 @@ export default function AskScreen() {
     </Text>
   );
 
+  // Opening a chat shows its end at once; sending a question follows it down. Content that grows
+  // later (chips, cards, a slow answer) is followed by the scroll view itself while at the end.
+  const { reset: resetScroll, pin } = scroll;
+  useEffect(() => resetScroll(), [target, resetScroll]);
   useEffect(() => {
-    scroll.current?.scrollToEnd({ animated: true });
-  }, [messages.length, send.isPending]);
+    if (send.isPending) pin();
+  }, [send.isPending, pin]);
 
   function submit(text: string) {
     const trimmed = text.trim();
@@ -268,53 +272,60 @@ export default function AskScreen() {
       <QueryState query={chat}>
         {() =>
           started ? (
-            <ScrollView
-              ref={scroll}
-              style={{ flex: 1 }}
-              contentContainerStyle={[styles.messages, width]}
-              keyboardShouldPersistTaps="handled"
-            >
-              {messages.map((message, index) => {
-                // An answer is retried by asking its question again, in place.
-                const question =
-                  message.role === 'assistant' && messages[index - 1]?.role === 'user'
-                    ? messages[index - 1]
-                    : undefined;
-                return (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    knownEvidence={report.data?.evidence ?? {}}
-                    findingTitles={findingTitles}
-                    busy={send.isPending}
-                    onEdit={
-                      message.role === 'user' ? (text) => resend(text, message.id) : undefined
-                    }
-                    onRetry={question ? () => resend(question.text, question.id) : undefined}
-                    onRate={
-                      message.role === 'assistant'
-                        ? (rating) => rate.mutate({ id: message.id, rating })
-                        : undefined
-                    }
-                  />
-                );
-              })}
-              {pendingText === undefined && <MemoryPrompts />}
-              {pendingText !== undefined && (
-                <>
-                  <View
-                    style={[
-                      styles.pendingMine,
-                      { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
-                    ]}
-                  >
-                    <Text>{pendingText}</Text>
-                  </View>
-                  <Thinking expert={pendingExpert} />
-                </>
-              )}
-              {sendError}
-            </ScrollView>
+            <View style={{ flex: 1 }}>
+              <ScrollView
+                ref={scroll.ref}
+                style={{ flex: 1 }}
+                contentContainerStyle={[styles.messages, width]}
+                keyboardShouldPersistTaps="handled"
+                onScroll={scroll.onScroll}
+                onContentSizeChange={scroll.onContentSizeChange}
+                onLayout={scroll.onLayout}
+                scrollEventThrottle={32}
+              >
+                {messages.map((message, index) => {
+                  // An answer is retried by asking its question again, in place.
+                  const question =
+                    message.role === 'assistant' && messages[index - 1]?.role === 'user'
+                      ? messages[index - 1]
+                      : undefined;
+                  return (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      knownEvidence={report.data?.evidence ?? {}}
+                      findingTitles={findingTitles}
+                      busy={send.isPending}
+                      onEdit={
+                        message.role === 'user' ? (text) => resend(text, message.id) : undefined
+                      }
+                      onRetry={question ? () => resend(question.text, question.id) : undefined}
+                      onRate={
+                        message.role === 'assistant'
+                          ? (rating) => rate.mutate({ id: message.id, rating })
+                          : undefined
+                      }
+                    />
+                  );
+                })}
+                {pendingText === undefined && <MemoryPrompts />}
+                {pendingText !== undefined && (
+                  <>
+                    <View
+                      style={[
+                        styles.pendingMine,
+                        { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+                      ]}
+                    >
+                      <Text>{pendingText}</Text>
+                    </View>
+                    <Thinking expert={pendingExpert} />
+                  </>
+                )}
+                {sendError}
+              </ScrollView>
+              {scroll.showJump && <JumpToLatest onPress={() => scroll.pin()} />}
+            </View>
           ) : noData ? (
             <ScrollView contentContainerStyle={[styles.noData, width]}>
               <NoData shows="Ask answers questions about your sleep, recovery and activity" />
@@ -495,6 +506,36 @@ function useKeyboardOpen(): boolean {
   return open;
 }
 
+/** Back to the latest message, shown once the person has scrolled up to read. */
+function JumpToLatest({ onPress }: { onPress: () => void }) {
+  const colors = useColors();
+  return (
+    <Animated.View
+      entering={FadeIn.duration(DURATION.fast)}
+      exiting={FadeOut.duration(DURATION.fast)}
+      style={styles.jump}
+      pointerEvents="box-none"
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Jump to the latest message"
+        onPress={onPress}
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.jumpButton,
+          {
+            backgroundColor: colors.surfaceRaised,
+            borderColor: colors.border,
+            opacity: pressed ? 0.7 : 1,
+          },
+        ]}
+      >
+        <Ionicons name="arrow-down" size={18} color={colors.text} />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   header: {
     ...column,
@@ -553,6 +594,20 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   messages: { ...column, padding: spacing.lg, gap: spacing.lg, flexGrow: 1 },
+  jump: { position: 'absolute', bottom: spacing.md, left: 0, right: 0, alignItems: 'center' },
+  jumpButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
   pendingMine: {
     alignSelf: 'flex-end',
     maxWidth: '82%',
