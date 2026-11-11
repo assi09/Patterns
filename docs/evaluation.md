@@ -199,3 +199,40 @@ the premise check does for the metric itself, rather than leave the choice to th
 `eval/results/phia_blind_2026-11-10.csv` has 51 answers, three each to 17 open questions, shuffled and
 unlabeled. Fill in the three 1-to-5 columns. Do not open `phia_blind_key_2026-11-10.json` or
 `phia_answers_2026-11-10.jsonl` until finished: they say which system wrote what.
+
+## The pilot report
+
+`python -m app.pilot_report --since 2026-11-12 --until 2026-11-22` prints the pilot's totals as JSON
+(`backend/app/pilot_report.py`). It runs **inside the Railway `api` service** (`railway ssh`, as in
+[deployment.md](deployment.md#4-first-sign-in-online)), because Postgres has no public port and
+testers' health data never leaves the server. Only the printed JSON is copied to
+`eval/results/pilot_<date>.json`. It costs nothing: no model is called.
+
+What it prints, all as counts, rates and spreads (mean, median, 90th percentile, maximum):
+
+| Section | What |
+|---|---|
+| `chat` | questions, questions per person per day and per active day, question types (the router's), outcomes from the stored traces, success rate (of the questions not refused), refusals, latency in total and in the model, model and tool calls, tool errors, repairs, rejected claims, fallbacks, guard outages, cost, thumbs (and thumbs by outcome), and per person only their number of questions and active days |
+| `accuracy` | every stored verified claim checked against the independent answer key (`app.oracle`, moved from `eval/` so the server has it) on that person's data, over the periods its evidence covered: changes and no-changes from `compare_windows` and `weekday_split`, links from `correlate`; other claims are counted as unchecked |
+| `recall` | what "has anything changed" answers missed: for each answered `change` question, the answer key tests every metric in the answering expert's area, last 14 days against the 28 before, corrected for testing them all (Benjamini-Hochberg at 0.05), and counts the changes the answer named in the right direction, named the wrong way, missed, and the changes it named that the key does not find. With nothing planted the key finds a change for 2.4-3.4% of 500 made-up people per area, so a quiet answer is rarely marked as a miss |
+| `recovery_vs_check_ins` | the recovery score against morning check-ins, per person with at least 7 paired days (Spearman), reported only across people: how many, median rho, how many positive and significant |
+| `proposals` | alerts raised, sent and marked useful; reminders the agent proposed and kept; memory cards shown, kept and declined |
+| `teams` | per team (as "team 1"…): members, alerts raised, proposals approved or declined, the team agent's outcomes, latency, thumbs and cost |
+
+**What these do not measure.** The claim check shows the numbers are right; recall shows what
+was missed, only for change questions and only over the default period. Neither judges whether the
+answer addressed the question, a "why", the summary's wording, or a general how-to answer. For those,
+Karim and Jad grade a random sample of about 40 answers by hand, inside Railway, with a rubric set
+before reading (addressed the question, correct, complete, nothing unsupported), only from testers
+who agreed that the team may read answers. Only the scores are kept.
+
+**Privacy.** People are "person 1", "person 2"… in an order taken from a hash of their id. Nothing
+prints an email, a message, a claim's words or a health value, and a statistic about someone's own
+data appears only as part of a figure across people. Admins (the owner) are left out unless
+`--include-admins` is given. A test builds a made-up database and checks that none of these appear
+in the output (`backend/tests/test_pilot_report.py`).
+
+**Limits.** The answer key tests at 0.05 per claim, while the agent corrects for all the tests in
+its run, so a borderline change it called unclear can count as a disagreement; the report says so.
+Data synced after an answer (the last three days are reread) can shift a recomputed result
+slightly. Answers from before traces were stored (#151) are counted as untraced.
