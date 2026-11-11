@@ -312,7 +312,7 @@ def add_note(
     team_id: str, body: schemas.TeamNoteIn, db: Db, clock: Now, user: Supervisor
 ) -> schemas.TeamNote:
     team = teams.supervised_team(db, user, team_id)
-    if problem := team_agent._unsafe(body.text):
+    if problem := team_agent._unsafe(body.text, note=True):
         raise ApiError(422, "unsafe_note", f"Not saved: {problem}")
     note = TeamNoteRow(
         team_id=team.id,
@@ -331,7 +331,7 @@ def delete_note(team_id: str, note_id: str, db: Db, user: Supervisor) -> Respons
     team = teams.supervised_team(db, user, team_id)
     for note in team_agent.notes_of(db, team):
         if str(note.id) == note_id:
-            db.delete(note)
+            team_agent.forget_note(db, team, note)
             return Response(status_code=204)
     raise ApiError(404, "not_found", "There is no such note.")
 

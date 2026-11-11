@@ -307,6 +307,13 @@ caught by these checks, which is a known limit.
 member's inbox, unsigned; an approved challenge tells every member what it is and for which days.
 Each decision is made once.
 
-**Memory** is the supervisor's notes (`GET`, `POST`, `DELETE /teams/{id}/notes`), shown to the agent as
-quoted data, and the last six messages of the conversation. **Alerts** are listed for the app at
+**Memory**, kept apart from every member's own and from the supervisor's personal memory:
+- **Notes** (`GET`, `POST`, `DELETE /teams/{id}/notes`): events the supervisor mentions. A message
+  that asks nothing ("we had a release deadline on Oct 20") takes a short path: one call saves it as
+  a note with its dates, or not, and the reply is fixed text ("Noted: …"). A note may say
+  "everyone", but never names a subset, a person, someone's health or an instruction. Deleting a
+  note also deletes the exchange it came from, so the chat cannot keep it alive.
+- **The conversation**: the last six messages in full and, before them, up to 20 earlier things the
+  supervisor said, shortened (a team chat is one thread). Asked what they said earlier, the agent
+  answers from the chat, and may repeat their own numbers. **Alerts** are listed for the app at
 `GET /teams/{id}/alerts`. The team agent shares the chat's daily cap per supervisor.

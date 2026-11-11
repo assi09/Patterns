@@ -109,6 +109,9 @@ _TEAM_OUTCOMES = {
     "about_a_person": "refused",
     "medical": "refused",
     "no_answer": "failed",
+    "noted": "answered",  # told something, and noted it or replied
+    "not_saved": "refused",  # a note about a person, someone's health, or an instruction
+    "about_me": "refused",  # the supervisor's own memory is not the team's
 }
 
 
