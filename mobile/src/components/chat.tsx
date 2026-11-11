@@ -12,7 +12,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import type { ChatMessage, Evidence, ExpertChoice, SourceLink } from '@/api/types';
+import type { ChatMessage, Evidence, ExpertChoice, Rating, SourceLink } from '@/api/types';
 import { useEvidence } from '@/api/hooks';
 import { EvidenceChip } from '@/components/evidence';
 import { LogDraftCard } from '@/components/LogDraftCard';
@@ -66,6 +66,7 @@ export const MessageBubble = memo(function MessageBubble({
   findingTitles,
   onEdit,
   onRetry,
+  onRate,
   busy = false,
 }: {
   message: ChatMessage;
@@ -73,6 +74,7 @@ export const MessageBubble = memo(function MessageBubble({
   findingTitles: Record<string, string>;
   onEdit?: (text: string) => void; // sends the edited question in place of this one
   onRetry?: () => void; // asks the question this answers again
+  onRate?: (rating: Rating | null) => void; // thumbs on an answer; null takes it back
   busy?: boolean; // an answer is on its way: no edits or retries meanwhile
 }) {
   const colors = useColors();
@@ -248,6 +250,7 @@ export const MessageBubble = memo(function MessageBubble({
                 onPress={onRetry}
               />
             )}
+            {onRate && <RatingButtons rating={message.rating} onRate={onRate} hover={hover} />}
           </View>
         </View>
       </Pressable>
@@ -277,18 +280,57 @@ function CopyButton({ text, hover }: { text: string; hover?: Hover }) {
   );
 }
 
+/**
+ * Thumbs up or down on an answer. Tapping the chosen one again takes it back. Only counted, for
+ * the pilot's report: nobody else sees it and it does not change the answer.
+ */
+export function RatingButtons({
+  rating,
+  onRate,
+  hover,
+}: {
+  rating?: Rating | null;
+  onRate: (rating: Rating | null) => void;
+  hover?: Hover;
+}) {
+  return (
+    <>
+      <ActionButton
+        hover={hover}
+        icon={rating === 'up' ? 'thumbs-up' : 'thumbs-up-outline'}
+        label="Helpful"
+        hideLabel
+        active={rating === 'up'}
+        onPress={() => onRate(rating === 'up' ? null : 'up')}
+      />
+      <ActionButton
+        hover={hover}
+        icon={rating === 'down' ? 'thumbs-down' : 'thumbs-down-outline'}
+        label="Not helpful"
+        hideLabel
+        active={rating === 'down'}
+        onPress={() => onRate(rating === 'down' ? null : 'down')}
+      />
+    </>
+  );
+}
+
 function ActionButton({
   icon,
   label,
   onPress,
   disabled = false,
   hover,
+  hideLabel = false,
+  active,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   disabled?: boolean;
   hover?: Hover; // keeps the message hovered while the pointer is on the button
+  hideLabel?: boolean; // the icon says it; the label is for screen readers
+  active?: boolean; // a toggle that is on, such as the chosen thumb
 }) {
   const colors = useColors();
   return (
@@ -296,6 +338,7 @@ function ActionButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
+      aria-selected={active}
       disabled={disabled}
       onPress={onPress}
       {...hover}
@@ -306,10 +349,12 @@ function ActionButton({
         disabled && { opacity: 0.4 },
       ]}
     >
-      <Ionicons name={icon} size={14} color={colors.muted} />
-      <Text variant="caption" color="muted">
-        {label}
-      </Text>
+      <Ionicons name={icon} size={14} color={active ? colors.accent : colors.muted} />
+      {!hideLabel && (
+        <Text variant="caption" color="muted">
+          {label}
+        </Text>
+      )}
     </Pressable>
   );
 }

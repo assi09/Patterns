@@ -152,6 +152,18 @@ records the routing decision as the first step of the trace.
 Planned: the evaluation comparing the experts with the general agent, and the routers with each
 other on a labeled question set.
 
+**Stored traces and ratings** (`trace.py`, table `answer_traces`, migration 0025). Every answer in
+either chat, the person's or the supervisor's, gets one row next to it, deleted with it. It holds the
+outcome (`answered`, `answered_in_part`, `budget`, `failed_checks`, `refused`, `failed`), the agent's
+own stop reason, the router's question type, the wall-clock latency and its split (model, router,
+guard, the rest), the model and tool calls (a consulted expert's included), tool errors, repair
+rounds, rejected claims, whether the summary fell back to joined claims, whether the guard was down,
+the cost, and the full list of steps. A crash while answering still gets a `failed` row with its
+time. The steps stay in the database: a report reads only the counts. People can rate an answer
+thumbs up or down (`PUT /chat/{id}/rating`, `PUT /teams/{team}/chat/{id}/rating`; null takes it
+back). Only answers can be rated, only by the person who asked or the team's supervisor, and the
+rating is counted, never shown to anyone else.
+
 ### Verifier
 
 Deterministic (`verifier.py`). Each claim must cite existing, sufficient evidence; a change or an

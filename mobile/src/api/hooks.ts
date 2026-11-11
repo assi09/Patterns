@@ -13,8 +13,10 @@ import type {
   ISODate,
   NewReminder,
   NotificationSettings,
+  Rating,
   ReminderChange,
   SendOptions,
+  TeamChatMessage,
 } from './types';
 
 const LISTENER_MS = 4000;
@@ -201,6 +203,34 @@ export function useSendMessage() {
         client.invalidateQueries({ queryKey: keys.chat });
         client.invalidateQueries({ queryKey: keys.conversations });
       }
+    },
+  });
+}
+
+/** A chat with one message's rating set (or cleared), every other message as it was. */
+export function withRating<T extends { id: string; rating?: Rating | null }>(
+  messages: T[] | undefined,
+  id: string,
+  rating: Rating | null,
+): T[] | undefined {
+  return messages?.map((m) => (m.id === id ? { ...m, rating: rating ?? undefined } : m));
+}
+
+/** Thumbs on an answer: shown at once in every cached copy of the chat, undone if it fails. */
+export function useRateAnswer() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, rating }: { id: string; rating: Rating | null }) =>
+      api.rateAnswer(id, rating),
+    onMutate: ({ id, rating }) => {
+      const before = client.getQueriesData<ChatMessage[]>({ queryKey: keys.chat });
+      client.setQueriesData<ChatMessage[]>({ queryKey: keys.chat }, (old) =>
+        withRating(old, id, rating),
+      );
+      return { before };
+    },
+    onError: (_error, _rated, context) => {
+      for (const [key, data] of context?.before ?? []) client.setQueryData(key, data);
     },
   });
 }
@@ -533,6 +563,21 @@ export function useAskTeamAgent(teamId: string) {
       client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'actions'] });
       client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'notes'] });
     },
+  });
+}
+
+export function useRateTeamAnswer(teamId: string) {
+  const client = useQueryClient();
+  const key = [...keys.teams, teamId, 'chat'];
+  return useMutation({
+    mutationFn: ({ id, rating }: { id: string; rating: Rating | null }) =>
+      api.rateTeamAnswer(teamId, id, rating),
+    onMutate: ({ id, rating }) => {
+      const before = client.getQueryData<TeamChatMessage[]>(key);
+      client.setQueryData<TeamChatMessage[]>(key, (old) => withRating(old, id, rating));
+      return { before };
+    },
+    onError: (_error, _rated, context) => client.setQueryData(key, context?.before),
   });
 }
 

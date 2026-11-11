@@ -16,6 +16,19 @@ describe('mock API', () => {
     }
   });
 
+  it('rates an answer, takes the rating back, and refuses to rate a question', async () => {
+    const [question, answer] = await mockClient.sendMessage('How did I sleep?', AUTO);
+    expect(answer.rating).toBeUndefined();
+    expect((await mockClient.rateAnswer(answer.id, 'up')).rating).toBe('up');
+    const chat = await mockClient.getChat(answer.conversationId);
+    const stored = chat.find((m) => m.id === answer.id);
+    expect(stored?.rating).toBe('up');
+    expect((await mockClient.rateAnswer(answer.id, 'down')).rating).toBe('down');
+    expect((await mockClient.rateAnswer(answer.id, null)).rating).toBeUndefined();
+    await expect(mockClient.rateAnswer(question.id, 'up')).rejects.toThrow(/no longer/);
+    await expect(mockClient.rateAnswer('missing', 'up')).rejects.toThrow(/no longer/);
+  });
+
   it('only cites evidence that exists in chat answers', async () => {
     const report = await mockClient.getLatestReport();
     const [, answer] = await mockClient.sendMessage('Why is my sleep worse?', DEEP);
@@ -441,6 +454,18 @@ describe('the team agent in the mock', () => {
     await expect(mockClient.decideTeamAction(id, proposed[0].id, false)).rejects.toThrow(
       /already decided/,
     );
+  });
+
+  it('lets the supervisor rate an answer, never their own question', async () => {
+    const id = await teamId();
+    const { messages } = await mockClient.askTeamAgent(id, 'How is the team?');
+    const [asked, said] = messages;
+    expect(said.rating).toBeNull();
+    expect((await mockClient.rateTeamAnswer(id, said.id, 'down')).rating).toBe('down');
+    const stored = (await mockClient.getTeamChat(id)).find((m) => m.id === said.id);
+    expect(stored?.rating).toBe('down');
+    expect((await mockClient.rateTeamAnswer(id, said.id, null)).rating).toBeNull();
+    await expect(mockClient.rateTeamAnswer(id, asked.id, 'up')).rejects.toThrow(/no longer/);
   });
 
   it('keeps notes about the team and refuses ones about a person', async () => {

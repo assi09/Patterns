@@ -208,6 +208,12 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       request<TeamChatMessage[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/chat`),
     askTeamAgent: (teamId, text) =>
       post<TeamChatReply>(baseUrl, `/teams/${encodeURIComponent(teamId)}/chat`, { text }, 60_000),
+    rateTeamAnswer: (teamId, messageId, rating) =>
+      request<TeamChatMessage>(
+        baseUrl,
+        `/teams/${encodeURIComponent(teamId)}/chat/${encodeURIComponent(messageId)}/rating`,
+        { method: 'PUT', body: JSON.stringify({ rating }) },
+      ),
     getTeamNotes: (teamId) =>
       request<TeamNote[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/notes`),
     addTeamNote: (teamId, text, startsOn, endsOn) =>
@@ -271,6 +277,11 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     syncGoogle: (options) =>
       post<GoogleStatus>(baseUrl, '/google/sync', { force: options?.force ?? false }),
     disconnectGoogle: () => post<GoogleStatus>(baseUrl, '/google/disconnect'),
+    rateAnswer: (messageId, rating) =>
+      request<ChatMessage>(baseUrl, `/chat/${encodeURIComponent(messageId)}/rating`, {
+        method: 'PUT',
+        body: JSON.stringify({ rating }),
+      }),
     sendMessage: (text, { expert, depth, attachment, conversationId, replaces }) =>
       post<ChatMessage[]>(
         baseUrl,

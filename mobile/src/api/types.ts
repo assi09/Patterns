@@ -197,8 +197,12 @@ export interface ChatMessage {
   consulted?: Expert[]; // other experts the answering expert asked
   refused?: boolean; // the request was out of scope, e.g. medical advice
   conversationId?: string;
+  rating?: Rating; // assistant only: the person's thumbs, absent until given
   createdAt: ISODateTime;
 }
+
+/** Thumbs up or down on an answer; counted, never shown to anyone else. */
+export type Rating = 'up' | 'down';
 
 /** One of the person's chats. Memory is the person's, so every conversation shares it. */
 export interface Conversation {
@@ -418,9 +422,11 @@ export interface SharedLevels {
 
 /** The supervisor's conversation with the team agent: team figures only, never a person. */
 export interface TeamChatMessage {
+  id: string;
   role: 'supervisor' | 'agent';
   text: string;
   evidence: Evidence[];
+  rating?: Rating | null; // agent only: the supervisor's thumbs
   createdAt: ISODateTime;
 }
 
@@ -512,6 +518,7 @@ export interface ApiClient {
   ): Promise<Conversation>;
   deleteConversation(id: string): Promise<void>;
   sendMessage(text: string, options: SendOptions): Promise<ChatMessage[]>; // returns the new messages
+  rateAnswer(messageId: string, rating: Rating | null): Promise<ChatMessage>; // null takes it back
   getReminders(): Promise<Reminder[]>; // all but deleted ones, newest first
   createReminder(reminder: NewReminder): Promise<Reminder>; // active at once
   changeReminder(id: string, change: ReminderChange): Promise<Reminder>;
@@ -546,6 +553,11 @@ export interface ApiClient {
   makeTeamReport(teamId: string, week?: ISODate): Promise<TeamReport>; // the last full week
   getTeamChat(teamId: string): Promise<TeamChatMessage[]>; // oldest first
   askTeamAgent(teamId: string, text: string): Promise<TeamChatReply>;
+  rateTeamAnswer(
+    teamId: string,
+    messageId: string,
+    rating: Rating | null,
+  ): Promise<TeamChatMessage>;
   getTeamNotes(teamId: string): Promise<TeamNote[]>;
   addTeamNote(
     teamId: string,
