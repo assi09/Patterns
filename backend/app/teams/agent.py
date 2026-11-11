@@ -10,6 +10,7 @@ model call, and a claim or proposal that singles anyone out, or sounds medical, 
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Literal
@@ -19,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agent.llm import LLM, Budget, BudgetExceeded, LLMError
+from app.agent.trace import team_trace
 from app.agent.verifier import DOWN_WORDS, MEDICAL, UP_WORDS, text_problems
 from app.analysis.evidence import Evidence, Window
 from app.analysis.screen import FDR
@@ -33,6 +35,7 @@ from app.analysis.team import (
     team_scan,
     team_statistics,
 )
+from app.db.chat import add_trace
 from app.db.models import Team, TeamAction, TeamAlert, TeamChatMessage, TeamNote
 from app.teams.narrative import INDIVIDUAL
 from app.teams.reports import _member_frames, last_full_week
@@ -475,21 +478,25 @@ def answer_supervisor(
 ) -> TeamReply:
     """One turn of the supervisor's conversation; both messages are stored."""
     earlier = history_of(db, team)
+    started = time.monotonic()
     reply = _answer(llm, db, team, question.strip()[:600], today, now, earlier)
+    elapsed = time.monotonic() - started
     db.add(
         TeamChatMessage(team_id=team.id, role="supervisor", text=question[:2000], created_at=now)
     )
-    db.add(
-        TeamChatMessage(
-            team_id=team.id,
-            role="agent",
-            text=reply.text[:2000],
-            evidence=[e.model_dump(mode="json") for e in reply.evidence],
-            cost_usd=round(reply.cost_usd, 6),
-            created_at=now + timedelta(microseconds=1),
-        )
+    answer = TeamChatMessage(
+        team_id=team.id,
+        role="agent",
+        text=reply.text[:2000],
+        evidence=[e.model_dump(mode="json") for e in reply.evidence],
+        cost_usd=round(reply.cost_usd, 6),
+        created_at=now + timedelta(microseconds=1),
     )
+    db.add(answer)
     db.flush()
+    add_trace(
+        db, team_trace(reply.stop, reply.trace, reply.cost_usd, elapsed), team_message_id=answer.id
+    )
     return reply
 
 
@@ -527,6 +534,9 @@ def _answer(
             reply.trace.append({"error": type(error).__name__})
             break
         messages.append(done.as_message())
+        reply.trace.append(
+            {"model": done.model, "latency_s": round(done.latency_s, 3), "cost_usd": done.cost_usd}
+        )
         if not done.tool_calls:
             messages.append({"role": "user", "content": f"Call {ANSWER} now."})
             continue

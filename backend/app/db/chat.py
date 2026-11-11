@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.agent.sanitize import clean, reads_like_instruction, stems
 from app.analysis.evidence import Evidence
 from app.db.models import (
+    AnswerTrace,
     ChatMessage,
     Conversation,
     EvidenceRecord,
@@ -377,3 +378,51 @@ def load_evidence(session: Session, user_id: uuid.UUID, ids: Iterable[str]) -> d
         )
     )
     return {row.id: Evidence.model_validate(row.payload) for row in rows}
+
+
+def add_trace(
+    session: Session,
+    record: dict,
+    *,
+    run_id: str | None = None,
+    message_id: uuid.UUID | None = None,
+    team_message_id: uuid.UUID | None = None,
+) -> AnswerTrace:
+    """Stores how one answer was reached (`app.agent.trace`), next to the answer it belongs to."""
+    fields = {k: v for k, v in record.items() if k in TRACE_FIELDS}
+    trace = AnswerTrace(
+        message_id=message_id, team_message_id=team_message_id, run_id=run_id, **fields
+    )
+    session.add(trace)
+    session.flush()
+    return trace
+
+
+TRACE_FIELDS = {
+    "outcome",
+    "stop_reason",
+    "question_type",
+    "latency_ms",
+    "stages_ms",
+    "model_calls",
+    "tool_calls",
+    "tool_errors",
+    "repair_rounds",
+    "rejected_claims",
+    "summary_fell_back",
+    "guard_down",
+    "cost_usd",
+    "steps",
+}
+
+
+def rate_answer(
+    session: Session, user_id: uuid.UUID, message_id: uuid.UUID, rating: str | None, now: datetime
+) -> ChatMessage | None:
+    """Sets or clears the person's thumbs on one of their own answers; None if it is not one."""
+    message = session.get(ChatMessage, message_id)
+    if message is None or message.user_id != user_id or message.role != "assistant":
+        return None
+    message.rating, message.rated_at = rating, now if rating else None
+    session.flush()
+    return message

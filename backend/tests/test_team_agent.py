@@ -17,7 +17,15 @@ from app.api import auth, teams
 from app.api.main import create_app
 from app.auth import accounts
 from app.db.daily import save_daily
-from app.db.models import Notification, Team, TeamAction, TeamChatMessage, TeamNote, User
+from app.db.models import (
+    AnswerTrace,
+    Notification,
+    Team,
+    TeamAction,
+    TeamChatMessage,
+    TeamNote,
+    User,
+)
 from app.db.session import session_scope
 from app.synthetic import Step, generate
 from app.teams import actions, memberships
@@ -310,3 +318,41 @@ def test_a_good_summary_is_kept_when_one_claim_still_fails(engine):
     )
     assert reply.stop == "answered_in_part" and reply.text.startswith("Time asleep")
     assert [e.tool for e in reply.evidence] == ["team_scan"]
+
+
+def test_each_team_answer_keeps_its_trace(engine):
+    team_id = make_team(engine)
+    ask(engine, team_id, "Who is sleeping the worst?", [])
+    ask(engine, team_id, "How are we?", [ScriptedLLM.call("team_overview"), answer("Hi.", [])])
+    with session_scope(engine) as db:
+        traces = db.scalars(select(AnswerTrace).order_by(AnswerTrace.created_at)).all()
+        assert [t.outcome for t in traces] == ["refused", "answered"]
+        assert all(t.message_id is None and t.team_message_id for t in traces)
+        assert traces[1].model_calls == 2 and traces[1].tool_calls == 1
+        agent = db.get(TeamChatMessage, traces[1].team_message_id)
+        assert agent.role == "agent" and agent.text == "Hi."
+
+
+def test_the_supervisor_rates_the_team_agents_answers_only(engine, client):
+    client, app = client
+    team_id = make_team(engine)
+    with session_scope(engine) as db:
+        db.add(User(email="other@example.com", status="approved", role="supervisor"))
+    app.dependency_overrides[teams.team_agent_llm] = lambda: ScriptedLLM([answer("Hi.", [])])
+    boss = signed_in(client, engine, "boss@example.com")
+    stranger = signed_in(client, engine, "other@example.com")
+    asked, said = client.post(
+        f"/teams/{team_id}/chat", headers=boss, json={"text": "Hello"}
+    ).json()["messages"]
+    url = f"/teams/{team_id}/chat/{said['id']}/rating"
+
+    rated = client.put(url, headers=boss, json={"rating": "down"})
+    assert rated.status_code == 200 and rated.json()["rating"] == "down"
+    assert client.get(f"/teams/{team_id}/chat", headers=boss).json()[1]["rating"] == "down"
+    assert client.put(url, headers=boss, json={"rating": None}).json()["rating"] is None
+    assert client.put(url, headers=stranger, json={"rating": "up"}).status_code == 404
+    own = f"/teams/{team_id}/chat/{asked['id']}/rating"
+    assert client.put(own, headers=boss, json={"rating": "up"}).status_code == 404
+    bad = f"/teams/{team_id}/chat/not-an-id/rating"
+    assert client.put(bad, headers=boss, json={"rating": "up"}).status_code == 404
+    assert client.put(url, headers=boss, json={"rating": "meh"}).status_code == 422

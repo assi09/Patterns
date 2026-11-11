@@ -214,7 +214,14 @@ class ChatMessage(ApiModel):
     consulted: list[str] | None = None
     refused: bool | None = None
     conversation_id: str | None = None
+    rating: Literal["up", "down"] | None = None  # the person's thumbs, on answers only
     created_at: datetime
+
+
+class RatingIn(ApiModel):
+    """Thumbs up or down on an answer; null takes it back."""
+
+    rating: Literal["up", "down"] | None
 
 
 class Conversation(ApiModel):
@@ -351,9 +358,11 @@ class TeamChatIn(ApiModel):
 
 
 class TeamChatMessage(ApiModel):
+    id: str
     role: Literal["supervisor", "agent"]
     text: str
     evidence: list[Evidence] = Field(default_factory=list)
+    rating: Literal["up", "down"] | None = None  # the supervisor's thumbs, on answers only
     created_at: datetime
 
 

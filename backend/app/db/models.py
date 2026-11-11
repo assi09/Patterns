@@ -33,6 +33,8 @@ from app.agent.facts import FACT_KINDS
 SOURCES = ("google_health", "takeout")
 SYNC_STATUSES = ("running", "succeeded", "failed")
 CHAT_ROLES = ("user", "assistant")
+# A person's or a supervisor's thumbs on an answer, for the pilot's report.
+RATINGS = ("up", "down")
 # A sign-up waits for the owner's approval: the Google Health app is in Testing mode, so each
 # person must also be added as a test user by hand before they can connect their data.
 USER_STATUSES = ("pending", "approved", "rejected")
@@ -194,6 +196,7 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
     __table_args__ = (
         CheckConstraint(f"role IN {CHAT_ROLES}", name="ck_chat_messages_role"),
+        CheckConstraint(f"rating IS NULL OR rating IN {RATINGS}", name="ck_chat_messages_rating"),
         Index("ix_chat_messages_user_created", "user_id", "created_at"),
     )
 
@@ -226,6 +229,8 @@ class ChatMessage(Base):
     run_id: Mapped[str | None] = mapped_column(String(32), default=None)  # links to the trace
     # What the answer's model calls cost, in US dollars, for the daily spending caps.
     cost_usd: Mapped[float | None] = mapped_column(Float, default=None)
+    rating: Mapped[str | None] = mapped_column(String(8), default=None)  # up or down, or none
+    rated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -617,7 +622,12 @@ class TeamChatMessage(Base):
     """The supervisor's conversation with the team agent: team figures only."""
 
     __tablename__ = "team_chat_messages"
-    __table_args__ = (Index("ix_team_chat_team_created", "team_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_team_chat_team_created", "team_id", "created_at"),
+        CheckConstraint(
+            f"rating IS NULL OR rating IN {RATINGS}", name="ck_team_chat_messages_rating"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"))
@@ -625,6 +635,52 @@ class TeamChatMessage(Base):
     text: Mapped[str] = mapped_column(String(2000))
     evidence: Mapped[list | None] = mapped_column(JSON, default=None)
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    rating: Mapped[str | None] = mapped_column(String(8), default=None)  # up or down, or none
+    rated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+TRACE_OUTCOMES = ("answered", "answered_in_part", "budget", "failed_checks", "refused", "failed")
+
+
+class AnswerTrace(Base):
+    """How one answer was reached, kept after a restart: the AgentOps record of each answer.
+
+    One row per assistant answer in either chat, deleted with it. `steps` is the agent's full
+    trace (tool calls, checks, model calls), held in the database only; reports read the counts.
+    """
+
+    __tablename__ = "answer_traces"
+    __table_args__ = (
+        CheckConstraint(f"outcome IN {TRACE_OUTCOMES}", name="ck_answer_traces_outcome"),
+        CheckConstraint(
+            "(message_id IS NULL) != (team_message_id IS NULL)", name="ck_answer_traces_one_chat"
+        ),
+        Index("ix_answer_traces_created", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    message_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="CASCADE"), unique=True, default=None
+    )
+    team_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("team_chat_messages.id", ondelete="CASCADE"), unique=True, default=None
+    )
+    run_id: Mapped[str | None] = mapped_column(String(32), default=None)
+    outcome: Mapped[str] = mapped_column(String(24))
+    stop_reason: Mapped[str] = mapped_column(String(32))
+    question_type: Mapped[str | None] = mapped_column(String(32), default=None)  # the router's
+    latency_ms: Mapped[int] = mapped_column()
+    stages_ms: Mapped[dict] = mapped_column(JSON, default=dict)  # model, router, guard, other
+    model_calls: Mapped[int] = mapped_column(default=0)
+    tool_calls: Mapped[int] = mapped_column(default=0)
+    tool_errors: Mapped[int] = mapped_column(default=0)
+    repair_rounds: Mapped[int] = mapped_column(default=0)
+    rejected_claims: Mapped[int] = mapped_column(default=0)
+    summary_fell_back: Mapped[bool] = mapped_column(Boolean, default=False)
+    guard_down: Mapped[bool] = mapped_column(Boolean, default=False)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    steps: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
