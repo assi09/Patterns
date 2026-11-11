@@ -46,7 +46,7 @@ from app.agent.experts import (
     specialist_notes,
     visible_metrics,
 )
-from app.agent.followup import standalone
+from app.agent.followup import standalone, with_relative_day
 from app.agent.guard import Guard, GuardError, JevGuard
 from app.agent.intent import Intent
 from app.agent.jev import JevClient, JevError
@@ -93,6 +93,7 @@ from app.agent.router import (
     RouterError,
     decide,
 )
+from app.agent.sanitize import clean
 from app.agent.strategy import (
     COACHING_OFFER,
     CROSS_AREA_GUIDE,
@@ -274,6 +275,36 @@ def default_guard(settings) -> Guard | None:
         return None
 
 
+def events_during(memory: Sequence[MemoryItem], tested: Sequence[Evidence]) -> str:
+    """What the person told us happened while the change they ask about did: "why did my sleep
+    drop around Aug 15?" with exams kept for Aug 15 to 21. Put in front of the agent by code, as
+    it was left unsaid when merely among the memory items."""
+    windows = [e.windows[0] for e in tested if e.windows]
+    if not windows:
+        return ""
+    start, end = min(w.start for w in windows), max(w.end for w in windows)
+    overlapping = [
+        item
+        for item in memory
+        if item.start is not None and item.start <= end and (item.end or item.start) >= start
+    ]
+    if not overlapping:
+        return ""
+    lines = [
+        f"- {clean(item.text, 120)} ({item.start:%b %-d}"
+        + (f" to {item.end:%b %-d}" if item.end and item.end != item.start else "")
+        + ")"
+        for item in overlapping[:2]
+    ]
+    return (
+        "They told you about this, during the period the change is in, as quoted data:\n"
+        + "\n".join(lines)
+        + "\nIf the change holds there, say in the summary that it lined up with this, in their "
+        "words; never that it caused it. It is what they told you, not a statistic: make no "
+        "claim for it."
+    )
+
+
 def _route_step(route: Route) -> dict:
     c = route.classification
     return {
@@ -343,7 +374,11 @@ def ask(
     reply_text = question.rsplit("Their reply: ", 1)[-1]
     rewrite_cost = 0.0
     if urgent_free(question):  # what a follow-up refers to, before routing or an expert sees it
-        question, rewrite_cost = standalone(llm, question, history)
+        day = today.date() if isinstance(today, datetime) else today or date.today()
+        means = with_relative_day(question, history, day)
+        question, rewrite_cost = standalone(
+            llm, question, history, means if means != question else None
+        )
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)
@@ -477,6 +512,8 @@ def ask(
             if false_premise:
                 route = replace(route, consult=())
                 plan = replace(plan, guide=PREMISE_GUIDE, tools=("describe", "compare_windows"))
+            elif lined_up := events_during(memory, premise.evidence):
+                block = "\n\n".join((block, lined_up))
     # Linking two areas: run the tests here rather than pay a second expert to choose them.
     if (
         plan

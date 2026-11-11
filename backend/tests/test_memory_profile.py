@@ -492,3 +492,46 @@ def test_deleting_a_kept_fact_takes_it_out_of_the_profile(client, engine):
 
 def test_a_turn_needs_no_memory():
     assert build([Turn("Q?", "A.")], {}).included["profile"] == 0
+
+
+def test_recall_may_quote_a_number_from_what_was_kept():
+    """A kept fact such as "day shifts, 9 to 5" is the person's own: quoting it is not invented."""
+    llm = ScriptedLLM([ScriptedLLM.say("You work day shifts, 9 to 5.")])
+    result = recall(llm, "What do you know about me?", [], profile=["Works day shifts, 9 to 5"])
+    assert result.stop_reason == "recalled" and "9 to 5" in result.summary
+
+
+def test_a_failed_recall_falls_back_to_what_was_kept_not_an_old_chat():
+    """Another chat can be out of date (night shifts, since replaced); what was kept is current."""
+    past = [{"date": "2026-10-01", "text": "You've said you work night shifts."}]
+    result = recall(
+        ScriptedLLM([ScriptedLLM.say("You work 37 nights a month.")]),
+        "What do you know about me?",
+        [],
+        past=past,
+        profile=["Works day shifts"],
+    )
+    assert result.stop_reason == "recall_fallback"
+    assert "day shifts" in result.summary and "night" not in result.summary
+
+
+def test_the_recall_prompt_says_the_kept_profile_wins_over_other_chats():
+    llm = ScriptedLLM([ScriptedLLM.say("You work day shifts.")])
+    recall(llm, "What do you know about me?", [], profile=["Works day shifts"])
+    assert "the profile wins" in llm.requests[0]["messages"][0]["content"]
+
+
+def test_the_agent_is_told_the_data_wins_over_what_they_said():
+    from app.agent.context import ChatState, build
+
+    built = build([], {}, chat=ChatState(profile=("Usually sleeps 8 hours",)))
+    assert "go by the data" in built.block and "never agree with it" in built.block
+
+
+def test_a_claim_without_a_real_direction_parses_and_is_then_asked_for_one():
+    from app.agent.verifier import Claim
+
+    for given in ("steady", "none", "", "flat"):
+        claim = Claim(text="x", kind="change", evidence_ids=["e"], direction=given)
+        assert claim.direction is None
+    assert Claim(text="x", kind="change", evidence_ids=["e"], direction="up").direction == "up"
