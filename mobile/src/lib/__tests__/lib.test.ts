@@ -3,6 +3,7 @@ import type { Evidence, Point } from '@/api/types';
 import { chartGeometry } from '../chart';
 import { EXPERTS, expertForMetric, expertInfo } from '../experts';
 import { heroFrame } from '../hero';
+import { distanceFromBottom, JUMP_AFTER, PINNED_WITHIN } from '../stickToBottom';
 import {
   evidenceLabel,
   formatP,
@@ -235,5 +236,19 @@ describe('heroFrame', () => {
   it('grows steadily with progress', () => {
     const widths = [0, 0.25, 0.5, 0.75, 1].map((p) => heroFrame(p, 390, 844).width);
     widths.slice(1).forEach((width, i) => expect(width).toBeGreaterThan(widths[i]));
+  });
+});
+
+describe('distanceFromBottom', () => {
+  it('is how far the view is from the end, never below zero', () => {
+    expect(distanceFromBottom(2000, 800, 1200)).toBe(0);
+    expect(distanceFromBottom(2000, 800, 900)).toBe(300);
+    expect(distanceFromBottom(2000, 800, 1250)).toBe(0); // bounced past the end
+    expect(distanceFromBottom(500, 800, 0)).toBe(0); // shorter than the screen
+  });
+
+  it('follows near the end and offers the button only well above it', () => {
+    expect(distanceFromBottom(2000, 800, 1200 - PINNED_WITHIN)).toBeLessThanOrEqual(PINNED_WITHIN);
+    expect(JUMP_AFTER).toBeGreaterThan(PINNED_WITHIN);
   });
 });
