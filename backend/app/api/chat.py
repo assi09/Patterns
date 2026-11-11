@@ -58,6 +58,7 @@ from app.db.models import (
     Conversation,
     HealthAction,
     MemoryEpisode,
+    Spend,
     User,
 )
 from app.db.session import session_scope
@@ -192,11 +193,10 @@ def _day_start(now: datetime) -> datetime:
 
 
 def _spent(db: Session, since: datetime, user: User | None = None) -> float:
-    query = select(func.coalesce(func.sum(ChatMessage.cost_usd), 0.0)).where(
-        ChatMessage.created_at >= since
-    )
+    """From the spending ledger, not the chats: a deleted chat's answers still count today."""
+    query = select(func.coalesce(func.sum(Spend.cost_usd), 0.0)).where(Spend.at >= since)
     if user is not None:
-        query = query.where(ChatMessage.user_id == user.id)
+        query = query.where(Spend.user_id == user.id)
     return float(db.scalar(query))
 
 

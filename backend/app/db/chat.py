@@ -22,6 +22,7 @@ from app.db.models import (
     HealthAction,
     MemoryFact,
     Reminder,
+    Spend,
 )
 
 NEW_TITLE = "New chat"
@@ -187,6 +188,8 @@ def add_answer(
         conversation_id=conversation_id,
     )
     session.add(message)
+    if cost_usd:
+        session.add(Spend(user_id=user_id, kind="answer", cost_usd=cost_usd))
     session.flush()
     return message
 
@@ -262,6 +265,8 @@ def charge_answer(
     )
     if answer is not None:
         answer.cost_usd = (answer.cost_usd or 0.0) + cost_usd
+    if cost_usd:
+        session.add(Spend(user_id=user_id, kind="background", cost_usd=cost_usd))
 
 
 def save_summary(

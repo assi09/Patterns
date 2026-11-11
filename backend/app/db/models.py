@@ -640,6 +640,20 @@ class TeamChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class Spend(Base):
+    """What answering cost, kept apart from the chats: deleting a chat must not hand back its
+    share of the day's spending cap. One row per charge; deleted only with the person."""
+
+    __tablename__ = "spend"
+    __table_args__ = (Index("ix_spend_user_at", "user_id", "at"), Index("ix_spend_at", "at"))
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))  # answer, or background (listener, summary)
+    cost_usd: Mapped[float] = mapped_column(Float)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 TRACE_OUTCOMES = ("answered", "answered_in_part", "budget", "failed_checks", "refused", "failed")
 
 
