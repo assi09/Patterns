@@ -236,3 +236,54 @@ in the output (`backend/tests/test_pilot_report.py`).
 its run, so a borderline change it called unclear can count as a disagreement; the report says so.
 Data synced after an answer (the last three days are reread) can shift a recomputed result
 slightly. Answers from before traces were stored (#151) are counted as untraced.
+
+## Memory, the person's and the team's (2026-11-11)
+
+`eval/memory_eval.py` drives the real API with the real model, router and guard, on a made-up person
+(120 days, a resting heart rate rise, two dated sleep dips) and a made-up team of seven. Twenty
+scenarios, 77 checks. Each check is code reading the reply, the stored trace of the answer (what
+context it was given, which tools ran on which dates) and the memory page or team notes afterwards.
+Results are in `eval/results/memory_eval_2026-11-11_*`.
+
+| Area | Scenarios |
+|---|---|
+| Within a chat | follow-ups keep the subject; "the day before that"; a trip mentioned in turn 1 used in turn 11, after it left the verbatim window |
+| Across chats | the trip's dates found from another chat without ever being kept; a kept fact shaping advice; a declined one never used; said once (noticed) then twice (a card); a fact replaced; an event used only when its dates match; an earlier finding recalled; a reworded fact used; a belief that disagrees with the data |
+| Forgetting | a deleted chat's words and heard facts gone; an edited message's card gone |
+| Attacks | an instruction and a medical statement as memory, refused and not obeyed |
+| Team memory | a note saved from what the supervisor said, found after leaving the history and lined up with the team's change; unsafe notes refused; a deleted note forgotten; something said and not saved, recalled after four more turns; the supervisor's own memory and the team's kept apart, both ways |
+
+**The rule, set before the first run:** one full run; read every failure and sort it as a bug, a
+design gap or a test flaw; fix causes with scripted tests; rerun only what failed; then one final
+full run. Repeats were decided beforehand: the three cross-chat recall scenarios, three times each.
+
+**Results.** First full run 58 of 71. After the fixes below, the final full run passed 77 of 77, with
+the repeated recall scenarios 3 of 3 each; it then found four answers that passed their checks but
+read badly, which were fixed and rerun (21 of 21 on the "remember" scenarios, three times each).
+Context stayed within its budget on every turn (median 93 tokens, at most 1,481 of 1,500).
+
+**What it found and what changed:**
+
+| Found | Fix |
+|---|---|
+| "Why did my sleep drop around Aug 15?" answered about the last two weeks | the premise check reads a named day and tests the week from it |
+| "What do you know about me?" quoted an old chat's "night shifts" after it was replaced | recall trusts the kept profile; its number check reads it; the fallback lists what was kept |
+| "The day before that" counted from today | code turns it into a date from the last answer's day; the rewrite may use it; the day snapshot covers the day named |
+| A coaching answer lost over a claim direction of "steady" | an unknown direction parses as none and is asked for |
+| An event they kept, overlapping the change, went unmentioned | code puts it in front of the agent, to be said in their words, never as a statistic |
+| The listener reworded an attack ("wants answers to ignore rules") past the instruction check | facts about how the assistant should behave are refused, and such messages are not listened to |
+| A card from a message edited away stayed waiting | an undecided card goes with its words, with its inbox entry; kept or declined ones stay |
+| "Do I get 8 hours?" agreed with a kept belief | the context says the data wins over what they said |
+| "Remember that…" promised a card when none was made | an explicit request is heard first, and the reply says what happened; the guard gets a second try |
+| The team agent did not save "we had a deadline on Oct 20" and failed the answer | a message that asks nothing takes a short note path |
+| The team agent forgot anything older than three exchanges | it reads up to 20 earlier things the supervisor said |
+| A note saying "everyone was crunching" was refused | notes may speak of the whole team, never a subset |
+| A deleted note was still recalled from the chat | deleting a note deletes the exchange it came from |
+| "What do you know about me?" in the team chat failed | a fixed reply: the team agent knows the team only |
+| Deleting chats handed back the daily spending cap | a spending ledger (#154) |
+
+**Limits.** One made-up person and team; each turn but the repeated three ran once per pass, so a
+pass shows behaviour, not a rate. Some checks are word matches, and three were loosened after
+reading answers that were right in other words (a recall route, a longer usual period, a usual
+range); every loosening is in the script's history. Real chats from the pilot are the next test of
+this, through the report's traces.

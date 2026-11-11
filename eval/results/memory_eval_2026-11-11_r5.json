@@ -1,0 +1,20 @@
+{
+  "checks": 9,
+  "passed": 9,
+  "by_scenario": {
+    "P1": "5/5",
+    "P8": "4/4"
+  },
+  "context_tokens": {
+    "budget": 1500,
+    "median": 175.0,
+    "max": 1448,
+    "over_budget": 0
+  },
+  "dropped_items": 6,
+  "dropped_reasons": [
+    "over the context budget"
+  ],
+  "cost_usd": 0.0487,
+  "failures": []
+}

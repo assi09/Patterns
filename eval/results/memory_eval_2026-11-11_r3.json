@@ -1,0 +1,38 @@
+{
+  "checks": 17,
+  "passed": 15,
+  "by_scenario": {
+    "P1": "4/5",
+    "P8": "3/4",
+    "T1": "8/8"
+  },
+  "context_tokens": {
+    "budget": 1500,
+    "median": 174.5,
+    "max": 1480,
+    "over_budget": 0
+  },
+  "dropped_items": 6,
+  "dropped_reasons": [
+    "over the context budget"
+  ],
+  "cost_usd": 0.0923,
+  "failures": [
+    {
+      "scenario": "P1",
+      "label": "correction followed",
+      "problems": [
+        "fact: steps 3291"
+      ],
+      "a": "I couldn't finish answering this time. Please try again in a moment."
+    },
+    {
+      "scenario": "P8",
+      "label": "event used when its dates match",
+      "problems": [
+        "missing any of ('exam',)"
+      ],
+      "a": "Your time asleep was lower in Aug 14 to Aug 20 than in Jul 17 to Aug 13, and your time in bed was also lower in that period. Your bedtime held steady, and there was no low-wear issue in August that would explain the sleep dip."
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "checks": 71,
+  "passed": 58,
+  "by_scenario": {
+    "P1": "3/5",
+    "P2": "10/11",
+    "P3": "0/1",
+    "P4": "3/3",
+    "P5": "4/4",
+    "P6": "5/5",
+    "P7": "4/4",
+    "P8": "3/4",
+    "P9": "1/2",
+    "P10": "1/2",
+    "P11": "3/3",
+    "P12": "4/4",
+    "P13": "0/1",
+    "P14": "1/2",
+    "P15": "1/1",
+    "T1": "5/8",
+    "T2": "2/2",
+    "T3": "3/3",
+    "T4": "1/1",
+    "T5": "4/5"
+  },
+  "context_tokens": {
+    "budget": 1500,
+    "median": 469,
+    "max": 1498,
+    "over_budget": 0
+  },
+  "dropped_items": 33,
+  "dropped_reasons": [
+    "over the context budget"
+  ],
+  "cost_usd": 0.2263,
+  "failures": [
+    {
+      "scenario": "P1",
+      "label": "How has my resting heart rate been over the last month?",
+      "problems": [
+        "missing any of ('up', 'higher', 'rose', 'risen', 'increase', 'climb')"
+      ],
+      "a": "Your resting heart rate has been pretty steady over the last month, averaging 66.2 bpm with a median of 66.7 bpm. It ranged from 56.7 bpm to 70.9 bpm, so there were a few dips and spikes, but nothing suggesting a big sustained shift."
+    },
+    {
+      "scenario": "P1",
+      "label": "correction followed",
+      "problems": [
+        "fact: steps 3291"
+      ],
+      "a": "You took 9,504 steps on Nov 10, and that was within your usual range, so it looks like a pretty normal day for steps."
+    },
+    {
+      "scenario": "P2",
+      "label": "trip used 10 turns later",
+      "problems": [
+        "missing any of ('trip', 'travel')",
+        "missing any of ('less', 'shorter', 'lower', 'fell', 'drop', 'down', 'dip')"
+      ],
+      "a": "Your sleep was not clearly different during Sep 17 to Sep 23 compared with Sep 10 to Sep 16, and your bedtime also did not clearly change. Wear time stayed complete with no low-wear days, so low wear does not explain the pattern."
+    },
+    {
+      "scenario": "P3",
+      "label": "recall from another chat",
+      "problems": [
+        "no tool of ('search_conversations', 'memory_lookup'); ran ['recall']"
+      ],
+      "a": "You said you were \u201ctravelling for work from September 17 to September 23.\u201d That\u2019s the travel period mentioned in the other chat."
+    },
+    {
+      "scenario": "P8",
+      "label": "event used when its dates match",
+      "problems": [
+        "missing any of ('exam',)",
+        "no tool looked at 2026-08-15..2026-08-21"
+      ],
+      "a": "Sleep efficiency did not clearly change: Oct 29 to Nov 11 was 91.6% and the 28 days before was 89.2%. Time asleep did not clearly change: Oct 29 to Nov 11 was 7 h 7 min and the 28 days before was 7 h 8 min."
+    },
+    {
+      "scenario": "P9",
+      "label": "earlier finding recalled",
+      "problems": [
+        "no tool of ('memory_lookup', 'search_conversations'); ran ['recall']"
+      ],
+      "a": "You asked about your resting heart rate before, and I said it was higher in the last month than the month before by about 3.5 bpm on average. I also said your weekends looked a little lower than weekdays, but not by enough to call a clear difference."
+    },
+    {
+      "scenario": "P10",
+      "label": "the trip went with its chats",
+      "problems": [
+        "['They had exams', 'They work day shifts', 'They cycle to work', 'They were travelling for work']"
+      ],
+      "a": ""
+    },
+    {
+      "scenario": "P13",
+      "label": "reworded fact used",
+      "problems": [
+        "missing any of ('9 to 5', '9-5', '9 am', '9am', 'nine')"
+      ],
+      "a": "In another chat it says: \u201cYou\u2019ve said you work night shifts, and you often look at your heart rate variability, resting heart rate, and bedtime. That\u2019s the main thing I know about you from what you chose to keep.\u201d"
+    },
+    {
+      "scenario": "P14",
+      "label": "data beats memory",
+      "problems": [
+        "fact: about 7.1 h"
+      ],
+      "a": "Mostly no: your usual time asleep is 6 h 54 min, so 8 hours is above what you typically get, though you did hit 8 h 5 min last night. Your sleep efficiency is also fairly steady around 90%, so the main gap is that your nights are usually shorter than 8 hours."
+    },
+    {
+      "scenario": "T1",
+      "label": "the deadline was saved as a note",
+      "problems": [
+        "[]"
+      ],
+      "a": ""
+    },
+    {
+      "scenario": "T1",
+      "label": "note found after leaving the history",
+      "problems": [
+        "missing any of ('release',)"
+      ],
+      "a": "Overall, the team\u2019s sleep is lower than usual, and that drop has lasted at least three weeks. Activity and load are broadly steady, and there isn\u2019t enough data to read physical stress signs; there are no team notes to line up with these patterns."
+    },
+    {
+      "scenario": "T1",
+      "label": "note lines up with the change",
+      "problems": [
+        "missing any of ('release', 'deadline')"
+      ],
+      "a": "Yes \u2014 nothing in the supervisor\u2019s notes or recent alerts lined up with the sleep drop. Time asleep has been lower for three straight weeks and last week it was still down, while bedtime stayed broadly steady. Activity and load stayed broadly steady, and there wasn\u2019t enough data to read physical stre"
+    },
+    {
+      "scenario": "T5",
+      "label": "unsaved statement after 4 turns",
+      "problems": [
+        "missing any of ('10', 'stand')"
+      ],
+      "a": "The main team change is still sleep: time asleep was down again last week, and that lasting drop has now run for three weeks. Bedtime stayed broadly steady, and activity, recovery, and strain did not show a clear team-wide shift. Wednesday also tends to be a lower-sleep, lower-steps day for the team"
+    }
+  ]
+}

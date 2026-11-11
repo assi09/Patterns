@@ -1,0 +1,37 @@
+{
+  "checks": 9,
+  "passed": 7,
+  "by_scenario": {
+    "P1": "4/5",
+    "P8": "3/4"
+  },
+  "context_tokens": {
+    "budget": 1500,
+    "median": 157.0,
+    "max": 1460,
+    "over_budget": 0
+  },
+  "dropped_items": 2,
+  "dropped_reasons": [
+    "over the context budget"
+  ],
+  "cost_usd": 0.0432,
+  "failures": [
+    {
+      "scenario": "P1",
+      "label": "correction followed",
+      "problems": [
+        "fact: steps 3291"
+      ],
+      "a": "On Monday Nov 9, your resting heart rate was above your usual range. It was 70.9 bpm that day, higher than your usual 63.4 bpm to 68.3 bpm band."
+    },
+    {
+      "scenario": "P8",
+      "label": "event used when its dates match",
+      "problems": [
+        "missing any of ('exam',)"
+      ],
+      "a": "Your sleep dropped around Aug 15 because your time asleep went down from 6 h 49 min to 5 h 40 min, and the shift was dated to Aug 15. Your time in bed also went down around Aug 15, from 7 h 41 min to 6 h 28 min."
+    }
+  ]
+}
