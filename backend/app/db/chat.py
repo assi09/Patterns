@@ -21,6 +21,7 @@ from app.db.models import (
     EvidenceRecord,
     HealthAction,
     MemoryFact,
+    Notification,
     Reminder,
     Spend,
 )
@@ -114,14 +115,21 @@ def replace_from(
 
 
 def forget_candidates(session: Session, user_id: uuid.UUID, *messages) -> None:
-    """What was only heard in these messages goes with them; what the person saw stays theirs."""
-    session.execute(
-        delete(MemoryFact).where(
-            MemoryFact.user_id == user_id,
-            MemoryFact.status == "candidate",
-            MemoryFact.source_message_id.in_(select(ChatMessage.id).where(*messages)),
-        )
+    """What these messages said goes with them unless the person kept it: something only heard,
+    and a card still waiting for their tap (with its inbox entry), since they took the words back.
+    What they kept or declined stays their decision."""
+    undecided = select(MemoryFact.id).where(
+        MemoryFact.user_id == user_id,
+        MemoryFact.status.in_(("candidate", "proposed")),
+        MemoryFact.source_message_id.in_(select(ChatMessage.id).where(*messages)),
     )
+    ids = list(session.scalars(undecided))
+    if not ids:
+        return
+    session.execute(
+        delete(Notification).where(Notification.user_id == user_id, Notification.fact_id.in_(ids))
+    )
+    session.execute(delete(MemoryFact).where(MemoryFact.id.in_(ids)))
 
 
 def add_question(
