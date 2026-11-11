@@ -19,7 +19,7 @@ from app.api.main import create_app
 from app.api.store import analyze, get_data
 from app.auth.accounts import LoginThrottle
 from app.config import settings
-from app.db.models import AnswerTrace, ChatMessage, EvidenceRecord, User
+from app.db.models import AnswerTrace, ChatMessage, EvidenceRecord, Spend, User
 from app.db.session import session_scope
 from app.ingest.takeout import DailyData
 from app.synthetic import generate
@@ -486,10 +486,34 @@ def test_yesterdays_spending_does_not_count(client, engine, agent, monkeypatch):
     agent.llm.turns.append(submission("Nothing stood out.", cost=0.012))
     ask(client, headers)
     with session_scope(engine) as session:
-        for message in session.scalars(select(ChatMessage)):
-            message.created_at -= timedelta(days=2)
+        for charge in session.scalars(select(Spend)):
+            charge.at -= timedelta(days=2)
     agent.llm.turns.append(submission("Nothing stood out."))
     assert ask(client, headers).status_code == 200
+
+
+def test_deleting_a_chat_does_not_give_back_todays_spending(client, engine, agent, monkeypatch):
+    monkeypatch.setattr(settings, "chat_daily_cap_per_user_usd", 0.01)
+    headers = signed_in(client, engine)
+    agent.llm.turns.append(submission("Nothing stood out.", cost=0.012))
+    conversation = ask(client, headers).json()[1]["conversationId"]
+    deleted = client.delete(f"/conversations/{conversation}", headers=headers)
+    assert deleted.status_code == 204
+    with session_scope(engine) as session:
+        assert session.scalar(select(ChatMessage.id)) is None  # the chat is gone
+    assert ask(client, headers).json()["error"]["code"] == "daily_limit"  # the spending is not
+
+
+def test_background_work_counts_towards_the_cap(engine):
+    from app.db import chat as store
+
+    with session_scope(engine) as session:
+        person = User(email="person@example.com", status="approved")
+        session.add(person)
+        session.flush()
+        conversation = store.create_conversation(session, person.id)
+        store.charge_answer(session, person.id, conversation.id, 0.002)  # before any answer
+        assert session.scalar(select(Spend.cost_usd)) == 0.002
 
 
 def test_a_slow_answer_is_stored_when_it_is_ready(client, engine, agent, monkeypatch):
@@ -858,3 +882,28 @@ def test_only_ones_own_answers_can_be_rated(client, engine, agent):
     assert client.put(url, json={"rating": "meh"}, headers=headers).status_code == 422
     assert client.put(url, json={}, headers=headers).status_code == 422
     assert client.put(url, json={"rating": "up"}).status_code == 401
+
+
+def test_the_ledger_starts_with_the_costs_already_stored(tmp_path):
+    url = f"sqlite:///{tmp_path / 'old.db'}"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "0025")
+    old = create_engine(url)
+    person = uuid.uuid4()
+    with old.begin() as db:
+        db.exec_driver_sql(
+            "INSERT INTO users (id, email, created_at, status, role) "
+            f"VALUES ('{person.hex}', 'p@example.com', '2026-11-11 08:00:00', 'approved', 'member')"
+        )
+        for role, cost in (("assistant", 0.004), ("assistant", None), ("user", None)):
+            db.exec_driver_sql(
+                "INSERT INTO chat_messages (id, user_id, role, text, claims, evidence_ids, "
+                "consulted, refused, cost_usd, created_at) VALUES "
+                f"('{uuid.uuid4().hex}', '{person.hex}', '{role}', 'x', '[]', '[]', '[]', 0, "
+                f"{cost if cost is not None else 'NULL'}, '2026-11-11 09:00:00')"
+            )
+    command.upgrade(config, "head")
+    with old.begin() as db:
+        rows = db.exec_driver_sql("SELECT kind, cost_usd FROM spend").all()
+    assert rows == [("answer", 0.004)]
