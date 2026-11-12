@@ -18,11 +18,11 @@ from app.alarms.run import Sessions
 from app.analysis.evidence import Evidence, Window
 from app.analysis.report import change_text
 from app.analysis.team import AREA_OF, team_alerts, team_info
-from app.db.models import Notification, Team, TeamAlert, TeamNote, User
+from app.db.models import Notification, Team, TeamAlert, User
 from app.email import Email, Mailer, MailError
 from app.reminders import store
 from app.reminders.schedule import zone
-from app.teams.reports import _direction, _member_frames
+from app.teams.reports import _direction, _member_frames, lined_up
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,6 @@ COOLDOWN = timedelta(days=14)
 FIRST_HOUR_UTC = 6  # after the morning's syncs, as the weekly report
 LINK = "/team"
 NOTE = "Team figures from everyone with data. It describes a pattern, not any one person."
-NOTES_BEFORE = timedelta(days=7)  # a deadline the week before a change can line up with it
 SENT_AT_ONCE = ("concern", "change")  # good news waits for the weekly report and the Team tab
 
 
@@ -42,22 +41,6 @@ def alert_text(evidence: Evidence) -> str:
         f"over the past week: median change {change_text(metric, stats['median_change'])} "
         f"({who} of {stats['members']} people)."
     )
-
-
-def lined_up(db: Session, team: Team, window: Window) -> str:
-    """The supervisor's notes whose dates fall in the change's week or the week before it."""
-    start, end = window.start - NOTES_BEFORE, window.end
-    notes = [
-        note
-        for note in db.scalars(select(TeamNote).where(TeamNote.team_id == team.id))
-        if note.starts_on is not None
-        and note.starts_on <= end
-        and (note.ends_on or note.starts_on) >= start
-    ]
-    if not notes:
-        return ""
-    said = "; ".join(f"{n.text[:80]} ({n.starts_on:%b %-d})" for n in notes[:2])
-    return f" It lined up with your note: {said}."
 
 
 def check_team(

@@ -321,3 +321,80 @@ def test_made_up_members_are_refused_where_they_do_not_belong(engine, monkeypatc
     assert cli.main(argv) == 1
     with session_scope(engine) as db:
         assert db.scalar(select(User)) is None
+
+
+# What the report leads with
+
+
+def test_a_lasting_concern_leads_with_the_note_it_lined_up_with(engine):
+    from app.db.models import TeamNote
+
+    began = WEEK.start - timedelta(days=14)  # three weeks running by the report's week
+    team_id, _ = team_with(engine, 8, (Step("sleep_minutes", began, -70),))
+    with session_scope(engine) as db:
+        db.add(
+            TeamNote(
+                team_id=team_id,
+                text="Release crunch",
+                starts_on=began - timedelta(days=3),
+                created_at=NOW,
+            )
+        )
+    report = report_for(engine, team_id)
+    first = report.body["priorities"][0]
+    assert (first["metric"], first["kind"], first["status"]) == (
+        "sleep_minutes",
+        "concern",
+        "lasting",
+    )
+    assert first["text"].startswith("Time asleep has been lower for 3 weeks running")
+    assert "lined up with your note: Release crunch" in first["text"]
+    assert report.headline.startswith("Needs attention: Time asleep has been lower")
+    assert first["evidence_id"] in report.evidence
+
+
+def test_good_news_comes_after_concerns_and_a_quiet_week_says_so(engine):
+    from app.teams.reports import headline_from, priorities  # noqa: F401
+
+    found = [
+        {"kind": "improvement", "status": "new", "text": "Steps rose this week: x."},
+        {"kind": "concern", "status": "new", "text": "Time asleep fell this week: x."},
+        {"kind": "concern", "status": "lasting", "text": "HRV has been lower for 2 weeks: x."},
+        {"kind": "change", "status": "lasting", "text": "Strain has been higher for 3 weeks: x."},
+    ]
+    from app.teams.reports import KIND_ORDER, STATUS_ORDER
+
+    ordered = sorted(found, key=lambda f: (KIND_ORDER[f["kind"]], STATUS_ORDER[f["status"]]))
+    assert [f["text"][:4] for f in ordered] == ["HRV ", "Time", "Stra", "Step"]
+    assert (
+        headline_from(ordered) == "Needs attention: HRV has been lower for 2 weeks (3 more below)."
+    )
+    assert headline_from([]) is None
+
+
+def test_a_steady_team_has_no_priorities(engine):
+    team_id, _ = team_with(engine, 7)
+    report = report_for(engine, team_id)
+    assert report.body["priorities"] == [] and report.body["challenges"] == []
+
+
+def test_an_ended_challenge_says_whether_it_moved_its_metric(engine):
+    from app.db.models import TeamAction
+
+    team_id, _ = team_with(engine, 8, (Step("sleep_minutes", WEEK.start - timedelta(days=7), 60),))
+    with session_scope(engine) as db:
+        db.add(
+            TeamAction(
+                team_id=team_id,
+                kind="challenge",
+                title="Lights out by 23:00",
+                body="b",
+                metric="sleep_minutes",
+                status="approved",
+                starts_on=WEEK.start - timedelta(days=7),
+                ends_on=WEEK.end,
+                proposed_at=NOW,
+            )
+        )
+    (row,) = report_for(engine, team_id).body["challenges"]
+    assert row["text"].startswith("Lights out by 23:00: time asleep rose during it")

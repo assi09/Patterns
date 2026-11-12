@@ -308,6 +308,17 @@ class ReportSection(ApiModel):
     evidence_id: str
 
 
+class ReportFinding(ApiModel):
+    """What the week's report leads with: a worthwhile team change, in reading order."""
+
+    metric: str
+    label: str
+    kind: Literal["concern", "improvement", "change"]
+    status: Literal["lasting", "new"]
+    text: str
+    evidence_id: str
+
+
 class TeamWeekLevel(ApiModel):
     mean: float | None
     level: Literal["below", "usual", "above"] | None
@@ -340,6 +351,9 @@ class TeamReport(TeamReportSummary):
     minimum_members: int
     sections: list[ReportSection]
     weekdays: list[ReportSection]
+    priorities: list[ReportFinding] = Field(default_factory=list)  # concerns first
+    alerts: list[str] = Field(default_factory=list)  # raised during the week
+    challenges: list[ReportSection] = Field(default_factory=list)  # approved ones that ended
     narrative: list[NarrativeParagraph]  # the model's prose, checked; empty when templated
     evidence: dict[str, Evidence]
     generated_by: Literal["template", "model"]

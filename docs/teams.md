@@ -159,6 +159,16 @@ For each person who opted in, the Team tab shows one row for the past week:
   never instead of them. Cap `FA_TEAM_REPORT_CAP_USD` (default $0.02); a passing synthetic run
   cost $0.0037 ([experiments.md](experiments.md#the-weekly-team-report-written-by-a-model-2026-10-26)).
 
+**What it leads with** (2026-11-12, `priorities` in `app/teams/reports.py`). The four-week scan says
+which metrics are lasting (two or more weeks running) or new; each one that is also worth a
+supervisor's attention by the alerts' rule becomes a finding, written by code from the scan's
+figures, in reading order: concerns (lasting before new), then load and bedtime, then good news
+(which alerts hold back for the report). Each finding names a note it lined up with. The headline is
+the first finding ("Needs attention: Time asleep has been lower for 3 weeks running (2 more
+below)."), or the old summary on a quiet week. The report also lists the week's alerts, and every
+approved challenge that ended with whether its metric moved during it. The per-metric sections and
+the model's checked prose stay below.
+
 **Planned (as designed):**
 
 - **Text.** One language-model call per team per week receives only the aggregate evidence and
