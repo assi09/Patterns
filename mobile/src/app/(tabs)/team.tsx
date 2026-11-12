@@ -7,6 +7,7 @@ import {
   useCreateTeam,
   useMakeTeamReport,
   useRotateTeamCode,
+  useTeamAlerts,
   useTeamReport,
   useTeamReports,
   useTeams,
@@ -19,19 +20,20 @@ import type {
   TeamReportSummary,
 } from '@/api/types';
 import { Row, Section } from '@/components/list';
+import { AlertsSection, NotesSection, ProposalsSection } from '@/components/teamAgent';
 import {
-  AlertsSection,
-  NotesSection,
-  ProposalsSection,
-  TeamChatSection,
-} from '@/components/teamAgent';
+  AreaStrip,
+  AskTeamRow,
+  PrioritiesSection,
+  TeamStatusLine,
+} from '@/components/teamDashboard';
 import { ChangeChart, KeyFigures, LevelsTable, WeekdayChart } from '@/components/teamReport';
 import { QueryState, Screen } from '@/components/Screen';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { windowLabel } from '@/lib/format';
-import { changeRows } from '@/lib/team';
+import { areaReadings, changeRows, teamStatus } from '@/lib/team';
 import { useWide } from '@/lib/layout';
 import { fonts, radius, spacing, useColors, useMetricColor } from '@/theme';
 
@@ -90,17 +92,25 @@ function TeamView({ team }: { team: SupervisedTeam }) {
   const [chosen, setChosen] = useState<ISODate | undefined>();
   const week = chosen ?? reports.data?.[0]?.week.start;
   const report = useTeamReport(team.id, week);
+  // Where the team stands now: the latest report and the open alerts, whatever week is shown.
+  const latest = useTeamReport(team.id, reports.data?.[0]?.week.start);
+  const alerts = useTeamAlerts(team.id);
 
   const main = (
     <>
+      <TeamStatusLine status={teamStatus(alerts.data, latest.data)} />
+      <AreaStrip readings={areaReadings(alerts.data, latest.data)} />
+      <AskTeamRow />
+      <ProposalsSection teamId={team.id} />
       <AlertsSection teamId={team.id} />
-      <TeamChatSection teamId={team.id} />
+      {latest.data && latest.data.week.start === week ? (
+        <PrioritiesSection report={latest.data} />
+      ) : null}
       <ReportSection team={team} reports={reports.data} report={report.data} />
     </>
   );
   const side = (
     <>
-      <ProposalsSection teamId={team.id} />
       <NotesSection teamId={team.id} />
       {report.data ? <LevelsSection levels={report.data.levels} /> : null}
       <InviteSection team={team} />

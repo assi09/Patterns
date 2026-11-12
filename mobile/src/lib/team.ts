@@ -1,4 +1,10 @@
-import type { Evidence, ReportSection, TeamLevel, TeamReport } from '@/api/types';
+import type {
+  Evidence,
+  ReportSection,
+  TeamAlert,
+  TeamLevel,
+  TeamReport,
+} from '@/api/types';
 import { formatWithUnit, metricLabel } from '@/lib/format';
 
 /** A signed change in the metric's units: "-1 h 4 min", "+12 min" for bedtime, "-1,148 steps". */
@@ -112,4 +118,83 @@ export function levelMark(level: TeamLevel | null | undefined): { icon: string; 
   if (level === 'below') return { icon: 'arrow-down', word: 'Below' };
   if (level === 'usual') return { icon: 'remove', word: 'Usual' };
   return { icon: 'ellipsis-horizontal', word: 'Too few days' };
+}
+
+// The dashboard's reading of the team: where things stand at a glance.
+
+export type TeamArea = 'sleep' | 'activity' | 'recovery' | 'load' | 'stress';
+export type AreaState = 'steady' | 'concern' | 'change' | 'improvement';
+
+export const TEAM_AREAS: { key: TeamArea; label: string; metrics: string[] }[] = [
+  { key: 'sleep', label: 'Sleep', metrics: ['sleep_minutes', 'bedtime_hour'] },
+  { key: 'activity', label: 'Activity', metrics: ['steps', 'active_zone_minutes'] },
+  { key: 'recovery', label: 'Recovery', metrics: ['resting_hr', 'hrv_ms', 'recovery_score'] },
+  { key: 'load', label: 'Load', metrics: ['strain'] },
+  { key: 'stress', label: 'Physical stress signs', metrics: ['stress_score'] },
+];
+
+const WEIGHT: Record<AreaState, number> = { concern: 3, change: 2, improvement: 1, steady: 0 };
+
+export interface AreaReading {
+  key: TeamArea;
+  label: string;
+  state: AreaState;
+  detail: string; // "Time asleep · ongoing", "Steps · this week", or "No team-wide change"
+}
+
+/**
+ * Each area's state: an open alert first (the daily check is the newest word), then the latest
+ * report's findings, else steady. The weightiest wins: a concern over a change over good news.
+ */
+export function areaReadings(alerts: TeamAlert[] = [], report?: TeamReport): AreaReading[] {
+  return TEAM_AREAS.map(({ key, label, metrics }) => {
+    const candidates: { state: AreaState; detail: string }[] = [];
+    for (const alert of alerts) {
+      if (!alert.resolvedAt && metrics.includes(alert.metric)) {
+        candidates.push({ state: alert.kind, detail: `${alert.label} · ongoing` });
+      }
+    }
+    for (const found of report?.priorities ?? []) {
+      if (metrics.includes(found.metric)) {
+        const when = found.status === 'lasting' ? 'lasting' : 'this week';
+        candidates.push({ state: found.kind, detail: `${found.label} · ${when}` });
+      }
+    }
+    const top = candidates.sort((a, b) => WEIGHT[b.state] - WEIGHT[a.state])[0];
+    return top
+      ? { key, label, state: top.state, detail: top.detail }
+      : { key, label, state: 'steady', detail: 'No team-wide change' };
+  });
+}
+
+export interface TeamStatus {
+  level: 'attention' | 'watch' | 'good' | 'steady' | 'unknown';
+  title: string;
+  line: string;
+}
+
+/** The one line at the top: what most needs the supervisor, in the words the check wrote. */
+export function teamStatus(alerts: TeamAlert[] = [], report?: TeamReport): TeamStatus {
+  const open = alerts.filter((a) => !a.resolvedAt);
+  const found = report?.priorities ?? [];
+  const first = (kind: AreaState) =>
+    open.find((a) => a.kind === kind)?.text ?? found.find((f) => f.kind === kind)?.text;
+  const concern = first('concern');
+  if (concern) return { level: 'attention', title: 'Needs attention', line: concern };
+  const change = first('change');
+  if (change) return { level: 'watch', title: 'Worth watching', line: change };
+  const good = first('improvement');
+  if (good) return { level: 'good', title: 'Good news', line: good };
+  if (!report && !alerts.length) {
+    return {
+      level: 'unknown',
+      title: 'Not enough yet',
+      line: 'The first reading comes with the first weekly report.',
+    };
+  }
+  return {
+    level: 'steady',
+    title: 'Steady',
+    line: 'No team-wide change worth acting on.',
+  };
 }
