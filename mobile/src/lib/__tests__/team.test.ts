@@ -1,5 +1,13 @@
-import type { Evidence, TeamReport } from '@/api/types';
-import { changeRows, levelMark, shortChange, signedChange, weekdayBars } from '@/lib/team';
+import type { Evidence, TeamAlert, TeamReport } from '@/api/types';
+import {
+  areaReadings,
+  changeRows,
+  levelMark,
+  shortChange,
+  signedChange,
+  teamStatus,
+  weekdayBars,
+} from '@/lib/team';
 
 function evidence(id: string, stats: Evidence['stats'], sufficient = true): Evidence {
   return { id, tool: 'team_change', metrics: [], windows: [], n: 6, sufficient, stats };
@@ -81,5 +89,61 @@ describe('team report figures', () => {
     expect(levelMark('above').word).toBe('Above');
     expect(levelMark('below').icon).toBe('arrow-down');
     expect(levelMark(null).word).toBe('Too few days');
+  });
+});
+
+describe('the team at a glance', () => {
+  const alert = (metric: string, kind: TeamAlert['kind'], resolved = false): TeamAlert => ({
+    id: metric,
+    metric,
+    label: metric,
+    direction: 'down',
+    kind,
+    text: `${metric} moved.`,
+    raisedAt: '2026-11-10T09:00:00Z',
+    resolvedAt: resolved ? '2026-11-11T09:00:00Z' : null,
+  });
+  const report = (priorities: TeamReport['priorities']) =>
+    ({ priorities }) as unknown as TeamReport;
+
+  it('reads each area from open alerts first, then the report, the weightiest winning', () => {
+    const readings = areaReadings(
+      [alert('sleep_minutes', 'concern'), alert('steps', 'improvement', true)],
+      report([
+        {
+          metric: 'steps',
+          label: 'Steps',
+          kind: 'improvement',
+          status: 'new',
+          text: 'Steps rose.',
+          evidenceId: 'e',
+        },
+        {
+          metric: 'bedtime_hour',
+          label: 'Bedtime',
+          kind: 'change',
+          status: 'lasting',
+          text: 'Bedtime later.',
+          evidenceId: 'e',
+        },
+      ]),
+    );
+    const by = Object.fromEntries(readings.map((r) => [r.key, r]));
+    expect(by.sleep.state).toBe('concern'); // the open alert beats the report's change
+    expect(by.sleep.detail).toBe('sleep_minutes · ongoing');
+    expect(by.activity).toMatchObject({ state: 'improvement', detail: 'Steps · this week' });
+    expect(by.recovery.state).toBe('steady');
+    expect(readings.map((r) => r.key)).toEqual(['sleep', 'activity', 'recovery', 'load', 'stress']);
+  });
+
+  it('puts what most needs the supervisor first, in the check’s own words', () => {
+    expect(teamStatus([alert('sleep_minutes', 'concern')])).toMatchObject({
+      level: 'attention',
+      line: 'sleep_minutes moved.',
+    });
+    expect(teamStatus([alert('strain', 'change')]).level).toBe('watch');
+    expect(teamStatus([alert('steps', 'improvement')]).level).toBe('good');
+    expect(teamStatus([alert('sleep_minutes', 'concern', true)], report([])).level).toBe('steady');
+    expect(teamStatus([], undefined).level).toBe('unknown');
   });
 });

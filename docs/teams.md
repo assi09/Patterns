@@ -350,6 +350,16 @@ reply without a model call. A claim, note or proposal is refused if it singles a
 members", "some of the team", he or she) or records someone's health ("off sick"). Names alone are not
 caught by these checks, which is a known limit.
 
+**The Team tab is a dashboard** (2026-11-12). At the top, one word for where the team stands
+("Needs attention", "Worth watching", "Good news", "Steady") and the sentence behind it, from open
+alerts first and then the latest report; then the five areas (sleep, activity, recovery, load,
+physical stress signs), each a word (Watch, Changed, Better, Steady) coloured only when it changed.
+Below: the way into the team agent, proposals waiting for approval, alerts (concerns first, good
+news marked, ended concerns "back to usual"), what the latest report says to focus on, then the full
+report, notes, shared levels, the invite and past weeks. **Asking is a page of its own**
+(`/team-chat`): the whole conversation, following its latest message with a button back down,
+thumbs on answers, suggestions to start, and any proposal from an answer decided right there.
+
 **Actions wait for approval.** A proposal does nothing until the supervisor approves it
 (`POST /teams/{id}/actions/{id}/approve` or `decline`). An approved message reaches every active
 member's inbox, unsigned; an approved challenge tells every member what it is and for which days.
