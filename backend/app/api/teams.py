@@ -351,6 +351,7 @@ def list_alerts(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamAler
             metric=a.metric,
             label=team_info(a.metric).label,
             direction=a.direction,
+            kind=a.kind,
             text=a.text,
             raised_at=a.raised_at,
             resolved_at=a.resolved_at,

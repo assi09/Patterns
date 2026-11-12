@@ -712,7 +712,9 @@ class TeamAlert(Base):
     )
     metric: Mapped[str] = mapped_column(String(32))
     direction: Mapped[str] = mapped_column(String(8))
-    text: Mapped[str] = mapped_column(String(300))
+    # concern, improvement, or change (load and bedtime): good news waits for the weekly report.
+    kind: Mapped[str] = mapped_column(String(16), default="change", server_default="change")
+    text: Mapped[str] = mapped_column(String(400))
     evidence: Mapped[dict] = mapped_column(JSON)
     raised_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)

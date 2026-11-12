@@ -403,6 +403,7 @@ class TeamAlert(ApiModel):
     metric: str
     label: str
     direction: Literal["up", "down"]
+    kind: Literal["concern", "improvement", "change"] = "change"
     text: str
     raised_at: datetime
     resolved_at: datetime | None = None

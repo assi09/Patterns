@@ -17,8 +17,8 @@ from sqlalchemy.orm import Session
 from app.alarms.run import Sessions
 from app.analysis.evidence import Evidence, Window
 from app.analysis.report import change_text
-from app.analysis.team import team_alerts, team_info
-from app.db.models import Notification, Team, TeamAlert, User
+from app.analysis.team import AREA_OF, team_alerts, team_info
+from app.db.models import Notification, Team, TeamAlert, TeamNote, User
 from app.email import Email, Mailer, MailError
 from app.reminders import store
 from app.reminders.schedule import zone
@@ -30,6 +30,8 @@ COOLDOWN = timedelta(days=14)
 FIRST_HOUR_UTC = 6  # after the morning's syncs, as the weekly report
 LINK = "/team"
 NOTE = "Team figures from everyone with data. It describes a pattern, not any one person."
+NOTES_BEFORE = timedelta(days=7)  # a deadline the week before a change can line up with it
+SENT_AT_ONCE = ("concern", "change")  # good news waits for the weekly report and the Team tab
 
 
 def alert_text(evidence: Evidence) -> str:
@@ -42,14 +44,35 @@ def alert_text(evidence: Evidence) -> str:
     )
 
 
-def check_team(db: Session, team: Team, end: date, now: datetime) -> list[TeamAlert]:
-    """Raises what is new and closes what has ended; returns the new alerts."""
+def lined_up(db: Session, team: Team, window: Window) -> str:
+    """The supervisor's notes whose dates fall in the change's week or the week before it."""
+    start, end = window.start - NOTES_BEFORE, window.end
+    notes = [
+        note
+        for note in db.scalars(select(TeamNote).where(TeamNote.team_id == team.id))
+        if note.starts_on is not None
+        and note.starts_on <= end
+        and (note.ends_on or note.starts_on) >= start
+    ]
+    if not notes:
+        return ""
+    said = "; ".join(f"{n.text[:80]} ({n.starts_on:%b %-d})" for n in notes[:2])
+    return f" It lined up with your note: {said}."
+
+
+def check_team(
+    db: Session, team: Team, end: date, now: datetime, ended: list[TeamAlert] | None = None
+) -> list[TeamAlert]:
+    """Raises what is new and closes what has ended; returns the new alerts, and adds the ones
+    that ended to `ended` when given."""
     window = Window(start=end - timedelta(days=6), end=end)
     found = team_alerts(_member_frames(db, team, window), end)
     alerts = list(db.scalars(select(TeamAlert).where(TeamAlert.team_id == team.id)))
     for alert in alerts:
         if alert.resolved_at is None and (alert.metric, alert.direction) not in found.still_moving:
             alert.resolved_at = now
+            if ended is not None:
+                ended.append(alert)
 
     def blocked(metric: str, direction: str) -> bool:
         return any(
@@ -68,7 +91,8 @@ def check_team(db: Session, team: Team, end: date, now: datetime) -> list[TeamAl
             team_id=team.id,
             metric=metric,
             direction=direction,
-            text=alert_text(evidence)[:300],
+            kind=evidence.stats.get("kind", "change"),
+            text=(alert_text(evidence) + lined_up(db, team, evidence.windows[0]))[:400],
             evidence=evidence.model_dump(mode="json"),
             raised_at=now,
         )
@@ -95,16 +119,44 @@ def compose(team: Team, alerts: list[TeamAlert], to: str, app_url: str) -> Email
 
 
 def _title(team: Team, alerts: list[TeamAlert]) -> str:
+    areas = {AREA_OF.get(a.metric) for a in alerts if a.kind == "concern"}
+    if {"sleep", "recovery"} <= areas:  # moving together: one story, not several
+        return f"{team.name}: sleep and recovery moved together"[:80]
     if len(alerts) == 1:
         return f"{team.name}: {team_info(alerts[0].metric).label.lower()} changed"[:80]
     return f"{team.name}: {len(alerts)} changes across the team"[:80]
 
 
 def deliver(
-    db: Session, team: Team, alerts: list[TeamAlert], now: datetime, mailer: Mailer, app_url: str
+    db: Session,
+    team: Team,
+    alerts: list[TeamAlert],
+    now: datetime,
+    mailer: Mailer,
+    app_url: str,
+    ended: list[TeamAlert] = (),
 ) -> None:
+    """Concerns and changes now, in the inbox and by email; good news only on the Team tab and in
+    the weekly report; a concern that ended, as a quiet line in the inbox."""
     supervisor = db.get(User, team.supervisor_id)
     if supervisor is None:
+        return
+    over = [a for a in ended if a.kind == "concern"]
+    if over:
+        names = ", ".join(team_info(a.metric).label.lower() for a in over)
+        db.add(
+            Notification(
+                user_id=supervisor.id,
+                kind="team_alert",
+                title=f"{team.name}: back to usual"[:80],
+                body=f"The team's {names} {'is' if len(over) == 1 else 'are'} back to usual."[:400],
+                link=LINK,
+                created_at=now,
+            )
+        )
+    alerts = [a for a in alerts if a.kind in SENT_AT_ONCE]
+    if not alerts:
+        db.flush()
         return
     db.add(
         Notification(
@@ -146,9 +198,10 @@ def run_due(sessions: Sessions, now: datetime, mailer: Mailer, app_url: str) -> 
         try:
             with sessions() as db:
                 team = db.get(Team, team_id)
-                new = check_team(db, team, _yesterday(db, team, now), now)
-                if new:
-                    deliver(db, team, new, now, mailer, app_url)
+                ended: list[TeamAlert] = []
+                new = check_team(db, team, _yesterday(db, team, now), now, ended)
+                if new or ended:
+                    deliver(db, team, new, now, mailer, app_url, ended)
                 counts["alerts"] += len(new)
         except Exception:
             logger.exception("Checking one team for alerts failed")

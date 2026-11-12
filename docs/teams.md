@@ -261,6 +261,44 @@ Measured on made-up teams:
 A smaller team needs a bigger change, so five-person teams will rarely get an alert. Stricter settings
 cut false alarms but miss far more; looser ones raised false alarms in up to 26 of 60 teams.
 
+### What deserves an alert (2026-11-12)
+
+Being real is not enough: in a large team a change of minutes is significant and still not worth a
+supervisor's attention. A change is raised only when it is all of:
+
+- **Real**: significant after correction across metrics, the same way for four daily checks in a row
+  (as before).
+- **Big enough**: the team's median change is at least half of each person's own usual spread (the
+  "smallest worthwhile change" used in sports monitoring, where a 7-day average is judged against
+  0.5 SD) and at least a floor in the metric's units: 20 min of sleep, 30 min of bedtime, 1,000
+  steps, 10 Active Zone Minutes a day, 2 bpm resting heart rate, 3 ms HRV, 5 points of recovery or
+  physical stress signs, 1 point of strain.
+- **Broad**: at least 60% of the people moved that way, so it is the team, not a few people.
+
+Each alert has a **kind**: a concern (sleep, recovery or activity worse), an improvement, or a change
+(load and bedtime, neither good nor bad). Concerns and changes are sent at once (inbox and email);
+**improvements wait** for the weekly report and the Team tab. When a concern ends, the inbox says
+"back to usual". Sleep and recovery concerns raised together are told as one story ("sleep and
+recovery moved together"), and a note whose dates fall in the change's week or the week before is
+named in the alert ("It lined up with your note: Release deadline (Oct 20)").
+
+Measured on made-up teams of `app.synthetic` members with every metric, checked daily for 30 days,
+the same teams judged by the old rule and the new (`eval/team_alert_check.py`, 40 teams each,
+`eval/results/team_alert_check_2026-11-12.json`):
+
+| Teams | Old rule | New rule |
+|---|---|---|
+| Nothing changed, 8 / 12 / 30 people | 0 / 0 / 1 alerted | 0 / 0 / 0 |
+| Sleep -60 min (1.3 SD), 5 / 8 / 12 people | found 33 / 40 / 40, median day 7 / 5 / 4 | the same |
+| Sleep -40 min (0.9 SD), 8 people | 37 found, day 7 | 36 found, day 7 |
+| Resting heart rate +4, 8 people | 40 found, day 4 | 40 found, day 4 |
+| Sleep -12 min (0.27 SD), 30 people: real, too small | 29 alerted | 2 alerted |
+
+Alerts besides the planted one come mostly from the app's scores, which are built from sleep and
+heart rate and so really move; they arrive together as one story. These members have less day-to-day
+noise than the teams measured above (12% false alarms), so false-alarm rates depend on the data's
+noise; the pilot's real team is the check.
+
 ## What the scores can be claimed to mean
 
 Checked against PMData's morning self-reports, each person against themselves (`eval/stress_check.py`,
