@@ -1,0 +1,31 @@
+{
+  "checks": 22,
+  "passed": 21,
+  "by_scenario": {
+    "P4": "5/5",
+    "P5": "4/4",
+    "P8": "4/4",
+    "P11": "3/3",
+    "P12": "4/4",
+    "P14": "1/2"
+  },
+  "context_tokens": {
+    "budget": 1500,
+    "median": 25.0,
+    "max": 694,
+    "over_budget": 0
+  },
+  "dropped_items": 0,
+  "dropped_reasons": [],
+  "cost_usd": 0.061,
+  "failures": [
+    {
+      "scenario": "P14",
+      "label": "data beats memory",
+      "problems": [
+        "fact: a figure from the data"
+      ],
+      "a": "Not quite \u2014 your sleep usually lands a bit under 8 hours, even though last night you got 8 h 5 min. Your bedtime is usually in your normal range, so the main gap is that your usual time asleep is closer to 6 h 33 min to 7 h 33 min, not 8 hours."
+    }
+  ]
+}

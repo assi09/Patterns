@@ -24,7 +24,7 @@ from app.agent.llm import Budget
 from app.agent.present import clock, label
 from app.agent.strategy_types import DEFAULT_TYPE
 from app.agent.tools import TOOLS, Toolbox, evidence_payload
-from app.agent.verifier import MENTIONS, run_adjusted
+from app.agent.verifier import DAY_MONTH, ISO_DATE, MENTIONS, MONTH_DAY, MONTHS, run_adjusted
 from app.agent.verifier import _significant as is_significant
 from app.analysis.coaching import WEEKDAYS, habit_options, personal_options
 from app.analysis.day import compare_day
@@ -82,7 +82,9 @@ STRATEGIES: dict[str, Strategy] = {
         tools=("compare_day", "usual_ranges", "coverage"),
         guide="How to work: the snapshot below already compares one day with the usual range, as "
         "evidence you may cite. Answer from it if it covers the day asked about; otherwise use "
-        "compare_day for that day. " + ONE_THING + "No hypotheses. Then call submit_findings.",
+        "compare_day for that day. A day said relative to an earlier answer ('the day before "
+        "that', 'the next day') counts from the day that answer was about, not from today. Name "
+        "the day's date in the answer. " + ONE_THING + "No hypotheses. Then call submit_findings.",
         budget=Budget(max_calls=6, max_tool_calls=5, max_cost_usd=0.02),
         snapshot=True,
         memory=False,
@@ -218,13 +220,22 @@ def expand_tool(toolbox: Toolbox, budget: Budget, trace: list[dict]) -> ExtraToo
     )
 
 
+DAY_BEFORE_YESTERDAY = re.compile(r"\bday before yesterday\b", re.IGNORECASE)
+
+
 def asked_day(question: str, today, frame: pd.DataFrame) -> date | None:
-    """Yesterday, when the question is about it and the data has it. "Today's" row is the latest
-    one, so without this a question about yesterday gets today's numbers."""
-    if not YESTERDAY.search(question) or today is None:
+    """The day a question is about, when the data has it: a date it names ("Monday Nov 9"), the
+    day before yesterday, or yesterday. "Today's" row is the latest one, so without this a
+    question about yesterday gets today's numbers, and one about Nov 9 got yesterday's snapshot."""
+    if today is None:
         return None
-    day = (today.date() if isinstance(today, datetime) else today) - timedelta(days=1)
-    return day if pd.Timestamp(day) in frame.index else None
+    current = today.date() if isinstance(today, datetime) else today
+    day = named_day(question, current)
+    if day is None and DAY_BEFORE_YESTERDAY.search(question):
+        day = current - timedelta(days=2)
+    elif day is None and YESTERDAY.search(question):
+        day = current - timedelta(days=1)
+    return day if day is not None and pd.Timestamp(day) in frame.index else None
 
 
 def snapshot(
@@ -234,7 +245,7 @@ def snapshot(
     as evidence."""
     if frame.empty:
         return [], ""
-    name = "yesterday" if day else "the latest day"
+    name = "the day asked about" if day else "the latest day"
     day = day or frame.index.max().date()
     found = []
     for metric in SNAPSHOT_METRICS:
@@ -518,6 +529,33 @@ def _premise_windows(frame: pd.DataFrame, metric: str, end: date) -> tuple[Windo
     return recent, baseline
 
 
+# "Around Aug 15": people name the day something started, so a week mostly after it.
+NAMED_DAY_BEFORE, NAMED_DAY_AFTER = 1, 5
+
+
+def named_day(question: str, end: date) -> date | None:
+    """The day a question names ("around August 15", "15 Aug", "2026-08-15"), in the latest year
+    that puts it on or before `end`; None if it names none, or more than one."""
+    found: set[date] = set()
+    for year, month, day in ISO_DATE.findall(question):
+        try:
+            found.add(date(int(year), int(month), int(day)))
+        except ValueError:
+            continue
+    pairs = [(MONTHS[m.lower()], int(d)) for m, d in MONTH_DAY.findall(question)]
+    pairs += [(MONTHS[m.lower()], int(d)) for d, m in DAY_MONTH.findall(question)]
+    for month, day in pairs:
+        for year in (end.year, end.year - 1):
+            try:
+                candidate = date(year, month, day)
+            except ValueError:
+                break
+            if candidate <= end:
+                found.add(candidate)
+                break
+    return found.pop() if len(found) == 1 else None
+
+
 def check_premise(frame: pd.DataFrame, question: str, lead: str | None) -> Premise | None:
     """Whether what the question takes for granted is true: "why is my sleep worse?" may rest on
     nothing, and an answer that goes along with it invents a problem. Tested before the model."""
@@ -526,11 +564,23 @@ def check_premise(frame: pd.DataFrame, question: str, lead: str | None) -> Premi
     named = [m for m, pattern in MENTIONS.items() if pattern.search(question)]
     metrics = [m for m in named or PREMISE_METRICS.get(lead, ()) if m in frame.columns]
     end = frame.index.max().date()
+    # "Why did my sleep drop around Aug 15?" is about Aug 15, not the latest weeks.
+    day = named_day(question, end)
     tests = []
     for metric in metrics[:3]:
         if _assumed_direction(question, metric) is None:
             continue
-        recent, baseline = _premise_windows(frame, metric, end)
+        if day is not None:
+            recent = Window(
+                start=day - timedelta(days=NAMED_DAY_BEFORE),
+                end=min(end, day + timedelta(days=NAMED_DAY_AFTER)),
+            )
+            baseline = Window(
+                start=recent.start - timedelta(days=PREMISE_BASELINE),
+                end=recent.start - timedelta(days=1),
+            )
+        else:
+            recent, baseline = _premise_windows(frame, metric, end)
         try:
             record = compare_windows(frame, metric, recent, baseline)
         except ToolError:
@@ -558,8 +608,15 @@ def check_premise(frame: pd.DataFrame, question: str, lead: str | None) -> Premi
             f": {'a clear change' if moved(record) else 'no clear change that way'}"
         )
     verdict = "It holds." if holds else "It does not hold: nothing shows this change."
+    period = (
+        f" They ask about {day:%b %-d}: look at the days around it, not the latest weeks."
+        if day is not None
+        else ""
+    )
     return Premise(
-        holds, tests, f"Checked what the question assumes. {verdict}\n" + "\n".join(lines)
+        holds,
+        tests,
+        f"Checked what the question assumes.{period} {verdict}\n" + "\n".join(lines),
     )
 
 

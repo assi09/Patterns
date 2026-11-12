@@ -585,6 +585,8 @@ class TeamNote(Base):
     text: Mapped[str] = mapped_column(String(300))
     starts_on: Mapped[date | None] = mapped_column(Date, default=None)
     ends_on: Mapped[date | None] = mapped_column(Date, default=None)
+    # The supervisor's message it was made from, if any: deleting the note forgets that too.
+    source_message_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

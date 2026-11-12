@@ -358,3 +358,61 @@ def test_the_premise_check_does_not_find_a_change_that_is_not_there():
         premise = check_premise(frame, "Why am I sleeping less lately?", "sleep")
         wrong += bool(premise and premise.holds)
     assert wrong / 60 < 0.12
+
+
+def test_a_named_day_is_read_in_every_form_and_only_once():
+    from app.agent.strategy import named_day
+
+    end = date(2026, 11, 11)
+    for question in (
+        "Why did my sleep drop around August 15?",
+        "why worse on 15 Aug",
+        "why lower on 2026-08-15",
+    ):
+        assert named_day(question, end) == date(2026, 8, 15)
+    assert named_day("Why on Dec 20?", end) == date(2025, 12, 20)  # the latest one already past
+    assert named_day("Why is my sleep worse lately?", end) is None
+    assert named_day("Between Aug 1 and Aug 9?", end) is None  # two days: not one period
+    assert named_day("Why on Feb 30?", end) is None
+
+
+def test_the_premise_check_looks_at_the_day_the_question_names():
+    """A dip months ago, then nothing: asked about its date, it holds; asked about lately, it
+    does not. Over many seeds."""
+    from app.agent.strategy import check_premise
+    from app.synthetic import Step
+
+    start = date(2026, 6, 1)
+    dip = start + timedelta(days=40)
+    held_then = held_lately = 0
+    for seed in range(30):
+        effects = (  # a week of short sleep that began on the day they name
+            Step("sleep_minutes", dip, -90.0),
+            Step("sleep_minutes", dip + timedelta(days=7), 90.0),
+        )
+        frame = generate(start, 120, effects, seed).frame
+        then = check_premise(frame, f"Why did my sleep drop around {dip:%B} {dip.day}?", "sleep")
+        lately = check_premise(frame, "Why did my sleep drop lately?", "sleep")
+        held_then += bool(then and then.holds)
+        held_lately += bool(lately and lately.holds)
+        assert then is not None and f"{dip:%b} {dip.day}" in then.text
+    # 80% power is the usual bar; 26 of 30 measured (one normal day sits in the week).
+    assert held_then >= 24 and held_lately <= 4
+
+
+def test_the_day_strategy_counts_relative_days_from_the_earlier_answer():
+    assert "the day before that" in STRATEGIES["day"].guide
+
+
+def test_the_snapshot_covers_the_day_the_question_names():
+    from app.agent.strategy import asked_day
+
+    frame = _frame([420.0] * 60)
+    end = frame.index.max().date()
+    today = end + timedelta(days=1)
+    two_back = end - timedelta(days=1)
+    asked = f"How many steps did I take on {two_back:%A} {two_back:%b} {two_back.day}?"
+    assert asked_day(asked, today, frame) == two_back
+    assert asked_day("And the day before yesterday?", today, frame) == two_back
+    assert asked_day("How did I sleep yesterday?", today, frame) == end
+    assert asked_day("How did I sleep?", today, frame) is None

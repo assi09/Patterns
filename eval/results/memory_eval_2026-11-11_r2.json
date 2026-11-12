@@ -1,0 +1,71 @@
+{
+  "checks": 46,
+  "passed": 41,
+  "by_scenario": {
+    "P1": "3/5",
+    "P2": "11/11",
+    "P8": "3/4",
+    "P3": "0/1",
+    "P10": "2/2",
+    "P4": "3/3",
+    "P7": "4/4",
+    "P13": "1/1",
+    "P14": "2/2",
+    "T1": "7/8",
+    "T5": "5/5"
+  },
+  "context_tokens": {
+    "budget": 1500,
+    "median": 80.0,
+    "max": 1500,
+    "over_budget": 0
+  },
+  "dropped_items": 41,
+  "dropped_reasons": [
+    "over the context budget"
+  ],
+  "cost_usd": 0.2114,
+  "failures": [
+    {
+      "scenario": "P1",
+      "label": "How has my resting heart rate been over the last month?",
+      "problems": [
+        "missing any of ('up', 'higher', 'rose', 'risen', 'increase', 'climb')"
+      ],
+      "a": "Your resting heart rate was pretty steady over the last month, averaging 66.3 bpm with a median of 66.9 bpm. It ranged from 56.7 bpm to 70.9 bpm, so there were a few spikes and dips, but no big sustained swing."
+    },
+    {
+      "scenario": "P1",
+      "label": "correction followed",
+      "problems": [
+        "fact: steps 3291"
+      ],
+      "a": "You took 9,504 steps on Nov 10, and that was within your usual range for steps."
+    },
+    {
+      "scenario": "P8",
+      "label": "event used when its dates match",
+      "problems": [
+        "missing any of ('exam',)",
+        "no tool looked at 2026-08-15..2026-08-21"
+      ],
+      "a": "Your sleep didn\u2019t clearly drop around Aug 15, so there\u2019s no sign of a real change there. Around that date, your sleep efficiency was about the same and your time asleep was within your usual range, so this looks more like normal ups and downs than a shift. If you want, tell me what felt different th"
+    },
+    {
+      "scenario": "P3",
+      "label": "recall from another chat",
+      "problems": [
+        "no tool of ('search_conversations', 'memory_lookup'); ran ['recall']"
+      ],
+      "a": "You said you were travelling for work from \u201cSeptember 17 to September 23.\u201d That\u2019s the only date range mentioned in the earlier chat here."
+    },
+    {
+      "scenario": "T1",
+      "label": "the deadline was saved as a note",
+      "problems": [
+        "[]"
+      ],
+      "a": ""
+    }
+  ]
+}

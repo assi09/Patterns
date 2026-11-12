@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.agent.present import label
 from app.analysis.evidence import Evidence
@@ -34,6 +34,13 @@ class Claim(BaseModel):
     evidence_ids: list[str] = Field(min_length=1)
     metric: str | None = None  # the metric the claim is about
     direction: Direction | None = None  # for change and association claims
+
+    @field_validator("direction", mode="before")
+    @classmethod
+    def _no_direction(cls, value):
+        """ "steady" or "none" is no direction: the verifier then says what is missing, instead of
+        the whole submission failing to parse five times over one field (memory evaluation)."""
+        return value if value in ("up", "down") else None
 
 
 class Hypothesis(BaseModel):

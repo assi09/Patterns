@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.actions.schemas import Measured
 from app.actions.tools import proposal_tools
-from app.agent.ask import REMINDERS, ask, default_guard, default_router
+from app.agent.ask import NOTED, REMINDERS, ask, default_guard, default_router
 from app.agent.context import Attachment, ChatState, turns_from
 from app.agent.conversation import DRAFT_NOTE
 from app.agent.experts import EXPERTS, Depth, available
@@ -297,10 +297,12 @@ def listen_to(
     today,
     now: datetime,
 ) -> None:
-    """Hears what the person's message says about them, after the answer; nothing is kept without
-    their tap (`app.db.memory.propose_fact`)."""
+    """Hears what the person's message says about them; nothing is kept without their tap
+    (`app.db.memory.propose_fact`). Returns the status of what it recorded (empty when nothing
+    passed the rules), or None when listening failed."""
     if not worth_listening(text):
-        return
+        return []
+    statuses: list[str] = []
     try:
         with sessions() as db:
             held = memory.held_facts(db, user_id)[:MAX_KNOWN]
@@ -312,7 +314,7 @@ def listen_to(
             question = db.get(ChatMessage, question_id)
             for heard in kept if question is not None else ():
                 with suppress(memory.MemoryRejected):
-                    memory.propose_fact(
+                    fact = memory.propose_fact(
                         db,
                         user_id,
                         heard.kind,
@@ -325,10 +327,34 @@ def listen_to(
                         message_id=question_id,
                         now=now,
                     )
+                    if fact is not None:
+                        statuses.append(fact.status)
             if question is not None and question.conversation_id:
                 store.charge_answer(db, user_id, question.conversation_id, result.cost_usd)
     except Exception:
         logger.exception("Listening to a message failed")
+        return None
+    return statuses
+
+
+NOT_KEPT = (
+    "I didn't keep that. I keep things about you, like your routine, goals or plans: nothing "
+    "medical, and nothing about how I should answer."
+)
+NOT_HEARD = "I couldn't note that just now. Could you tell me again in a moment?"
+ALREADY_KEPT = "I already keep that in mind."
+
+
+def noted_reply(statuses: list[str] | None) -> str:
+    """What to say to "remember that …", from what listening recorded: never a card that isn't
+    there (the memory evaluation found one promised when listening had failed)."""
+    if statuses is None:
+        return NOT_HEARD
+    if "proposed" in statuses:
+        return NOTED
+    if "approved" in statuses:
+        return ALREADY_KEPT
+    return NOT_KEPT
 
 
 def _answer(
@@ -475,6 +501,11 @@ def _answer(
         except Exception:
             logger.exception("Answering failed")
             reply = None
+        # "Remember that …" is heard now, not after: the reply says what actually happened.
+        noted = reply is not None and reply.result.stop_reason == "noted"
+        if noted:
+            outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
+            reply.result.summary = noted_reply(outcome)
         elapsed = monotonic() - started
         with sessions() as db:
             question = db.get(ChatMessage, question_id)
@@ -520,8 +551,12 @@ def _answer(
                 result.summary, result.claims = reminder_reply(result.summary), []
             refused = reply.route.action == "refuse"
             # "Remember my goal is 8,000 steps" can read as a reminder; it is still worth hearing.
-            heard = not refused and (
-                reply.route.classification.intent not in QUIET_INTENTS or is_explicit(body.text)
+            heard = (
+                not noted
+                and not refused
+                and (
+                    reply.route.classification.intent not in QUIET_INTENTS or is_explicit(body.text)
+                )
             )
             memory.mark_used(db, user_id, reply.context.memory_used, now)
             if not refused:

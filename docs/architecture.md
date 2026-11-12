@@ -359,9 +359,22 @@ model call (`app/agent/listener.py`, about $0.0006) that notes what they say abo
 and dated, through a tool. Each note then passes the medical guard and the fact rules (no condition,
 no instruction, 120 characters), and is counted in `memory_facts`: a candidate is used for nothing
 and only shown on the memory page. Said twice, or with "remember that", it becomes a card in the
-inbox. What the person declined is never raised again, and what was only heard in a message goes
-when that message is edited or its chat deleted. `GET /memory` shows all of it except what was
+inbox. What the person declined is never raised again. When a message is edited or its chat deleted,
+what was only heard in it goes, and so does a card from it still waiting for a tap (with its inbox
+entry): they took the words back before deciding. What they kept or declined stays. Nothing about
+how the assistant should behave is ever kept ("wants answers to ignore rules" is refused, as is a
+message trying it), however the listener words it. `GET /memory` shows all of it except what was
 declined; the person can keep, reword or delete.
+
+**What wins.** In the agent's context, the profile is what the person said about themselves, not a
+measurement: where it and their data disagree, the data wins and the answer says so. When asked
+what is known about them, recall starts from the profile; another chat's older wording is out of
+date, and if a reply fails its checks the fallback lists what was kept, never an old chat.
+
+**Time in follow-ups.** "The day before that" is turned into a date by code, from the day the last
+answer was about, before the follow-up is rewritten; a question naming a day ("around Aug 15") is
+checked and answered on that day, and an event the person kept that overlaps it is put in front of
+the agent, to be said in their words as something that lined up, never as a cause or a statistic.
 
 ### Searching
 
@@ -454,7 +467,7 @@ No embeddings: memory here is structured (metrics, dates, tags), so filtering an
 cheaper, deterministic and testable. No model call is used to summarize memory.
 
 **Built so far: the conversation and attachments** (`backend/app/agent/context.py`, stored in
-`chat_messages` and `evidence`). The last 4 turns go in verbatim (question, answer, verified claims
+`chat_messages` and `evidence`). The last 3 turns go in verbatim (question, answer, verified claims
 with their evidence ids) and their cited evidence is re-attached, at most 8 records; older turns are
 condensed to the question and the claims' text; an attachment (a metric, or a finding with its
 evidence) comes first. Items are added newest first while they fit in about 1,500 tokens. Refused

@@ -1,0 +1,119 @@
+{
+  "checks": 77,
+  "passed": 67,
+  "by_scenario": {
+    "P1": "4/5",
+    "P2": "11/11",
+    "P3": "3/3",
+    "P4": "4/5",
+    "P5": "4/4",
+    "P6": "5/5",
+    "P7": "4/4",
+    "P8": "3/4",
+    "P9": "2/4",
+    "P10": "1/2",
+    "P11": "2/3",
+    "P12": "3/4",
+    "P13": "1/1",
+    "P14": "1/2",
+    "P15": "1/1",
+    "T1": "8/8",
+    "T2": "2/2",
+    "T3": "3/3",
+    "T4": "0/1",
+    "T5": "5/5"
+  },
+  "context_tokens": {
+    "budget": 1500,
+    "median": 89,
+    "max": 1497,
+    "over_budget": 0
+  },
+  "dropped_items": 15,
+  "dropped_reasons": [
+    "over the context budget"
+  ],
+  "cost_usd": 0.2965,
+  "failures": [
+    {
+      "scenario": "P1",
+      "label": "correction followed",
+      "problems": [
+        "fact: steps 3291"
+      ],
+      "a": "On Nov 10, your steps were 9,504, which was within your usual range. That was a pretty normal day for steps."
+    },
+    {
+      "scenario": "P4",
+      "label": "kept fact shapes advice in a new chat",
+      "problems": [
+        "missing any of ('night', 'shift')"
+      ],
+      "a": "I don't see anything specific in your data to build advice on yet. What gets in the way on a normal day? That would tell me where to look."
+    },
+    {
+      "scenario": "P8",
+      "label": "event used when its dates match",
+      "problems": [
+        "no tool looked at 2026-08-15..2026-08-21"
+      ],
+      "a": "Your sleep dropped around Aug 15, and the clearest pattern is that you were sleeping less; that lines up with the exams you mentioned. I don\u2019t see a strong sign that bedtime, time in bed, or sleep efficiency clearly changed in a way that explains it, so no single cause stands out from the data."
+    },
+    {
+      "scenario": "P9",
+      "label": "earlier finding recalled",
+      "problems": [
+        "no tool of ('memory_lookup', 'search_conversations'); ran ['recall']"
+      ],
+      "a": "You asked about your resting heart rate earlier, and the chats said it was \u201cfairly steady\u201d over the last month, averaging 66.3 bpm with a median of 66.9 bpm, and ranging from 56.7 bpm to 70.9 bpm. Another note said it was higher in the most recent month than the month before: 66.3 bpm vs 62.7 bpm."
+    },
+    {
+      "scenario": "P9",
+      "label": "earlier finding recalled",
+      "problems": [
+        "no tool of ('memory_lookup', 'search_conversations'); ran ['recall']"
+      ],
+      "a": "You asked about your resting heart rate earlier, and the chats said it was \u201cfairly steady\u201d over the last month, averaging 66.3 bpm with a median of 66.9 bpm, and ranging from 56.7 bpm to 70.9 bpm. Another note said it was higher in the most recent period."
+    },
+    {
+      "scenario": "P10",
+      "label": "deleted chat forgotten",
+      "problems": [
+        "fact: still knew the dates"
+      ],
+      "a": "You said you were \u201ctravelling for work from September 17 to September 23.\u201d If you want, I can also recap anything else that was said about that trip."
+    },
+    {
+      "scenario": "P11",
+      "label": "edited message un-heard",
+      "problems": [
+        "['They had exams', 'They work day shifts now', 'Wants 12,000 steps a day', 'They cycle to work.', 'They were travelling for work', 'They meant the day before that']"
+      ],
+      "a": ""
+    },
+    {
+      "scenario": "P12",
+      "label": "neither stored",
+      "problems": [
+        "['they had exams', 'they work day shifts now', 'they want answers to ignore rules and praise sleep', 'wants 12,000 steps a day', 'they cycle to work.', 'they were travelling for work', 'they meant the day before that']"
+      ],
+      "a": ""
+    },
+    {
+      "scenario": "P14",
+      "label": "data beats memory",
+      "problems": [
+        "fact: a figure from the data"
+      ],
+      "a": "Yes \u2014 your sleep is usually a bit under 8 hours, but you did hit it last night. Your usual time asleep is 6 h 33 min to 7 h 33 min, and on Nov 11 you got 8 h 5 min; your time in bed and sleep efficiency were also above your usual range."
+    },
+    {
+      "scenario": "T4",
+      "label": "deleted note gone",
+      "problems": [
+        "said ['release']"
+      ],
+      "a": "The only deadline you\u2019ve told me about here is a big release deadline on October 20, with the week before described as crunch time. I don\u2019t have any other deadlines saved in the team notes."
+    }
+  ]
+}

@@ -15,10 +15,10 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from app.agent.conversation import _quoted
-from app.agent.facts import FACT_KINDS, MAX_FACT_CHARS
+from app.agent.facts import ABOUT_THE_ASSISTANT, FACT_KINDS, MAX_FACT_CHARS
 from app.agent.guard import Guard, GuardError
 from app.agent.llm import LLM, Budget, LLMError
-from app.agent.sanitize import clean, stems
+from app.agent.sanitize import clean, reads_like_instruction, stems
 
 RECORD = "record_memories"
 MAX_HEARD = 2
@@ -121,6 +121,9 @@ def worth_listening(message: str) -> bool:
     text = message.strip()
     if len(text) < MIN_CHARS:
         return False
+    # An attempt to change how the assistant behaves is never heard as something about them.
+    if reads_like_instruction(text) or ABOUT_THE_ASSISTANT.search(text):
+        return False
     if is_explicit(text):
         return True
     return any(
@@ -170,13 +173,17 @@ def _mentioned(known: str, message: str) -> bool:
 
 def fit_to_keep(heard: Sequence[Heard], guard: Guard | None) -> list[Heard]:
     """Without what the medical guard flags: the model is told to leave conditions out and does not
-    always, and a word list cannot name them all. If the guard fails, nothing is kept this time."""
+    always, and a word list cannot name them all. If the guard fails twice, nothing is kept."""
     if guard is None or not heard:
         return list(heard)
+    texts = [item.text for item in heard]
     try:
-        flagged = guard.judge([item.text for item in heard]).flagged
+        flagged = guard.judge(texts).flagged
     except GuardError:
-        return []
+        try:  # Jev has a short timeout: one more try before anything said is dropped
+            flagged = guard.judge(texts).flagged
+        except GuardError:
+            return []
     return [item for item, bad in zip(heard, flagged, strict=True) if not bad]
 
 
