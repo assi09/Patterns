@@ -278,9 +278,11 @@ supervisor's attention. A change is raised only when it is all of:
 
 - **Real**: significant after correction across metrics, the same way for four daily checks in a row
   (as before).
-- **Big enough**: the team's median change is at least half of each person's own usual spread (the
-  "smallest worthwhile change" used in sports monitoring, where a 7-day average is judged against
-  0.5 SD) and at least a floor in the metric's units: 20 min of sleep, 30 min of bedtime, 1,000
+- **Big enough**: the team's median change is at least the "smallest worthwhile change" of sports
+  monitoring, half the spread of a person's 7-day average. Changes are measured in units of the
+  spread of daily values, about √7 times larger, so the bar is 0.25 of it (first set at 0.5, which
+  missed PMData's lockdown drop of 2,000 steps a day; see evaluation.md). And at least a floor in the
+  metric's units: 20 min of sleep, 30 min of bedtime, 1,000
   steps, 10 Active Zone Minutes a day, 2 bpm resting heart rate, 3 ms HRV, 5 points of recovery or
   physical stress signs, 1 point of strain.
 - **Broad**: at least 60% of the people moved that way, so it is the team, not a few people.
@@ -298,12 +300,14 @@ the same teams judged by the old rule and the new (`eval/team_alert_check.py`, 4
 
 | Teams | Old rule | New rule |
 |---|---|---|
-| Nothing changed, 8 / 12 / 30 people | 0 / 0 / 1 alerted | 0 / 0 / 0 |
+| Nothing changed, 8 / 12 / 30 people | 0 / 0 / 1 alerted | 0 / 0 / 1 |
 | Sleep -60 min (1.3 SD), 5 / 8 / 12 people | found 33 / 40 / 40, median day 7 / 5 / 4 | the same |
-| Sleep -40 min (0.9 SD), 8 people | 37 found, day 7 | 36 found, day 7 |
+| Sleep -40 min (0.9 SD), 8 people | 37 found, day 7 | 37 found, day 7 |
 | Resting heart rate +4, 8 people | 40 found, day 4 | 40 found, day 4 |
-| Sleep -12 min (0.27 SD), 30 people: real, too small | 29 alerted | 2 alerted |
+| Sleep -12 min (0.27 SD), 30 people: real, too small | 29 alerted | 6 alerted |
 
+The bar was first 0.5 of the daily spread (2 of 40 alerted on the tiny change), which also missed a
+real 2,000-step drop on real people; 0.25 matches the sports rule and finds that drop.
 Alerts besides the planted one come mostly from the app's scores, which are built from sleep and
 heart rate and so really move; they arrive together as one story. These members have less day-to-day
 noise than the teams measured above (12% false alarms), so false-alarm rates depend on the data's

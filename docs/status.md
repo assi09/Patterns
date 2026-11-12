@@ -421,8 +421,9 @@ OpenAI ([costs.md](costs.md) has every run).
 34. **The team stress score does not track reported stress** (median rho -0.03 on PMData). Shown as
     "physical stress signs"; the consent text still says "stress" and changing it means asking
     members again. Undecided.
-35. **Team checks do not catch names.** A claim, note or proposal that singles out "two members" or
-    "he" is refused, but a first name alone passes.
+35. ~~Team checks do not catch names.~~ Fixed 2026-11-12: a question naming a member (by the name in
+    their email) or asking after a name ("How is Sarah sleeping?", "Maya's recovery") is stopped in
+    code, as are rankings and comparing part of the team with the rest (evaluation.md).
 36. **Five-person teams rarely get an alert** (4 of 24 for a 1.2 SD sleep drop). A smaller team
     needs a bigger change; the floor cannot go lower.
 37. **The team screens have only run on the mock.** The API is tested, and the Team tab was clicked

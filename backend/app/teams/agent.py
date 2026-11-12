@@ -35,9 +35,18 @@ from app.analysis.team import (
     team_participation,
     team_scan,
     team_statistics,
+    worthwhile,
 )
 from app.db.chat import add_trace
-from app.db.models import Team, TeamAction, TeamAlert, TeamChatMessage, TeamNote
+from app.db.models import (
+    Team,
+    TeamAction,
+    TeamAlert,
+    TeamChatMessage,
+    TeamMembership,
+    TeamNote,
+    User,
+)
 from app.teams.narrative import INDIVIDUAL
 from app.teams.reports import _member_frames, last_full_week
 
@@ -54,6 +63,83 @@ ASKS = re.compile(
     re.IGNORECASE,
 )
 CHALLENGE_DAYS = (7, 28)
+# Part of the team, to compare with the rest: differencing two groups can single people out.
+GROUP_WORDS = (
+    r"(?:people|persons?|members?|employees?|colleagues?|staff|hires?|newcomers?|engineers?|"
+    r"designers?|developers?|managers?|interns?|juniors?|seniors?|shifts?|ones|those|them|him|"
+    r"her|group|department|newest|oldest|remote|onsite|night shift|day shift)"
+)
+SUBGROUP = re.compile(
+    r"\b(?:without|excluding|except(?: for)?|apart from|other than|leav(?:e|ing) out|left out|"
+    rf"minus)\s+(?:the\s+|our\s+|my\s+)?(?:\w+\s+){{0,2}}{GROUP_WORDS}\b|"
+    rf"\b(?:just|only) (?:the|our|my) (?:\w+\s+)?{GROUP_WORDS}\b|"
+    r"\bcompare (?:the )?(?:people|members|ones|those|new|newer|older)\b|"
+    r"\b(?:people|members|those|ones) who\b",
+    re.IGNORECASE,
+)
+SUBGROUP_REPLY = (
+    "I only look at the whole team, never a part of it: comparing parts of a team could single "
+    "people out. Ask me about the whole team and I'll tell you what changed."
+)
+# The extreme of a team ranks people: "the lowest anyone slept", "the bottom three".
+RANKING = re.compile(
+    r"\b(?:top|bottom)\s+(?:\d+|one|two|three|four|five|ten)\b|"
+    r"\b(?:lowest|highest|worst|best)\s+(?:\w+\s+)?(?:anyone|anybody|someone|somebody|person|"
+    r"member|employee)\b",
+    re.IGNORECASE,
+)
+# Asking after someone by name: "How is Sarah sleeping?", "Maya's recovery". Capitalised words that
+# are not names in this setting are left alone; the team's own members' names are always caught.
+NAMED = re.compile(
+    r"\b([A-Z][a-z]{2,})'s\b|\b(?:is|was|did|does|has|about|for|with|from)\s+([A-Z][a-z]{2,})\b"
+)
+NOT_NAMES = {
+    "The",
+    "This",
+    "That",
+    "Fitbit",
+    "Patterns",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+    "Today",
+    "Team",
+    "Our",
+    # The metrics as supervisors read them.
+    "Active",
+    "Zone",
+    "Minutes",
+    "Recovery",
+    "Sleep",
+    "Steps",
+    "Strain",
+    "Stress",
+    "Physical",
+    "Resting",
+    "Heart",
+    "Bedtime",
+    "Load",
+    "Activity",
+    "Time",
+}
+# Health and care, beyond the medical words: a question about them gets the medical reply.
+CARE = re.compile(r"\b(?:doctors?|physicians?|therap\w*|counsel\w*|clinic\w*|nurses?)\b", re.I)
 
 ABOUT_A_PERSON = re.compile(
     r"\b(who\b|whom\b|which (?:person|member|employee|colleague|one of)|names?\b|"
@@ -453,11 +539,20 @@ def _unsafe(text: str, note: bool = False) -> str | None:
 
 
 def _team_change_moved(record: Evidence) -> bool | None:
+    """Whether the team moved in a way worth telling: real, and big and broad enough by the alerts'
+    rule. A real change of a few minutes is "broadly steady" (the quiet team in the evaluation was
+    told of an "uptick" from one week's noise)."""
     if record.tool == "team_scan":
-        return record.stats.get("status") in ("lasting", "new")
+        way = record.stats.get("direction")
+        if record.stats.get("status") not in ("lasting", "new") or way is None:
+            return False
+        return worthwhile(record.metrics[0], record.stats["weeks"][-1], way)
     if record.tool == "team_change" and record.sufficient:
         p = record.stats.get("p_value_adjusted", record.stats.get("p_value"))
-        return p is not None and p < FDR
+        if p is None or p >= FDR:
+            return False
+        way = "up" if record.stats["median_change"] > 0 else "down"
+        return worthwhile(record.metrics[0], record.stats, way)
     if record.tool == "team_alert":
         return True
     return None
@@ -592,6 +687,28 @@ def _note(llm: LLM, box: "TeamTools", told: str, today: date) -> TeamReply:
     return reply
 
 
+def names_asked(db: Session, team: Team, question: str) -> bool:
+    """Whether the question names someone: a member (by the name in their email) or anyone else
+    the way names are written. Read here only, never shown or stored."""
+    emails = db.scalars(
+        select(User.email)
+        .join(TeamMembership, TeamMembership.user_id == User.id)
+        .where(TeamMembership.team_id == team.id, TeamMembership.left_at.is_(None))
+    )
+    tokens = {
+        part
+        for email in emails
+        for part in re.split(r"[^a-z]+", email.split("@")[0].casefold())
+        if len(part) >= 3
+    }
+    words = set(re.findall(r"[a-z]+", question.casefold()))
+    if tokens & words:
+        return True
+    team_words = set(re.findall(r"[A-Za-z]+", team.name))
+    found = [n for pair in NAMED.findall(question) for n in pair if n]
+    return any(n not in NOT_NAMES and n not in team_words for n in found)
+
+
 def answer_supervisor(
     llm: LLM, db: Session, team: Team, question: str, today: date, now: datetime
 ) -> TeamReply:
@@ -632,10 +749,20 @@ def _answer(
     now: datetime,
     earlier: list[TeamChatMessage],
 ) -> TeamReply:
-    if ABOUT_A_PERSON.search(question) or INDIVIDUAL.search(question):
+    if (
+        ABOUT_A_PERSON.search(question)
+        or INDIVIDUAL.search(question)
+        or RANKING.search(question)
+        or names_asked(db, team, question)
+    ):
         return TeamReply(ABOUT_A_PERSON_REPLY, stop="about_a_person")
-    if MEDICAL.search(question):
+    if MEDICAL.search(question) or (
+        # A statement about someone's health is refused as a note, with that reason, below.
+        ASKS.search(question) and (HEALTH_STATE.search(question) or CARE.search(question))
+    ):
         return TeamReply(MEDICAL_REPLY, stop="medical")
+    if SUBGROUP.search(question):
+        return TeamReply(SUBGROUP_REPLY, stop="subgroup")
     if ABOUT_ME.search(question):
         return TeamReply(ABOUT_ME_REPLY, stop="about_me")
     box = TeamTools(db, team, today, now)

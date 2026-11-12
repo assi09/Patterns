@@ -112,6 +112,7 @@ _TEAM_OUTCOMES = {
     "noted": "answered",  # told something, and noted it or replied
     "not_saved": "refused",  # a note about a person, someone's health, or an instruction
     "about_me": "refused",  # the supervisor's own memory is not the team's
+    "subgroup": "refused",  # part of the team, compared with the rest
 }
 
 

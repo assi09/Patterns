@@ -56,10 +56,13 @@ ALERT_DAYS_HELD = 4  # chosen on made-up teams to keep false alarms rare (docs/t
 ALERT_FDR = 0.05
 SUSTAINED_WEEKS = 2  # changed this many weeks in a row before it counts as lasting
 # What makes a change worth telling a supervisor, besides being real (docs/teams.md, "What deserves
-# an alert"). Big enough: the team's median change is at least half of each person's usual spread
-# (a common "smallest worthwhile change") and at least a floor in the metric's own units. Broad: at
-# least this share of the people moved that way, so it is the team, not a few people.
-WORTHWHILE_SD = 0.5
+# an alert"). Big enough: the team's median change is at least the "smallest worthwhile change" of
+# sports monitoring, half the spread of a person's 7-day average, and at least a floor in the
+# metric's own units. Changes here are in units of the spread of *daily* values, which is about
+# sqrt(7) times larger than that of a 7-day mean (a little less, as days follow on from each
+# other), so half of it is about 0.25 here; 0.5 missed PMData's lockdown drop of 2,000 steps a day.
+# Broad: at least this share of the people moved that way, so it is the team, not a few people.
+WORTHWHILE_SD = 0.25
 WORTHWHILE_FLOOR = {
     "sleep_minutes": 20.0,  # minutes a night
     "bedtime_hour": 0.5,  # half an hour
