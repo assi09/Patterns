@@ -1,0 +1,27 @@
+{
+  "people": 16,
+  "days_checked": 83,
+  "planted_on": "2020-01-31",
+  "as_is": {
+    "old": {
+      "bedtime_hour down": "2020-01-25",
+      "steps down": "2020-03-19"
+    },
+    "new": {
+      "bedtime_hour down": "2020-01-25",
+      "steps down": "2020-03-19"
+    }
+  },
+  "sleep_down_60": {
+    "old": {
+      "bedtime_hour down": "2020-01-25",
+      "sleep_minutes down": "2020-02-05",
+      "steps down": "2020-03-19"
+    },
+    "new": {
+      "bedtime_hour down": "2020-01-25",
+      "sleep_minutes down": "2020-02-05",
+      "steps down": "2020-03-19"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "teams": 6,
+  "passed": 6,
+  "cost_usd": 0.0502,
+  "rows": [
+    {
+      "team": "sleep down",
+      "a": "Lately the team\u2019s sleep has dipped and that looks lasting, while activity, recovery, and load have been mostly steady. Time asleep has been down for two straight weeks, and the last full week showed a clear drop again; bedtime and activity did not show a consistent shift. Physical stress signs don\u2019t have enough team data to read yet.",
+      "problems": [],
+      "cost": 0.007868
+    },
+    {
+      "team": "sleep down",
+      "a": "Lately, the team has been sleeping less, and that drop has lasted at least two weeks. Activity, recovery, and load look broadly steady, and there isn\u2019t enough data yet to say anything about physical stress signs. I don\u2019t see any supervisor notes or alerts that line up with these shifts.",
+      "problems": [],
+      "cost": 0.007877
+    },
+    {
+      "team": "sleep down, steps up",
+      "a": "Lately the team\u2019s activity has risen and sleep has fallen. Steps are up in a lasting pattern over the last three weeks, while time asleep has been down for two straight weeks; bedtime itself has stayed about steady. Strain has stayed roughly steady, and there isn\u2019t enough data yet to say anything reliable about physical stress signs.",
+      "problems": [],
+      "cost": 0.008256
+    },
+    {
+      "team": "sleep down, steps up",
+      "a": "Lately, the team has been sleeping less and walking more. Sleep time has been down for 2 straight weeks, while steps have been up for 3 straight weeks; bedtime itself looks steady. Recovery was lower in the week of 2026-10-26 to 2026-11-01, and the latest week is still a bit below baseline; resting heart rate, heart rate variability, strain, and active zone minutes are mostly steady, and there isn\u2019t enough team data to read physical stress signs.",
+      "problems": [],
+      "cost": 0.008985
+    },
+    {
+      "team": "nothing",
+      "a": "Overall, the team has been fairly steady lately, with no lasting shifts in sleep, activity, recovery, or load across the last four weeks. In the most recent full week, steps and recovery were up, and sleep time also ticked up, while bedtime and strain stayed basically unchanged. We do not have enough team data yet to read physical stress signs.",
+      "problems": [],
+      "cost": 0.00864
+    },
+    {
+      "team": "nothing",
+      "a": "The team looks broadly steady lately, with no lasting shift in sleep, activity, recovery, or load over the last four weeks. The most recent week shows a small uptick in sleep time, steps, and recovery, while bedtime and strain stayed about flat. I don\u2019t have any recent team notes or alerts that line up with these changes, and there isn\u2019t enough pooled data to say anything reliable about physical stress signs.",
+      "problems": [],
+      "cost": 0.008586
+    }
+  ]
+}

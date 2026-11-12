@@ -232,7 +232,7 @@ def test_a_change_must_be_big_and_broad_enough_as_well_as_real():
     }
     assert worthwhile("sleep_minutes", big, "down")
     assert not worthwhile("sleep_minutes", big | {"median_change": -12.0}, "down")  # floor
-    assert not worthwhile("sleep_minutes", big | {"median_standardized_change": -0.3}, "down")
+    assert not worthwhile("sleep_minutes", big | {"median_standardized_change": -0.2}, "down")
     assert not worthwhile("sleep_minutes", big | {"members_up": 5, "members_down": 5}, "down")
     assert not worthwhile("sleep_minutes", big, "up")  # the median says otherwise
 

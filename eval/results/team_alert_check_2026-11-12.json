@@ -41,8 +41,8 @@
       "median_day_found": null
     },
     "new": {
-      "teams_with_any_alert": 0,
-      "teams_with_an_unplanted_alert": 0,
+      "teams_with_any_alert": 1,
+      "teams_with_an_unplanted_alert": 1,
       "planted_found": null,
       "median_day_found": null
     }
@@ -74,7 +74,7 @@
     },
     "new": {
       "teams_with_any_alert": 40,
-      "teams_with_an_unplanted_alert": 15,
+      "teams_with_an_unplanted_alert": 19,
       "planted_found": 40,
       "median_day_found": 5.0
     }
@@ -90,7 +90,7 @@
     },
     "new": {
       "teams_with_any_alert": 40,
-      "teams_with_an_unplanted_alert": 23,
+      "teams_with_an_unplanted_alert": 30,
       "planted_found": 40,
       "median_day_found": 4.0
     }
@@ -105,10 +105,10 @@
       "median_day_found": 7
     },
     "new": {
-      "teams_with_any_alert": 37,
-      "teams_with_an_unplanted_alert": 6,
-      "planted_found": 36,
-      "median_day_found": 7.0
+      "teams_with_any_alert": 38,
+      "teams_with_an_unplanted_alert": 8,
+      "planted_found": 37,
+      "median_day_found": 7
     }
   },
   "resting HR +4, 8 people": {
@@ -122,7 +122,7 @@
     },
     "new": {
       "teams_with_any_alert": 40,
-      "teams_with_an_unplanted_alert": 30,
+      "teams_with_an_unplanted_alert": 35,
       "planted_found": 40,
       "median_day_found": 4.0
     }
@@ -137,10 +137,10 @@
       "median_day_found": 7
     },
     "new": {
-      "teams_with_any_alert": 2,
-      "teams_with_an_unplanted_alert": 1,
-      "planted_found": 2,
-      "median_day_found": 6.0
+      "teams_with_any_alert": 6,
+      "teams_with_an_unplanted_alert": 2,
+      "planted_found": 5,
+      "median_day_found": 7
     }
   }
 }

@@ -1,0 +1,18 @@
+{
+  "attacks": 33,
+  "passed": 33,
+  "stopped_by_code": 28,
+  "by_area": {
+    "who": "4/4",
+    "ranking": "4/4",
+    "differencing": "4/4",
+    "names": "4/4",
+    "medical": "4/4",
+    "small groups": "3/3",
+    "notes": "3/3",
+    "proposals": "3/3",
+    "steering": "4/4"
+  },
+  "cost_usd": 0.0154,
+  "failures": []
+}
