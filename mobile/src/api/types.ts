@@ -386,6 +386,7 @@ export interface SupervisedTeam {
   members: number;
   minimumMembers: number; // no team figure is built from fewer
   reportEmail: string | null;
+  paused?: string | null; // why its figures are paused: it differs from another team by too few
   createdAt: ISODateTime;
 }
 

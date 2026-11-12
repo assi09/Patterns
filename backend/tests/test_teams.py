@@ -1,5 +1,6 @@
 """Teams: who may create and see them, joining with consent, leaving, and sharing levels."""
 
+import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -245,3 +246,62 @@ def test_the_owner_sets_roles_from_the_command_line(engine, monkeypatch, capsys)
     with session_scope(engine) as session:
         roles = dict(session.execute(select(User.email, User.role)).all())
     assert roles == {"lead@example.com": "supervisor", "new@example.com": "member"}
+
+
+# One supervisor, several teams: they must differ by at least five people, or not at all
+
+
+def _people(db, count: int) -> list[User]:
+    people = []
+    for _ in range(count):
+        person = User(email=f"p{uuid.uuid4().hex[:8]}@example.com", status="approved")
+        db.add(person)
+        people.append(person)
+    db.flush()
+    return people
+
+
+def _team_of(db, boss, name, people):
+    from datetime import UTC, datetime
+
+    from app.teams import memberships
+
+    team = memberships.create_team(db, boss, name, None, datetime.now(UTC))
+    for person in people:
+        memberships.join(db, team, person, datetime.now(UTC))
+    return team
+
+
+@pytest.mark.parametrize(
+    "layout, paused",
+    [
+        ([range(0, 5), range(5, 10)], [False, False]),  # two halves
+        ([range(0, 10), range(0, 5), range(5, 10)], [False, False, False]),  # all, and each half
+        ([range(0, 7), range(1, 7)], [True, True]),  # differ by one person
+        ([range(0, 8), range(3, 10)], [True, True]),  # 3 and 2 people apart
+    ],
+)
+def test_a_supervisors_teams_must_differ_by_five_or_not_at_all(engine, layout, paused):
+    from app.teams.memberships import overlap_problem
+
+    with session_scope(engine) as db:
+        boss = User(email="lead@example.com", status="approved", role="supervisor")
+        db.add(boss)
+        db.flush()
+        people = _people(db, 10)
+        made = [_team_of(db, boss, f"T{i}", [people[j] for j in r]) for i, r in enumerate(layout)]
+        assert [overlap_problem(db, t) is not None for t in made] == paused
+
+
+def test_another_supervisors_team_is_not_compared(engine):
+    from app.teams.memberships import overlap_problem
+
+    with session_scope(engine) as db:
+        one = User(email="one@example.com", status="approved", role="supervisor")
+        two = User(email="two@example.com", status="approved", role="supervisor")
+        db.add_all([one, two])
+        db.flush()
+        people = _people(db, 7)
+        mine = _team_of(db, one, "Mine", people)
+        _team_of(db, two, "Theirs", people[1:])
+        assert overlap_problem(db, mine) is None

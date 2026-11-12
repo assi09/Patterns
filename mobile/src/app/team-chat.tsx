@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -36,8 +36,9 @@ const MAX_LENGTH = 600;
 
 /** The supervisor's conversation with the team agent, on a page of its own. */
 export default function TeamChatScreen() {
+  const { team: asked } = useLocalSearchParams<{ team?: string }>();
   const teams = useTeams();
-  const team = teams.data?.[0];
+  const team = teams.data?.find((t) => t.id === asked) ?? teams.data?.[0];
   return (
     <>
       <Stack.Screen options={{ title: team ? `Ask about ${team.name}` : 'Ask about your team' }} />
@@ -214,7 +215,9 @@ function Proposal({ teamId, action }: { teamId: string; action: TeamAction }) {
   const decide = useDecideTeamAction(teamId);
   const [done, setDone] = useState<string>();
   return (
-    <View style={[styles.proposal, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+    <View
+      style={[styles.proposal, { borderColor: colors.border, backgroundColor: colors.surface }]}
+    >
       <Text variant="caption" color="faint">
         Proposed for your approval
       </Text>

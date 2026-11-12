@@ -69,14 +69,14 @@ export function AreaStrip({ readings }: { readings: AreaReading[] }) {
 }
 
 /** The way into the team agent, now a page of its own. */
-export function AskTeamRow() {
+export function AskTeamRow({ teamId }: { teamId: string }) {
   return (
     <Section footer="Answers come from team figures only and never describe one person.">
       <Row
         icon="chatbubbles-outline"
         title="Ask about your team"
         detail="What changed, what lined up with it, what the team could try"
-        onPress={() => router.push('/team-chat')}
+        onPress={() => router.push({ pathname: '/team-chat', params: { team: teamId } })}
       />
     </Section>
   );

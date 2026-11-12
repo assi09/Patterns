@@ -47,6 +47,7 @@ from app.db.models import (
     TeamNote,
     User,
 )
+from app.teams.memberships import overlap_problem
 from app.teams.narrative import INDIVIDUAL
 from app.teams.reports import _member_frames, last_full_week
 
@@ -765,6 +766,8 @@ def _answer(
         return TeamReply(SUBGROUP_REPLY, stop="subgroup")
     if ABOUT_ME.search(question):
         return TeamReply(ABOUT_ME_REPLY, stop="about_me")
+    if paused := overlap_problem(db, team):
+        return TeamReply(f"I can't look at this team's figures right now. {paused}", stop="paused")
     box = TeamTools(db, team, today, now)
     if not ASKS.search(question):
         # About a person, someone's health or an instruction: nothing to save, and no model call.

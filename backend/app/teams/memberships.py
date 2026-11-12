@@ -120,6 +120,38 @@ def active_members(db: Session, team: Team) -> int:
     )
 
 
+def member_ids(db: Session, team: Team) -> set[uuid.UUID]:
+    return set(
+        db.scalars(
+            select(TeamMembership.user_id).where(
+                TeamMembership.team_id == team.id, TeamMembership.left_at.is_(None)
+            )
+        )
+    )
+
+
+def overlap_problem(db: Session, team: Team) -> str | None:
+    """Why this team's figures are paused, or None. One supervisor may run several teams (a
+    department and its squads), but two of them that share people must differ by at least
+    MIN_MEMBERS people each way, or comparing their figures could single someone out."""
+    mine = member_ids(db, team)
+    others = db.scalars(
+        select(Team).where(Team.supervisor_id == team.supervisor_id, Team.id != team.id)
+    )
+    for other in others:
+        theirs = member_ids(db, other)
+        if not mine & theirs:
+            continue
+        if 0 < len(mine - theirs) < MIN_MEMBERS or 0 < len(theirs - mine) < MIN_MEMBERS:
+            return (
+                f"It shares people with your team {other.name!r} and differs from it by fewer "
+                f"than {MIN_MEMBERS} people, so comparing the two could single someone out. Its "
+                f"figures are paused until the two teams differ by at least {MIN_MEMBERS} people "
+                "or not at all."
+            )
+    return None
+
+
 def team_for_code(db: Session, code: str) -> Team | None:
     return db.scalar(select(Team).where(Team.invite_code == normalize_code(code)))
 

@@ -230,11 +230,22 @@ challenges or messages that wait for approval (sections below). Left, as of 2026
 - **The consent wording**: "stress" or "physical stress signs" (see below). Undecided.
 - Invite by link, participation counts in the app, a verified sending domain, and a pilot team.
 
+## Several teams for one supervisor (2026-11-13)
+
+A supervisor may run several teams, as a department head sees the department and each of its squads,
+and the Team tab has a switcher (the team names in a row, and "New team"). A person may be in several
+teams; each asks for its own consent. The risk is differencing: two of one supervisor's teams that
+share people and differ by one or two would let them compare figures and see those people. So two
+of a supervisor's teams that share anyone must differ by at least 5 people each way, or not at all
+(`overlap_problem` in `app/teams/memberships.py`). When they do not, both teams' figures are paused:
+no report (and none stored, so the week can be made once fixed), no alerts, a fixed reply from the
+agent, and the reason at the top of the Team tab. With 10 people, the safe layouts are two halves of
+5, or the whole 10 and each half. Different supervisors' teams are never compared with each other.
+
 ## Open
 
 - A verified sending domain for Resend, so reports can reach any supervisor's address.
 - Whether 5 is the right floor for a demo team; it can only go up, never down.
-- Whether a supervisor can run more than one team (the model allows it; the first UI shows one).
 
 ## The Monday check across every area (built, no agent on it yet)
 

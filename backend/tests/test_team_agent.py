@@ -597,3 +597,29 @@ def test_a_real_but_small_team_change_is_told_as_steady():
     assert check_claim(TeamClaim(**up, evidence_ids=[small.id]), {small.id: small})
     assert check_claim(TeamClaim(**steady, evidence_ids=[small.id]), {small.id: small}) == []
     assert check_claim(TeamClaim(**up, evidence_ids=[big.id]), {big.id: big}) == []
+
+
+def test_a_paused_team_gives_no_figures_anywhere(engine, client):
+    """Two of one supervisor's teams one person apart: no report, no alerts, no answers."""
+    from app.db.models import TeamReport
+    from app.teams import alerts, reports
+
+    client, _ = client
+    team_id = make_team(engine)  # seven members
+    with session_scope(engine) as db:
+        team = db.get(Team, uuid.UUID(team_id))
+        boss = db.get(User, team.supervisor_id)
+        smaller = memberships.create_team(db, boss, "Design minus one", None, NOW)
+        for person in db.scalars(select(User).where(User.email.like("member0%"))).all()[1:]:
+            memberships.join(db, smaller, person, NOW)
+    reply, llm = ask(engine, team_id, "How has the team been lately?", [])
+    assert reply.stop == "paused" and llm.requests == []
+    with session_scope(engine) as db:
+        team = db.get(Team, uuid.UUID(team_id))
+        report = reports.build_report(db, team, reports.last_full_week(TODAY), NOW)
+        assert report.status == "withheld" and "paused" in report.headline
+        assert db.scalars(select(TeamReport)).all() == []  # not stored: made once it is fixed
+        assert alerts.check_team(db, team, TODAY, NOW) == []
+    boss = signed_in(client, engine, "boss@example.com")
+    shown = client.get(f"/teams/{team_id}", headers=boss).json()
+    assert "differs from it by fewer than 5 people" in shown["paused"]

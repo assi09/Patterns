@@ -1,6 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { type ReactNode, useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ApiError } from '@/api/http';
 import {
@@ -37,32 +38,124 @@ import { areaReadings, changeRows, teamStatus } from '@/lib/team';
 import { useWide } from '@/lib/layout';
 import { fonts, radius, spacing, useColors, useMetricColor } from '@/theme';
 
-/** A supervisor's team: this week's report, shared levels, the invite code (docs/teams.md). */
+// The team last looked at, for this session: switching tabs and back keeps it.
+let lastTeam: string | undefined;
+
+/** A supervisor's teams (a department and its squads, say): one dashboard each (docs/teams.md). */
 export default function TeamScreen() {
   const teams = useTeams();
-  const team = teams.data?.[0]; // one team per supervisor in this first version
+  const [chosen, setChosen] = useState<string | undefined>(lastTeam);
+  const [adding, setAdding] = useState(false);
+  const all = teams.data ?? [];
+  const team = all.find((t) => t.id === chosen) ?? all[0];
+  const choose = (id: string) => {
+    lastTeam = id;
+    setChosen(id);
+    setAdding(false);
+  };
   return (
     <Screen
-      title={team?.name ?? 'Team'}
+      title={adding ? 'New team' : (team?.name ?? 'Team')}
       wide
       refreshing={teams.isRefetching}
       onRefresh={teams.refetch}
     >
       <QueryState query={teams}>
-        {() => (team ? <TeamView team={team} /> : <CreateTeam />)}
+        {() => (
+          <>
+            {all.length > 0 ? (
+              <TeamSwitcher
+                teams={all}
+                current={adding ? undefined : team?.id}
+                onChoose={choose}
+                onAdd={() => setAdding(true)}
+              />
+            ) : null}
+            {team && !adding ? (
+              <TeamView key={team.id} team={team} />
+            ) : (
+              <CreateTeam
+                first={all.length === 0}
+                onCreated={choose}
+                onCancel={all.length ? () => setAdding(false) : undefined}
+              />
+            )}
+          </>
+        )}
       </QueryState>
     </Screen>
   );
 }
 
-function CreateTeam() {
+/** The supervisor's teams as a row of names, the open one underlined; text, not boxes. */
+function TeamSwitcher({
+  teams,
+  current,
+  onChoose,
+  onAdd,
+}: {
+  teams: SupervisedTeam[];
+  current?: string;
+  onChoose: (id: string) => void;
+  onAdd: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.switcher}
+      accessibilityRole="tablist"
+    >
+      {teams.map((t) => {
+        const open = t.id === current;
+        return (
+          <Pressable
+            key={t.id}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: open }}
+            aria-selected={open}
+            onPress={() => onChoose(t.id)}
+            style={[styles.switch, open && { borderBottomColor: colors.text }]}
+          >
+            <Text color={open ? 'text' : 'muted'} style={open ? styles.switchOpen : undefined}>
+              {t.name}
+            </Text>
+            {t.paused ? (
+              <Ionicons name="pause-circle-outline" size={14} color={colors.warning} />
+            ) : null}
+          </Pressable>
+        );
+      })}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="New team"
+        onPress={onAdd}
+        style={[styles.switch, current === undefined && { borderBottomColor: colors.text }]}
+      >
+        <Ionicons name="add" size={16} color={colors.muted} />
+        <Text color="muted">New team</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+function CreateTeam({
+  first,
+  onCreated,
+  onCancel,
+}: {
+  first: boolean;
+  onCreated: (id: string) => void;
+  onCancel?: () => void;
+}) {
   const colors = useColors();
   const create = useCreateTeam();
   const [name, setName] = useState('');
-  const submit = () => name.trim() && create.mutate(name);
+  const submit = () => name.trim() && create.mutate(name, { onSuccess: (t) => onCreated(t.id) });
   return (
     <Section
-      title="Create your team"
+      title={first ? 'Create your team' : 'Another team'}
       footer="You get a code to share. People join with it in their Settings after reading what you will see: weekly team figures from at least 5 people, and named levels only from those who choose to share them."
     >
       <View style={styles.field}>
@@ -81,6 +174,13 @@ function CreateTeam() {
         />
         <Button label="Create" disabled={!name.trim() || create.isPending} onPress={submit} />
       </View>
+      {onCancel ? <Button label="Cancel" variant="secondary" onPress={onCancel} /> : null}
+      {!first ? (
+        <Text variant="caption" color="muted">
+          Teams that share people must differ by at least 5 people, or not at all, or their figures
+          pause: comparing two nearly identical teams could single someone out.
+        </Text>
+      ) : null}
       {create.error ? <ErrorLine error={create.error} /> : null}
     </Section>
   );
@@ -96,11 +196,18 @@ function TeamView({ team }: { team: SupervisedTeam }) {
   const latest = useTeamReport(team.id, reports.data?.[0]?.week.start);
   const alerts = useTeamAlerts(team.id);
 
-  const main = (
+  const main = team.paused ? (
+    <>
+      <Section title="Figures paused">
+        <Text color="muted">{team.paused}</Text>
+      </Section>
+      <AskTeamRow teamId={team.id} />
+    </>
+  ) : (
     <>
       <TeamStatusLine status={teamStatus(alerts.data, latest.data)} />
       <AreaStrip readings={areaReadings(alerts.data, latest.data)} />
-      <AskTeamRow />
+      <AskTeamRow teamId={team.id} />
       <ProposalsSection teamId={team.id} />
       <AlertsSection teamId={team.id} />
       {latest.data && latest.data.week.start === week ? (
@@ -328,6 +435,16 @@ function ErrorLine({ error }: { error: Error }) {
 }
 
 const styles = StyleSheet.create({
+  switcher: { gap: spacing.lg, paddingBottom: spacing.xs },
+  switch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  switchOpen: { fontFamily: fonts.semibold },
   columns: { flexDirection: 'row', gap: spacing.xxl, alignItems: 'flex-start' },
   main: { flex: 3, minWidth: 0 },
   side: { flex: 2, minWidth: 0 },
