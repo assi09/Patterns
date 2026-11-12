@@ -470,9 +470,22 @@ export interface TeamAlert {
   resolvedAt: ISODateTime | null;
 }
 
+/** What the week's report leads with: a worthwhile team change, concerns first. */
+export interface ReportFinding {
+  metric: string;
+  label: string;
+  kind: 'concern' | 'improvement' | 'change';
+  status: 'lasting' | 'new';
+  text: string;
+  evidenceId: string;
+}
+
 export interface TeamReport extends TeamReportSummary {
   membersTotal: number;
   minimumMembers: number;
+  priorities: ReportFinding[]; // in reading order: concerns, load and bedtime, then good news
+  alerts: string[]; // raised during the week
+  challenges: ReportSection[]; // approved challenges that ended, and whether they moved
   sections: ReportSection[];
   weekdays: ReportSection[];
   narrative: NarrativeParagraph[]; // the model's checked prose; empty when templated

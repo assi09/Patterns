@@ -330,6 +330,7 @@ def team_scan(frames: list[pd.DataFrame], last: Window, weeks: int = SCAN_WEEKS)
                 row |= {
                     "members": evidence.stats["members"],
                     "median_change": evidence.stats["median_change"],
+                    "median_standardized_change": evidence.stats["median_standardized_change"],
                     "members_up": evidence.stats["members_up"],
                     "members_down": evidence.stats["members_down"],
                     "changed": moved,

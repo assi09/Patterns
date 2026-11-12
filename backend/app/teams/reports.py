@@ -14,22 +14,31 @@ from sqlalchemy.orm import Session
 from app.agent.llm import LLM
 from app.analysis.evidence import Evidence, Window
 from app.analysis.report import change_text
+from app.analysis.screen import FDR
 from app.analysis.team import (
     LEVEL_METRICS,
     MIN_MEMBERS,
     Level,
     TeamStatistics,
+    kind_of,
     member_levels,
     team_info,
+    team_scan,
     team_statistics,
     week_of,
+    worthwhile,
 )
 from app.db.daily import load_daily
-from app.db.models import Team, TeamMembership, TeamReport, User
+from app.db.models import Team, TeamAction, TeamAlert, TeamMembership, TeamNote, TeamReport, User
 from app.teams.memberships import active_members
 
 SOURCE = "google_health"  # team reports read each member's live data only
 HISTORY_DAYS = 70  # enough before the week for the scores' baselines and four earlier weeks
+NOTES_BEFORE = timedelta(days=7)  # a deadline the week before a change can line up with it
+# The order a supervisor reads: what needs attention, what lasted before what is new, then load and
+# bedtime (neither good nor bad), then good news.
+KIND_ORDER = {"concern": 0, "change": 1, "improvement": 2}
+STATUS_ORDER = {"lasting": 0, "new": 1}
 
 
 def last_full_week(today: date) -> Window:
@@ -103,6 +112,115 @@ def template(statistics: TeamStatistics) -> tuple[str, dict]:
     return headline, {"sections": sections, "weekdays": weekdays}
 
 
+def lined_up(db: Session, team: Team, window: Window) -> str:
+    """The supervisor's notes whose dates fall in the change's span or the week before it."""
+    start, end = window.start - NOTES_BEFORE, window.end
+    notes = [
+        note
+        for note in db.scalars(select(TeamNote).where(TeamNote.team_id == team.id))
+        if note.starts_on is not None
+        and note.starts_on <= end
+        and (note.ends_on or note.starts_on) >= start
+    ]
+    if not notes:
+        return ""
+    said = "; ".join(f"{n.text[:80]} ({n.starts_on:%b %-d})" for n in notes[:2])
+    return f" It lined up with your note: {said}."
+
+
+def priorities(db: Session, team: Team, scan) -> list[dict]:
+    """What the week's report leads with: every lasting or new team change that is worth a
+    supervisor's attention (the alerts' rule), concerns first, lasting before new, each with the
+    note it lined up with. Code writes every sentence from the scan's figures."""
+    found = []
+    for evidence in scan.metrics:
+        status, way = evidence.stats.get("status"), evidence.stats.get("direction")
+        if status not in STATUS_ORDER or way is None:
+            continue
+        metric = evidence.metrics[0]
+        latest = evidence.stats["weeks"][-1]
+        if not worthwhile(metric, latest, way):
+            continue
+        running = evidence.stats["weeks_running"]
+        label = team_info(metric).label
+        moved = latest["members_up"] if way == "up" else latest["members_down"]
+        figures = (
+            f"median change {change_text(metric, latest['median_change'])} against the four "
+            f"weeks before ({moved} of {latest['members']} people)"
+        )
+        if status == "lasting":
+            word = "later" if metric == "bedtime_hour" else "higher" if way == "up" else "lower"
+            text = f"{label} has been {word} for {running} weeks running: {figures}."
+        else:
+            text = f"{label} {_direction(metric, latest['median_change'])} this week: {figures}."
+        span = Window(
+            start=scan.weeks[-running].start if running else scan.weeks[-1].start,
+            end=scan.weeks[-1].end,
+        )
+        kind = kind_of(metric, way)
+        found.append(
+            {
+                "metric": metric,
+                "label": label,
+                "kind": kind,
+                "status": status,
+                "text": text + lined_up(db, team, span),
+                "evidence_id": evidence.id,
+            }
+        )
+    return sorted(found, key=lambda f: (KIND_ORDER[f["kind"]], STATUS_ORDER[f["status"]]))
+
+
+def headline_from(found: list[dict]) -> str | None:
+    if not found:
+        return None
+    first = found[0]
+    lead = {"concern": "Needs attention", "change": "Worth knowing", "improvement": "Good news"}
+    more = f" ({len(found) - 1} more below)" if len(found) > 1 else ""
+    return f"{lead[first['kind']]}: {first['text'].split(':')[0]}{more}."
+
+
+def week_alerts(db: Session, team: Team, week: Window) -> list[str]:
+    """Alerts raised during the week, as the supervisor saw them."""
+    return [
+        a.text
+        for a in db.scalars(
+            select(TeamAlert).where(TeamAlert.team_id == team.id).order_by(TeamAlert.raised_at)
+        )
+        if week.start <= a.raised_at.date() <= week.end + timedelta(days=1)
+    ]
+
+
+def challenges(db: Session, team: Team, week: Window, frames: list) -> list[tuple[dict, Evidence]]:
+    """Approved challenges that ended by the end of the week and not before the week before it:
+    did the team's metric move during them? Read like a weekly change."""
+    from app.teams.agent import challenge_result  # the agent imports this module
+
+    done = []
+    for action in db.scalars(select(TeamAction).where(TeamAction.team_id == team.id)):
+        ends = action.ends_on
+        if (
+            action.kind != "challenge"
+            or action.status != "approved"
+            or not action.metric
+            or ends is None
+            or not (week.start - timedelta(days=7) <= ends <= week.end)
+        ):
+            continue
+        evidence = challenge_result(frames, action)
+        label = team_info(action.metric).label
+        if not evidence.sufficient:
+            text = f"{action.title}: not enough people with data to tell."
+        elif evidence.stats["p_value"] < FDR:
+            median = change_text(action.metric, evidence.stats["median_change"])
+            way = _direction(action.metric, evidence.stats["median_change"])
+            text = f"{action.title}: {label.lower()} {way} during it (median change {median})."
+        else:
+            text = f"{action.title}: no clear change in {label.lower()} during it."
+        done.append(({"metric": action.metric, "text": text, "evidence_id": evidence.id}, evidence))
+    return done
+
+
 def _member_frames(db: Session, team: Team, week: Window) -> list:
     users = db.scalars(
         select(TeamMembership.user_id).where(
@@ -151,6 +269,15 @@ def build_report(
         )
     else:
         headline, body = template(statistics)
+        scan = team_scan(frames, week)
+        found = priorities(db, team, scan)
+        ended = challenges(db, team, week, frames)
+        body |= {
+            "priorities": found,
+            "alerts": week_alerts(db, team, week),
+            "challenges": [row for row, _ in ended],
+        }
+        headline = headline_from(found) or headline
         generated_by, cost = "template", 0.0
         if writer is not None:
             from app.teams.narrative import narrate  # it imports the report's text helpers
@@ -162,9 +289,8 @@ def build_report(
                 body["narrative"] = attempt.narrated.paragraphs
             else:
                 body["narrative_problems"] = attempt.problems[:10]
-        evidence = {
-            e.id: e.model_dump(mode="json") for e in [*statistics.changes, *statistics.weekdays]
-        }
+        cited = [*statistics.changes, *statistics.weekdays, *scan.metrics, *(e for _, e in ended)]
+        evidence = {e.id: e.model_dump(mode="json") for e in cited}
         report = TeamReport(
             team_id=team.id,
             week_start=week.start,

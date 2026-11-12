@@ -1003,8 +1003,37 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
   return {
     week: { start, end },
     status: 'ready',
-    headline:
-      "This week the team's time asleep fell and recovery fell against the four weeks before; the rest held steady.",
+    headline: 'Needs attention: Time asleep has been lower for 3 weeks running (2 more below).',
+    priorities: [
+      {
+        metric: 'sleep_minutes',
+        label: 'Time asleep',
+        kind: 'concern',
+        status: 'lasting',
+        text: 'Time asleep has been lower for 3 weeks running: median change -38 min against the four weeks before (7 of 8 people). It lined up with your note: Release deadline (Oct 20).',
+        evidenceId: 'e_sleep_minutes',
+      },
+      {
+        metric: 'recovery_score',
+        label: 'Recovery',
+        kind: 'concern',
+        status: 'new',
+        text: 'Recovery fell this week: median change -9 against the four weeks before (6 of 8 people).',
+        evidenceId: 'e_recovery_score',
+      },
+      {
+        metric: 'steps',
+        label: 'Steps',
+        kind: 'improvement',
+        status: 'new',
+        text: 'Steps rose this week: median change +1,400 against the four weeks before (7 of 8 people).',
+        evidenceId: 'e_steps',
+      },
+    ],
+    alerts: [
+      'Time asleep fell across the team over the past week: median change -38 min (6 of 8 people).',
+    ],
+    challenges: [],
     membersIncluded: 8,
     membersTotal: 8,
     minimumMembers: 5,

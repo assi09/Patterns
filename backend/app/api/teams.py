@@ -137,6 +137,9 @@ def _report(db, team: Team, report: TeamReport, user: User, clock) -> schemas.Te
         minimum_members=MIN_MEMBERS,
         sections=[schemas.ReportSection(**s) for s in report.body.get("sections", [])],
         weekdays=[schemas.ReportSection(**w) for w in report.body.get("weekdays", [])],
+        priorities=[schemas.ReportFinding(**f) for f in report.body.get("priorities", [])],
+        alerts=list(report.body.get("alerts", [])),
+        challenges=[schemas.ReportSection(**c) for c in report.body.get("challenges", [])],
         narrative=[
             schemas.NarrativeParagraph(
                 text=p["text"], kind=p["kind"], metric=p["metric"], evidence_ids=p["evidence_ids"]

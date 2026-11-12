@@ -106,6 +106,7 @@ def test_evidence_holds_only_aggregates():
         "end",
         "members",
         "median_change",
+        "median_standardized_change",  # a median across at least five people, as the others
         "members_up",
         "members_down",
         "changed",
