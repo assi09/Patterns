@@ -464,6 +464,7 @@ export interface TeamAlert {
   metric: string;
   label: string;
   direction: 'up' | 'down';
+  kind: 'concern' | 'improvement' | 'change'; // good news waits for the weekly report
   text: string;
   raisedAt: ISODateTime;
   resolvedAt: ISODateTime | null;

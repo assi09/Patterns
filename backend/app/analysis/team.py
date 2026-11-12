@@ -55,6 +55,33 @@ SCAN_WEEKS = 4
 ALERT_DAYS_HELD = 4  # chosen on made-up teams to keep false alarms rare (docs/teams.md)
 ALERT_FDR = 0.05
 SUSTAINED_WEEKS = 2  # changed this many weeks in a row before it counts as lasting
+# What makes a change worth telling a supervisor, besides being real (docs/teams.md, "What deserves
+# an alert"). Big enough: the team's median change is at least half of each person's usual spread
+# (a common "smallest worthwhile change") and at least a floor in the metric's own units. Broad: at
+# least this share of the people moved that way, so it is the team, not a few people.
+WORTHWHILE_SD = 0.5
+WORTHWHILE_FLOOR = {
+    "sleep_minutes": 20.0,  # minutes a night
+    "bedtime_hour": 0.5,  # half an hour
+    "steps": 1000.0,
+    "active_zone_minutes": 10.0,  # a day
+    "resting_hr": 2.0,  # bpm
+    "hrv_ms": 3.0,
+    "recovery_score": 5.0,  # of 100
+    "strain": 1.0,  # of 21
+    "stress_score": 5.0,  # of 100
+}
+BREADTH = 0.6
+# Which way is good, for telling a concern from good news; load and bedtime are neither.
+GOOD_WAY = {
+    "sleep_minutes": "up",
+    "steps": "up",
+    "active_zone_minutes": "up",
+    "resting_hr": "down",
+    "hrv_ms": "up",
+    "recovery_score": "up",
+    "stress_score": "down",
+}
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 # The four weekly levels a member may share with their supervisor, by name.
@@ -148,6 +175,7 @@ def team_change(changes: list[MemberChange], metric: str, week: Window) -> Evide
             "change_q1": round(float(np.quantile(raw, 0.25)), 2),
             "change_q3": round(float(np.quantile(raw, 0.75)), 2),
             "mean_standardized_change": round(float(standardized.mean()), 3),
+            "median_standardized_change": round(float(np.median(standardized)), 3),
             "members_up": int((raw > 0).sum()),
             "members_down": int((raw < 0).sum()),
             "p_value": round(p_value, 6),
@@ -390,9 +418,9 @@ def alerts_from_prepared(prepared: list[pd.DataFrame], end: date) -> TeamAlerts:
     """Metrics that moved the same way in each of the last few daily checks.
 
     Checking every day gives many more chances of a false alarm than a weekly report, so a change
-    has to hold for ALERT_DAYS_HELD checks in a row, at a stricter level. Only the group of everyone
-    with data is ever tested, and an alert is raised once, so no series of daily figures exists
-    from which one person's day could be worked out.
+    has to hold for ALERT_DAYS_HELD checks in a row, and be worthwhile: big and broad enough. Only
+    the group of everyone with data is ever tested, and an alert is raised once, so no series of
+    daily figures exists from which one person's day could be worked out.
     """
     if len(prepared) < MIN_MEMBERS:
         return TeamAlerts([], set())
@@ -405,7 +433,8 @@ def alerts_from_prepared(prepared: list[pd.DataFrame], end: date) -> TeamAlerts:
     raised = []
     for metric, evidence in days[0].items():
         direction = way(evidence)
-        if all(metric in day and way(day[metric]) == direction for day in days):
+        held = all(metric in day and way(day[metric]) == direction for day in days)
+        if held and worthwhile(metric, evidence.stats, direction):
             stats = evidence.stats
             raised.append(
                 evidence.model_copy(
@@ -414,6 +443,7 @@ def alerts_from_prepared(prepared: list[pd.DataFrame], end: date) -> TeamAlerts:
                         "stats": {
                             "area": AREA_OF[metric],
                             "direction": direction,
+                            "kind": kind_of(metric, direction),
                             "held_days": ALERT_DAYS_HELD,
                             "members": stats["members"],
                             "median_change": stats["median_change"],
@@ -424,6 +454,26 @@ def alerts_from_prepared(prepared: list[pd.DataFrame], end: date) -> TeamAlerts:
                 )
             )
     return TeamAlerts(raised, still)
+
+
+def worthwhile(metric: str, stats_: dict, direction: str) -> bool:
+    """Big enough and broad enough to tell a supervisor about, besides being real."""
+    median, typical = stats_["median_change"], stats_.get("median_standardized_change", 0.0)
+    moved = stats_["members_up"] if direction == "up" else stats_["members_down"]
+    return (
+        abs(median) >= WORTHWHILE_FLOOR.get(metric, 0.0)
+        and abs(typical) >= WORTHWHILE_SD
+        and (median > 0) == (direction == "up")
+        and moved >= BREADTH * stats_["members"]
+    )
+
+
+def kind_of(metric: str, direction: str) -> str:
+    """concern, improvement, or change (for load and bedtime, which are neither good nor bad)."""
+    good = GOOD_WAY.get(metric)
+    if good is None:
+        return "change"
+    return "improvement" if direction == good else "concern"
 
 
 def team_alerts(frames: list[pd.DataFrame], end: date) -> TeamAlerts:

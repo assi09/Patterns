@@ -50,7 +50,7 @@ def team_id(engine):
         return memberships.create_team(db, boss, "Design", None, NOW).id
 
 
-def raised(metric="sleep_minutes", direction="down", median=-32.0) -> Evidence:
+def raised(metric="sleep_minutes", direction="down", median=-32.0, kind="concern") -> Evidence:
     window = Window(start=END - timedelta(days=6), end=END)
     return Evidence(
         tool="team_alert",
@@ -61,6 +61,7 @@ def raised(metric="sleep_minutes", direction="down", median=-32.0) -> Evidence:
         stats={
             "area": "sleep",
             "direction": direction,
+            "kind": kind,
             "held_days": ALERT_DAYS_HELD,
             "members": 7,
             "median_change": median,
@@ -161,7 +162,7 @@ def test_the_daily_pass_runs_once_and_one_team_failing_stops_no_other(engine, te
         memberships.create_team(db, boss, "Sales", None, NOW)
     calls = []
 
-    def failing_first(db, team, end, now):
+    def failing_first(db, team, end, now, ended=None):
         calls.append(team.name)
         if len(calls) == 1:
             raise ValueError("broken")
@@ -202,6 +203,7 @@ def test_a_large_change_held_for_days_is_raised_with_aggregates_only():
     assert set(found.raised[0].stats) == {
         "area",
         "direction",
+        "kind",
         "held_days",
         "members",
         "median_change",
@@ -213,3 +215,115 @@ def test_a_large_change_held_for_days_is_raised_with_aggregates_only():
 def test_the_supervisor_reads_physical_stress_signs_not_stress():
     assert team_info("stress_score").label == "Physical stress signs"
     assert stats.team_info("sleep_minutes").label != "Physical stress signs"
+
+
+# What deserves an alert, and how it is told
+
+
+def test_a_change_must_be_big_and_broad_enough_as_well_as_real():
+    from app.analysis.team import worthwhile
+
+    big = {
+        "median_change": -45.0,
+        "median_standardized_change": -0.9,
+        "members": 10,
+        "members_up": 2,
+        "members_down": 8,
+    }
+    assert worthwhile("sleep_minutes", big, "down")
+    assert not worthwhile("sleep_minutes", big | {"median_change": -12.0}, "down")  # floor
+    assert not worthwhile("sleep_minutes", big | {"median_standardized_change": -0.3}, "down")
+    assert not worthwhile("sleep_minutes", big | {"members_up": 5, "members_down": 5}, "down")
+    assert not worthwhile("sleep_minutes", big, "up")  # the median says otherwise
+
+
+def test_concerns_and_good_news_are_told_apart():
+    from app.analysis.team import kind_of
+
+    assert kind_of("sleep_minutes", "down") == "concern"
+    assert kind_of("resting_hr", "up") == "concern"
+    assert kind_of("steps", "up") == "improvement"
+    assert kind_of("strain", "up") == "change" and kind_of("bedtime_hour", "down") == "change"
+
+
+def test_a_real_but_tiny_change_in_a_large_team_is_not_raised():
+    """With 30 people a 12-minute drop is real; it is not worth a supervisor's attention."""
+    rng = np.random.default_rng(4)
+    found = team_alerts([plain_member(rng, -0.3) for _ in range(30)], END)
+    assert found.raised == []
+
+
+def test_good_news_waits_for_the_report_and_an_ended_concern_says_so(engine, team_id):
+    mail = Mail()
+    with session_scope(engine) as db:
+        team = db.get(Team, team_id)
+        good = TeamAlert(
+            team_id=team.id,
+            metric="steps",
+            direction="up",
+            kind="improvement",
+            text="Steps rose.",
+            evidence={},
+            raised_at=NOW,
+        )
+        over = TeamAlert(
+            team_id=team.id,
+            metric="sleep_minutes",
+            direction="down",
+            kind="concern",
+            text="Sleep fell.",
+            evidence={},
+            raised_at=NOW,
+        )
+        db.add_all([good, over])
+        db.flush()
+        alerts.deliver(db, team, [good], NOW, mail, "https://app.example", ended=[over])
+        told = [(n.title, n.body) for n in db.scalars(select(Notification))]
+    assert mail.sent == []  # nothing urgent: no email
+    assert told == [("Design: back to usual", "The team's time asleep is back to usual.")]
+
+
+def test_sleep_and_recovery_concerns_together_are_one_story(engine, team_id):
+    mail = Mail()
+    with session_scope(engine) as db:
+        team = db.get(Team, team_id)
+        rows = [
+            TeamAlert(
+                team_id=team.id,
+                metric=m,
+                direction=d,
+                kind="concern",
+                text=f"{m} moved.",
+                evidence={},
+                raised_at=NOW,
+            )
+            for m, d in (("sleep_minutes", "down"), ("resting_hr", "up"))
+        ]
+        db.add_all(rows)
+        db.flush()
+        alerts.deliver(db, team, rows, NOW, mail, "https://app.example")
+    assert mail.sent[0].subject == "Design: sleep and recovery moved together"
+
+
+def test_an_alert_names_the_note_it_lined_up_with(engine, team_id, monkeypatch):
+    from app.db.models import TeamNote
+
+    with session_scope(engine) as db:
+        db.add(
+            TeamNote(
+                team_id=team_id,
+                text="Release deadline",
+                starts_on=END - timedelta(days=9),
+                created_at=NOW,
+            )
+        )
+        db.add(
+            TeamNote(
+                team_id=team_id, text="Offsite", starts_on=END - timedelta(days=40), created_at=NOW
+            )
+        )
+    found = TeamAlerts([raised()], {("sleep_minutes", "down")})
+    assert check(engine, team_id, monkeypatch, found) == ["sleep_minutes"]
+    with session_scope(engine) as db:
+        text = db.scalar(select(TeamAlert.text))
+    assert "lined up with your note: Release deadline" in text and "Offsite" not in text
