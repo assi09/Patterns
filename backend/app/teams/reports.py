@@ -30,7 +30,7 @@ from app.analysis.team import (
 )
 from app.db.daily import load_daily
 from app.db.models import Team, TeamAction, TeamAlert, TeamMembership, TeamNote, TeamReport, User
-from app.teams.memberships import active_members
+from app.teams.memberships import active_members, overlap_problem
 
 SOURCE = "google_health"  # team reports read each member's live data only
 HISTORY_DAYS = 70  # enough before the week for the scores' baselines and four earlier weeks
@@ -251,6 +251,20 @@ def build_report(
     if found is not None:
         return found
     total = active_members(db, team)
+    if paused := overlap_problem(db, team):  # not stored: the week can be made once it is fixed
+        return TeamReport(
+            team_id=team.id,
+            week_start=week.start,
+            status="withheld",
+            members_total=total,
+            members_included=0,
+            headline=f"No report this week. {paused}",
+            body={"sections": [], "weekdays": []},
+            evidence={},
+            generated_by="template",
+            cost_usd=0.0,
+            created_at=now,
+        )
     frames = _member_frames(db, team, week)
     statistics = team_statistics(frames, week)
     if not statistics.changes:

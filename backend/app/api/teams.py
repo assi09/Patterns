@@ -55,6 +55,7 @@ def _team(db, team: Team) -> schemas.Team:
         members=teams.active_members(db, team),
         minimum_members=teams.MIN_MEMBERS,
         report_email=team.report_email,
+        paused=teams.overlap_problem(db, team),
         created_at=team.created_at,
     )
 

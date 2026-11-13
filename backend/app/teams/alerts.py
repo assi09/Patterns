@@ -22,6 +22,7 @@ from app.db.models import Notification, Team, TeamAlert, User
 from app.email import Email, Mailer, MailError
 from app.reminders import store
 from app.reminders.schedule import zone
+from app.teams.memberships import overlap_problem
 from app.teams.reports import _direction, _member_frames, lined_up
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,8 @@ def check_team(
 ) -> list[TeamAlert]:
     """Raises what is new and closes what has ended; returns the new alerts, and adds the ones
     that ended to `ended` when given."""
+    if overlap_problem(db, team):  # paused: nothing raised, nothing closed
+        return []
     window = Window(start=end - timedelta(days=6), end=end)
     found = team_alerts(_member_frames(db, team, window), end)
     alerts = list(db.scalars(select(TeamAlert).where(TeamAlert.team_id == team.id)))
