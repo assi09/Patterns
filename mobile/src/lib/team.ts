@@ -192,6 +192,14 @@ export function teamStatus(alerts: TeamAlert[] = [], report?: TeamReport): TeamS
       line: 'The first reading comes with the first weekly report.',
     };
   }
+  // A withheld week says nothing about the team, so it must not read as "Steady".
+  if (report?.status === 'withheld' && !open.length) {
+    return {
+      level: 'unknown',
+      title: 'Not enough yet',
+      line: `Team figures need at least ${report.minimumMembers} people with data; last week ${report.membersIncluded} had some.`,
+    };
+  }
   return {
     level: 'steady',
     title: 'Steady',

@@ -429,8 +429,10 @@ OpenAI ([costs.md](costs.md) has every run).
     code, as are rankings and comparing part of the team with the rest (evaluation.md).
 36. **Five-person teams rarely get an alert** (4 of 24 for a 1.2 SD sleep drop). A smaller team
     needs a bigger change; the floor cannot go lower.
-37. **The team screens have only run on the mock.** The API is tested, and the Team tab was clicked
-    through on the mock with Playwright, but not yet against the real backend.
+37. ~~The team screens have only run on the mock.~~ Checked 2026-11-13 against the real API on a
+    throwaway local Postgres with made-up members: a ready team, a withheld one, a paused overlap
+    and a member's Teams page, light and dark, wide and phone width. It found one bug, fixed: a
+    withheld week read "Steady" on every area; it now says "Not enough yet" and why.
 38. **Blind grading is not done.** `eval/results/phia_blind_2026-11-10.csv` (51 answers) waits for
     Karim and Jad, and about 30 of the grader's readings should be checked by hand.
 
