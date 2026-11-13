@@ -35,7 +35,7 @@ as buffer. What is left, what still has to be tested and the order of work are i
 
 **On hold or not built:** personal experiments (on hold since 2026-11-08 at Karim's request); the
 weekly team report written by the team agent; phone push notifications; a metrics page
-(AgentOps; each answer's trace and the person's thumbs are stored since #151); the Failure Matrix and threat model; account deletion, email
+(AgentOps; each answer's trace and the person's thumbs are stored since #151); the Failure Matrix and threat model; email
 verification and password reset; the pilot.
 
 ## Objective
@@ -65,7 +65,7 @@ The table above dates from 2026-10-27; what was added since is in [Where we are]
 
 **Not built yet:** personal experiments (on hold); the metrics page; the
 Failure Matrix and threat model; the daily run with the agent's note on Today (skipped at the
-user's request); phone push; account deletion, email verification and reset; the journal with
+user's request); phone push; email verification and reset; the journal with
 habit impact; fitness age; the weekly workout summary. Deployment (Railway and Vercel, see
 [deployment.md](deployment.md)) and teams ([teams.md](teams.md)) are built.
 
@@ -154,7 +154,10 @@ To let someone else sign in, add their Google account as a test user in the cons
   `python -m app.auth approve <email>`, never automatically, since there is no email check yet.
   The data owner created by the sync has no password; they claim the account with
   `python -m app.auth set-password <email>` (asked without echo), which also replaces a
-  forgotten or leaked password until there is a reset.
+  forgotten or leaked password until there is a reset. A deletion request is honoured with
+  `python -m app.auth delete <email>`: it lists how many rows will go, asks for the email again,
+  deletes the account and everything pointing at it (a supervisor's teams too), then counts again
+  and rolls back if anything is left. It prints counts only, never content.
   The app shows each phase's screens only (signed out, waiting, approved), so a deep link cannot
   skip sign-in or approval. Each person sees only their own data.
 - **Never mix sources in one history.** The API's sleep is Google's v2 algorithm; the legacy

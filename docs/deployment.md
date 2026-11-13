@@ -120,6 +120,14 @@ The local setup uses a "Desktop app" OAuth client, which only returns to `127.0.
 3. Settings → **Connect Google Health**. The whole history syncs from Google; the local Takeout
    export is never uploaded (one source per history).
 
+## Deleting an account
+
+When someone asks for their data to be deleted, run, in the same SSH session on the API service,
+`python -m app.auth delete their@email` and type the email again when asked. Everything held
+about them goes: synced days, check-ins, chats and their traces, memory, reminders, spending,
+team memberships, and the teams they supervise. Afterwards, remove them as a test user on the
+OAuth consent screen; they can also remove the app from their Google Account's third-party access.
+
 ## Phones without paying Apple
 
 | Way | Cost | Who | Notes |

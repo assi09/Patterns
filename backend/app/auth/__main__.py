@@ -5,6 +5,8 @@ account the first time: sign-up has no email check yet, so an admin email is nev
 automatically (someone else could have registered it first). `set-password` asks for the password
 without echoing it, so it never lands in the shell history; it is how the data owner created by
 the sync claims their account, and how a forgotten password is replaced until there is a reset.
+`delete` removes an account and everything held about the person, after the email is typed again;
+it is how a deletion request is honoured (the pilot invitation promises one).
 """
 
 import argparse
@@ -16,6 +18,7 @@ from sqlalchemy import select
 
 from app.auth import accounts
 from app.auth.accounts import AuthError
+from app.auth.deletion import DeletionError, delete_account, held, teams_supervised
 from app.db.models import USER_ROLES, User
 from app.db.session import session_scope
 
@@ -32,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     command = commands.add_parser("set-role", help="make an account a supervisor or a member")
     command.add_argument("email")
     command.add_argument("role", choices=USER_ROLES)
+    command = commands.add_parser("delete", help="delete an account and all of the person's data")
+    command.add_argument("email")
     args = parser.parse_args(argv)
 
     with session_scope() as session:
@@ -57,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             print(f"Password set for {user.email}; every device was signed out.")
             return 0
+        if args.command == "delete":
+            return _delete(session, user)
         if args.command == "set-role":
             if user.status != "approved":
                 print(f"{user.email} is not approved yet.", file=sys.stderr)
@@ -68,6 +75,32 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{user.email}: {user.status}")
         if user.status == "approved":
             print("Also add them as a test user on the Google Cloud console's OAuth screen.")
+    return 0
+
+
+def _delete(session, user: User) -> int:
+    """Shows what will go, asks for the email again, deletes, and reports counts only."""
+    rows = held(session, user.id)
+    teams = teams_supervised(session, user.id)
+    print(f"This deletes {user.email} and {sum(rows.values())} rows that point at them:")
+    for table, n in sorted(rows.items()):
+        print(f"  {table}: {n}")
+    if teams:
+        names = ", ".join(sorted(t.name for t in teams))
+        print(f"They supervise {len(teams)} team(s), deleted too with every membership: {names}")
+    if input("Type the email again to delete: ").strip().lower() != user.email:
+        print("Not deleted.", file=sys.stderr)
+        return 1
+    try:
+        done = delete_account(session, user)
+    except DeletionError as error:
+        session.rollback()
+        print(f"Not deleted: {error}", file=sys.stderr)
+        return 1
+    session.commit()
+    print(f"Deleted {done.email}: {sum(done.rows.values())} rows, nothing left.")
+    print("Their Google sign-in is gone; they can also remove the app's access in their Google")
+    print("Account, and remove them as a test user on the OAuth consent screen.")
     return 0
 
 
