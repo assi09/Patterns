@@ -196,6 +196,7 @@ function TeamView({ team }: { team: SupervisedTeam }) {
   const latest = useTeamReport(team.id, reports.data?.[0]?.week.start);
   const alerts = useTeamAlerts(team.id);
 
+  const status = teamStatus(alerts.data, latest.data);
   const main = team.paused ? (
     <>
       <Section title="Figures paused">
@@ -205,8 +206,11 @@ function TeamView({ team }: { team: SupervisedTeam }) {
     </>
   ) : (
     <>
-      <TeamStatusLine status={teamStatus(alerts.data, latest.data)} />
-      <AreaStrip readings={areaReadings(alerts.data, latest.data)} />
+      <TeamStatusLine status={status} />
+      {/* Five "Steady"s would claim a reading the team does not have yet. */}
+      {status.level === 'unknown' ? null : (
+        <AreaStrip readings={areaReadings(alerts.data, latest.data)} />
+      )}
       <AskTeamRow teamId={team.id} />
       <ProposalsSection teamId={team.id} />
       <AlertsSection teamId={team.id} />

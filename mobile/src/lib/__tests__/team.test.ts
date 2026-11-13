@@ -146,4 +146,19 @@ describe('the team at a glance', () => {
     expect(teamStatus([alert('sleep_minutes', 'concern', true)], report([])).level).toBe('steady');
     expect(teamStatus([], undefined).level).toBe('unknown');
   });
+
+  it('does not call a team steady when its week was withheld for too few people', () => {
+    const withheld = {
+      status: 'withheld',
+      priorities: [],
+      minimumMembers: 5,
+      membersIncluded: 3,
+    } as unknown as TeamReport;
+    expect(teamStatus([], withheld)).toMatchObject({
+      level: 'unknown',
+      line: 'Team figures need at least 5 people with data; last week 3 had some.',
+    });
+    // An alert still open from an earlier week is still what needs the supervisor.
+    expect(teamStatus([alert('sleep_minutes', 'concern')], withheld).level).toBe('attention');
+  });
 });
