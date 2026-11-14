@@ -194,7 +194,8 @@ export function useSendMessage() {
     onSuccess: (added, { target, options }) => {
       storeAnswer(client, added, target, options.replaces);
       client.invalidateQueries({ queryKey: keys.conversations });
-      // The listener runs after the answer: look again once it has had time.
+      // A card raised with the reply is there now; the listener's later ones after a moment.
+      client.invalidateQueries({ queryKey: keys.memory });
       setTimeout(() => client.invalidateQueries({ queryKey: keys.memory }), LISTENER_MS);
     },
     // A slow answer was still stored with its question: reload to show them as they arrive.

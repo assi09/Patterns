@@ -256,3 +256,29 @@ export function keyStats(evidence: Evidence): StatLine[] {
   lines.push({ label: 'Days of data', value: String(evidence.n) });
   return lines;
 }
+
+const MENTIONS_GAPS = /\b(missing|gaps?|wear|wore|coverage|no data|fewer|not enough)\b/i;
+
+/**
+ * The evidence chips an answer shows: one per name ("Bedtime" twice read as a bug), none for a
+ * passage already linked under "Check it yourself", and no "Data coverage" chip when the answer
+ * says nothing about gaps. Evidence still loading keeps its chip until it can be named.
+ */
+export function chipIds(
+  ids: string[],
+  evidence: Record<string, Evidence | undefined>,
+  text: string,
+  hasSources: boolean,
+): string[] {
+  const seen = new Set<string>();
+  return ids.filter((id) => {
+    const item = evidence[id];
+    if (!item) return true;
+    if (hasSources && item.tool === 'knowledge') return false;
+    if (item.tool === 'coverage' && !MENTIONS_GAPS.test(text)) return false;
+    const name = evidenceLabel(item);
+    if (!name || seen.has(name)) return false;
+    seen.add(name);
+    return true;
+  });
+}
