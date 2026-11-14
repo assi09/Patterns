@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-14",
+  "turns": 62,
+  "passed_code_checks": 60,
+  "problems": {
+    "repeats 'usual range'": 1,
+    "does not mention /half|marathon|race|december/": 1
+  },
+  "judge_mean": {
+    "sound": 4.34,
+    "context": 4.69,
+    "natural": 4.02
+  },
+  "judge_below_4_on_sound": 10,
+  "stops": {
+    "chatted": 13,
+    "submitted": 38,
+    "looked_up": 3,
+    "refused": 3,
+    "noted": 1,
+    "recalled": 2,
+    "unavailable": 1,
+    "clarification": 1
+  },
+  "agent_usd": 0.2771,
+  "judge_usd": 0.0215
+}

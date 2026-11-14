@@ -326,3 +326,29 @@ about √7 times larger. The bar is now 0.25 of the daily spread, and the drop i
 old rule raised it.
 
 Cost: about $0.22 (`docs/costs.md`).
+
+## Whole conversations through the chat API (2026-11-14)
+
+`eval/conversation_eval.py` sends 37 made-up conversations (62 turns, `eval/conversation_set.json`)
+through `POST /chat` as the app does, on a synthetic person whose data ends today, so routing, the
+follow-up rewrite, the chat's history, memory cards and the listener are all in play. The first is
+Karim's own chat from the deployed app that started this work. Each turn is checked by code and read
+by a small-model judge (1 to 5 on sound, uses context, natural).
+
+| | Run 2 | Run 3 | Run 4 |
+|---|---|---|---|
+| Turns | 47 | 62 | 62 |
+| Passed every code check | 44 | 58 | 60 |
+| Judge: sound | 4.36 | 4.10 | 4.34 |
+| Judge: uses context | 4.87 | 4.61 | 4.69 |
+| Judge: natural | 4.04 | 3.92 | 4.02 |
+
+The two code checks run 4 still failed: an answer naming "usual range" twice, and training advice
+that did not mention the kept half-marathon goal. Results: `eval/results/conversation_eval_2026-11-14.json`.
+
+**What can be claimed:** on this set, greetings, thanks, pushback and statements get replies rather
+than statistics; day, lookup, change and pattern answers carry their figures; a volunteered fact
+raises a card; follow-ups keep their day and period. **What cannot:** one synthetic person and one
+judge from the same model family, not checked against people; the set was written by us, and the
+fixes were made while reading its answers, so a fresh set would score lower. The pilot's thumbs and
+the blind grading are the outside checks.
