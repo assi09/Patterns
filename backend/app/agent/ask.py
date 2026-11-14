@@ -33,7 +33,7 @@ from app.agent.context import (
     build,
     earlier_questions,
 )
-from app.agent.conversation import ask_what_they_want, recall
+from app.agent.conversation import ask_what_they_want, chat_reply, recall
 from app.agent.experts import (
     BUDGETS,
     EXPERTS,
@@ -46,7 +46,7 @@ from app.agent.experts import (
     specialist_notes,
     visible_metrics,
 )
-from app.agent.followup import standalone, with_relative_day
+from app.agent.followup import standalone, with_period, with_relative_day
 from app.agent.guard import Guard, GuardError, JevGuard
 from app.agent.intent import Intent
 from app.agent.jev import JevClient, JevError
@@ -63,7 +63,7 @@ from app.agent.knowledge import (
     more_passages,
     source_note,
 )
-from app.agent.listener import is_explicit
+from app.agent.listener import is_explicit, worth_listening
 from app.agent.llm import LLM, Budget
 from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
 from app.agent.personal import (
@@ -85,6 +85,7 @@ from app.agent.personal import (
     without_filler,
 )
 from app.agent.router import (
+    OFF_TOPIC,
     FallbackRouter,
     JevRouter,
     KeywordRouter,
@@ -104,12 +105,23 @@ from app.agent.strategy import (
     cross_area_evidence,
     eating_context,
     expand_tool,
+    figures_check,
     premise_answer_check,
     scaled,
     snapshot,
     strategy_for,
 )
-from app.agent.verifier import Claim
+from app.agent.strategy_types import (
+    AFFIRM,
+    LOGGABLE,
+    REACTION,
+    as_request,
+    certain_talk,
+    is_small_talk,
+    is_statement,
+    offer_in,
+)
+from app.agent.verifier import MEDICAL, Claim
 from app.agent.world import answer_world
 from app.analysis.evidence import Evidence
 from app.outside import Outside
@@ -148,9 +160,35 @@ URGENT_MIND_REPLY = (
     "local crisis line, or your local emergency number if you might act on these thoughts."
 )
 NOTED = "Got it. Tap Keep on the card and I'll bear that in mind from now on."
-REFUSAL = (
-    "That's outside what I can help with. I'm good for your Fitbit data, everyday habits, logging "
-    "food and workouts, and reminders, but not medical questions or other topics."
+# Said kindly, with something it can do instead: one fixed sentence for everything read as cold.
+MEDICAL_REFUSAL = (
+    "That one's a medical question, so it isn't something I can answer. What I can do is show "
+    "you what your own data looks like, or suggest everyday habits from it. Want a look at how "
+    "your recent days compare with your usual?"
+)
+MEDICAL_AGAIN = (
+    "That's another one for the medical side, so I'll leave it. If it's about sleeping better, I "
+    "can look at your own nights and suggest everyday habits that fit them."
+)
+OFF_TOPIC_AGAIN = "That one's outside my lane too. Ask me anything about your own data, though."
+OFF_TOPIC_REFUSAL = (
+    "That's outside what I know about. I stick to you: your Fitbit data, everyday habits, "
+    "logging food and workouts, and reminders. Anything there you'd like to look at?"
+)
+OVERALL_GUIDE = (
+    "How to work: they ask how they are doing overall. Open with a one-sentence verdict in plain "
+    "words ('Mostly on track this week, with one rough night.'). If they name a period (this "
+    "week, this month), compare that period with the weeks before using compare_windows on the "
+    "main metrics (time asleep, recovery score, resting heart rate, steps) and give the figures; "
+    "without one, answer from the snapshot of the latest day below. No hypotheses. Then call "
+    "submit_findings."
+)
+OVERALL_TOOLS = ("compare_windows", "describe", "compare_day", "usual_ranges")
+OVERALL = re.compile(
+    r"^\s*(?:am i (?:ok|okay|alright|all right|fine|doing (?:ok|okay|well|good|fine|alright))|"
+    r"how am i (?:doing|looking)|how(?:'s| is| has) my (?:week|day|month|body|data)(?: been)?|"
+    r"how(?:'re| are) things looking|compare (?:this|last) (?:week|month) (?:to|with|against))\b",
+    re.IGNORECASE,
 )
 
 
@@ -164,6 +202,7 @@ class Answer:
 LINKING_TYPES = ("why", "change", "pattern")
 ASKS_WHY = ("why", "change")
 NO_CONSULT = ("day", "lookup", "coaching")
+STATED_TYPES = ("day", "lookup", "change", "pattern")  # answered with the figures themselves
 MAX_REPLY_WORDS = 12
 NEW_QUESTION = re.compile(
     r"\s*(?:how|what|why|when|which|did|do|does|is|are|was|were|can|could|show|tell)\b",
@@ -182,6 +221,56 @@ ADVICE_TOOLS = ("habit_options", "personal_options")
 def _just_a_reply(text: str) -> bool:
     """Whether a message in a logging request gives a detail rather than asks something new."""
     return "?" not in text and len(text.split()) <= MAX_REPLY_WORDS and not NEW_QUESTION.match(text)
+
+
+TOLD_HERE_TURNS = 6  # the latest messages of this chat whose statements count as context
+MAX_TOLD = 3
+
+
+def told_here(history: Sequence[Turn]) -> list[str]:
+    """What the person said about themselves earlier in this chat, newest first. It shapes the
+    answer before any card is kept: "I'm a student, I had projects" must reach the advice asked for
+    a minute later."""
+    said = []
+    for turn in reversed(history[-TOLD_HERE_TURNS:]):
+        text = clean(turn.question, 200)
+        if worth_listening(text) and text not in said:
+            said.append(text)
+    return said[:MAX_TOLD]
+
+
+def told_block(lines: Sequence[str]) -> str:
+    if not lines:
+        return ""
+    quoted = "\n".join(f"- {line}" for line in lines)
+    return (
+        "Earlier in this chat they told you, as quoted data:\n"
+        f"{quoted}\n"
+        "If the data shows something it fits (a short night, a drop), say so in their words, never "
+        "as a cause. If nothing changed, do not force a link. It is what they said, not a "
+        "statistic: make no claim for it."
+    )
+
+
+SHORT_WHY = re.compile(r"^\s*(?:but |and |so )?why\b[^.]{0,30}$", re.IGNORECASE)
+NOTHING_TO_EXPLAIN = (
+    "Their last answer found no clear change, and they now ask why. Open by saying kindly that, "
+    "as far as their data shows, it has not really changed, so there is nothing to explain yet; "
+    "cite the earlier evidence. Then say what would show a real change, or offer to look again "
+    "in a week or two. Do not hunt for causes."
+)
+
+
+def _asks_why_of_nothing(said: str, history: Sequence[Turn]) -> bool:
+    """ "why?" right after an answer whose findings were all "no clear change"."""
+    if not history or not SHORT_WHY.match(said):
+        return False
+    kinds = [c.get("kind") for c in history[-1].claims if c.get("kind") != "data_quality"]
+    return bool(kinds) and all(kind == "no_change" for kind in kinds)
+
+
+def _certain_talk(text: str) -> bool:
+    return certain_talk(text)
 
 
 def urgent_free(question: str) -> bool:
@@ -236,7 +325,7 @@ def _fill_points(llm: LLM, result: AgentResult, question: str, wanted: int, guar
             return
         added = [a for a, bad in zip(added, flags, strict=True) if not bad]
     lines = [as_points(base)] if base else []
-    lines += [f"- {a.tip}" for a in added]
+    lines += [f"- {a.tip.lstrip('- ').strip()}" for a in added]
     if added:
         closing = "The last points are general guidance from the sources."
         result.summary = "\n".join(lines) + f"\n\n{closing}"
@@ -372,16 +461,26 @@ def ask(
     answers cite and `memory` the person's stored memory, all loaded by the caller for this person
     only. Routing comes first, so memory is chosen for the metrics the question is about."""
     reply_text = question.rsplit("Their reply: ", 1)[-1]
+    said = question  # their own words: small talk is judged on these, never on a rewrite
     rewrite_cost = 0.0
-    if urgent_free(question):  # what a follow-up refers to, before routing or an expert sees it
+    # "Yes" to the offer the last answer ended on takes it up, rather than reading as small talk.
+    offer = offer_in(history[-1].answer) if history and AFFIRM.match(question) else None
+    if offer:
+        question = said = as_request(offer)
+    # What a follow-up refers to, before routing or an expert sees it.
+    if urgent_free(question) and not _certain_talk(question) and not is_statement(question):
         day = today.date() if isinstance(today, datetime) else today or date.today()
-        means = with_relative_day(question, history, day)
+        means = with_period(with_relative_day(question, history, day), history)
         question, rewrite_cost = standalone(
             llm, question, history, means if means != question else None
         )
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)
+    # "Am I ok?" asks how their data looks, not for a diagnosis: answered, as an overall look.
+    if route.action == "refuse" and OVERALL.match(said) and not MEDICAL.search(said):
+        overall = replace(route.classification, question_types={"lookup": 1.0})
+        route = Route("general", None, (), choice == "auto", overall)
     # A single value, last night or advice is one expert's job; a second expert costs as much again
     # and, measured, changed nothing. Questions linking areas (why, change, pattern) keep them.
     if route.classification.question_type in NO_CONSULT and route.consult:
@@ -466,9 +565,37 @@ def ask(
         and route.action in ("expert", "general")
         and not (acting or continuing or reminding or logging_tools)
     )
+    # "Just had a chicken salad": log it, or look at the data? Asked before any small talk.
+    asking_what = bool(
+        action_tools
+        and route.classification.intent_probabilities
+        and route.classification.intent == Intent.CLARIFY
+        and route.expert in ("nutrition", "activity")
+        and not continuing
+        and route.classification.question_type != "coaching"  # "what should I do?" is no meal
+        and "?" not in question  # someone asking something has not just told you what they ate
+        # "I'm training for a half marathon" is their life, not an entry: no done-verb in it.
+        and not (is_statement(said) and not LOGGABLE.search(said))
+        and not REACTION.match(said)  # "that seems wrong, I walked more" disputes a figure
+    )
+    # Hello, thanks, "that's wrong", or telling us about their life: a reply, not a data run.
+    chatting = not asking_what and (
+        attachment is None
+        and not (acting or continuing or reminding or logging_tools or world)
+        and route.action in ("expert", "general", "conversation")
+        and (
+            _certain_talk(said)
+            or bool(AFFIRM.match(said))  # a "yes" with no offer before it: nothing to run
+            or (
+                route.classification.question_type == "chat"
+                and "?" not in said
+                and (route.action != "conversation" or is_small_talk(said))
+            )
+        )
+    )
     plan = (
         None
-        if acting or continuing or reminding or logging_tools or world
+        if acting or continuing or reminding or logging_tools or world or chatting
         else strategy_for(route.classification.question_type)
     )
     # Someone with nothing logged can still ask how to eat better: the rest of their data and
@@ -490,6 +617,12 @@ def ask(
         moment = now or datetime.now(UTC)
         kept = chat.profile if chat else ()
         relevant = rank_memory(question, archive, kept, llm, moment, memory_cost)
+        known = {r.text.casefold() for r in relevant}
+        relevant = [
+            Relevant(text=line, kind="said in this chat", score=1.0)
+            for line in told_here(history)
+            if line.casefold() not in known
+        ] + relevant
         fit = fit_to_life([*kept, *(r.text for r in relevant)])
         records = [memory_evidence(item) for item in relevant]
         evidence |= {record.id: record for record in records}
@@ -503,7 +636,17 @@ def ask(
     topics = route.expert if route.action == "expert" and not route.consult else None
     # What the question takes for granted, checked before anyone sets out to explain it.
     false_premise = False
-    if plan and route.classification.question_type in ASKS_WHY and urgent_free(question):
+    # "Why?" straight after an answer that found no change asks to explain nothing.
+    if (
+        plan
+        and route.classification.question_type in ASKS_WHY
+        and _asks_why_of_nothing(said, history)
+    ):
+        false_premise = True
+        route = replace(route, consult=())
+        plan = replace(plan, guide=PREMISE_GUIDE, tools=("describe", "compare_windows"))
+        block = "\n\n".join(part for part in (block, NOTHING_TO_EXPLAIN) if part)
+    elif plan and route.classification.question_type in ASKS_WHY and urgent_free(question):
         premise = check_premise(frame, question, route.expert or advisor)
         if premise:
             evidence |= {record.id: record for record in premise.evidence}
@@ -534,6 +677,8 @@ def ask(
                 guide=CROSS_AREA_GUIDE,
                 tools=("coverage", "correlate", "compare_windows", "change_point"),
             )
+    if plan and not plan.coaching and (said_before := told_here(history)):
+        block = "\n\n".join(part for part in (block, told_block(said_before)) if part)
     if plan:
         visible = sorted(_scope(route) or frame.columns)
         found: list[tuple[list[Evidence], str]] = []
@@ -597,6 +742,10 @@ def ask(
     check = (
         personal_check(personal_ids, fit, wanted, passage_ids) if plan and plan.coaching else None
     )
+    if plan and OVERALL.match(said):  # "am I ok?", "how am I doing this week?"
+        plan = replace(plan, guide=OVERALL_GUIDE, tools=OVERALL_TOOLS, snapshot=True)
+    if plan and route.classification.question_type in STATED_TYPES:
+        check = figures_check
     if false_premise:
         check = premise_answer_check
     if made_a_draft and logging_tools and route.classification.intent == Intent.LOG:
@@ -622,12 +771,31 @@ def ask(
         route = replace(route, action="refuse")
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="urgent", summary=urgent)
     elif route.action == "refuse":
-        result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
+        # Health-shaped (melatonin to sleep, a symptom): the medical wording; else off topic.
+        medical = (
+            MEDICAL.search(said)
+            or OFF_TOPIC.search(said)
+            or any(KeywordRouter._hits(said).values())
+            or any(p >= 0.5 for p in route.classification.needs.values())
+        )
+        wording = MEDICAL_REFUSAL if medical else OFF_TOPIC_REFUSAL
+        if history and history[-1].answer.startswith(wording[:40]):  # not the same words twice
+            wording = MEDICAL_AGAIN if medical else OFF_TOPIC_AGAIN
+        result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=wording)
     elif is_explicit(question) and "?" not in question and not logging_tools:
         # Keeping it is the person's tap on the card the listener raises; no data to look at.
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="noted", summary=NOTED)
     elif world:
         result = answer_world(llm, question, outside, guard=guard)
+    elif chatting:
+        result = chat_reply(
+            llm,
+            said,
+            history,
+            guard=guard,
+            summary=chat.usable_summary if chat else None,
+            profile=chat.profile if chat else (),
+        )
     elif route.action == "conversation":
         result = recall(
             llm,
@@ -646,15 +814,7 @@ def ask(
             "choose Undo and confirm the removal. Chat messages cannot confirm Google writes. "
             "Reminders are paused, changed or deleted in Reminders.",
         )
-    elif (
-        action_tools
-        and route.classification.intent_probabilities
-        and route.classification.intent == Intent.CLARIFY
-        and route.expert in ("nutrition", "activity")
-        and not continuing
-        and route.classification.question_type != "coaching"  # "what should I do?" is no meal
-        and "?" not in question  # someone asking something has not just told you what they ate
-    ):
+    elif asking_what:
         result = ask_what_they_want(llm, question, expert=route.expert, guard=guard)
     elif route.action == "general":
         result = answer(
@@ -706,7 +866,7 @@ def ask(
             answer_check=check,
         )
         result.notes += _notes(frame, route, result)
-    stopped_early = result.stop_reason in ("urgent", "refused", "noted")
+    stopped_early = result.stop_reason in ("urgent", "refused", "noted", "chatted", "chat_fallback")
     if plan and plan.coaching:
         result.summary = without_filler(result.summary)
         if wanted and not stopped_early:

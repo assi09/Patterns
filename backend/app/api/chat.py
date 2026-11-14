@@ -39,6 +39,7 @@ from app.agent.intent import Intent
 from app.agent.listener import MAX_KNOWN, fit_to_keep, is_explicit, listen, worth_listening
 from app.agent.llm import LLM, LLMError, OpenAILLM
 from app.agent.router import Router
+from app.agent.strategy_types import REACTION, is_statement
 from app.agent.summary import FOLD_AT, fold, to_fold
 from app.agent.trace import failed_trace, personal_trace
 from app.agent.world import food_tool
@@ -58,13 +59,15 @@ from app.db.models import (
     Conversation,
     HealthAction,
     MemoryEpisode,
+    Reminder,
     Spend,
     User,
 )
 from app.db.session import session_scope
 from app.outside import FoodData, Outside
-from app.reminders.store import timezone_of
-from app.reminders.tools import reminder_reply, reminder_tools
+from app.reminders.schedule import describe
+from app.reminders.store import SCHEDULE, timezone_of
+from app.reminders.tools import ALARM, reminder_reply, reminder_tools
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
@@ -309,7 +312,15 @@ def listen_to(
             known = [(fact.id, fact.text) for fact in held]
         result = listen(agent.llm, text, today, [words for _, words in known])
         kept = fit_to_keep(result.heard, agent.guard)
-        explicit = is_explicit(text)
+        if not kept and is_explicit(text):
+            # Asked outright to remember it: one miss of the listener or the guard (seen once in
+            # the conversation evaluation, 2026-11-14) must not become "I didn't keep that".
+            again = listen(agent.llm, text, today, [words for _, words in known])
+            again.cost_usd += result.cost_usd
+            result, kept = again, fit_to_keep(again.heard, agent.guard)
+        # Something they volunteer ("I'm a student, I had projects") is worth a card at once; a
+        # fact tucked into a question ("as a vegetarian, how much protein?") waits to be said twice.
+        explicit = is_explicit(text) or is_statement(text)
         with sessions() as db:
             question = db.get(ChatMessage, question_id)
             for heard in kept if question is not None else ():
@@ -337,6 +348,8 @@ def listen_to(
     return statuses
 
 
+CHATTED = ("chatted", "chat_fallback")
+CARD_NOTE = "I've put that on a card below: tap Keep and I'll bear it in mind from now on."
 NOT_KEPT = (
     "I didn't keep that. I keep things about you, like your routine, goals or plans: nothing "
     "medical, and nothing about how I should answer."
@@ -506,6 +519,13 @@ def _answer(
         if noted:
             outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
             reply.result.summary = noted_reply(outcome)
+        # Something they told us in passing: heard now too, so the reply can point to its card.
+        chatted = reply is not None and reply.result.stop_reason in CHATTED
+        # "That seems wrong, I walked more" disputes a figure; it says nothing lasting about them.
+        if chatted and worth_listening(body.text) and not REACTION.match(body.text):
+            outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
+            if outcome and "proposed" in outcome:
+                reply.result.summary = f"{reply.result.summary}\n\n{CARD_NOTE}"
         elapsed = monotonic() - started
         with sessions() as db:
             question = db.get(ChatMessage, question_id)
@@ -548,11 +568,20 @@ def _answer(
             reminding = any(step.get("reminding") for step in result.trace)
             if reminders:
                 # The agent's words when they do not claim it is on; the card holds the details.
-                result.summary, result.claims = reminder_reply(result.summary), []
+                drafts = [db.get(Reminder, uuid.UUID(i)) for i in reminders]
+                described = [
+                    (r.title, describe(SCHEDULE.validate_python(r.schedule)))
+                    for r in drafts
+                    if r is not None
+                ]
+                alarm = bool(ALARM.search(body.text))
+                result.summary = reminder_reply(result.summary, described, asked_alarm=alarm)
+                result.claims = []
             refused = reply.route.action == "refuse"
             # "Remember my goal is 8,000 steps" can read as a reminder; it is still worth hearing.
             heard = (
                 not noted
+                and not chatted
                 and not refused
                 and (
                     reply.route.classification.intent not in QUIET_INTENTS or is_explicit(body.text)
