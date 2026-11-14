@@ -36,6 +36,21 @@ def _values(frame: pd.DataFrame, metric: str, window: Window) -> pd.Series:
     return rows.dropna()
 
 
+# Metrics whose days add up to something a person would ask for: steps, minutes, calories.
+ADDITIVE = frozenset(
+    {
+        "steps",
+        "calories",
+        "distance_km",
+        "active_zone_minutes",
+        "sedentary_minutes",
+        "lightly_active_minutes",
+        "moderately_active_minutes",
+        "very_active_minutes",
+    }
+)
+
+
 def describe(frame: pd.DataFrame, metric: str, window: Window) -> Evidence:
     """Summary statistics of one metric over one window."""
     values = _values(frame, metric, window)
@@ -47,6 +62,8 @@ def describe(frame: pd.DataFrame, metric: str, window: Window) -> Evidence:
         "max": _round(values.max()),
         "missing_days": window.days - len(values),
     }
+    if metric in ADDITIVE:  # "how many steps this week?" asks for the total, not the average
+        summary["total"] = _round(values.sum())
     return Evidence(
         tool="describe",
         metrics=(metric,),

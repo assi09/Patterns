@@ -1,0 +1,490 @@
+{
+  "note": "Made-up conversations for one synthetic person, written for this evaluation (none taken from anyone). Each turn says what it should get: `expect` is the kind of reply (chat, data, refuse, noted, clarify, draft, reminder, any); `figure` asks for a number that is not a date; `mentions` and `forbid` are regular expressions on the reply; `card` asks for a new memory card; `keep` keeps the newest card, as the person's tap; `chips` false asks for no evidence chips. The first conversation is the one Karim had on 2026-11-14.",
+  "conversations": [
+    {
+      "name": "karim_2026-11-14",
+      "turns": [
+        {
+          "m": "Hi",
+          "expect": "chat",
+          "chips": false,
+          "forbid": "kept|you often look"
+        },
+        {
+          "m": "how did i sleep today",
+          "expect": "data",
+          "figure": true
+        },
+        {
+          "m": "im a student i had a few projects thats why i didnt have time to sleep much",
+          "expect": "chat",
+          "card": true,
+          "chips": false,
+          "forbid": "wear|coverage"
+        },
+        {
+          "m": "CAN u give me advice on how to sleep  better",
+          "expect": "data",
+          "mentions": "student|project|deadline|stud"
+        }
+      ]
+    },
+    {
+      "name": "greetings_and_capabilities",
+      "turns": [
+        {
+          "m": "good morning!",
+          "expect": "chat",
+          "chips": false
+        },
+        {
+          "m": "what can you do?",
+          "expect": "chat",
+          "chips": false,
+          "mentions": "sleep|remind|log"
+        },
+        {
+          "m": "ok cool",
+          "expect": "chat",
+          "chips": false
+        }
+      ]
+    },
+    {
+      "name": "thanks_and_pushback",
+      "turns": [
+        {
+          "m": "How many steps did I do yesterday?",
+          "expect": "data",
+          "figure": true
+        },
+        {
+          "m": "thanks!",
+          "expect": "chat",
+          "chips": false
+        },
+        {
+          "m": "that seems wrong, I walked a lot more than that",
+          "expect": "any",
+          "forbid": "great question"
+        }
+      ]
+    },
+    {
+      "name": "yes_to_an_offer",
+      "turns": [
+        {
+          "m": "I've been really stressed with exams this week",
+          "expect": "chat",
+          "card": true,
+          "chips": false
+        },
+        {
+          "m": "yes please",
+          "expect": "data",
+          "forbid": "^anytime"
+        }
+      ]
+    },
+    {
+      "name": "day_follow_ups",
+      "turns": [
+        {
+          "m": "how was my HRV last night?",
+          "expect": "data",
+          "figure": true
+        },
+        {
+          "m": "and the night before that?",
+          "expect": "data",
+          "figure": true
+        },
+        {
+          "m": "what about my resting heart rate?",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "trend_then_why",
+      "turns": [
+        {
+          "m": "Is my resting heart rate going up lately?",
+          "expect": "data"
+        },
+        {
+          "m": "why?",
+          "expect": "data"
+        }
+      ]
+    },
+    {
+      "name": "weekends",
+      "turns": [
+        {
+          "m": "Do I sleep worse on weekends?",
+          "expect": "data"
+        },
+        {
+          "m": "what about my steps?",
+          "expect": "data"
+        }
+      ]
+    },
+    {
+      "name": "night_shift_advice",
+      "turns": [
+        {
+          "m": "I work night shifts at the hospital three times a week",
+          "expect": "chat",
+          "card": true,
+          "keep": true
+        },
+        {
+          "m": "how can I sleep better?",
+          "expect": "data",
+          "mentions": "shift|night",
+          "forbid": "23:|11 ?pm"
+        }
+      ]
+    },
+    {
+      "name": "lookups",
+      "turns": [
+        {
+          "m": "What's my average sleep this month?",
+          "expect": "data",
+          "figure": true
+        },
+        {
+          "m": "what was my best night?",
+          "expect": "data",
+          "figure": true
+        },
+        {
+          "m": "and my worst?",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "general_knowledge",
+      "turns": [
+        {
+          "m": "what is HRV?",
+          "expect": "any",
+          "mentions": "heart"
+        },
+        {
+          "m": "how many calories are in a banana?",
+          "expect": "any",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "medical_and_off_topic",
+      "turns": [
+        {
+          "m": "Do I have sleep apnea?",
+          "expect": "refuse"
+        },
+        {
+          "m": "should I take melatonin to sleep?",
+          "expect": "refuse"
+        },
+        {
+          "m": "what's the capital of France?",
+          "expect": "refuse"
+        }
+      ]
+    },
+    {
+      "name": "remember_explicitly",
+      "turns": [
+        {
+          "m": "remember that I go to the gym on Mondays and Thursdays",
+          "expect": "noted",
+          "card": true
+        },
+        {
+          "m": "what do you know about me?",
+          "expect": "any"
+        }
+      ]
+    },
+    {
+      "name": "vague",
+      "turns": [
+        {
+          "m": "am I ok?",
+          "expect": "data"
+        },
+        {
+          "m": "how am I doing overall this week?",
+          "expect": "data"
+        }
+      ]
+    },
+    {
+      "name": "feelings",
+      "turns": [
+        {
+          "m": "I feel exhausted today",
+          "expect": "any",
+          "forbid": "doctor|illness"
+        },
+        {
+          "m": "did I sleep less than usual?",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "two_questions_at_once",
+      "turns": [
+        {
+          "m": "how did I sleep last night and how many steps did I get yesterday?",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "disagreeing_with_a_figure",
+      "turns": [
+        {
+          "m": "how long did I sleep last night?",
+          "expect": "data",
+          "figure": true
+        },
+        {
+          "m": "no way, I slept like 9 hours",
+          "expect": "any",
+          "forbid": "great"
+        }
+      ]
+    },
+    {
+      "name": "train_today",
+      "turns": [
+        {
+          "m": "am I recovered enough to train hard today?",
+          "expect": "data"
+        }
+      ]
+    },
+    {
+      "name": "week_on_week",
+      "turns": [
+        {
+          "m": "compare this week to last week",
+          "expect": "data"
+        }
+      ]
+    },
+    {
+      "name": "food_without_logs",
+      "turns": [
+        {
+          "m": "how's my protein intake been?",
+          "expect": "any",
+          "forbid": "\\bgrams? of protein you (ate|had)"
+        }
+      ]
+    },
+    {
+      "name": "logging",
+      "turns": [
+        {
+          "m": "I just had a chicken salad for lunch",
+          "expect": "any"
+        },
+        {
+          "m": "log it please",
+          "expect": "any"
+        }
+      ]
+    },
+    {
+      "name": "reminder",
+      "turns": [
+        {
+          "m": "remind me to start winding down at 10:30 every night",
+          "expect": "any"
+        }
+      ]
+    },
+    {
+      "name": "memory_across_chats_part_1",
+      "turns": [
+        {
+          "m": "I'm training for a half marathon in December",
+          "expect": "chat",
+          "card": true,
+          "keep": true
+        }
+      ]
+    },
+    {
+      "name": "memory_across_chats_part_2",
+      "turns": [
+        {
+          "m": "any advice for my training this week?",
+          "expect": "data",
+          "mentions": "half|marathon|race|december"
+        }
+      ]
+    },
+    {
+      "name": "coaching_counts",
+      "turns": [
+        {
+          "m": "give me 3 tips to recover faster",
+          "expect": "data"
+        }
+      ]
+    },
+    {
+      "name": "greeting_with_a_question",
+      "turns": [
+        {
+          "m": "Hello! How did I sleep?",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "thanks_then_a_question",
+      "turns": [
+        {
+          "m": "How many steps did I do yesterday?",
+          "expect": "data",
+          "figure": true
+        },
+        {
+          "m": "thanks, and what was my resting heart rate yesterday?",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "typos",
+      "turns": [
+        {
+          "m": "hw much did i slep lst nite",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "usual_bedtime",
+      "turns": [
+        {
+          "m": "what time do I usually go to bed?",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "sleep_score",
+      "turns": [
+        {
+          "m": "what's my sleep score been like this week?",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "active_minutes",
+      "turns": [
+        {
+          "m": "how many active zone minutes did I get this week?",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "population_comparison",
+      "turns": [
+        {
+          "m": "is my HRV good for my age?",
+          "expect": "any",
+          "forbid": "doctor|condition"
+        }
+      ]
+    },
+    {
+      "name": "cross_area",
+      "turns": [
+        {
+          "m": "do my steps go with better sleep?",
+          "expect": "data"
+        }
+      ]
+    },
+    {
+      "name": "fact_inside_question",
+      "turns": [
+        {
+          "m": "I'm vegetarian, how much protein do adults need?",
+          "expect": "any",
+          "figure": true
+        }
+      ]
+    },
+    {
+      "name": "recall_earlier",
+      "turns": [
+        {
+          "m": "How did I sleep last night?",
+          "expect": "data",
+          "figure": true
+        },
+        {
+          "m": "what did I ask you earlier?",
+          "expect": "any",
+          "mentions": "sleep"
+        }
+      ]
+    },
+    {
+      "name": "watch_alarm",
+      "turns": [
+        {
+          "m": "can you set an alarm on my watch for 7am?",
+          "expect": "any",
+          "forbid": "^done|is set"
+        }
+      ]
+    },
+    {
+      "name": "user_states_a_figure",
+      "turns": [
+        {
+          "m": "I slept 6 hours last night",
+          "expect": "any"
+        }
+      ]
+    },
+    {
+      "name": "long_trend",
+      "turns": [
+        {
+          "m": "how has my sleep changed over the last 3 months?",
+          "expect": "data",
+          "figure": true
+        }
+      ]
+    }
+  ]
+}

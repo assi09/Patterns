@@ -29,9 +29,12 @@ PASSWORD = "correct horse battery"
 
 
 class FixedRouter:
-    def __init__(self, **given: float):
+    def __init__(self, question_type: str | None = None, **given: float):
         topic = dict.fromkeys(LABELS, 0.0) | given
-        self.result = Classification(topic, dict.fromkeys(EXPERT_LABELS, 0.0), source="test")
+        kinds = {question_type: 1.0} if question_type else {}
+        self.result = Classification(
+            topic, dict.fromkeys(EXPERT_LABELS, 0.0), source="test", question_types=kinds
+        )
 
     def classify(self, question: str, earlier=()) -> Classification:
         return self.result
@@ -257,6 +260,27 @@ def test_what_is_heard_becomes_a_card_only_when_asked_for(client, engine, agent)
     kept = client.post(f"/memory/facts/{fact['id']}/decision", json={"keep": True}, headers=headers)
     assert kept.json()["status"] == "approved"
     assert client.get("/notifications", headers=headers).json()["unread"] == 0
+
+
+def test_something_told_in_passing_gets_a_reply_and_a_card_at_once(client, engine, agent):
+    headers = signed_in(client, engine)
+    parts = AgentParts(agent.llm, FixedRouter("chat", sleep=0.9), None, background=True)
+    client.app.dependency_overrides[chat.get_agent] = lambda: parts
+    agent.llm.turns.append(ScriptedLLM.say("Deadlines, that explains a lot. Want ideas?"))
+    heard = ScriptedLLM.call(
+        "record_memories", memories=[{"kind": "context", "text": "Student with project deadlines"}]
+    )
+    agent.llm.turns.append(heard)
+    message = "im a student i had a few projects thats why i didnt have time to sleep much"
+    reply = ask(client, headers, message).json()[-1]
+    assert reply["text"].startswith("Deadlines, that explains a lot.")
+    assert reply["text"].endswith(chat.CARD_NOTE)
+    assert reply["evidenceIds"] == []
+    # Heard before the reply was stored, so the card is already there.
+    [fact] = client.get("/memory", headers=headers).json()["waiting"]
+    assert fact["text"] == "Student with project deadlines"
+    time.sleep(0.1)  # and not heard a second time in the background
+    assert len([r for r in agent.llm.requests if r["tools"] == ["record_memories"]]) == 1
 
 
 def test_a_plain_question_costs_no_listening_call(client, engine, agent):
@@ -752,7 +776,7 @@ def test_asking_for_a_reminder_prepares_one_to_tap_on(client, engine, agent):
 
 
 def test_a_reply_saying_the_reminder_is_on_is_replaced(client, engine, agent):
-    from app.reminders.tools import REMINDER_NOTE
+    from app.reminders.tools import TAP_SET
 
     headers = signed_in(client, engine)
     remind_router(agent, "remind")
@@ -764,7 +788,11 @@ def test_a_reply_saying_the_reminder_is_on_is_replaced(client, engine, agent):
         ]
     )
     _, answer = ask(client, headers, "Remind me tomorrow at 7 to log breakfast").json()
-    assert answer["text"] == REMINDER_NOTE
+    # The fixed note says what was prepared, from the stored draft, not the model's words.
+    assert (
+        answer["text"]
+        == f"Here's your reminder, “Log breakfast”: once, Wed 2 Jan at 07:00. {TAP_SET}"
+    )
 
 
 def test_the_answer_to_a_missing_time_continues_the_reminder(client, engine, agent):
