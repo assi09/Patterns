@@ -1,6 +1,7 @@
 import type { Evidence, TeamAlert, TeamReport } from '@/api/types';
 import {
   areaReadings,
+  briefingItems,
   changeRows,
   levelMark,
   shortChange,
@@ -160,5 +161,69 @@ describe('the team at a glance', () => {
     });
     // An alert still open from an earlier week is still what needs the supervisor.
     expect(teamStatus([alert('sleep_minutes', 'concern')], withheld).level).toBe('attention');
+  });
+});
+
+describe('briefingItems', () => {
+  const raised = (id: string, metric: string, kind: TeamAlert['kind'], resolved = false) =>
+    ({
+      id,
+      metric,
+      label: metric,
+      direction: 'down',
+      kind,
+      text: `${metric} moved`,
+      raisedAt: '2026-11-10T08:00:00Z',
+      resolvedAt: resolved ? '2026-11-12T08:00:00Z' : null,
+    }) as TeamAlert;
+  const report = (priorities: TeamReport['priorities'], status: TeamReport['status'] = 'ready') =>
+    ({ status, priorities }) as unknown as TeamReport;
+
+  it('puts open alerts first, concerns before good news, and leaves ended ones out', () => {
+    const items = briefingItems([
+      raised('a', 'steps', 'improvement'),
+      raised('b', 'sleep_minutes', 'concern'),
+      raised('c', 'hrv_ms', 'concern', true),
+    ]);
+    expect(items.map((i) => i.key)).toEqual(['b', 'a']);
+    expect(items[0].when).toBe('ongoing');
+  });
+  it('adds the report’s priorities on other metrics, and not the same metric twice', () => {
+    const items = briefingItems(
+      [raised('b', 'sleep_minutes', 'concern')],
+      report([
+        {
+          metric: 'sleep_minutes',
+          label: 'Time asleep',
+          kind: 'concern',
+          status: 'new',
+          text: 't',
+          evidenceId: 'e1',
+        },
+        {
+          metric: 'strain',
+          label: 'Strain',
+          kind: 'change',
+          status: 'lasting',
+          text: 'u',
+          evidenceId: 'e2',
+        },
+      ]),
+    );
+    expect(items.map((i) => i.label)).toEqual(['sleep_minutes', 'Strain']);
+    expect(items[1].when).toBe('lasting');
+  });
+  it('says nothing from a withheld week, and keeps to the limit', () => {
+    const found = {
+      metric: 'strain',
+      label: 'Strain',
+      kind: 'change',
+      status: 'new',
+      text: 'u',
+      evidenceId: 'e',
+    } as const;
+    expect(briefingItems([], report([found], 'withheld'))).toEqual([]);
+    const many = Array.from({ length: 8 }, (_, i) => raised(`x${i}`, `m${i}`, 'change'));
+    expect(briefingItems(many)).toHaveLength(5);
   });
 });

@@ -1,7 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { type ReactNode, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  type StyleProp,
+  StyleSheet,
+  TextInput,
+  View,
+  type ViewStyle,
+} from 'react-native';
 
 import { ApiError } from '@/api/http';
 import {
@@ -22,19 +30,15 @@ import type {
 } from '@/api/types';
 import { Row, Section } from '@/components/list';
 import { AlertsSection, NotesSection, ProposalsSection } from '@/components/teamAgent';
-import {
-  AreaStrip,
-  AskTeamRow,
-  PrioritiesSection,
-  TeamStatusLine,
-} from '@/components/teamDashboard';
+import { AreaChips, AskBar, BriefingCard } from '@/components/teamBrief';
+import { TILE_RADIUS } from '@/components/widgets';
 import { ChangeChart, KeyFigures, LevelsTable, WeekdayChart } from '@/components/teamReport';
 import { QueryState, Screen } from '@/components/Screen';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { windowLabel } from '@/lib/format';
-import { areaReadings, changeRows, teamStatus } from '@/lib/team';
+import { areaReadings, briefingItems, changeRows, teamStatus } from '@/lib/team';
 import { useWide } from '@/lib/layout';
 import { fonts, radius, spacing, useColors, useMetricColor } from '@/theme';
 
@@ -188,6 +192,8 @@ function CreateTeam({
 
 function TeamView({ team }: { team: SupervisedTeam }) {
   const wide = useWide();
+  const colors = useColors();
+  const card = [styles.card, { backgroundColor: colors.surface }];
   const reports = useTeamReports(team.id);
   const [chosen, setChosen] = useState<ISODate | undefined>();
   const week = chosen ?? reports.data?.[0]?.week.start;
@@ -197,71 +203,93 @@ function TeamView({ team }: { team: SupervisedTeam }) {
   const alerts = useTeamAlerts(team.id);
 
   const status = teamStatus(alerts.data, latest.data);
+  const kicker = [
+    `${team.members} ${team.members === 1 ? 'person' : 'people'}`,
+    latest.data ? `week of ${windowLabel(latest.data.week)}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const main = team.paused ? (
     <>
-      <Section title="Figures paused">
+      <Section title="Figures paused" style={card}>
         <Text color="muted">{team.paused}</Text>
       </Section>
-      <AskTeamRow teamId={team.id} />
+      <AskBar teamId={team.id} />
     </>
   ) : (
     <>
-      <TeamStatusLine status={status} />
       {/* Five "Steady"s would claim a reading the team does not have yet. */}
       {status.level === 'unknown' ? null : (
-        <AreaStrip readings={areaReadings(alerts.data, latest.data)} />
+        <AreaChips readings={areaReadings(alerts.data, latest.data)} />
       )}
-      <AskTeamRow teamId={team.id} />
-      <ProposalsSection teamId={team.id} />
-      <AlertsSection teamId={team.id} />
-      {latest.data && latest.data.week.start === week ? (
-        <PrioritiesSection report={latest.data} />
-      ) : null}
-      <ReportSection team={team} reports={reports.data} report={report.data} />
+      <BriefingCard
+        status={status}
+        items={briefingItems(alerts.data, latest.data)}
+        teamId={team.id}
+      />
+      <ProposalsSection teamId={team.id} style={card} />
+      <AskBar teamId={team.id} />
+      <ReportSection team={team} reports={reports.data} report={report.data} card={card} />
     </>
   );
   const side = (
     <>
-      <NotesSection teamId={team.id} />
-      {report.data ? <LevelsSection levels={report.data.levels} /> : null}
-      <InviteSection team={team} />
+      <NotesSection teamId={team.id} style={card} />
+      <AlertsSection teamId={team.id} style={card} endedOnly />
+      {report.data ? <LevelsSection levels={report.data.levels} card={card} /> : null}
+      <InviteSection team={team} card={card} />
       <PastWeeks
         reports={reports.data ?? []}
         selected={week}
         onSelect={(start) => setChosen(start)}
+        card={card}
       />
     </>
   );
+  const top = (
+    <Text variant="label" color="muted">
+      {kicker}
+    </Text>
+  );
   if (!wide) {
     return (
-      <>
+      <View style={styles.stack}>
+        {top}
         {main}
         {side}
-      </>
+      </View>
     );
   }
   return (
-    <View style={styles.columns}>
-      <View style={styles.main}>{main}</View>
-      <View style={styles.side}>{side}</View>
+    <View style={styles.stack}>
+      {top}
+      <View style={styles.columns}>
+        <View style={[styles.main, styles.stack]}>{main}</View>
+        <View style={[styles.side, styles.stack]}>{side}</View>
+      </View>
     </View>
   );
 }
+
+type Card = StyleProp<ViewStyle>;
 
 function ReportSection({
   team,
   reports,
   report,
+  card,
 }: {
   team: SupervisedTeam;
   reports?: TeamReportSummary[];
   report?: TeamReport;
+  card: Card;
 }) {
   const make = useMakeTeamReport();
   if (!reports) return <Skeleton height={120} radius={radius.md} />;
   if (reports.length === 0) {
     return (
       <Section
+        style={card}
         title="Weekly report"
         footer={`Reports are made each Monday for the week before. ${
           team.members >= team.minimumMembers
@@ -287,7 +315,7 @@ function ReportSection({
   const changed = rows.filter((row) => row.status === 'changed').length;
   return (
     <>
-      <Section title={`Week of ${windowLabel(report.week)}`}>
+      <Section title={`Week of ${windowLabel(report.week)}`} style={card}>
         <Text variant="headline" style={styles.headline}>
           {report.headline}
         </Text>
@@ -309,6 +337,7 @@ function ReportSection({
       {report.status === 'ready' ? (
         <>
           <Section
+            style={card}
             title="How the team changed"
             footer="Each person's week against their own four weeks before; only the counts and the median reach you, never anyone's own data. A metric counts as changed only when the whole team moved clearly. Patterns, not advice."
           >
@@ -316,6 +345,7 @@ function ReportSection({
           </Section>
           {report.weekdays.length > 0 ? (
             <Section
+              style={card}
               title="By weekday"
               footer="The median, across people, of each weekday against each person's own usual over five weeks. A description, not a test."
             >
@@ -356,9 +386,10 @@ function Line({
   );
 }
 
-function LevelsSection({ levels }: { levels: SharedLevels[] }) {
+function LevelsSection({ levels, card }: { levels: SharedLevels[]; card: Card }) {
   return (
     <Section
+      style={card}
       title="Shared weekly levels"
       footer="Only people who chose to share, each week against their own usual weeks, never against each other. They can stop at any time."
     >
@@ -373,11 +404,11 @@ function LevelsSection({ levels }: { levels: SharedLevels[] }) {
   );
 }
 
-function InviteSection({ team }: { team: SupervisedTeam }) {
+function InviteSection({ team, card }: { team: SupervisedTeam; card: Card }) {
   const rotate = useRotateTeamCode();
   const [copied, setCopied] = useState(false);
   return (
-    <Section title="Invite">
+    <Section title="Invite" style={card}>
       <Row
         icon="key-outline"
         title={team.inviteCode}
@@ -408,14 +439,16 @@ function PastWeeks({
   reports,
   selected,
   onSelect,
+  card,
 }: {
   reports: TeamReportSummary[];
   selected?: ISODate;
   onSelect: (start: ISODate) => void;
+  card: Card;
 }) {
   if (reports.length < 2) return null;
   return (
-    <Section title="Past weeks">
+    <Section title="Past weeks" style={card}>
       {reports.map((report) => (
         <Row
           key={report.week.start}
@@ -449,7 +482,9 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   switchOpen: { fontFamily: fonts.semibold },
-  columns: { flexDirection: 'row', gap: spacing.xxl, alignItems: 'flex-start' },
+  columns: { flexDirection: 'row', gap: spacing.lg, alignItems: 'flex-start' },
+  stack: { gap: spacing.md },
+  card: { borderRadius: TILE_RADIUS, padding: spacing.lg, marginTop: 0 },
   main: { flex: 3, minWidth: 0 },
   side: { flex: 2, minWidth: 0 },
   field: {

@@ -390,3 +390,12 @@ Each decision is made once.
   supervisor said, shortened (a team chat is one thread). Asked what they said earlier, the agent
   answers from the chat, and may repeat their own numbers. **Alerts** are listed for the app at
 `GET /teams/{id}/alerts`. The team agent shares the chat's daily cap per supervisor.
+
+## The dashboard's layout (2026-11-16)
+
+Redesigned as Karim chose from mockups: the five areas as chips, tinted where something moved; the
+team agent's briefing (where the team stands, then each open alert and the week's priorities on
+other metrics, numbered, with questions that open the agent with the question typed); proposals
+waiting for approval; an ask box; the weekly report and its charts as tiles. On desktop, notes,
+earlier alerts, shared levels, the invite and past weeks sit in a column beside it. Open alerts
+appear once, in the briefing.
