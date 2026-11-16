@@ -45,7 +45,9 @@ from app.analysis.day import with_scores
 from app.config import settings
 from scipy.stats import binomtest
 
-ITEMS = Path("data/eval/phia_bench_items.json")  # git-ignored: real people's answers stay local
+ITEMS = Path(
+    "data/eval/phia_bench_items.json"
+)  # git-ignored: real people's answers stay local
 ANSWERS = Path("data/eval/results")  # git-ignored: replies about real people stay local
 SUMMARY = Path("eval/results/phia_bench_summary.json")
 SYSTEMS = ("patterns", "single_agent", "chatbot", "code")
@@ -90,8 +92,100 @@ def _threshold(match: re.Match) -> tuple[str, float] | None:
     return column, float(number) * (60 if minutes else 1)
 
 
-def why_dropped(match: re.Match) -> str | None:
+# Checking PHIA's key against its own words: it has errors. "Sleep less than 3 hours" is coded as
+# sleep_minutes >= 180, and light-sleep questions are computed on total sleep (found 2026-11-16).
+METRIC_WORDS = [  # most specific first
+    ("light", "light_sleep_minutes"),
+    ("deep", "deep_sleep_minutes"),
+    ("rem", "rem_sleep_minutes"),
+    ("awake", "awake_minutes"),
+    ("heart rate variability", "heart_rate_variability"),
+    ("hrv", "heart_rate_variability"),
+    ("resting", "resting_heart_rate"),
+    ("heart rate", "resting_heart_rate"),
+    ("zone", "active_zone_minutes"),
+    ("step", "steps"),
+    ("walk", "steps"),
+    ("sleep", "sleep_minutes"),
+    ("slept", "sleep_minutes"),
+]
+HOW_WORDS = [
+    ("how many days", "count"),
+    ("median", "median"),
+    ("middle", "median"),
+    ("average", "mean"),
+    ("mean", "mean"),
+    ("highest", "max"),
+    ("most", "max"),
+    ("max", "max"),
+    ("best", "max"),
+    ("lowest", "min"),
+    ("least", "min"),
+    ("min", "min"),
+    ("fewest", "min"),
+    ("total", "sum"),
+    ("sum", "sum"),
+]
+LESS = re.compile(
+    r"\b(less than|fewer than|under|below|at most|less|fewer|lower than)\b",
+    re.IGNORECASE,
+)
+MORE = re.compile(
+    r"\b(more than|greater than|over|above|at least|exceed|higher than|more|greater)\b",
+    re.IGNORECASE,
+)
+EQUAL = re.compile(r"\b(exactly|equals?|equal to)\b", re.IGNORECASE)
+
+
+def named_metric(q):
+    low = q.lower()
+    for word, col in METRIC_WORDS:
+        if re.search(rf"\b{word}", low):
+            return col
+    return None
+
+
+def key_problems(q, m, threshold_col):
+    out = []
+    target = m["column"] if m["column"] != "datetime" else threshold_col
+    if (named := named_metric(q)) and target and named != target:
+        out.append(f"metric: words {named}, code {target}")
+    low = re.sub(r"\b(at least|at most|or equal to|minutes?|mins?)\b", " ", q.lower())
+    how = next((h for w, h in HOW_WORDS if re.search(rf"\b{w}\b", low)), None)
+    if how and how != m["how"]:
+        out.append(f"kind: words {how}, code {m['how']}")
+    if m["where"]:
+        op = re.search(r"(<=|>=|<|>|==)", m["where"]).group(1)
+        if re.search(
+            r"less than or equal|at most|fewer than or equal", q, re.IGNORECASE
+        ):
+            said = "lt"
+        elif re.search(
+            r"greater than or equal|more than or equal|at least", q, re.IGNORECASE
+        ):
+            said = "gt"
+        elif EQUAL.search(q):
+            said = "eq"
+        elif LESS.search(q):
+            said = "lt"
+        elif MORE.search(q):
+            said = "gt"
+        else:
+            said = None
+        coded = {"<": "lt", "<=": "lt", ">": "gt", ">=": "gt", "==": "eq"}[op]
+        if said and said != coded:
+            out.append(f"direction: words {said}, code {op}")
+    period = re.search(r"last (\d+) days|today|yesterday", q.lower())
+    said_when = period.group(0) if period else None
+    if (m["when"] or None) != said_when:
+        out.append(f"period: words {said_when}, code {m['when']}")
+    return out
+
+
+def why_dropped(match: re.Match, question: str = "") -> str | None:
     """Why a question proves nothing, or None if it is kept."""
+    if question and key_problems(question, match, (_threshold(match) or (None,))[0]):
+        return "PHIA's key does not match its own words (wrong metric or direction)"
     if match["how"] == "sum" and match["column"] in RATES:
         return "a total of a heart rate, which means nothing"
     if match["how"] == "count" and match["when"] in ("today", "yesterday"):
@@ -106,6 +200,24 @@ def why_dropped(match: re.Match) -> str | None:
 def tidy(question: str) -> str:
     """The template's doubled word ("did I I had") made single; nothing else is changed."""
     return re.sub(r"\bI I\b", "I", question).strip()
+
+
+MIN_COVERAGE = 0.8  # of the days in a question's period, for a real person
+
+
+def covered(frame: pd.DataFrame, match: re.Match, needed: set[str]) -> bool:
+    """Whether the person has the data the question's period needs. A real person's sleep can stop
+    weeks before their steps do: "last 21 days" over one night of sleep gave a key of 1, which no
+    system could fairly be marked on (the live check of 2026-11-16)."""
+    last, when = frame.index.max(), match["when"]
+    needed = {c for c in needed if c}
+    if when in ("today", "yesterday"):
+        day = last if when == "today" else last - pd.Timedelta(days=1)
+        return all(day in frame.index and pd.notna(frame.at[day, c]) for c in needed)
+    if when and (days := re.fullmatch(r"last (\d+) days", when)):
+        rows = frame.loc[last - pd.Timedelta(days=int(days[1]) - 1) : last]
+        return all(rows[c].notna().mean() >= MIN_COVERAGE for c in needed)
+    return all(frame[c].notna().sum() >= 30 for c in needed)
 
 
 def phia_frame(frame: pd.DataFrame) -> pd.DataFrame:
@@ -138,7 +250,7 @@ def build() -> dict:
     dropped, mode_a = Counter(), []
     for item in published:
         match = phia._eligible(codes[(item["user"], item["q"])])
-        if reason := why_dropped(match):
+        if reason := why_dropped(match, item["q"]):
             dropped[reason] += 1
             continue
         mode_a.append(
@@ -175,6 +287,8 @@ def build() -> dict:
             if not all(
                 c in frame.columns and frame[c].notna().sum() >= 30 for c in needed if c
             ):
+                continue
+            if not covered(frame, match, needed):
                 continue
             keys = [
                 phia.recompute(frame, match, w)
@@ -224,6 +338,7 @@ def build() -> dict:
 CODE_PROMPT = """You answer a question about one person's daily fitness data by writing ONE pandas
 expression over a DataFrame `df`, one row per day, indexed by date (a DatetimeIndex, newest last).
 Columns: {columns}. Durations are in minutes. Today is {today}; "today" is the last row.
+This is pandas {version}: DataFrame.last() no longer exists, so select days by filtering the index.
 Reply with JSON only: {{"code": "<one expression that evaluates to a single number>"}}."""
 UNSAFE = re.compile(r"__|import|open\(|exec|eval|os\.|sys\.|subprocess|globals|locals")
 
@@ -234,7 +349,9 @@ def code_baseline(
     """PHIA's code-generation baseline: one expression, run by code, no loop and no checks."""
     budget = Budget(max_calls=1, max_cost_usd=0.01)
     task = CODE_PROMPT.format(
-        columns=", ".join(frame.columns), today=f"{now:%A %d %b %Y}"
+        columns=", ".join(frame.columns),
+        today=f"{now:%A %d %b %Y}",
+        version=pd.__version__,
     )
     done = llm.complete(
         [{"role": "system", "content": task}, {"role": "user", "content": question}],
@@ -255,6 +372,42 @@ def code_baseline(
         return float(value), code, budget.cost_usd
     except Exception as exc:  # noqa: BLE001 the baseline's own failure, scored as wrong
         return None, f"{type(exc).__name__}: {code[:200]}", budget.cost_usd
+
+
+DURATION = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hours?)\b(?:\s*(?:and\s*)?(\d+)\s*(?:min|mins|minutes?)\b)?"
+    r"|(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*(?:min|mins|minutes?)\b",
+    re.IGNORECASE,
+)
+NUMBER = re.compile(r"(?<![\w.,])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?![\w,]*\d)")
+DATE = re.compile(
+    r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}(?:,? \d{4})?\b"
+    r"|\b\d{4}-\d{2}-\d{2}\b|\b(?:19|20)\d{2}\b",
+    re.IGNORECASE,
+)
+
+
+def exact(got, want: float) -> bool:
+    try:
+        return got is not None and abs(float(got) - want) < 0.5
+    except (TypeError, ValueError):
+        return False
+
+
+def numbers_in(reply: str) -> list[float]:
+    """Every figure a reply states, read by code: durations in minutes ("7 h 22 min" = 442),
+    "13,458" as one number, dates left out. A check on the model that reads the answer."""
+    text, found = DATE.sub(" ", reply or ""), []
+    for m in DURATION.finditer(text):
+        if m.group(3):
+            found.append(float(m.group(3).replace(",", "")))
+        else:
+            found.append(float(m.group(1)) * 60 + float(m.group(2) or 0))
+            if not m.group(2):
+                found.append(float(m.group(1)))  # "6 h" may also be a count of hours
+    rest = DURATION.sub(" ", text)
+    found += [float(n.replace(",", "")) for n in NUMBER.findall(rest)]
+    return found
 
 
 def ask_one(system, llm, router, guard, item, frame, spent) -> dict:
@@ -311,10 +464,21 @@ def ask_one(system, llm, router, guard, item, frame, spent) -> dict:
         read = real_eval.extract(llm, item["q"], text, spent)
         out |= {"value": read.get("value"), "reply": text[:800], "cost": round(cost, 5)}
     out["seconds"] = round(clock.monotonic() - started, 1)
-    out["strict"] = real_eval.close(out["value"], item["label"])
+    right = (
+        exact if item["how"] == "count" else real_eval.close
+    )  # a count of days is exact
+    out["strict"] = right(out["value"], item["label"])
     out["fair"] = out["strict"] or any(
-        real_eval.close(out["value"], a) for a in item["also_accepted"]
+        right(out["value"], a) for a in item["also_accepted"]
     )
+    if system != "code":
+        # Code's own reading of the reply: does it state the right figure anywhere? Where it and
+        # the reading model disagree, the answer is listed for a person to check.
+        keys = [item["label"], *item["also_accepted"]]
+        asked = set(numbers_in(item["q"]))  # "last 21 days" in the reply is no answer
+        stated = [n for n in numbers_in(out["reply"]) if n not in asked or n in keys]
+        out["scan_fair"] = any(right(n, k) for n in stated for k in keys)
+        out["readers_disagree"] = out["scan_fair"] != out["fair"]
     return out
 
 
@@ -472,6 +636,11 @@ def report() -> dict:
             part["systems"][system]["claims_rejected"] = sum(
                 r[system].get("rejected", 0) for r in group
             )
+        part["readers_disagree"] = {
+            s: sum(r[s].get("readers_disagree", False) for r in group)
+            for s in systems
+            if s != "code"
+        }
         part["fair_by_kind"] = {
             kind: {s: round(sum(v) / len(v), 3) for s, v in d.items()}
             for kind, d in by_kind.items()

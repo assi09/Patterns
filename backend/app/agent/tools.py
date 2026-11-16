@@ -201,8 +201,10 @@ TOOLS: dict[str, AgentTool] = {
         ),
         AgentTool(
             "goal_progress",
-            "How often days met a target the person set themselves, overall and over the last "
-            "week. The target must come from what they said.",
+            "How many days a metric was at least or at most a value in a period, and how many in "
+            "its last week: a target they set, or any threshold they name ('how many nights did I "
+            "sleep under 7 hours?', 'days over 10,000 steps'). The value must come from what they "
+            "said.",
             GoalArguments,
             lambda frame, a: habits.goal_progress(
                 frame, a.metric, a.goal_value, a.direction, _window(a)

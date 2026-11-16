@@ -64,14 +64,19 @@ lowest, total, days past a threshold). They do not test "why", advice, logging o
 
 **Two modes.** Mode A asks each question of the PHIA synthetic user it was written for, graded by
 PHIA's published answer. Mode B, the one the course requirement needs, asks the same questions of
-real people (all 16 of PMData, all 51 usable in LifeSnaps), graded by PHIA's answer logic on their
-data. A second, separate implementation agrees with every mode-B answer (690 of 690).
+real people from PMData and LifeSnaps, graded by PHIA's answer logic on their data. A question goes
+to a person only if they have the metric on at least 80% of the days in its period (a person's sleep
+can stop weeks before their steps), which leaves 58 people. A second, separate implementation agrees
+with every mode-B answer.
 
-**Cleaning** (4,000 published, 1,603 of a shape our data has, 1,440 kept):
+**Cleaning** (4,000 published, 1,603 of a shape our data has, 1,411 kept):
 - dropped: questions about workouts (1,532), sleep-stage percentages (668), standard deviations and
   multi-step code (197): data or computations the app does not have;
-- dropped: a total of a heart rate or HRV (57), "how many days" within one day (61), a threshold no
-  person reaches, answered 0 by anyone ("exactly 15 hours of sleep", 45);
+- dropped: a total of a heart rate or HRV (57), "how many days" within one day (48), a threshold no
+  person reaches, answered 0 by anyone ("exactly 15 hours of sleep", 42);
+- dropped: PHIA's own key errors, where its code disagrees with its words (45): "sleep less than 3
+  hours" coded as at least 3 hours, light-sleep questions computed on total sleep. Every kept
+  question's metric, kind, direction and period match its code;
 - tidied: the template's doubled word, "did I I had" (145); no other change to the wording;
 - graded twice: strict against PHIA's key, which reads "last 7 days" as eight calendar days, and
   fair, which also accepts the seven days ending today or yesterday (the two differ on 44%).
@@ -91,10 +96,15 @@ each baseline; accuracy by kind of question; cost and time per answer; from Patt
 router's question type (every PHIA question is a value or a day), the tools used and the claims the
 verifier rejected.
 
-**Batches:** mode A in 5 batches of 288, mode B in 2 of 345, every kind, period and metric spread
-evenly. Each batch first asks 20 questions (`--first 20`), which are read before the rest; a system
-failing 5 times in a row stops the run. About $0.016 per question for the four systems: $4.6 per
-mode-A batch, $5.5 per mode-B batch, about $34 in all.
+**Grading:** a reading model, blind to the system and the key, gives the reply's number; it is right
+within 2% (or 1 unit), and a count of days only if exact. Code also reads every number in the reply
+(durations to minutes, dates and the question's own numbers left out); where the two readings
+disagree, the answer is listed for a person to check.
+
+**Batches:** mode A in 5 batches of about 282, mode B in 2 of 338, every kind, period and metric
+spread evenly. Each batch first asks 20 questions (`--first 20`), which are read before the rest; a system
+failing 5 times in a row stops the run. About $0.016 per question for the four systems: $4.5 per
+mode-A batch, $5.4 per mode-B batch, about $33 in all.
 
 ## When the other parts are tested
 
