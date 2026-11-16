@@ -416,11 +416,13 @@ OpenAI ([costs.md](costs.md) has every run).
     second reminder to submit, a rerun answered all six with no fallback, but that is one run, one
     still ended on its budget, and a `why` question took 15 calls and $0.05. Since measured at scale
     ([evaluation.md](evaluation.md)): 82% on 46 real people.
-33. **"Why" answers stop early.** About 55-60% right; a cause is named in about half the cases with
-    none planted, and a cause in another area is found about half the time. Read from the wrong
-    answers: the agent does not test every candidate before and after the change, scores are still
-    explained by their own inputs in `compare_windows`, and some premises are missed. Planned fix:
-    code tests every likely cause ([plan.md](plan.md#where-we-are-and-what-is-left-2026-11-11)).
+33. ~~"Why" answers stop early.~~ Fixed 2026-11-16: once the premise check confirms a change, code
+    tests every everyday driver (sleep, bedtime, time in bed, steps, Active Zone Minutes, strain,
+    sedentary time) from its own change point, corrected for the number tested, and the agent may
+    name only one that moved (`candidate_causes` in `strategy.py`). On the same 33 real-people why
+    questions: 16 to 28 right; on the 25 answered both times (8 of the "before" run were model
+    errors), 15 to 21 right, 8 questions fixed and 2 broken (p = 0.11). Synthetic checks over 20
+    seeds find a planted cause and give none to a lone change.
 34. **The team stress score does not track reported stress** (median rho -0.03 on PMData). Shown as
     "physical stress signs"; the consent text still says "stress" and changing it means asking
     members again. Undecided.
@@ -435,4 +437,8 @@ OpenAI ([costs.md](costs.md) has every run).
     withheld week read "Steady" on every area; it now says "Not enough yet" and why.
 38. **Blind grading is not done.** `eval/results/phia_blind_2026-11-10.csv` (51 answers) waits for
     Karim and Jad, and about 30 of the grader's readings should be checked by hand.
+39. **Model calls sometimes fail in bursts** (8 of 33 in one evaluation run, 3 of 104 in another), well
+    under the account's rate limits (5,000 requests and 2 million tokens a minute). The cause is not
+    known yet: failures now store their error in the answer's trace (2026-11-16), so the next burst
+    can be read in Railway.
 
