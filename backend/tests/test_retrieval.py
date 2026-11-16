@@ -38,9 +38,11 @@ def test_words_find_an_exact_name(index):
     assert done.found[0].passage.id == "dead" and done.method == "words"
 
 
-def test_the_merge_finds_it_and_says_how(index):
+def test_meaning_alone_by_default_and_the_merge_on_request(index):
     done = search("dark bedroom at night", llm=ScriptedLLM([]), index=index)
-    assert done.found[0].passage.id == "dark" and done.method == "hybrid"
+    assert done.found[0].passage.id == "dark" and done.method == "vectors"
+    merged = search("dark bedroom at night", llm=ScriptedLLM([]), index=index, use_words=True)
+    assert merged.found[0].passage.id == "dark" and merged.method == "hybrid"
 
 
 def test_no_embeddings_still_answers_from_words(index):

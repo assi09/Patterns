@@ -58,7 +58,7 @@ def main() -> None:
     methods = {
         "words": {"use_vectors": False},
         "meaning": {"use_words": False},
-        "both": {},
+        "both": {"use_words": True},
     }
     results: dict = {}
     cards = load_cards()
