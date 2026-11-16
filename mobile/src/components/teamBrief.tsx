@@ -6,6 +6,7 @@ import { stateColor } from '@/components/teamDashboard';
 import { Text } from '@/components/Text';
 import { Tile } from '@/components/widgets';
 import { isHovered } from '@/lib/platform';
+import type { TeamBriefing } from '@/api/types';
 import type { AreaReading, AreaState, BriefingItem, TeamStatus } from '@/lib/team';
 import { fonts, radius, spacing, type as typeScale, useColors } from '@/theme';
 
@@ -53,10 +54,12 @@ export function BriefingCard({
   status,
   items,
   teamId,
+  briefing,
 }: {
   status: TeamStatus;
   items: BriefingItem[];
   teamId: string;
+  briefing?: TeamBriefing | null; // the agent's own Monday run, when it checked out
 }) {
   const colors = useColors();
   return (
@@ -66,7 +69,13 @@ export function BriefingCard({
           <Ionicons name="pulse" size={15} color={colors.accent} />
         </View>
         <Text variant="caption" color="muted" style={{ fontFamily: fonts.semibold }}>
-          This week’s briefing · your team agent
+          {briefing
+            ? `Your team agent · ${new Date(briefing.madeAt).toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'short',
+                day: 'numeric',
+              })}`
+            : 'This week’s briefing · your team agent'}
         </Text>
       </View>
       <Text
@@ -75,7 +84,9 @@ export function BriefingCard({
       >
         {status.title}
       </Text>
-      {items.length ? (
+      {briefing ? (
+        <Text style={{ fontSize: 16, lineHeight: 24 }}>{briefing.summary}</Text>
+      ) : items.length ? (
         items.map((item, index) => (
           <View key={item.key} style={styles.item}>
             <Text
@@ -95,7 +106,7 @@ export function BriefingCard({
       ) : (
         <Text color="muted">{status.line}</Text>
       )}
-      {items.length ? (
+      {briefing || items.length ? (
         <AskChips
           teamId={teamId}
           questions={['What lined up with this?', 'What could the team try?']}

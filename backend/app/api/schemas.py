@@ -363,6 +363,21 @@ class TeamReportSummary(ApiModel):
     created_at: datetime
 
 
+class BriefingItem(ApiModel):
+    text: str
+    kind: str
+    metric: str | None = None
+
+
+class TeamBriefing(ApiModel):
+    """What the team agent found on its Monday run, checked like its chat answers."""
+
+    summary: str
+    items: list[BriefingItem]
+    proposals: int = 0  # team actions it proposed, waiting for approval
+    made_at: datetime
+
+
 class TeamReport(TeamReportSummary):
     members_total: int
     minimum_members: int
@@ -375,6 +390,7 @@ class TeamReport(TeamReportSummary):
     evidence: dict[str, Evidence]
     generated_by: Literal["template", "model"]
     levels: list[SharedLevels]
+    briefing: TeamBriefing | None = None
 
 
 class GenerateReport(ApiModel):

@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     # the most one report's text may cost.
     team_report_narrative: bool = False
     team_report_cap_usd: float = 0.02
+    team_briefing_cap_usd: float = 0.10  # the agent's Monday run, per team
     # Team report emails: written to data/outbox/ unless sending through Resend is turned on,
     # with its key and a sender Resend accepts (onboarding@resend.dev only reaches the account's
     # own address; any other needs a verified domain).

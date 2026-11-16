@@ -9,7 +9,7 @@ local database, to try reports before real people join (`demo.py`).
 import argparse
 import sys
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.engine import make_url
@@ -20,6 +20,7 @@ from app.config import settings
 from app.db.models import Team
 from app.db.session import session_scope
 from app.teams import memberships, reports
+from app.teams.briefing import brief
 from app.teams.demo import add_demo_members
 from app.teams.email import MailError, deliver, mailer_from_settings
 
@@ -36,6 +37,11 @@ def main(argv: list[str] | None = None) -> int:
         "--narrate", action="store_true", help="have a model write the prose (paid; checked)"
     )
     weekly.add_argument("--no-email", action="store_true", help="make reports without emailing")
+    weekly.add_argument(
+        "--agent",
+        action="store_true",
+        help="the team agent investigates the week and writes a briefing (paid; checked)",
+    )
     demo = commands.add_parser(
         "demo-members", help="fill a team with made-up members (local database only)"
     )
@@ -52,12 +58,13 @@ def main(argv: list[str] | None = None) -> int:
         print("That week is not over yet.", file=sys.stderr)
         return 1
     writer = OpenAILLM.from_settings(settings) if args.narrate else None
+    agent = OpenAILLM.from_settings(settings) if args.agent else None
     try:
         mailer = None if args.no_email else mailer_from_settings(settings)
     except MailError as error:
         print(error, file=sys.stderr)
         return 1
-    made = withheld = written = emailed = failed = 0
+    made = withheld = written = emailed = failed = briefed = 0
     cost = 0.0
     with session_scope() as session:
         query = select(Team).order_by(Team.created_at)
@@ -70,6 +77,22 @@ def main(argv: list[str] | None = None) -> int:
             made += report.status == "ready"
             withheld += report.status == "withheld"
             written += report.generated_by == "model"
+            if agent is not None and report.status == "ready":
+                try:
+                    briefed += (
+                        brief(
+                            agent,
+                            session,
+                            team,
+                            report,
+                            week.end + timedelta(days=1),  # the Monday after the report's week
+                            now,
+                            settings.team_briefing_cap_usd,
+                        )
+                        is not None
+                    )
+                except Exception as error:  # noqa: BLE001 the report and its email still go out
+                    print(f"{team.name}: no briefing ({type(error).__name__})", file=sys.stderr)
             cost += report.cost_usd
             if mailer is not None:
                 try:
@@ -80,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Week of {week.start}: {made} reports ready, {withheld} withheld (too few people).")
     if writer:
         print(f"{written} written by the model, the rest templated; ${cost:.4f}.")
+    if agent:
+        print(f"{briefed} briefed by the team agent; ${cost:.4f} in all.")
     if mailer is not None:
         where = "sent" if settings.email_backend == "resend" else "written to data/outbox/"
         print(f"{emailed} emails {where}" + (f", {failed} failed." if failed else "."))

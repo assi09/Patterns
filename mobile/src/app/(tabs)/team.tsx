@@ -226,6 +226,7 @@ function TeamView({ team }: { team: SupervisedTeam }) {
         status={status}
         items={briefingItems(alerts.data, latest.data)}
         teamId={team.id}
+        briefing={latest.data?.briefing}
       />
       <ProposalsSection teamId={team.id} style={card} />
       <AskBar teamId={team.id} />

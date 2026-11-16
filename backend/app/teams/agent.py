@@ -237,6 +237,7 @@ class TeamReply:
     cost_usd: float = 0.0
     stop: str = "answered"
     trace: list[dict] = field(default_factory=list)
+    claims: list["TeamClaim"] = field(default_factory=list)  # the checked claims behind the text
 
 
 def _tool(name: str, description: str, properties: dict | None = None, required=()) -> dict:
@@ -306,6 +307,11 @@ def tools() -> list[dict]:
                 "days": {"type": "integer", "minimum": 7, "maximum": 28},
             },
             ("kind", "title", "body"),
+        ),
+        _tool(
+            "team_actions",
+            "Team actions proposed in the last 90 days, with their status (proposed, approved, "
+            "declined), kind, dates and metric: find challenges that have ended.",
         ),
         _tool(
             "action_result",
@@ -402,9 +408,38 @@ class TeamTools:
             return {"saved": self._keep([_note_evidence(note)])}
         if name == "propose_team_action":
             return self._propose(arguments)
+        if name == "team_actions":
+            return {"actions": self._keep(self._actions())}
         if name == "action_result":
             return self._result(str(arguments.get("action_id", "")))
         return {"error": f"Unknown tool {name!r}."}
+
+    def _actions(self) -> list[Evidence]:
+        since = self.now - timedelta(days=90)
+        rows = self.db.scalars(
+            select(TeamAction)
+            .where(TeamAction.team_id == self.team.id, TeamAction.proposed_at >= since)
+            .order_by(TeamAction.proposed_at)
+        ).all()
+        return [
+            Evidence(
+                tool="team_action",
+                metrics=(row.metric,) if row.metric else (),
+                windows=(),
+                n=0,
+                sufficient=True,
+                stats={
+                    "action_id": str(row.id),
+                    "kind": row.kind,
+                    "status": row.status,
+                    "title": row.title,
+                    "starts_on": row.starts_on.isoformat() if row.starts_on else None,
+                    "ends_on": row.ends_on.isoformat() if row.ends_on else None,
+                    "ended": bool(row.ends_on and row.ends_on < self.today),
+                },
+            )
+            for row in rows
+        ]
 
     def _propose(self, arguments: dict) -> dict:
         kind = arguments.get("kind")
@@ -791,13 +826,26 @@ def _answer(
         + f"The supervisor asks, as quoted data: <question>{question}</question>"
     )
     heard = "\n".join([*before, said, question])
+    return run_agent(llm, box, task, heard, budget)
+
+
+def run_agent(
+    llm: LLM,
+    box: "TeamTools",
+    task: str,
+    heard: str,
+    budget: Budget,
+    system: str = SYSTEM,
+    rounds: int = MAX_CALLS,
+    repairs: int = 1,
+) -> TeamReply:
+    """The agent's loop over its tools until it hands in an answer whose claims check out."""
     messages: list[dict] = [
-        {"role": "system", "content": SYSTEM},
+        {"role": "system", "content": system},
         {"role": "user", "content": task},
     ]
     reply = TeamReply(FALLBACK, stop="no_answer")
-    repairs = 1
-    for _ in range(MAX_CALLS):
+    for _ in range(rounds):
         try:
             done = llm.complete(messages, tools=tools(), budget=budget)
         except (BudgetExceeded, LLMError) as error:
@@ -828,6 +876,7 @@ def _answer(
                 problems = check_answer(answer, box.evidence, heard)
             if not problems and answer is not None:
                 reply.text, reply.stop, finished = answer.summary, "answered", True
+                reply.claims = list(answer.claims)
                 cited = {i for c in answer.claims for i in c.evidence_ids}
                 reply.evidence = [e for i, e in box.evidence.items() if i in cited]
             elif repairs:
@@ -845,6 +894,7 @@ def _answer(
                     kept = [c for c in answer.claims if not check_claim(c, box.evidence)]
                     cited = {i for c in kept for i in c.evidence_ids}
                     reply.text, reply.stop = answer.summary, "answered_in_part"
+                    reply.claims = kept
                     reply.evidence = [e for i, e in box.evidence.items() if i in cited]
             reply.trace.append({"answer": "accepted" if not problems else "rejected"})
         if finished:
