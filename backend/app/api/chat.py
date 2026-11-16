@@ -16,7 +16,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as WaitTimeout
 from contextlib import AbstractContextManager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, time, timedelta
 from functools import lru_cache
 from time import monotonic
@@ -28,10 +28,11 @@ from pydantic import Field, model_validator
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.actions import store as health_store
 from app.actions.schemas import Measured
 from app.actions.tools import proposal_tools
 from app.agent.agent import NO_ANSWER
-from app.agent.ask import NOTED, REMINDERS, ask, default_guard, default_router
+from app.agent.ask import CORRECTS, NOTED, REMINDERS, ask, default_guard, default_router
 from app.agent.context import Attachment, ChatState, turns_from
 from app.agent.conversation import DRAFT_NOTE
 from app.agent.experts import EXPERTS, Depth, available
@@ -65,7 +66,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import session_scope
-from app.outside import FoodData, Outside
+from app.outside import FoodData, Outside, model_choice
 from app.reminders.schedule import describe
 from app.reminders.store import SCHEDULE, timezone_of
 from app.reminders.tools import ALARM, listing_reply, reminder_reply, reminder_tools
@@ -78,6 +79,7 @@ HISTORY_USED = 20  # messages the agent sees as context; the context builder tri
 HISTORY_FOLDED = 40  # messages looked at for the running summary
 DRAFT_WITHOUT_ONE = re.compile(r"\bdraft\b", re.IGNORECASE)
 NO_DRAFT_REPLY = "I couldn't get that entry ready. Could you send it once more?"
+WAITING_ANSWERS = 4  # recent answers whose waiting drafts a "log it" or a correction refers to
 FOOD_LOG_DAYS = 45  # enough to cover the 30 days the agent summarises
 MAX_THREAD = 6  # the person's messages kept from one logging request still being asked about
 QUIET_INTENTS = (Intent.LOG, Intent.REMIND)  # one-off requests: nothing to listen for
@@ -107,6 +109,15 @@ def _agent() -> AgentParts:
 @lru_cache(maxsize=1)
 def food_data() -> FoodData | None:
     return FoodData.from_settings(settings)
+
+
+def food_data_for(llm: LLM) -> FoodData | None:
+    """USDA's matches ranked by meaning, then the food described chosen by the model: right first
+    for 22 of 25 held-out foods, against 14 in USDA's own order (eval/food_rank_eval.py)."""
+    found = food_data()
+    if found is None:
+        return None
+    return replace(found, embed=lambda texts: llm.embed(texts).vectors, choose=model_choice(llm))
 
 
 def get_agent() -> AgentParts:
@@ -438,6 +449,28 @@ def _answer(
                 for row in db.scalars(select(CheckIn).where(CheckIn.user_id == user_id))
             ]
         last = earlier[-1] if earlier and earlier[-1].role == "assistant" else None
+        # Drafts from this chat's recent answers that still wait for the person's tap: "log it"
+        # after a reply that made none still means the card above (2026-11-16).
+        recent_ids = [
+            i
+            for message in earlier[-2 * WAITING_ANSWERS :]
+            if message.role == "assistant"
+            for i in message.action_ids or []
+        ]
+        waiting: list[HealthAction] = []
+        if recent_ids:
+            with sessions() as db:
+                waiting = [
+                    row
+                    for i in recent_ids
+                    if (row := db.get(HealthAction, uuid.UUID(i))) is not None
+                    and row.user_id == user_id
+                    and row.status == "draft"
+                ]
+                db.expunge_all()
+        # "Nah, I meant 100 g of each": the agent prepares the corrected draft, and the one it
+        # replaces is cancelled, rather than asking them to edit the card (2026-11-16).
+        correcting = bool(waiting) and bool(CORRECTS.match(body.text))
         continuing_log = None
         if last and last.pending_log_expert:
             created = (
@@ -445,6 +478,8 @@ def _answer(
             )
             if timedelta(0) <= now - created <= timedelta(hours=24):
                 continuing_log = last.pending_log_expert
+        if correcting:
+            continuing_log = "nutrition" if waiting[-1].kind == "food" else "activity"
         # With the app's own scores as daily metrics, and the morning check-ins (rating and tags),
         # so they can be asked about and cited.
         frame = with_checkins(with_scores(data.daily.frame), checkins, CHECKIN_TAGS)
@@ -471,7 +506,7 @@ def _answer(
                 return measure_workout(db, user_id, start, end, exercise_type)
 
         described: list[str] = []
-        outside = Outside(sessions, user_id, now, _day_start(now), food_data())
+        outside = Outside(sessions, user_id, now, _day_start(now), food_data_for(agent.llm))
         # Present only with a food lookup to fill it: a draft with no values is then told to look
         # the food up rather than ask the person.
         estimates: list[str] | None = [] if outside.food_data else None
@@ -522,7 +557,7 @@ def _answer(
                 outside=outside,
                 food_logs=food_logs,
                 made_a_draft=lambda: bool(prepared),
-                after_draft=bool(last and last.action_ids),
+                after_draft=bool(waiting) and not correcting,
             )
         except Exception:
             logger.exception("Answering failed")
@@ -562,6 +597,10 @@ def _answer(
                 store.add_trace(db, failed_trace(elapsed), message_id=answer.id)
                 return [question, answer]
             result = reply.result
+            if correcting and prepared:
+                for old in waiting:
+                    if str(old.id) not in prepared:
+                        health_store.cancel(db, user_id, old.id, old.version, now)
             if prepared:
                 note = " ".join(described) or DRAFT_NOTE
                 if reply.route.classification.intent == Intent.LOG or any(
@@ -577,6 +616,7 @@ def _answer(
                     result.notes.append(note)
             elif (
                 reply.route.classification.intent == Intent.LOG
+                and result.stop_reason != "limits"  # a fixed reply ("tap Log it on the card")
                 and DRAFT_WITHOUT_ONE.search(result.summary)
                 and "?" not in result.summary
             ):  # it says a card is waiting, and there is none
@@ -636,6 +676,7 @@ def _answer(
                 if reminding and not reminders and not prepared
                 else (reply.route.expert or "general")
                 if not prepared
+                and result.stop_reason != "limits"
                 and (reply.route.expert in draft_tools or reply.route.action == "general")
                 and (
                     reply.route.classification.intent == Intent.LOG
