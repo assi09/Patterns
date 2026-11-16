@@ -45,9 +45,7 @@ from app.analysis.day import with_scores
 from app.config import settings
 from scipy.stats import binomtest
 
-ITEMS = Path(
-    "data/eval/phia_bench_items.json"
-)  # git-ignored: real people's answers stay local
+ITEMS = Path("data/eval/phia_bench_items.json")  # git-ignored: real people's answers stay local
 ANSWERS = Path("data/eval/results")  # git-ignored: replies about real people stay local
 SUMMARY = Path("eval/results/phia_bench_summary.json")
 SYSTEMS = ("patterns", "single_agent", "chatbot", "code")
@@ -156,13 +154,9 @@ def key_problems(q, m, threshold_col):
         out.append(f"kind: words {how}, code {m['how']}")
     if m["where"]:
         op = re.search(r"(<=|>=|<|>|==)", m["where"]).group(1)
-        if re.search(
-            r"less than or equal|at most|fewer than or equal", q, re.IGNORECASE
-        ):
+        if re.search(r"less than or equal|at most|fewer than or equal", q, re.IGNORECASE):
             said = "lt"
-        elif re.search(
-            r"greater than or equal|more than or equal|at least", q, re.IGNORECASE
-        ):
+        elif re.search(r"greater than or equal|more than or equal|at least", q, re.IGNORECASE):
             said = "gt"
         elif EQUAL.search(q):
             said = "eq"
@@ -229,9 +223,7 @@ def phia_frame(frame: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _stratified(
-    items: list[dict], batches: int, rng: random.Random
-) -> list[list[dict]]:
+def _stratified(items: list[dict], batches: int, rng: random.Random) -> list[list[dict]]:
     """Every kind, period and metric spread evenly over the batches."""
     rng.shuffle(items)
     items.sort(key=lambda i: (i["how"], i["when"], i["metric"]))
@@ -277,16 +269,10 @@ def build() -> dict:
             continue
         seen.add(item["q"])
         match = phia._eligible(item["code"])
-        needed = {
-            c
-            for c in (match["column"], (_threshold(match) or ("",))[0])
-            if c != "datetime"
-        }
+        needed = {c for c in (match["column"], (_threshold(match) or ("",))[0]) if c != "datetime"}
         for name in rng.sample(names, len(names)):
             frame = frames[name]
-            if not all(
-                c in frame.columns and frame[c].notna().sum() >= 30 for c in needed if c
-            ):
+            if not all(c in frame.columns and frame[c].notna().sum() >= 30 for c in needed if c):
                 continue
             if not covered(frame, match, needed):
                 continue
@@ -343,9 +329,7 @@ Reply with JSON only: {{"code": "<one expression that evaluates to a single numb
 UNSAFE = re.compile(r"__|import|open\(|exec|eval|os\.|sys\.|subprocess|globals|locals")
 
 
-def code_baseline(
-    llm, frame: pd.DataFrame, question: str, now: datetime, spent: list
-) -> tuple:
+def code_baseline(llm, frame: pd.DataFrame, question: str, now: datetime, spent: list) -> tuple:
     """PHIA's code-generation baseline: one expression, run by code, no loop and no checks."""
     budget = Budget(max_calls=1, max_cost_usd=0.01)
     task = CODE_PROMPT.format(
@@ -366,9 +350,7 @@ def code_baseline(
     if UNSAFE.search(code):
         return None, f"refused code: {code[:200]}", budget.cost_usd
     try:
-        value = eval(
-            code, {"__builtins__": {}}, {"df": frame.copy(), "pd": pd, "np": np}
-        )
+        value = eval(code, {"__builtins__": {}}, {"df": frame.copy(), "pd": pd, "np": np})
         return float(value), code, budget.cost_usd
     except Exception as exc:  # noqa: BLE001 the baseline's own failure, scored as wrong
         return None, f"{type(exc).__name__}: {code[:200]}", budget.cost_usd
@@ -416,6 +398,7 @@ def ask_one(system, llm, router, guard, item, frame, spent) -> dict:
     if system == "code":
         value, code, cost = code_baseline(llm, frame, item["q"], now, spent)
         out = {"value": value, "reply": code, "cost": round(cost, 5)}
+        out["seconds"] = round(clock.monotonic() - started, 1)
     else:
         if system == "patterns":
             reply = ask(
@@ -447,30 +430,26 @@ def ask_one(system, llm, router, guard, item, frame, spent) -> dict:
             cost, text = result.budget.cost_usd, result.summary
         else:
             before = spent[0]
-            text = real_eval.plain_chatbot(
-                llm, frame, list(frame.columns), item["q"], now, spent
-            )
+            text = real_eval.plain_chatbot(llm, frame, list(frame.columns), item["q"], now, spent)
             cost = spent[0] - before
             spent[0] = before
         if system != "chatbot":
             # How it got there: the tools it ran, and what the verifier turned down.
             out["stop"] = result.stop_reason
-            out["tools"] = [
-                s.get("name") for s in walk(result.trace) if s.get("type") == "tool"
-            ]
+            out["tools"] = [s.get("name") for s in walk(result.trace) if s.get("type") == "tool"]
             out["rejected"] = len(result.rejected)
             out["claims"] = len(result.claims)
         spent[0] += cost
+        # The system's own time ends here; reading its number out is the grader's, timed apart
+        # (the code baseline has no reading step, so its time never included one).
+        answered = clock.monotonic()
         read = real_eval.extract(llm, item["q"], text, spent)
+        out["read_seconds"] = round(clock.monotonic() - answered, 1)
         out |= {"value": read.get("value"), "reply": text[:800], "cost": round(cost, 5)}
-    out["seconds"] = round(clock.monotonic() - started, 1)
-    right = (
-        exact if item["how"] == "count" else real_eval.close
-    )  # a count of days is exact
+        out["seconds"] = round(answered - started, 1)
+    right = exact if item["how"] == "count" else real_eval.close  # a count of days is exact
     out["strict"] = right(out["value"], item["label"])
-    out["fair"] = out["strict"] or any(
-        right(out["value"], a) for a in item["also_accepted"]
-    )
+    out["fair"] = out["strict"] or any(right(out["value"], a) for a in item["also_accepted"])
     if system != "code":
         # Code's own reading of the reply: does it state the right figure anywhere? Where it and
         # the reading model disagree, the answer is listed for a person to check.
@@ -498,11 +477,7 @@ def _frame_for(item: dict, cache: dict) -> pd.DataFrame:
             cache[item["person"]] = phia.person(int(item["person"]))
         else:
             source = item["person"].split("/", 1)[0]
-            loaded = (
-                real_data.load_pmdata()
-                if source == "pmdata"
-                else real_data.load_lifesnaps()
-            )
+            loaded = real_data.load_pmdata() if source == "pmdata" else real_data.load_lifesnaps()
             cache.update({f"{source}/{k}": v for k, v in loaded.items()})
     return cache[item["person"]]
 
@@ -530,9 +505,7 @@ def run(mode: str, batch: int, first: int | None, stop: float, systems: tuple) -
     out = ANSWERS / f"phia_bench_{mode}{batch}.jsonl"
     earlier = latest(out.read_text().splitlines()) if out.exists() else {}
     done = {
-        i
-        for i, r in earlier.items()
-        if not any(broken(r.get(s, {"error": 1})) for s in systems)
+        i for i, r in earlier.items() if not any(broken(r.get(s, {"error": 1})) for s in systems)
     }
     todo = [i for i in items if i["id"] not in done][: first or None]
     llm = OpenAILLM.from_settings(settings, SpendLedger(cap_usd=stop + 0.5))
@@ -543,9 +516,7 @@ def run(mode: str, batch: int, first: int | None, stop: float, systems: tuple) -
         {},
     )
     failing = Counter()
-    print(
-        f"{mode}{batch}: {len(todo)} to ask ({len(done)} already answered), systems {systems}"
-    )
+    print(f"{mode}{batch}: {len(todo)} to ask ({len(done)} already answered), systems {systems}")
     asked = 0
     for n, item in enumerate(todo, start=1):
         if spent[0] >= stop:
@@ -582,20 +553,35 @@ def run(mode: str, batch: int, first: int | None, stop: float, systems: tuple) -
             file.write(json.dumps(row, default=float) + "\n")
         asked += 1
         marks = " ".join(
-            f"{s[:6]}:{'!' if broken(row[s]) else 'Y' if row[s]['fair'] else '-'}"
-            for s in systems
+            f"{s[:6]}:{'!' if broken(row[s]) else 'Y' if row[s]['fair'] else '-'}" for s in systems
         )
         print(f"{n:3d} ${spent[0]:.3f} {marks} | {item['q'][:70]}")
         if bad := [s for s, count in failing.items() if count >= STOP_AFTER]:
-            print(
-                f"Stopped: {bad} failed {STOP_AFTER} times in a row. Fix before going on."
-            )
+            print(f"Stopped: {bad} failed {STOP_AFTER} times in a row. Fix before going on.")
             break
     each = spent[0] / asked if asked else 0
     print(f"spent ${spent[0]:.3f}, ${each:.4f} a question")
 
 
 # Reporting (free)
+
+
+BOOTSTRAP = 2000
+
+
+def clustered(group: list[dict], score) -> list[float]:
+    """A 95% interval for a rate that resamples people, not questions: one person's answers are
+    not independent of each other, and some people got many more questions than others."""
+    by_person: dict[str, list[float]] = defaultdict(list)
+    for row in group:
+        by_person[row["person"]].append(float(score(row)))
+    people = list(by_person.values())
+    rng = np.random.default_rng(SEED)
+    rates = []
+    for _ in range(BOOTSTRAP):
+        picked = [people[i] for i in rng.integers(0, len(people), len(people))]
+        rates.append(sum(sum(p) for p in picked) / sum(len(p) for p in picked))
+    return [round(float(np.percentile(rates, 2.5)), 3), round(float(np.percentile(rates, 97.5)), 3)]
 
 
 def wilson(hits: int, n: int) -> list[float]:
@@ -614,8 +600,11 @@ def report() -> dict:
         for row in latest(path.read_text().splitlines()).values()
     ]
     summary: dict = {}
-    for mode in ("A", "B"):
-        every = [r for r in rows if r["mode"] == mode]
+    # Each batch on its own: B1 was the development batch (Patterns was changed after it), B2 the
+    # held-out one, so pooling them would mix two versions of Patterns.
+    for key in sorted({f"{r['mode']}{r['batch']}" for r in rows}):
+        mode, batch = key[0], int(key[1:])
+        every = [r for r in rows if r["mode"] == mode and r["batch"] == batch]
         systems = [s for s in SYSTEMS if all(s in r for r in every)] if every else []
         if not every:
             continue
@@ -623,6 +612,7 @@ def report() -> dict:
         group = [r for r in every if not any(broken(r[s]) for s in systems)]
         part: dict = {
             "questions": len(group),
+            "people": len({r["person"] for r in group}),
             "left_out_failed": len(every) - len(group),
         }
         part["systems"] = {}
@@ -632,11 +622,16 @@ def report() -> dict:
                 part["systems"].setdefault(system, {})[score] = {
                     "rate": round(hits / len(group), 3),
                     "wilson_95": wilson(hits, len(group)),
+                    "by_person_95": clustered(group, lambda r, s=system, k=score: r[s][k]),
                 }
             costs = [r[system].get("cost", 0) for r in group]
             part["systems"][system]["cost_per_answer"] = round(float(np.mean(costs)), 5)
             seconds = [r[system].get("seconds", 0) for r in group]
             part["systems"][system]["seconds_mean"] = round(float(np.mean(seconds)), 1)
+            # Rows from before the grader's reading was timed apart include it in "seconds".
+            part["systems"][system]["seconds_include_reading"] = system != "code" and any(
+                "read_seconds" not in r[system] for r in group
+            )
         for other in (s for s in systems if s != "patterns" and "patterns" in systems):
             only_p = sum(r["patterns"]["fair"] and not r[other]["fair"] for r in group)
             only_o = sum(r[other]["fair"] and not r["patterns"]["fair"] for r in group)
@@ -646,6 +641,12 @@ def report() -> dict:
                 "p": round(binomtest(only_p, only_p + only_o).pvalue, 4)
                 if only_p + only_o
                 else None,
+                # The difference in accuracy, with an interval resampling people.
+                "difference": round((only_p - only_o) / len(group), 3),
+                "difference_by_person_95": clustered(
+                    group,
+                    lambda r, o=other: float(r["patterns"]["fair"]) - float(r[o]["fair"]),
+                ),
             }
         by_kind = defaultdict(lambda: defaultdict(list))
         for r in group:
@@ -673,7 +674,7 @@ def report() -> dict:
             kind: {s: round(sum(v) / len(v), 3) for s, v in d.items()}
             for kind, d in by_kind.items()
         }
-        summary[mode] = part
+        summary[key] = part
     SUMMARY.write_text(json.dumps(summary, indent=2) + "\n")
     return summary
 
@@ -685,9 +686,7 @@ def main() -> None:
     go = sub.add_parser("run")
     go.add_argument("--mode", choices=("A", "B"), required=True)
     go.add_argument("--batch", type=int, required=True)
-    go.add_argument(
-        "--first", type=int, help="ask only this many more questions of the batch"
-    )
+    go.add_argument("--first", type=int, help="ask only this many more questions of the batch")
     go.add_argument("--stop", type=float, default=5.0)
     go.add_argument("--systems", default=",".join(SYSTEMS))
     sub.add_parser("report")
@@ -696,9 +695,7 @@ def main() -> None:
         built = build()
         print(json.dumps({k: v for k, v in built.items() if k != "items"}, indent=1))
     elif args.command == "run":
-        run(
-            args.mode, args.batch, args.first, args.stop, tuple(args.systems.split(","))
-        )
+        run(args.mode, args.batch, args.first, args.stop, tuple(args.systems.split(",")))
     else:
         print(json.dumps(report(), indent=1))
 
