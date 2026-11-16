@@ -1,56 +1,56 @@
 {
  "note": "Regraded with the same rule for both systems; see real_eval_*_full.json for the first score (0.777 agent, 0.604 plain on shared questions).",
  "agent_all": {
-  "n": 421,
-  "rate": 0.822,
+  "n": 261,
+  "rate": 0.824,
   "wilson_95": [
-   0.782,
-   0.855
+   0.773,
+   0.865
   ],
   "by_person_95": [
-   0.785,
-   0.855
+   0.767,
+   0.874
   ]
  },
  "agent_data_questions_only": {
-  "n": 317,
-  "rate": 0.814,
+  "n": 181,
+  "rate": 0.812,
   "wilson_95": [
-   0.767,
-   0.853
+   0.749,
+   0.862
   ]
  },
  "by_kind": {
   "average": {
-   "n": 51,
-   "rate": 0.961,
+   "n": 31,
+   "rate": 1.0,
    "wilson_95": [
-    0.868,
-    0.989
+    0.89,
+    1.0
    ]
   },
   "best_day": {
-   "n": 41,
+   "n": 19,
    "rate": 1.0,
    "wilson_95": [
-    0.914,
+    0.832,
     1.0
    ]
   },
   "change": {
-   "n": 39,
-   "rate": 0.923,
+   "n": 24,
+   "rate": 0.917,
    "wilson_95": [
-    0.797,
-    0.973
+    0.742,
+    0.977
    ]
   },
   "day_value": {
-   "n": 53,
-   "rate": 0.962,
+   "n": 28,
+   "rate": 0.929,
    "wilson_95": [
-    0.872,
-    0.99
+    0.774,
+    0.98
    ]
   },
   "edge_any": {
@@ -78,110 +78,122 @@
    ]
   },
   "latest": {
-   "n": 44,
-   "rate": 0.341,
+   "n": 26,
+   "rate": 0.462,
    "wilson_95": [
-    0.219,
-    0.489
+    0.288,
+    0.645
    ]
   },
   "link": {
-   "n": 54,
-   "rate": 0.741,
+   "n": 40,
+   "rate": 0.725,
    "wilson_95": [
-    0.611,
+    0.572,
     0.839
    ]
   },
   "planted": {
-   "n": 39,
-   "rate": 0.667,
+   "n": 26,
+   "rate": 0.615,
    "wilson_95": [
-    0.51,
-    0.794
+    0.425,
+    0.776
    ]
   },
   "planted_control": {
-   "n": 25,
-   "rate": 0.96,
+   "n": 14,
+   "rate": 1.0,
    "wilson_95": [
-    0.805,
-    0.993
+    0.785,
+    1.0
    ]
   },
   "weekend": {
-   "n": 35,
-   "rate": 0.743,
+   "n": 13,
+   "rate": 0.615,
    "wilson_95": [
-    0.579,
-    0.858
+    0.355,
+    0.823
    ]
   }
  },
  "same_questions": {
   "agent": {
-   "n": 187,
-   "rate": 0.834,
+   "n": 111,
+   "rate": 0.847,
    "wilson_95": [
-    0.774,
-    0.881
+    0.768,
+    0.902
    ]
   },
   "plain_chatbot": {
-   "n": 187,
-   "rate": 0.615,
+   "n": 111,
+   "rate": 0.622,
    "wilson_95": [
-    0.544,
-    0.682
+    0.529,
+    0.706
    ]
   },
-  "only_agent_right": 60,
-  "only_plain_right": 19
+  "only_agent_right": 34,
+  "only_plain_right": 9
  },
  "correct_when_key_says_no_effect": {
   "agent": {
-   "n": 102,
-   "rate": 0.961,
+   "n": 58,
+   "rate": 0.966,
    "wilson_95": [
-    0.903,
-    0.985
+    0.883,
+    0.99
    ]
   },
   "plain_chatbot": {
-   "n": 53,
-   "rate": 0.245,
+   "n": 31,
+   "rate": 0.29,
    "wilson_95": [
-    0.149,
-    0.376
+    0.161,
+    0.466
    ]
   }
  },
  "correct_when_key_says_an_effect": {
   "agent": {
-   "n": 51,
-   "rate": 0.549,
+   "n": 33,
+   "rate": 0.515,
    "wilson_95": [
-    0.414,
-    0.677
+    0.352,
+    0.675
    ]
   },
   "plain_chatbot": {
-   "n": 29,
-   "rate": 0.828,
+   "n": 19,
+   "rate": 0.737,
    "wilson_95": [
-    0.655,
-    0.924
+    0.512,
+    0.882
    ]
   }
  },
  "planted_change_found_by_the_answer_key": {
   "n": 39,
-  "rate": 0.769,
+  "rate": 0.795,
   "wilson_95": [
-   0.617,
-   0.874
+   0.645,
+   0.892
   ],
   "opposite": 2
  },
- "mean_hit_per_person": 0.816
+ "left_out_no_longer_asked": {
+  "ls_:deep_sleep_minutes": 23,
+  "ls_:sleep_minutes": 17,
+  "ls_:steps": 22,
+  "ls_:resting_hr": 24,
+  "ls_:time_in_bed": 13,
+  "ls_:hrv_ms": 13,
+  "ls_:active_zone_minutes": 17,
+  "ls_:calories": 25,
+  "ls_:None": 11,
+  "ls_:sleep_efficiency": 11
+ },
+ "mean_hit_per_person": 0.772
 }

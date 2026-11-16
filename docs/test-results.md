@@ -11,14 +11,15 @@ in `eval/results/` (totals only; anything holding a real person's values stays i
 
 | Test | What it shows | Data | Compared with | Result | When |
 |---|---|---|---|---|---|
-| **PHIA benchmark, real people** (mode B) | right metric, period and figure | PHIA's questions on 58 real people (PMData, LifeSnaps), PHIA's answer logic | single agent; chatbot with the data; code-writing (PHIA's baseline) | **pending**: batch 1 of 2 runs first | 2026-11-16/17 |
+| **PHIA benchmark, real people, batch 1** (development) | right metric, period and figure | 338 of PHIA's questions on 48 real people (PMData, LifeSnaps), PHIA's answer logic | single agent; chatbot with the data; code-writing (PHIA's baseline) | Patterns **93.2%** (by person 90.4-95.8); single agent 89.3%, chatbot 71.3%, code 99.4%. Read to find faults: totals fixed after it | 2026-11-16 |
+| **PHIA benchmark, real people, batch 2** (held out) | the same, on questions Patterns was not changed for | 337 other questions on 48 real people | the same three | Patterns **97.0%** (94.8-98.7); single agent 92.3% (Patterns +4.7, by person +1.8 to +7.3, p = 0.0009), chatbot 69.1% (+27.9), code 99.7% (-2.7) | 2026-11-17 |
 | **PHIA benchmark, PHIA's users** (mode A) | the same, against PHIA's published key | PHIA's 4 synthetic users | the same three | pending | after mode B |
 | **Verifier, on its own** | true claims pass, broken claims are caught | 3,184 claims built by code from 61 real people's evidence | itself before the fix | true claims **1,066 / 1,066** pass; broken claims caught **2,117 / 2,118** (89.9% before the fix) | 2026-11-16 |
 | **Router** | each question reaches the right place | 152 held-out questions (112 ours, 40 PHIA's) | the keyword rule | **150 / 152 (98.7%)** against 126 / 152 (82.9%) | 2026-11-16 |
 | **RAG retrieval** | the right passage comes back | a second held-out set of 35 answerable questions (+ 4 unanswerable, 4 medical) | words alone; the merge of words and meaning | meaning alone recall@3 **0.94**, MRR **0.83**; the merge 0.89, 0.76; words 0.51, 0.44. The app now uses meaning alone | 2026-11-16 |
 | **Food matching** | a logged food gets the right USDA food | 45 everyday foods to choose the method, then 25 held-out foods scored once; right when kcal per 100 g fall in the food's real range | USDA's own order; ranking by meaning alone | held out: **22 / 25** by meaning then the model's choice, against 14 / 25 in USDA's order and 18 / 25 by meaning; no food words in the code | 2026-11-17 |
 | **Logging** | the draft holds what was said | 52 generated requests through the chat API | none: the generator knows every value | **pending** (built; grader checked on hand-made drafts) | with the PHIA batches |
-| **Real data, end to end** | answers on real people are right | 421 questions, 46 people (PMData, LifeSnaps), an independent oracle | plain chatbot with the data pasted in | **82%** (79-86%); on the same 187 questions 83% against **62%** | 2026-11-10 |
+| **Real data, end to end** | answers on real people are right | first run: 421 questions, 46 people (PMData, LifeSnaps); **restated** on PMData only, 261 answers, after LifeSnaps' sleep stages and impossible zeros were found to be read wrongly | plain chatbot with the data pasted in | PMData only: **82.4%** (by person 76.7-87.4); on 111 shared questions 84.7% against **62.2%**. The LifeSnaps half is superseded until rerun | 2026-11-10, restated 2026-11-17 |
 | **Experts against none** | whether the experts earn their place | 100 real-people questions, 38 people; the whole agent, 85 turns | no experts | data questions 84.3% both; why 27% against 53%: led to the **hybrid** | 2026-11-10 |
 | **"Why" with planted causes** | a cause is named only when one moved | 33 why questions, causes planted in real people, with no-cause controls | the agent before code-tested causes | **16 to 28 / 33** | 2026-11-16 |
 | **Memory** | keeps what was said, only that, apart per person and team | 20 scenarios, 77 checks, made-up person and team, real API | its own first run | **77 / 77** (first run 58 / 71) | 2026-11-11 |
@@ -82,10 +83,25 @@ words only when embeddings are unavailable. Limits: a French how-to question can
 issue 41); 2 of 4 unanswerable and 2 of 4 medical questions returned passages, though medical
 questions are refused by the router before any search.
 
+## How to read these results (2026-11-17)
+
+- **Development or regression, and held out.** Sets we read and then fixed the agent against (the
+  conversation set, the router's first set, the 33 "why" questions, PHIA batch 1, the first 45
+  foods) show that the fixes work and that nothing regressed; they are not unbiased estimates.
+  Held-out results come from questions nothing was changed for: PHIA batch 2, the router's 152
+  questions, RAG's second set, the 25 held-out foods. The report quotes held-out figures as the
+  measure and development figures as the record of what was fixed.
+- **Uncertainty by person.** Several questions go to the same person, and their answers are not
+  independent, so intervals resample people (`by_person_95`), for rates and for paired
+  differences.
+- **Time.** In PHIA batches 1 and 2 the text-answering systems' time includes the grader's call that
+  reads the number out of the reply; the code baseline has none. Those times are not compared
+  across systems; runs from 2026-11-17 time the grader's reading apart (`read_seconds`).
+- **LifeSnaps before 2026-11-16.** Its sleep-stage ratios were read as minutes and impossible zeros
+  as values; the old real-data run is restated on PMData alone, and its LifeSnaps half needs a
+  rerun before it is quoted.
+
 ## To be filled in
 
-- PHIA mode B, batches 1 and 2: accuracy (strict and fair) for each system with intervals, paired
-  tests of Patterns against each baseline, by kind of question, cost and time per answer, the
-  router's type, tools used and claims rejected.
 - Logging: each field's accuracy, and the requests that must not become a draft.
 - PHIA mode A; the judge against Karim's and Jad's blind grades; the pilot.

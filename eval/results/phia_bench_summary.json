@@ -1,0 +1,428 @@
+{
+  "B1": {
+    "questions": 338,
+    "people": 48,
+    "left_out_failed": 0,
+    "systems": {
+      "patterns": {
+        "strict": {
+          "rate": 0.772,
+          "wilson_95": [
+            0.725,
+            0.814
+          ],
+          "by_person_95": [
+            0.73,
+            0.811
+          ]
+        },
+        "fair": {
+          "rate": 0.932,
+          "wilson_95": [
+            0.9,
+            0.954
+          ],
+          "by_person_95": [
+            0.904,
+            0.958
+          ]
+        },
+        "cost_per_answer": 0.00263,
+        "seconds_mean": 3.7,
+        "seconds_include_reading": true,
+        "tools_used": {
+          "describe": 119,
+          "rank_days": 91,
+          "goal_progress": 33,
+          "coverage": 7,
+          "compare_day": 5
+        },
+        "claims_rejected": 14
+      },
+      "single_agent": {
+        "strict": {
+          "rate": 0.743,
+          "wilson_95": [
+            0.693,
+            0.786
+          ],
+          "by_person_95": [
+            0.701,
+            0.784
+          ]
+        },
+        "fair": {
+          "rate": 0.893,
+          "wilson_95": [
+            0.856,
+            0.922
+          ],
+          "by_person_95": [
+            0.858,
+            0.926
+          ]
+        },
+        "cost_per_answer": 0.00637,
+        "seconds_mean": 7.0,
+        "seconds_include_reading": true,
+        "tools_used": {
+          "coverage": 168,
+          "compare_windows": 141,
+          "compare_day": 131,
+          "describe": 127,
+          "rank_days": 109,
+          "correlate": 51,
+          "goal_progress": 46,
+          "weekday_split": 34
+        },
+        "claims_rejected": 26
+      },
+      "chatbot": {
+        "strict": {
+          "rate": 0.642,
+          "wilson_95": [
+            0.59,
+            0.691
+          ],
+          "by_person_95": [
+            0.588,
+            0.695
+          ]
+        },
+        "fair": {
+          "rate": 0.713,
+          "wilson_95": [
+            0.663,
+            0.759
+          ],
+          "by_person_95": [
+            0.665,
+            0.757
+          ]
+        },
+        "cost_per_answer": 0.00231,
+        "seconds_mean": 1.9,
+        "seconds_include_reading": true
+      },
+      "code": {
+        "strict": {
+          "rate": 0.82,
+          "wilson_95": [
+            0.775,
+            0.857
+          ],
+          "by_person_95": [
+            0.778,
+            0.861
+          ]
+        },
+        "fair": {
+          "rate": 0.994,
+          "wilson_95": [
+            0.979,
+            0.998
+          ],
+          "by_person_95": [
+            0.98,
+            1.0
+          ]
+        },
+        "cost_per_answer": 0.00028,
+        "seconds_mean": 0.8,
+        "seconds_include_reading": false
+      }
+    },
+    "patterns_vs_single_agent": {
+      "only_patterns_right": 27,
+      "only_other_right": 14,
+      "p": 0.0596,
+      "difference": 0.038,
+      "difference_by_person_95": [
+        0.005,
+        0.072
+      ]
+    },
+    "patterns_vs_chatbot": {
+      "only_patterns_right": 87,
+      "only_other_right": 13,
+      "p": 0.0,
+      "difference": 0.219,
+      "difference_by_person_95": [
+        0.173,
+        0.271
+      ]
+    },
+    "patterns_vs_code": {
+      "only_patterns_right": 1,
+      "only_other_right": 22,
+      "p": 0.0,
+      "difference": -0.062,
+      "difference_by_person_95": [
+        -0.086,
+        -0.039
+      ]
+    },
+    "router_types": {
+      "lookup": 243,
+      "day": 92,
+      "world": 1,
+      "null": 2
+    },
+    "router_type_right": 0.991,
+    "readers_disagree": {
+      "patterns": 3,
+      "single_agent": 10,
+      "chatbot": 25
+    },
+    "fair_by_kind": {
+      "min": {
+        "patterns": 0.968,
+        "single_agent": 0.935,
+        "chatbot": 0.742,
+        "code": 1.0
+      },
+      "sum": {
+        "patterns": 0.83,
+        "single_agent": 0.745,
+        "chatbot": 0.66,
+        "code": 1.0
+      },
+      "median": {
+        "patterns": 0.937,
+        "single_agent": 0.889,
+        "chatbot": 0.794,
+        "code": 0.984
+      },
+      "max": {
+        "patterns": 0.956,
+        "single_agent": 0.897,
+        "chatbot": 0.882,
+        "code": 0.985
+      },
+      "count": {
+        "patterns": 0.935,
+        "single_agent": 0.935,
+        "chatbot": 0.484,
+        "code": 1.0
+      },
+      "mean": {
+        "patterns": 0.94,
+        "single_agent": 0.94,
+        "chatbot": 0.582,
+        "code": 1.0
+      }
+    }
+  },
+  "B2": {
+    "questions": 337,
+    "people": 48,
+    "left_out_failed": 0,
+    "systems": {
+      "patterns": {
+        "strict": {
+          "rate": 0.798,
+          "wilson_95": [
+            0.752,
+            0.838
+          ],
+          "by_person_95": [
+            0.759,
+            0.836
+          ]
+        },
+        "fair": {
+          "rate": 0.97,
+          "wilson_95": [
+            0.946,
+            0.984
+          ],
+          "by_person_95": [
+            0.948,
+            0.987
+          ]
+        },
+        "cost_per_answer": 0.00277,
+        "seconds_mean": 3.5,
+        "seconds_include_reading": true,
+        "tools_used": {
+          "describe": 147,
+          "rank_days": 76,
+          "goal_progress": 29,
+          "compare_day": 2
+        },
+        "claims_rejected": 0
+      },
+      "single_agent": {
+        "strict": {
+          "rate": 0.772,
+          "wilson_95": [
+            0.724,
+            0.813
+          ],
+          "by_person_95": [
+            0.727,
+            0.817
+          ]
+        },
+        "fair": {
+          "rate": 0.923,
+          "wilson_95": [
+            0.889,
+            0.947
+          ],
+          "by_person_95": [
+            0.895,
+            0.949
+          ]
+        },
+        "cost_per_answer": 0.00664,
+        "seconds_mean": 6.9,
+        "seconds_include_reading": true,
+        "tools_used": {
+          "coverage": 172,
+          "compare_windows": 154,
+          "describe": 142,
+          "compare_day": 117,
+          "rank_days": 113,
+          "correlate": 45,
+          "change_point": 44,
+          "weekday_split": 42
+        },
+        "claims_rejected": 30
+      },
+      "chatbot": {
+        "strict": {
+          "rate": 0.605,
+          "wilson_95": [
+            0.552,
+            0.656
+          ],
+          "by_person_95": [
+            0.55,
+            0.66
+          ]
+        },
+        "fair": {
+          "rate": 0.691,
+          "wilson_95": [
+            0.64,
+            0.738
+          ],
+          "by_person_95": [
+            0.629,
+            0.745
+          ]
+        },
+        "cost_per_answer": 0.00172,
+        "seconds_mean": 1.9,
+        "seconds_include_reading": true
+      },
+      "code": {
+        "strict": {
+          "rate": 0.813,
+          "wilson_95": [
+            0.768,
+            0.851
+          ],
+          "by_person_95": [
+            0.768,
+            0.859
+          ]
+        },
+        "fair": {
+          "rate": 0.997,
+          "wilson_95": [
+            0.983,
+            0.999
+          ],
+          "by_person_95": [
+            0.99,
+            1.0
+          ]
+        },
+        "cost_per_answer": 0.00028,
+        "seconds_mean": 0.8,
+        "seconds_include_reading": false
+      }
+    },
+    "patterns_vs_single_agent": {
+      "only_patterns_right": 19,
+      "only_other_right": 3,
+      "p": 0.0009,
+      "difference": 0.047,
+      "difference_by_person_95": [
+        0.018,
+        0.073
+      ]
+    },
+    "patterns_vs_chatbot": {
+      "only_patterns_right": 97,
+      "only_other_right": 3,
+      "p": 0.0,
+      "difference": 0.279,
+      "difference_by_person_95": [
+        0.224,
+        0.336
+      ]
+    },
+    "patterns_vs_code": {
+      "only_patterns_right": 1,
+      "only_other_right": 10,
+      "p": 0.0117,
+      "difference": -0.027,
+      "difference_by_person_95": [
+        -0.05,
+        -0.009
+      ]
+    },
+    "router_types": {
+      "day": 91,
+      "lookup": 245,
+      "world": 1
+    },
+    "router_type_right": 0.997,
+    "readers_disagree": {
+      "patterns": 5,
+      "single_agent": 7,
+      "chatbot": 21
+    },
+    "fair_by_kind": {
+      "median": {
+        "patterns": 0.984,
+        "single_agent": 0.968,
+        "chatbot": 0.762,
+        "code": 0.984
+      },
+      "min": {
+        "patterns": 1.0,
+        "single_agent": 0.919,
+        "chatbot": 0.726,
+        "code": 1.0
+      },
+      "mean": {
+        "patterns": 0.985,
+        "single_agent": 0.955,
+        "chatbot": 0.731,
+        "code": 1.0
+      },
+      "count": {
+        "patterns": 0.9,
+        "single_agent": 0.867,
+        "chatbot": 0.167,
+        "code": 1.0
+      },
+      "sum": {
+        "patterns": 0.935,
+        "single_agent": 0.804,
+        "chatbot": 0.565,
+        "code": 1.0
+      },
+      "max": {
+        "patterns": 0.971,
+        "single_agent": 0.957,
+        "chatbot": 0.87,
+        "code": 1.0
+      }
+    }
+  }
+}
