@@ -492,6 +492,14 @@ export interface ReportFinding {
   evidenceId: string;
 }
 
+/** What the team agent found on its own Monday run, every claim checked against team evidence. */
+export interface TeamBriefing {
+  summary: string;
+  items: { text: string; kind: string; metric?: string | null }[];
+  proposals: number; // team actions it proposed, waiting for approval
+  madeAt: ISODateTime;
+}
+
 export interface TeamReport extends TeamReportSummary {
   membersTotal: number;
   minimumMembers: number;
@@ -503,6 +511,7 @@ export interface TeamReport extends TeamReportSummary {
   narrative: NarrativeParagraph[]; // the model's checked prose; empty when templated
   evidence: Record<string, Evidence>;
   generatedBy: 'template' | 'model';
+  briefing?: TeamBriefing | null; // the team agent's Monday run, when it checked out
   levels: SharedLevels[];
 }
 

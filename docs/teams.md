@@ -399,3 +399,23 @@ other metrics, numbered, with questions that open the agent with the question ty
 waiting for approval; an ask box; the weekly report and its charts as tiles. On desktop, notes,
 earlier alerts, shared levels, the invite and past weeks sit in a column beside it. Open alerts
 appear once, in the briefing.
+
+## The agent's Monday run (2026-11-16)
+
+Until now the team agent only answered when asked, and the weekly report was written by code. The
+weekly job now runs the agent too (`python -m app.teams weekly --agent`, `app/teams/briefing.py`).
+Nobody asks it anything: it reads the overview, the week, the alerts and the notes, lists the team's
+actions and checks how any approved challenge that ended went (`team_actions`, `action_result`),
+proposes one team-level action only when a lasting concern calls for it and nothing like it is
+waiting, and writes a briefing of two to five sentences. Every claim goes through the same checks as
+in chat, and more strictly: unasked and emailed, a briefing is kept only when every claim checks
+out. It is stored with the week's report, shown at the top of the Team tab, put in the Monday email
+under "From your team agent", and posted to the team chat as the agent's message, so the supervisor
+can reply to it. When the agent fails or reaches its cap (`FA_TEAM_BRIEFING_CAP_USD`, $0.10 a
+team), the code-written report goes out alone and the reason is kept with the report.
+
+Measured on made-up teams of seven (live, 2026-11-16): a lasting sleep drop with a deadline note
+was briefed right in 3 of 3 runs once the instructions said what counts as a change and how to
+round, and a steady team was told it held steady; about $0.01 a team a week. Next: warnings before a
+noted crunch from what similar notes did before, and a one-question anonymous pulse.
+

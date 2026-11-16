@@ -149,6 +149,14 @@ def _report(db, team: Team, report: TeamReport, user: User, clock) -> schemas.Te
         ],
         evidence={key: _evidence(value) for key, value in report.evidence.items()},
         generated_by=report.generated_by,
+        briefing=schemas.TeamBriefing(
+            summary=told["summary"],
+            items=[schemas.BriefingItem(**i) for i in told.get("items", [])][:6],
+            proposals=told.get("proposals", 0),
+            made_at=told["made_at"],
+        )
+        if (told := report.body.get("briefing"))
+        else None,
         levels=[
             schemas.SharedLevels(
                 member=email,

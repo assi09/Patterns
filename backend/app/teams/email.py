@@ -79,6 +79,13 @@ def _lines(report: TeamReport) -> list[_Line]:
     return sorted(lines, key=lambda line: not line.changed)
 
 
+def _html_briefing(text: str) -> str:
+    return (
+        f'<p style="margin:0 0 4px;font-size:12px;color:{MUTED}">From your team agent</p>'
+        f'<p style="margin:0 0 16px;font-size:15px;line-height:22px">{html.escape(text)}</p>'
+    )
+
+
 def compose(team: Team, report: TeamReport, to: str, app_url: str) -> Email:
     """The email for one stored report, every figure read from its stored evidence."""
     week = _week(report)
@@ -91,7 +98,10 @@ def compose(team: Team, report: TeamReport, to: str, app_url: str) -> Email:
         "changed"
     )
 
+    briefing = (report.body or {}).get("briefing", {}).get("summary")
     text = [f"{team.name}, week of {week}", "", report.headline, ""]
+    if briefing:
+        text += ["From your team agent:", briefing, ""]
     if lines:
         text += [counts, ""]
         for line in lines:
@@ -117,6 +127,7 @@ border-radius:12px;padding:24px" cellpadding="0" cellspacing="0"><tr><td>
 <p style="margin:0 0 4px;font-size:12px;letter-spacing:.6px;text-transform:uppercase;\
 color:{MUTED}">{html.escape(team.name)} · week of {week}</p>
 <h1 style="margin:0 0 16px;font-size:20px;line-height:26px">{html.escape(report.headline)}</h1>
+{_html_briefing(briefing) if briefing else ""}
 {f'<p style="margin:0 0 16px;color:{MUTED};font-size:14px">{counts}</p>' if lines else ""}
 {_html_table(rows) if rows else ""}
 <p style="margin:20px 0"><a href="{html.escape(link)}" style="display:inline-block;\

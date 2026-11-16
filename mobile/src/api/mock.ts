@@ -1076,6 +1076,21 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
     minimumMembers: 5,
     createdAt: new Date().toISOString(),
     generatedBy: 'model',
+    briefing: {
+      summary:
+        'Time asleep fell across the team for the third week running, by a median of 38 min for 6 of 8 people. It lined up with your note on the release deadline. Steps rose by 1,400 a day, and recovery, load and physical stress signs held steady.',
+      items: [
+        {
+          text: 'Time asleep fell by a median of 38 min for 6 of 8 people.',
+          kind: 'change',
+          metric: 'sleep_minutes',
+        },
+        { text: 'It lined up with the release deadline.', kind: 'note', metric: null },
+        { text: 'Steps rose by 1,400 a day.', kind: 'change', metric: 'steps' },
+      ],
+      proposals: 0,
+      madeAt: new Date().toISOString(),
+    },
     narrative: [
       {
         text: 'Time asleep went down, with a median change of -38 min; 7 of 8 people were lower.',
