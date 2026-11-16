@@ -5,7 +5,8 @@ per test; the method behind each is in [evaluation-plan.md](evaluation-plan.md),
 [testing-plan.md](testing-plan.md), the full write-ups in [evaluation.md](evaluation.md) and
 [experiments.md](experiments.md), and the cost of each run in [costs.md](costs.md). Results files are
 in `eval/results/` (totals only; anything holding a real person's values stays in the git-ignored
-`data/eval/results`). Updated 2026-11-16.
+`data/eval/results`). Updated 2026-11-17. **Which results are final accuracy and which are
+development, and what is left: [progress-2026-11-17.md](progress-2026-11-17.md).**
 
 ## At a glance
 
@@ -19,6 +20,8 @@ in `eval/results/` (totals only; anything holding a real person's values stays i
 | **RAG retrieval** | the right passage comes back | a second held-out set of 35 answerable questions (+ 4 unanswerable, 4 medical) | words alone; the merge of words and meaning | meaning alone recall@3 **0.94**, MRR **0.83**; the merge 0.89, 0.76; words 0.51, 0.44. The app now uses meaning alone | 2026-11-16 |
 | **Food matching** | a logged food gets the right USDA food | 45 everyday foods to choose the method, then 25 held-out foods scored once; right when kcal per 100 g fall in the food's real range | USDA's own order; ranking by meaning alone | held out: **22 / 25** by meaning then the model's choice, against 14 / 25 in USDA's order and 18 / 25 by meaning; no food words in the code | 2026-11-17 |
 | **Logging** | the draft holds what was said | 52 generated requests through the chat API | none: the generator knows every value | **pending** (built; grader checked on hand-made drafts) | with the PHIA batches |
+| **Team warning before a noted crunch** | warned only when a past note like a coming one was followed by a real change | made-up teams of seven, live, a release followed by a sleep drop or by nothing | none (development) | warned **3 / 3**, false warnings **0 / 2** | 2026-11-17 |
+| **Meal logging replays** | the right card, and a correction replacing it | Karim's chicken-and-rice conversation through the chat API | the code before #171 | right values (USDA chicken breast + white rice); correction replaced the card **2 / 2** | 2026-11-17 |
 | **Real data, end to end** | answers on real people are right | first run: 421 questions, 46 people (PMData, LifeSnaps); **restated** on PMData only, 261 answers, after LifeSnaps' sleep stages and impossible zeros were found to be read wrongly | plain chatbot with the data pasted in | PMData only: **82.4%** (by person 76.7-87.4); on 111 shared questions 84.7% against **62.2%**. The LifeSnaps half is superseded until rerun | 2026-11-10, restated 2026-11-17 |
 | **Experts against none** | whether the experts earn their place | 100 real-people questions, 38 people; the whole agent, 85 turns | no experts | data questions 84.3% both; why 27% against 53%: led to the **hybrid** | 2026-11-10 |
 | **"Why" with planted causes** | a cause is named only when one moved | 33 why questions, causes planted in real people, with no-cause controls | the agent before code-tested causes | **16 to 28 / 33** | 2026-11-16 |
