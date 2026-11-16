@@ -33,6 +33,37 @@ def _span(start: date, end: date) -> str:
     return f"{start:%a %b %-d} to {end:%a %b %-d}"
 
 
+# A value over days: "my total REM minutes?", "my highest steps?". With no period named, PHIA's
+# questions on real people mean every day there is data; read as last night they were answered
+# with one night (2026-11-16).
+AGGREGATE = re.compile(
+    r"\b(total|sum|average|mean|median|highest|lowest|maximum|minimum|most|least|fewest|"
+    r"how many days|in all)\b",
+    re.IGNORECASE,
+)
+ONE_DAY = re.compile(
+    r"\b(today|tonight|yesterday|last night|this morning|this evening|day before|"
+    r"on (?:mon|tue|wed|thu|fri|sat|sun)\w*|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)"
+    r"\w*\.? \d{1,2}|\d{4}-\d{2}-\d{2})\b",
+    re.IGNORECASE,
+)
+SPAN = re.compile(
+    r"\b(week|month|year|weekend|weekday|since|days?|nights|lately|recently|so far|ever|"
+    r"all time)\b",
+    re.IGNORECASE,
+)
+
+
+def asks_over_days(question: str) -> bool:
+    """A value over several days (a total, average or extreme), not about one day."""
+    return bool(AGGREGATE.search(question)) and not ONE_DAY.search(question)
+
+
+def names_no_period(question: str) -> bool:
+    """An aggregate with no period at all: "my total REM minutes?", not "this week"."""
+    return asks_over_days(question) and not SPAN.search(question)
+
+
 def period(name: str, today: date, days: str | None = None) -> str | None:
     """What one period phrase means, given today."""
     name = name.lower()
@@ -70,9 +101,15 @@ def part_of_day(name: str, hour: int, minute: int, now: datetime) -> str:
     return f"today, {now:%a %b %-d}, about {at:%H:%M} unless they said a time"
 
 
-def with_dates(question: str, now: datetime) -> str:
-    """The question with a note naming the dates and times its phrases mean, or as it was."""
+def with_dates(question: str, now: datetime, first: date | None = None) -> str:
+    """The question with a note naming the dates and times its phrases mean, or as it was. A
+    total, average or extreme with no period means every day there is data, from `first`."""
     today = now.date()
+    if first and first < today and names_no_period(question):
+        return (
+            f"{question}\n(Worked out from today, {today:%a %b %-d}: no period is named, so "
+            f"all the data, {_span(first, today)}; name those dates in the answer.)"
+        )
     meanings: dict[str, str] = {}
     for found in PERIODS.finditer(question):
         phrase = found.group(1).lower()

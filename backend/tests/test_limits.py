@@ -294,3 +294,48 @@ def test_an_untracked_question_that_fails_its_checks_is_answered_honestly(frame)
     )
     assert reply.result.summary != NO_ANSWER
     assert "doesn't include menstrual" in reply.result.summary
+
+
+def test_a_total_with_no_period_means_all_the_data():
+    # "What are the total REM sleep minutes?" was answered with last night (PHIA, 2026-11-16).
+    from datetime import datetime
+
+    from app.agent.periods import asks_over_days, names_no_period, with_dates
+
+    now, first = datetime(2026, 11, 16, 11, 30), date(2026, 7, 1)
+    noted = with_dates("What are the total REM sleep minutes?", now, first)
+    assert "no period is named, so all the data, Wed Jul 1 to Mon Nov 16" in noted
+    assert "all the data" in with_dates("what is my highest steps?", now, first)
+    for kept in (
+        "how did I sleep?",  # no total, average or extreme asked for
+        "What is the total awake minutes today",  # one day
+        "total steps this week",  # a period of its own
+        "average sleep last 7 days",
+        "my lowest HRV since October",
+    ):
+        assert "all the data" not in with_dates(kept, now, first), kept
+    assert with_dates("What are the total REM sleep minutes?", now) == (
+        "What are the total REM sleep minutes?"  # without the first day, nothing to name
+    )
+    assert asks_over_days("total sleep last 30 days") and not names_no_period(
+        "total sleep last 30 days"
+    )
+    assert not asks_over_days("average deep sleep last night")
+
+
+def test_a_total_typed_as_one_day_gets_the_tools_that_add_days_up(frame):
+    from datetime import datetime
+
+    llm = ScriptedLLM([])
+    now = datetime(2026, 9, 28, 10, 0)
+    ask(
+        llm, Router("day"), frame, "What was the sum of the deep sleep minutes?", today=now, now=now
+    )
+    request = llm.requests[-1]
+    offered = set(request["tools"])
+    assert "describe" in offered  # the day strategy has no describe
+    assert "all the data" in request["messages"][1]["content"]
+    llm = ScriptedLLM([])
+    ask(llm, Router("day"), frame, "How did I sleep last night?", today=now, now=now)
+    offered = set(llm.requests[-1]["tools"])
+    assert "describe" not in offered  # a real day question keeps the day strategy

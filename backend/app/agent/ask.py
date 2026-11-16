@@ -77,7 +77,7 @@ from app.agent.limits import (
 from app.agent.listener import is_explicit, worth_listening
 from app.agent.llm import LLM, Budget
 from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
-from app.agent.periods import with_dates
+from app.agent.periods import asks_over_days, with_dates
 from app.agent.personal import (
     NOT_ABOUT_EATING_LEVERS,
     NOT_ABOUT_EATING_OPTIONS,
@@ -525,6 +525,10 @@ def ask(
     if route.action == "refuse" and OVERALL.match(said) and not MEDICAL.search(said):
         overall = replace(route.classification, question_types={"lookup": 1.0})
         route = Route("general", None, (), choice == "auto", overall)
+    # "My total REM minutes?" is a value over days: the day strategy cannot add days up.
+    if route.classification.question_type == "day" and asks_over_days(said):
+        over_days = replace(route.classification, question_types={"lookup": 1.0})
+        route = replace(route, classification=over_days)
     # Water or a menstrual cycle is not in the data: never the "no food logged" shortcut.
     missing = untracked(said)
     if missing and route.action == "expert" and route.expert == "nutrition":
@@ -793,7 +797,8 @@ def ask(
     # The dates its phrases mean, named by code ("last week = Mon Nov 9 to Sun Nov 15"): only for
     # the agent, after routing, so the router and the snapshot read the person's own words.
     local = today if isinstance(today, datetime) else now
-    asked = with_dates(question, local) if isinstance(local, datetime) else question
+    first = frame.index.min().date() if len(frame.index) else None
+    asked = with_dates(question, local, first) if isinstance(local, datetime) else question
     # What they said gets ignored far above the question: it has to be there at the point of use.
     if relevant or fit.notes:
         what = "; ".join([*(r.text for r in relevant), *fit.notes])
