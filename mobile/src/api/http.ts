@@ -20,6 +20,7 @@ import type {
   GoogleStatus,
   HealthAction,
   HourlySteps,
+  NightStages,
   Inbox,
   Membership,
   MetricSeries,
@@ -245,6 +246,7 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     getDay: (date) => request<DaySummary>(baseUrl, `/days/${encodeURIComponent(date)}`),
     getWorkouts: (date) => request<DayWorkouts>(baseUrl, `/days/${date}/workouts`),
     getHourlySteps: (date) => request<HourlySteps>(baseUrl, `/days/${date}/hourly`),
+    getSleepStages: (date) => request<NightStages>(baseUrl, `/days/${date}/sleep`),
     getCheckIn: (date) => request<CheckIn | null>(baseUrl, `/checkins/${date}`),
     saveCheckIn: (checkIn) =>
       request<CheckIn>(baseUrl, `/checkins/${checkIn.day}`, {

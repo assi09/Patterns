@@ -1,4 +1,4 @@
-import { DEMO_SUPERVISOR, mockClient, routeQuestion } from '../mock';
+import { DEMO_SUPERVISOR, isoDate, mockClient, mockDay, mockNight, routeQuestion } from '../mock';
 import { saveToken } from '../token';
 import type { SendOptions } from '../types';
 
@@ -475,5 +475,42 @@ describe('the team agent in the mock', () => {
     await expect(mockClient.addTeamNote(id, 'She is off sick')).rejects.toThrow(/Not saved/);
     await mockClient.deleteTeamNote(id, note.id);
     expect((await mockClient.getTeamNotes(id)).map((n) => n.id)).not.toContain(note.id);
+  });
+});
+
+describe('mock night', () => {
+  it('is one ordered, gapless night of five cycles, deep sleep early and REM late', () => {
+    for (const date of ['2026-11-16', '2026-11-10', '2026-10-01']) {
+      const night = mockNight(date);
+      const times = night.stages.map((s) => [Date.parse(s.start), Date.parse(s.end)]);
+      times.forEach(([start, end], i) => {
+        expect(end).toBeGreaterThan(start);
+        if (i) expect(start).toBe(times[i - 1][1]);
+      });
+      const hours = (times[times.length - 1][1] - times[0][0]) / 3_600_000;
+      expect(hours).toBeGreaterThan(6);
+      expect(hours).toBeLessThan(10);
+      const minutes = (kind: string, half: 0 | 1) =>
+        night.stages
+          .filter((s, i) => s.stage === kind && (i < night.stages.length / 2 ? 0 : 1) === half)
+          .reduce((sum, s) => sum + Date.parse(s.end) - Date.parse(s.start), 0);
+      expect(minutes('deep', 0)).toBeGreaterThan(minutes('deep', 1));
+      expect(minutes('rem', 1)).toBeGreaterThan(minutes('rem', 0));
+      expect(new Date(night.end!).getDate()).toBe(Number(date.slice(8)));
+    }
+  });
+});
+
+describe('mock night and day', () => {
+  it('starts the night at the day’s bedtime and lasts its time in bed', () => {
+    const day = mockDay(isoDate(1));
+    const value = (name: string) => day.metrics.find((m) => m.metric === name)!.value!;
+    const night = mockNight(day.date);
+    const start = new Date(night.start!);
+    const minutesPastMidnight = start.getHours() * 60 + start.getMinutes();
+    const bedtime = Math.round(value('bedtime_hour') * 60);
+    expect((minutesPastMidnight - bedtime + 1440) % 1440).toBe(0);
+    const length = (Date.parse(night.end!) - Date.parse(night.start!)) / 60_000;
+    expect(Math.abs(length - value('time_in_bed'))).toBeLessThanOrEqual(night.stages.length);
   });
 });
