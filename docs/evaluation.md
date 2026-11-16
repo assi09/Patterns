@@ -389,3 +389,12 @@ Retested: true claims 1,066 of 1,066 still pass; the highest-as-average swap is 
 all broken claims 2,117 of 2,118 (99.95%). The one miss is a wrong value that equals the usual
 range's window length (28 days). Totals in `eval/results/verifier_check_summary.json`.
 
+## The router and RAG on held-out sets (2026-11-16)
+
+Router (`eval/router_eval.py`, 152 questions never used to tune it, 40 of them PHIA's): Jev routes
+150 (98.7%) to the right place, all 40 PHIA questions, with the right question type for 109 of 112;
+the keyword fallback routes 126 (82.9%). RAG (`eval/rag_eval.py --set`, a second held-out set of 35
+answerable questions): the app's combined search recall@3 0.89, MRR 0.76; meaning alone 0.94, 0.83,
+the second held-out set in a row where it ranks better. Details and limits in
+[testing-plan.md](testing-plan.md#the-router-on-held-out-questions-2026-11-16).
+
