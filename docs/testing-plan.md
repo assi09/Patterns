@@ -173,6 +173,12 @@ checked against the titles present in the index before any search ran. Scored on
   help me sleep" returned general sleep passages. Neither reaches retrieval in the app: Jev refused
   every medical question in the router set, and the verifier rejects medical wording.
 
+## Status on 2026-11-17
+
+Done: the verifier, router, RAG and food-matching tests, PHIA batches 1 and 2 on real people. Left:
+PHIA mode A, the logging run, a fresh conversation set, the judge calibration, the pilot. Results
+and which are final: [progress-2026-11-17.md](progress-2026-11-17.md).
+
 ## Order and budget
 
 1. **Free, now:** the verifier test (3, done), router labels (6, done), RAG retrieval (4, done), the

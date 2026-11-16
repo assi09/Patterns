@@ -15,6 +15,16 @@ The page to read first when picking the project up, with [plan.md](plan.md) for 
   waiting for the card); the verifier, RAG, logging and the router each tested on their own; then
   the pilot and the team feature live.
 
+## 2026-11-16 and 17
+
+Two days of work are logged in [progress-2026-11-17.md](progress-2026-11-17.md): Today and the Team
+tab redesigned (#166, #167), the team agent's own Monday briefing (#169, live from 2026-11-23) and
+its warning before a noted crunch (#173), meal logging and corrections fixed (#171), and the
+evaluation: **PHIA held-out batch 97.0%** on real people (single agent 92.3%, chatbot 69.1%), the
+router 98.7% on held-out questions, food matching 22 of 25 held out, retrieval recall@3 0.94, the
+verifier catching 2,117 of 2,118 broken claims. That page says which results are final and what is
+left.
+
 ## Where we are (2026-11-11)
 
 **Presentations are on 2026-12-05.** Our own finish target stays 2026-11-23, with the time after it
