@@ -1,49 +1,44 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { type ReactNode, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
-import { useDay, useHourlySteps, useNoData, useReport, useWorkouts } from '@/api/hooks';
+import {
+  useDay,
+  useHourlySteps,
+  useNoData,
+  useReport,
+  useSleepStages,
+  useWorkouts,
+} from '@/api/hooks';
 import type { DaySummary, Finding, ISODate } from '@/api/types';
 import { CheckInSection } from '@/components/checkin';
-import {
-  DayHeader,
-  HourlyBars,
-  KeyNumber,
-  MetricRow,
-  StagesBar,
-  WorkoutRow,
-} from '@/components/day';
+import { DayHeader } from '@/components/day';
 import { QuestionCard } from '@/components/insights';
 import { Section } from '@/components/list';
+import {
+  ChangeChips,
+  InsightBar,
+  NumberTile,
+  ProgressBar,
+  RangesTile,
+  ScoreRings,
+  SleepTile,
+  StepsTile,
+  StressTile,
+  TILE_RADIUS,
+  WorkoutTile,
+} from '@/components/widgets';
 import { NoData } from '@/components/NoData';
 import { Screen } from '@/components/Screen';
 import { Skeleton } from '@/components/Skeleton';
 import { SyncLine } from '@/components/SyncLine';
 import { Text } from '@/components/Text';
-import { metricOf, shiftDate, stages, STRAIN_BANDS, wakeHour } from '@/lib/day';
-import { formatValue, metricLabel } from '@/lib/format';
+import { metricOf, shiftDate } from '@/lib/day';
 import { useWide } from '@/lib/layout';
-import { radius, spacing, useColors, useMetricColor } from '@/theme';
-import { isHovered } from '@/lib/platform';
+import { radius, spacing, useColors } from '@/theme';
 
-// Our own four scores of the day (docs/scores.md): one row on wide screens, two by two on phones.
-const KEY_NUMBERS = [
-  { metric: 'recovery_score', label: 'Recovery' },
-  { metric: 'strain', label: 'Strain' },
-  { metric: 'sleep_minutes', label: 'Sleep' },
-  { metric: 'stress_score', label: 'Stress' },
-];
-const ACTIVITY = [
-  'steps',
-  'active_zone_minutes',
-  'distance_km',
-  'calories',
-  'very_active_minutes',
-  'moderately_active_minutes',
-];
 const HEART = ['resting_hr', 'hrv_ms', 'respiratory_rate', 'skin_temp_variation_c'];
 
 export default function TodayScreen() {
@@ -142,12 +137,8 @@ export default function TodayScreen() {
                 day={data}
                 wide={wide}
                 open={open}
-                changes={
-                  <Changes
-                    findings={report.data?.findings ?? []}
-                    questions={report.data?.questions}
-                  />
-                }
+                findings={report.data?.findings ?? []}
+                questions={report.data?.questions}
               />
               <Text variant="caption" color="faint" style={styles.footer}>
                 Your own Fitbit data compared with your own usual range, the middle half of the four
@@ -165,232 +156,120 @@ function DayBody({
   day,
   wide,
   open,
-  changes,
+  findings,
+  questions,
 }: {
   day: DaySummary;
   wide: boolean;
   open: (metric: string) => void;
-  changes: ReactNode; // what the screen found lately; under Sleep on wide screens
+  findings: Finding[];
+  questions?: Parameters<typeof QuestionCard>[0]['question'][];
 }) {
   const colors = useColors();
-  const night = stages(day);
-  const bedtime = metricOf(day, 'bedtime_hour');
-  const wake = wakeHour(bedtime.value, metricOf(day, 'time_in_bed').value);
-
   const workouts = useWorkouts(day.date);
   const hourly = useHourlySteps(day.date);
+  const night = useSleepStages(day.date);
 
-  const keyNumber = ({ metric, label }: (typeof KEY_NUMBERS)[number]) => (
-    <KeyNumber
-      key={metric}
-      label={label}
-      metric={metricOf(day, metric)}
-      partial={day.partial}
-      large={wide}
-      note={metric === 'strain' && day.strain ? STRAIN_BANDS[day.strain.band] : undefined}
-      onPress={() => open(metric)}
+  const rings = <ScoreRings day={day} wide={wide} open={open} />;
+  const insight = findings[0] ? <InsightBar finding={findings[0]} /> : null;
+  const steps = <StepsTile day={day} hourly={hourly.data?.steps} open={open} />;
+  const sleep = <SleepTile day={day} night={night.data} open={open} />;
+  const heart = <RangesTile title="Heart and body" day={day} metrics={HEART} open={open} />;
+  const tiles = (
+    <>
+      <View style={styles.pair}>
+        <StressTile day={day} open={open} />
+        <NumberTile
+          day={day}
+          metric="active_zone_minutes"
+          open={open}
+          extra={<ProgressBar metric={metricOf(day, 'active_zone_minutes')} />}
+        />
+      </View>
+      <View style={styles.pair}>
+        <NumberTile day={day} metric="distance_km" open={open} />
+        <NumberTile day={day} metric="calories" open={open} />
+      </View>
+      {day.lowWear ? (
+        <Text variant="caption" color="faint">
+          Your tracker was worn under 10 hours this day, so these totals are low and left out of
+          your usual range.
+        </Text>
+      ) : null}
+    </>
+  );
+  // Without a Google Health connection there is nothing to read workouts from: say nothing.
+  const sessions = workouts.data?.available
+    ? workouts.data.workouts.map((workout) => (
+        <WorkoutTile
+          key={workout.id}
+          workout={workout}
+          onPress={() =>
+            router.push({ pathname: '/workout/[id]', params: { id: workout.id, date: day.date } })
+          }
+        />
+      ))
+    : null;
+  const checkIn = (
+    <CheckInSection
+      day={day.date}
+      today={day.partial}
+      style={[styles.checkIn, { backgroundColor: colors.surface }]}
     />
   );
-  const keys = (
-    <View style={[styles.keys, { borderColor: colors.border }]}>
-      {wide ? (
-        <View style={styles.keyRow}>{KEY_NUMBERS.map(keyNumber)}</View>
+  const changes = (
+    <View style={{ gap: spacing.md }}>
+      {(questions ?? [])
+        .filter((q) => !q.answer)
+        .map((question) => (
+          <QuestionCard key={question.id} question={question} />
+        ))}
+      <Text variant="label" color="muted" accessibilityRole="header">
+        What changed lately
+      </Text>
+      {findings.length ? (
+        <ChangeChips findings={findings} />
       ) : (
-        [KEY_NUMBERS.slice(0, 2), KEY_NUMBERS.slice(2)].map((row) => (
-          <View key={row[0].metric} style={styles.keyRow}>
-            {row.map(keyNumber)}
-          </View>
-        ))
+        <Text color="muted">
+          Nothing differed clearly from the weeks before. Ask about any metric in the Ask tab.
+        </Text>
       )}
     </View>
-  );
-
-  const sleep = (
-    <Section title="Sleep">
-      {night ? <StagesBar stages={night} /> : null}
-      <MetricRow
-        label="Time asleep"
-        metric={metricOf(day, 'sleep_minutes')}
-        partial={false}
-        onPress={() => open('sleep_minutes')}
-      />
-      <MetricRow
-        label="Bedtime"
-        metric={bedtime}
-        partial={false}
-        onPress={() => open('bedtime_hour')}
-      />
-      {wake !== null ? (
-        <MetricRow
-          label="Woke up"
-          metric={{ metric: 'wake', value: null, usual: null, recent: [] }}
-          partial={false}
-          value={formatValue('bedtime_hour', wake)}
-          detail="Bedtime plus time in bed"
-        />
-      ) : null}
-      <MetricRow
-        label="Sleep efficiency"
-        metric={metricOf(day, 'sleep_efficiency')}
-        partial={false}
-        onPress={() => open('sleep_efficiency')}
-      />
-    </Section>
-  );
-
-  const activity = (
-    <Section
-      title="Activity"
-      footer={
-        day.lowWear
-          ? 'Your tracker was worn under 10 hours this day, so these totals are low and left out of your usual range.'
-          : undefined
-      }
-    >
-      {hourly.data?.steps.some((s) => s !== null) ? (
-        <HourlyBars steps={hourly.data.steps} />
-      ) : null}
-      {ACTIVITY.map((metric) => (
-        <MetricRow
-          key={metric}
-          label={metricLabel(metric)}
-          metric={metricOf(day, metric)}
-          partial={day.partial}
-          onPress={() => open(metric)}
-        />
-      ))}
-    </Section>
-  );
-
-  // Without a Google Health connection there is nothing to read workouts from: say nothing.
-  const sessions = workouts.data?.available ? (
-    <Section title="Workouts">
-      {workouts.data.workouts.length ? (
-        workouts.data.workouts.map((workout) => (
-          <WorkoutRow
-            key={workout.id}
-            workout={workout}
-            onPress={() =>
-              router.push({
-                pathname: '/workout/[id]',
-                params: { id: workout.id, date: day.date },
-              })
-            }
-          />
-        ))
-      ) : (
-        <View style={styles.none}>
-          <Text color="muted">
-            {day.partial ? 'No workouts yet today.' : 'No workouts this day.'} Tell the Ask tab
-            about one and it can log it with what your tracker recorded.
-          </Text>
-        </View>
-      )}
-    </Section>
-  ) : null;
-  const checkIn = <CheckInSection day={day.date} today={day.partial} />;
-
-  const heart = (
-    <Section title="Heart and body">
-      {HEART.map((metric) => (
-        <MetricRow
-          key={metric}
-          label={metricLabel(metric)}
-          metric={metricOf(day, metric)}
-          partial={false}
-          onPress={() => open(metric)}
-        />
-      ))}
-    </Section>
   );
 
   if (!wide) {
     return (
       <>
-        {keys}
-        {checkIn}
+        {rings}
+        {insight}
+        {steps}
         {sleep}
-        {activity}
-        {sessions}
         {heart}
+        {tiles}
+        {sessions}
+        {checkIn}
         {changes}
       </>
     );
   }
   return (
     <>
-      {keys}
+      {rings}
+      {insight}
       <View style={styles.columns}>
         <View style={styles.column}>
-          {checkIn}
           {sleep}
-          {sessions}
+          {heart}
+          {checkIn}
         </View>
         <View style={styles.column}>
-          {activity}
-          {heart}
+          {steps}
+          {tiles}
+          {sessions}
           {changes}
         </View>
       </View>
     </>
-  );
-}
-
-/** What the screen found across the last weeks, as rows that open the finding. */
-function Changes({
-  findings,
-  questions,
-}: {
-  findings: Finding[];
-  questions?: Parameters<typeof QuestionCard>[0]['question'][];
-}) {
-  const open = (questions ?? []).filter((q) => !q.answer);
-  return (
-    <>
-      {open.map((question) => (
-        <QuestionCard key={question.id} question={question} />
-      ))}
-      <Section
-        title="What changed lately"
-        footer={
-          findings.length
-            ? 'The last two weeks against the four before, tested and corrected for many tests.'
-            : undefined
-        }
-      >
-        {findings.length === 0 ? (
-          <View style={styles.none}>
-            <Text color="muted">
-              Nothing differed clearly from the weeks before. Ask about any metric in the Ask tab.
-            </Text>
-          </View>
-        ) : (
-          findings.map((finding) => <FindingRow key={finding.id} finding={finding} />)
-        )}
-      </Section>
-    </>
-  );
-}
-
-function FindingRow({ finding }: { finding: Finding }) {
-  const colors = useColors();
-  const color = useMetricColor(finding.metric);
-  return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityHint="Opens the evidence for this finding"
-      onPress={() => router.push(`/finding/${finding.id}`)}
-      style={(state) => [styles.finding, isHovered(state) && { backgroundColor: colors.track }]}
-    >
-      <View style={[styles.findingDot, { backgroundColor: color }]} />
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text>{finding.title}</Text>
-        <Text variant="caption" color="muted" numberOfLines={2}>
-          {metricLabel(finding.metric)} · {finding.change}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.faint} />
-    </Pressable>
   );
 }
 
@@ -424,8 +303,10 @@ const styles = StyleSheet.create({
   },
   keyRow: { flexDirection: 'row', gap: spacing.lg },
   keysSkeleton: { flexDirection: 'row', gap: spacing.lg },
-  columns: { flexDirection: 'row', gap: spacing.xxl, alignItems: 'flex-start' },
-  column: { flex: 1, minWidth: 0 },
+  columns: { flexDirection: 'row', gap: spacing.lg, alignItems: 'flex-start' },
+  column: { flex: 1, minWidth: 0, gap: spacing.md },
+  pair: { flexDirection: 'row', gap: spacing.md },
+  checkIn: { borderRadius: TILE_RADIUS, padding: spacing.lg },
   none: { paddingVertical: spacing.md },
   finding: {
     flexDirection: 'row',

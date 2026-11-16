@@ -59,6 +59,16 @@ neat, not a stack of rounded boxes. Each step below ships as its own pull reques
 
 ### Today
 
+**Redesigned 2026-11-16 as widgets**, Karim's choice after mockups of two directions (Bevel-style
+rings and tiles, Google Health-style coach feed): the rings and tiles, with the feed's sleep card
+(the night stage by stage, read live from Google Health, `GET /days/{day}/sleep`) and its heart
+and body card (each value as a dot on the usual range). The earlier "no boxes" decision is replaced
+for Today. From the top: rings for recovery, strain and sleep; the newest finding with "Why?";
+steps by hour; sleep; heart and body; stress gauge, zone minutes, distance, calories; workouts; the
+check-in; context questions; what changed, as chips. Desktop: rings across, then two columns.
+
+The list below is the earlier plan, kept for the record.
+
 - Header: the date with previous/next day (swipe or arrows), and the sync time.
 - **The agent's note for the day**: one or two sentences from the daily run (what stands out and
   why), with its evidence chips; "Ask about this" opens Ask with the context.
