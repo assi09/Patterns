@@ -21,6 +21,11 @@ from app.agent.llm import LLM, Budget, LLMError
 from app.agent.sanitize import clean, reads_like_instruction, stems
 
 RECORD = "record_memories"
+ONE_OFF = re.compile(
+    r"\b(?:last night|today|tonight|yesterday|this morning|right now|at the moment|"
+    r"slept \d|feels? (?:tired|exhausted|sore|sick|stressed|rough))\b",
+    re.IGNORECASE,
+)
 MAX_HEARD = 2
 MAX_KNOWN = 30
 MAX_MESSAGE_CHARS = 1_000
@@ -56,7 +61,9 @@ Rules:
 {MAX_FACT_CHARS} characters. Nothing guessed from a question, and \
 nothing about their tracker's numbers; a target they set is a goal, with its number ("Wants 8,000 \
 steps a day").
-- Leave out one-off things: what they ate today, one workout, how last night went.
+- Leave out one-off things: what they ate today, one workout, how last night went, and how \
+they feel right now ("exhausted today", "sore", "a bit stressed"). What explains a stretch of \
+time is kept: "stressed with exams this week" is the event Exams.
 - Leave out illnesses by name, diagnoses, medication and treatment.
 - Note only what this message says. Never repeat a known item the message does not mention. If \
 the message says a known item again, give that item's number in same_as; if it says that item \
@@ -216,6 +223,9 @@ def listen(llm: LLM, message: str, today: date, known: Sequence[str] = ()) -> Li
             heard = _heard(item, today, len(shown))
             echo = heard and heard.same_as is not None
             if echo and not _mentioned(shown[heard.same_as], message):
+                continue
+            # "They slept 6 hours last night" is one night, not who they are (2026-11-14 run).
+            if heard and heard.kind != "event" and ONE_OFF.search(heard.text):
                 continue
             if heard and len(result.heard) < MAX_HEARD:
                 result.heard.append(heard)

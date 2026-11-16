@@ -644,10 +644,31 @@ COVERAGE_TALK = re.compile(
 )
 
 
+# Any sentence on wear or coverage ("Low wear time does not stand out as an explanation") that
+# does not report data actually missing: the person asked about their sleep, not the tracker.
+ABOUT_WEAR = re.compile(
+    r"\b(?:wear(?:ing)? time|low[- ]wear|wore|data coverage|coverage|tracking|the tracker|"
+    r"your (?:watch|device|fitbit))\b",
+    re.IGNORECASE,
+)
+REPORTS_GAP = re.compile(
+    r"\b(?:missing|gaps?|fewer|incomplete|no data|without data|only \d+|not enough|too few|"
+    r"(?:didn't|did not|wasn't|was not) (?:wear|worn|tracked|recorded))\b",
+    re.IGNORECASE,
+)
+_SENTENCES = re.compile(r"[^.!?]+[.!?]*\s*")
+
+
 def without_coverage_talk(summary: str) -> str:
     """A person asked about their sleep, not whether the data was complete: when the data is fine
     that sentence is noise, and the model keeps writing it despite being told not to."""
-    return COVERAGE_TALK.sub("", summary).strip() or summary
+    text = COVERAGE_TALK.sub("", summary)
+    kept = [
+        sentence
+        for sentence in _SENTENCES.findall(text)
+        if not (ABOUT_WEAR.search(sentence) and not REPORTS_GAP.search(sentence))
+    ]
+    return "".join(kept).strip() or summary
 
 
 def fallback_summary(claims: list[Claim]) -> str:
@@ -666,8 +687,10 @@ def fallback_summary(claims: list[Claim]) -> str:
         said = [sentence(c.text) for c in unchanged]
     else:
         said = [sentence(f"{', '.join(steady[:-1])} and {steady[-1]} showed no clear change")]
-    # A note on data quality alone answers nothing: better to say so than to pass it off.
-    return " ".join([*lead, *said]) or NO_ANSWER
+    # A note on data quality alone answers nothing: better to say so than to pass it off. A claim
+    # that "coverage was sufficient" is no finding either (the run of 2026-11-14).
+    text = " ".join([*lead, *said])
+    return (without_coverage_talk(text) if text else "") or NO_ANSWER
 
 
 def answer_task(

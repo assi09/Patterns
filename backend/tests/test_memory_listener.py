@@ -344,14 +344,24 @@ def job(engine, person, llm, message_id, text="I work night shifts"):
     api.listen_to(lambda: session_scope(engine), parts, person, message_id, text, TODAY, NOW)
 
 
-def test_the_job_stores_a_candidate_linked_to_its_message_and_charges_the_answer(engine, person):
+def test_something_volunteered_is_a_card_at_once_linked_and_charged(engine, person):
+    # "I work night shifts", said unprompted: waiting to hear it twice meant no card ever came.
     conversation, message = conversation_with(engine, person)
     item = {"kind": "routine", "text": "Works night shifts"}
     job(engine, person, ScriptedLLM([record(item, cost=0.0004)]), message)
     with session_scope(engine) as db:
         fact = db.scalar(select(MemoryFact))
-        assert (fact.status, fact.source_message_id) == ("candidate", message)
+        assert (fact.status, fact.source_message_id) == ("proposed", message)
         assert store.history(db, person, None, conversation)[-1].cost_usd == pytest.approx(0.0004)
+
+
+def test_a_fact_inside_a_question_waits_to_be_heard_again(engine, person):
+    text = "I work night shifts, so when should I sleep?"
+    _, message = conversation_with(engine, person, text)
+    item = {"kind": "routine", "text": "Works night shifts"}
+    job(engine, person, ScriptedLLM([record(item)]), message, text)
+    with session_scope(engine) as db:
+        assert db.scalar(select(MemoryFact)).status == "candidate"
 
 
 def test_a_rejected_item_does_not_stop_the_next(engine, person):

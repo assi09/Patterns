@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-16",
+  "turns": 104,
+  "passed_code_checks": 100,
+  "problems": {
+    "does not mention /student|project|deadline|stud/": 1,
+    "does not mention /half|marathon|race|december/": 1,
+    "talks about wear or coverage": 2
+  },
+  "judge_mean": {
+    "sound": 4.07,
+    "context": 4.42,
+    "natural": 3.98,
+    "honest": 4.44
+  },
+  "seconds_mean": 4.2,
+  "seconds_p90": 8.5,
+  "words_mean": 40.9,
+  "judge_below_4_on_sound": 24,
+  "stops": {
+    "chatted": 19,
+    "submitted": 63,
+    "budget": 1,
+    "looked_up": 3,
+    "refused": 7,
+    "noted": 1,
+    "recalled": 3,
+    "unavailable": 2,
+    "clarification": 2,
+    "model_error": 3
+  },
+  "agent_usd": 0.4965,
+  "judge_usd": 0.0436
+}

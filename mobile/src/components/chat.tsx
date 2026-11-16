@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import { useQueries } from '@tanstack/react-query';
 import { memo, useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import Animated, {
@@ -13,13 +14,13 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { ChatMessage, Evidence, ExpertChoice, Rating, SourceLink } from '@/api/types';
-import { useEvidence } from '@/api/hooks';
+import { api } from '@/api';
 import { EvidenceChip } from '@/components/evidence';
 import { LogDraftCard } from '@/components/LogDraftCard';
 import { ReminderDraftCard } from '@/components/ReminderDraftCard';
 import { Text } from '@/components/Text';
 import { expertInfo, useExpertColor } from '@/lib/experts';
-import { evidenceLabel, metricLabel } from '@/lib/format';
+import { chipIds, evidenceLabel, metricLabel } from '@/lib/format';
 import { canHover, isHovered } from '@/lib/platform';
 import { fonts, radius, spacing, useColors } from '@/theme';
 
@@ -51,13 +52,42 @@ function SourceLinks({ sources }: { sources: SourceLink[] }) {
   );
 }
 
-/** A chip for evidence the report may not hold (a chat answer's): fetched to name it. */
-function AnswerEvidenceChip({ id, known }: { id: string; known?: Evidence }) {
-  const fetched = useEvidence(id, !known);
-  const evidence = known ?? fetched.data;
-  // Evidence about many metrics takes the accent color rather than its first metric's.
-  const metric = evidence && evidence.metrics.length <= 2 ? evidence.metrics[0] : undefined;
-  return <EvidenceChip id={id} label={evidenceLabel(evidence)} metric={metric} />;
+/** An answer's evidence chips; evidence the report may not hold (a chat answer's) is fetched to
+ * name it, and the list is trimmed by `chipIds` once it can be. */
+function AnswerChips({
+  ids,
+  known,
+  text,
+  hasSources,
+}: {
+  ids: string[];
+  known: Record<string, Evidence>;
+  text: string;
+  hasSources: boolean;
+}) {
+  const fetched = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: ['evidence', id],
+      queryFn: () => api.getEvidence(id),
+      enabled: !known[id],
+    })),
+  });
+  const byId: Record<string, Evidence | undefined> = {};
+  ids.forEach((id, i) => {
+    byId[id] = known[id] ?? fetched[i]?.data;
+  });
+  const shown = chipIds(ids, byId, text, hasSources);
+  if (!shown.length) return null;
+  return (
+    <View style={styles.chips}>
+      {shown.map((id) => {
+        const evidence = byId[id];
+        // Evidence about many metrics takes the accent color rather than its first metric's.
+        const metric = evidence && evidence.metrics.length <= 2 ? evidence.metrics[0] : undefined;
+        return <EvidenceChip key={id} id={id} label={evidenceLabel(evidence)} metric={metric} />;
+      })}
+    </View>
+  );
 }
 
 export const MessageBubble = memo(function MessageBubble({
@@ -230,11 +260,12 @@ export const MessageBubble = memo(function MessageBubble({
             <SourceLinks sources={message.sources} />
           )}
           {message.evidenceIds.length > 0 && (
-            <View style={styles.chips}>
-              {message.evidenceIds.map((id) => (
-                <AnswerEvidenceChip key={id} id={id} known={knownEvidence[id]} />
-              ))}
-            </View>
+            <AnswerChips
+              ids={message.evidenceIds}
+              known={knownEvidence}
+              text={message.text}
+              hasSources={Boolean(message.sources?.length)}
+            />
           )}
           <View
             style={[styles.actions, !showActions && styles.hidden]}

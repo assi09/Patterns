@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from app.agent.agent import SUBMIT
-from app.agent.ask import REFUSAL, ask, default_router
+from app.agent.ask import MEDICAL_REFUSAL, OFF_TOPIC_REFUSAL, ask, default_router
 from app.agent.experts import CONSULT
 from app.agent.llm import Completion, ScriptedLLM, ToolCall, Usage
 from app.agent.router import (
@@ -51,10 +51,22 @@ def empty_submission() -> Completion:
 def test_an_out_of_scope_question_is_refused_without_calling_the_model(frame):
     llm = ScriptedLLM([])
     reply = ask(llm, FixedRouter(out_of_scope=0.9, sleep=0.1), frame, "Do I have apnea?")
-    assert reply.result.stop_reason == "refused" and reply.result.summary == REFUSAL
+    assert reply.result.stop_reason == "refused" and reply.result.summary == MEDICAL_REFUSAL
     assert llm.requests == []
     assert [s["type"] for s in reply.result.trace] == ["context", "route"]
     assert route_step(reply)["action"] == "refuse"
+
+
+def test_an_unrelated_question_gets_the_off_topic_wording(frame):
+    reply = ask(ScriptedLLM([]), FixedRouter(out_of_scope=0.9), frame, "Capital of France?")
+    assert reply.result.summary == OFF_TOPIC_REFUSAL
+
+
+def test_am_i_ok_is_answered_not_refused(frame):
+    llm = ScriptedLLM([])
+    reply = ask(llm, FixedRouter(out_of_scope=0.9), frame, "am I ok?")
+    assert reply.route.action == "general" and reply.result.stop_reason != "refused"
+    assert reply.route.classification.question_type == "lookup"
 
 
 def test_a_clear_question_goes_to_its_expert_without_consults(frame):

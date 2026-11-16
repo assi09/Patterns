@@ -892,3 +892,45 @@ hybrid stays. Why answers barely moved with the fixes (53% to 57%), and a cause 
 half the cases with none.
 
 **Changed:** the hybrid is kept. Why answers need code to test each candidate cause.
+
+## Whole conversations, after Karim's own chat (2026-11-14)
+
+**Tested:** Karim's chat on the deployed app read as robotic and unsound: "Hi" got his stored topics
+recited back, "how did I sleep today" had no figure, "I'm a student, I had projects, that's why I
+didn't sleep much" got a statistical answer about wear time, the advice that followed ignored it, and
+no memory card appeared (by design a fact had to be said twice). A new evaluation,
+`eval/conversation_eval.py`, sends whole made-up conversations through the real chat API on a
+synthetic person: 37 conversations, 62 turns, from greetings and pushback to follow-ups, advice with
+context, memory across chats, refusals, logging and reminders. Each turn has code checks (the kind of
+reply, a figure, words it must or must not say, a memory card) and a small-model judge scoring sound,
+uses context and natural from 1 to 5.
+
+**Showed:** a fifth of the turns asked nothing of the data, and every one of those had gone to a data
+run. Run by run, after each round of fixes:
+
+| Run | Turns | Passed the code checks | Judge: sound / context / natural |
+|---|---|---|---|
+| 2 (first after the main fixes) | 47 | 44 | 4.36 / 4.87 / 4.04 |
+| 3 (15 more question kinds added) | 62 | 58 | 4.10 / 4.61 / 3.92 |
+| 4 | 62 | 60 | 4.34 / 4.69 / 4.02 |
+
+Run 1 stopped halfway at the app's per-person daily cap ($0.10 locally), which the evaluation now lifts
+for its one synthetic person.
+
+**Changed:** a "chat" question type and reply (greetings, thanks, pushback, what the app can do, and
+something about their life), which never computes or invents a figure; a volunteered statement raises
+a memory card at once, and the reply says so; what the person said earlier in the chat reaches the
+advice and the answers; "yes" takes up the offer the last answer made; day, value, change and pattern
+answers must state their figures; wear and coverage talk is cut unless data is missing; the wrong
+weekday is caught; "why?" after "no clear change" says there is nothing to explain; "am I ok?" is
+answered, not refused; refusals are worded for medical or off-topic and not repeated word for word;
+short follow-ups keep the period asked about; "how many … this week" gets the total; one-off states
+("slept 6 hours last night") and pushback never become cards; a reminder reply says what was prepared,
+and that watch alarms are not possible; duplicate evidence chips are gone. The voice was rewritten as
+a persona: lead with what matters, no sentence per metric in the same mould.
+
+**Still weak:** the judge is the same model family as the agent and has not been checked against
+people; calories for a food come per 100 g, not per portion; "how much protein do adults need?" can
+retrieve the wrong passage; advice for training can miss a kept goal; a few coaching answers still
+read like guidelines.
+

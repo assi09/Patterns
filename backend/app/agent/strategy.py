@@ -84,7 +84,10 @@ STRATEGIES: dict[str, Strategy] = {
         "evidence you may cite. Answer from it if it covers the day asked about; otherwise use "
         "compare_day for that day. A day said relative to an earlier answer ('the day before "
         "that', 'the next day') counts from the day that answer was about, not from today. Name "
-        "the day's date in the answer. " + ONE_THING + "No hypotheses. Then call submit_findings.",
+        "the day's date in the answer, and give each value with the usual range as shown under "
+        "display ('6 h 10 min, against your usual 6 h 50 min to 7 h 40 min'). "
+        + ONE_THING
+        + "No hypotheses. Then call submit_findings.",
         budget=Budget(max_calls=6, max_tool_calls=5, max_cost_usd=0.02),
         snapshot=True,
         memory=False,
@@ -100,7 +103,10 @@ STRATEGIES: dict[str, Strategy] = {
             "goal_progress",
         ),
         guide="How to work: answer the value asked for with the fewest tool calls (the snapshot "
-        "below may already cover it). " + ONE_THING + "No hypotheses. Then call submit_findings.",
+        "below may already cover it), and state the figure as shown under display. 'How many' "
+        "over a period ('steps this week') is the total, with the daily average after it. "
+        + ONE_THING
+        + "No hypotheses. Then call submit_findings.",
         budget=Budget(max_calls=6, max_tool_calls=5, max_cost_usd=0.02),
         snapshot=True,
     ),
@@ -223,6 +229,9 @@ def expand_tool(toolbox: Toolbox, budget: Budget, trace: list[dict]) -> ExtraToo
 DAY_BEFORE_YESTERDAY = re.compile(r"\bday before yesterday\b", re.IGNORECASE)
 
 
+LATEST = re.compile(r"\b(?:last night|today|tonight|this morning)\b", re.IGNORECASE)
+
+
 def asked_day(question: str, today, frame: pd.DataFrame) -> date | None:
     """The day a question is about, when the data has it: a date it names ("Monday Nov 9"), the
     day before yesterday, or yesterday. "Today's" row is the latest one, so without this a
@@ -231,6 +240,10 @@ def asked_day(question: str, today, frame: pd.DataFrame) -> date | None:
         return None
     current = today.date() if isinstance(today, datetime) else today
     day = named_day(question, current)
+    # "Last night and yesterday's steps": two days; the snapshot keeps the latest, and the
+    # other day gets its own compare_day. Snapping both to yesterday answered the wrong night.
+    if day is None and LATEST.search(question):
+        return None
     if day is None and DAY_BEFORE_YESTERDAY.search(question):
         day = current - timedelta(days=2)
     elif day is None and YESTERDAY.search(question):
@@ -618,6 +631,25 @@ def check_premise(frame: pd.DataFrame, question: str, lead: str | None) -> Premi
         tests,
         f"Checked what the question assumes.{period} {verdict}\n" + "\n".join(lines),
     )
+
+
+FIGURE = re.compile(r"\d")
+A_PERIOD = re.compile(r"\b\d+\s*(?:days?|nights?|weeks?|months?|years?)\b", re.IGNORECASE)
+UNSTATED = ("data_quality", "guidance")  # what needs no figure of its own
+
+
+def figures_check(claims: list, summary: str) -> list[str]:
+    """An answer about their data says its figures: "less than usual" or "held steady" alone made
+    the person ask again (2026-11-14). The verifier already holds every number to the evidence."""
+    undated = ISO_DATE.sub(" ", MONTH_DAY.sub(" ", DAY_MONTH.sub(" ", summary)))  # "Nov 14"
+    undated = A_PERIOD.sub(" ", undated)  # "over the last 3 months" is no figure either
+    if any(c.kind not in UNSTATED for c in claims) and not FIGURE.search(undated):
+        return [
+            "give the figures themselves in the summary, as shown under display: a day's value "
+            "and its usual range ('6 h 10 min, against your usual 6 h 50 min to 7 h 40 min'), or "
+            "the two averages compared ('7 h 2 min on weekends, 7 h 10 min on weekdays')"
+        ]
+    return []
 
 
 def premise_answer_check(claims: list, summary: str) -> list[str]:

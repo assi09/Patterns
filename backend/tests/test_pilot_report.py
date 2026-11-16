@@ -155,7 +155,17 @@ def pilot(engine, monkeypatch):
         for offset in range(3):
             db.add(CheckIn(user_id=second.id, day=SINCE + timedelta(days=offset), rating=3))
 
-        common = {"kind": "day", "key": "k", "day": day, "severity": 1.0, "title": "t", "body": "b"}
+        # Dated inside the window, not "now": stamped with today's date, the test failed once the
+        # calendar passed the window's end (2026-11-16).
+        common = {
+            "kind": "day",
+            "key": "k",
+            "day": day,
+            "severity": 1.0,
+            "title": "t",
+            "body": "b",
+            "created_at": at(day),
+        }
         db.add(Alarm(user_id=first.id, status="sent", feedback="useful", **common))
         db.add(Alarm(user_id=first.id, status="sent", feedback="not_useful", **common))
         db.add(Alarm(user_id=second.id, status="sent", **common))

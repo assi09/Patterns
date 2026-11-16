@@ -40,6 +40,7 @@ from app.agent.strategy_types import (
     QUESTION_CRITERIA,
     QUESTION_INSTRUCTIONS,
     QUESTION_TYPES,
+    is_small_talk,
 )
 from app.agent.verifier import MEDICAL
 
@@ -318,6 +319,8 @@ QUESTION_WORDS = (
 
 
 def keyword_question_type(question: str) -> dict[str, float]:
+    if is_small_talk(question):
+        return {"chat": 1.0}
     found = next((name for name, pattern in QUESTION_WORDS if pattern.search(question)), None)
     return {found: 1.0} if found else {}
 

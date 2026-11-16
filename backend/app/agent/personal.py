@@ -142,6 +142,7 @@ DOES_SOMETHING = re.compile(
     re.IGNORECASE,
 )
 INLINE_BULLET = re.compile(r"(?<=[.!?])\s+-\s+")
+POINT_BREAK = re.compile(r"\n+|(?<=[.!?:])\s+-\s+")  # a new line, or a dash starting a point
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z-])")
 BED_BY_THE_CLOCK = re.compile(
     r"\b(?:in bed|asleep|bedtime|go(?:ing)? to bed)\b[^.\n]{0,40}\b(?:[01]?\d|2[0-3]):[0-5]\d\b",
@@ -338,7 +339,17 @@ def as_points(summary: str) -> str:
     """One point per line."""
     if summary.lstrip().startswith("- "):
         return summary
-    return "\n".join(f"- {s.strip()}" for s in SENTENCE_END.split(summary) if s.strip())
+    lines = []
+    pieces = [
+        sentence for part in POINT_BREAK.split(summary) for sentence in SENTENCE_END.split(part)
+    ]
+    for piece in pieces:
+        # A point that already has its dash keeps one ("- - You could try" in the 2026-11-14
+        # run), and a lead-in ("Three things fit your shifts:") is no point of its own.
+        text = piece.strip().lstrip("-").strip()
+        if text:
+            lines.append(text if text.endswith(":") else f"- {text}")
+    return "\n".join(lines)
 
 
 def draft_check(made_a_draft):
@@ -353,6 +364,16 @@ def draft_check(made_a_draft):
         ]
 
     return check
+
+
+# Points with nothing to do in them, written to reach a count ("You could try doing the same with
+# your HRV data, since no habit clearly stood out there either": the run of 2026-11-14).
+EMPTY_POINT = re.compile(
+    r"\b(?:no habit (?:clearly )?stood out|nothing (?:clearly )?stood out|"
+    r"(?:doing|do) the same (?:with|for)|without overemphasi[sz]\w*|focus(?:ing)? on recovery|"
+    r"keep (?:doing )?what you(?:'re| are) doing)\b",
+    re.IGNORECASE,
+)
 
 
 def personal_check(
@@ -374,6 +395,12 @@ def personal_check(
                 f"they asked for {wanted} points and there are {len(points)}: give {wanted} "
                 "different ones, personal ones first, then what the passages say to do, each as a "
                 "claim and one per line in the summary, starting with '- '"
+            )
+        empty = [c.text for c in points if EMPTY_POINT.search(c.text)]
+        if empty:
+            problems.append(
+                "a point must say one concrete thing to do; drop points such as 'no habit stood "
+                "out' or 'do the same with another metric', and give fewer points instead"
             )
         if VAGUE.search(summary):
             problems.append(

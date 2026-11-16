@@ -31,10 +31,15 @@ LIST = "list_reminders"
 MAX_PROPOSALS = 3  # per answer
 # Reminders are for everyday habits; medication is a medical matter, refused like advice.
 MEDICINE = re.compile(r"\b(pills?|tablets?|medicines?|meds|dose|dosage|insulin|inhaler)\b", re.I)
-REMINDER_NOTE = "Here's the reminder. Tap Set on the card to turn it on."
+TAP_SET = "Tap Set on the card to turn it on."
+BARE_REPLY_CHARS = 60
+# Apps cannot set alarms on the watch; a reply to "set an alarm" that does not say so misleads.
+NO_WATCH_ALARMS = "I can't set alarms on the watch itself, so here's a reminder instead"
+ALARM = re.compile(r"\balarms?\b", re.IGNORECASE)
+REMINDER_NOTE = f"Here's the reminder. {TAP_SET}"
 # A reply may not say the reminder is already on: it waits for the person's tap.
 CLAIMS_SET = re.compile(
-    r"\b(?:i've|i have|has been|is now|is|are)\s+(?:set|scheduled|created|added)\b"
+    r"\b(?:i['’]ve|i have|has been|is now|is|are)\s+(?:set|scheduled|created|added)\b"
     r"|\ball set\b|\bdone\b",
     re.IGNORECASE,
 )
@@ -177,9 +182,19 @@ def reminder_tools(
     ]
 
 
-def reminder_reply(summary: str) -> str:
-    """The agent's reply after preparing a reminder when it is safe; the fixed note if not."""
+def reminder_reply(
+    summary: str, prepared: Sequence[tuple[str, str]] = (), asked_alarm: bool = False
+) -> str:
+    """The agent's reply after preparing a reminder when it is safe; the fixed note if not.
+    `prepared` is each draft's title and schedule in words, from the stored draft: the fixed note
+    says what was prepared, so "Here's the reminder" alone never leaves them guessing."""
     text = summary.strip()
-    if not text or CLAIMS_SET.search(text) or not WAITS.search(text) or MEDICAL.search(text):
+    unsafe = not text or CLAIMS_SET.search(text) or not WAITS.search(text) or MEDICAL.search(text)
+    # "Tap Set on the card to turn it on." alone does not say what was prepared.
+    if unsafe or (len(prepared) == 1 and len(text) < BARE_REPLY_CHARS):
+        if len(prepared) == 1:
+            title, when = prepared[0]
+            opening = NO_WATCH_ALARMS if asked_alarm else "Here's your reminder"
+            return f"{opening}, “{title}”: {when[:1].lower() + when[1:]}. {TAP_SET}"
         return REMINDER_NOTE
     return text

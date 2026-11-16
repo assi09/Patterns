@@ -148,6 +148,7 @@ MONTH_DAY = re.compile(
 DAY_MONTH = re.compile(
     r"\b(\d{1,2}) (" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b", re.I
 )
+BARE_HOUR = re.compile(r"\b(\d{1,2})\s*([ap])\.?m\b\.?", re.IGNORECASE)
 CLOCK = re.compile(r"\b(\d{1,2}):(\d{2})\s*([ap]\.?m\.?)?(?![\w:])", re.IGNORECASE)
 DURATION = re.compile(
     r"(?<![\d.,])(\d+)\s*(?:h|hr|hrs|hours?)\b(?:\s*(?:and\s*)?(\d+)\s*(?:min|mins|minutes?)\b)?",
@@ -263,6 +264,7 @@ def _numbers_in(value) -> list[float]:
 
 LEVEL_KEYS = (
     "target",
+    "total",
     "mean",
     "median",
     "min",
@@ -284,6 +286,7 @@ LEVEL_KEYS = (
 
 # Statistics expressed in the metric's own unit, which may be quoted in a related unit.
 VALUE_KEYS = (
+    "total",
     "mean",
     "median",
     "sd",
@@ -371,6 +374,9 @@ def _quoted_durations(text: str) -> list[float]:
 def _quoted_clock_times(text: str) -> list[float]:
     """Times of day ("23:30", "11:30 pm"), as hours relative to midnight (23:30 -> -0.5)."""
     times = []
+    for h, meridiem in BARE_HOUR.findall(text):  # "7am", "10 pm"
+        hours = int(h) % 12 + (12 if meridiem.lower() == "p" else 0)
+        times.append(hours - 24 if hours >= 12 else hours)
     for h, m, meridiem in CLOCK.findall(text):
         hours = (
             int(h) % 12 + (12 if meridiem.lower().startswith("p") else 0) if meridiem else int(h)
@@ -536,6 +542,33 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
     return reasons + text_problems(claim.text, cited, general=claim.kind == "guidance")
 
 
+WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+WEEKDAY_DATE = re.compile(
+    r"\b(mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*,? (?:the )?("
+    + "|".join(sorted(MONTHS, key=len, reverse=True))
+    + r")\.? (\d{1,2})\b",
+    re.IGNORECASE,
+)
+
+
+def wrong_weekdays(text: str, years: set[int]) -> list[str]:
+    """ "Fri Nov 14" when Nov 14 was a Saturday: the model names weekdays from memory, and got
+    them wrong in the first conversation run (2026-11-14). Right in any year the evidence spans."""
+    found = []
+    for name, month, day in WEEKDAY_DATE.findall(text):
+        candidates = []
+        for year in years or {date.today().year}:
+            try:
+                candidates.append(date(year, MONTHS[month.lower()], int(day)))
+            except ValueError:
+                continue
+        if candidates and not any(
+            WEEKDAYS[d.weekday()].startswith(name.lower()) for d in candidates
+        ):
+            found.append(f"{name} {month} {day}")
+    return found
+
+
 def text_problems(
     text: str, cited: list[Evidence], said: str = "", general: bool = False
 ) -> list[str]:
@@ -565,6 +598,8 @@ def text_problems(
     }
     if bad := _unsupported_dates(text, years, cited):
         reasons.append("mentions dates outside the cited evidence: " + ", ".join(map(str, bad)))
+    if wrong := wrong_weekdays(text, years):
+        reasons.append("names the wrong day of the week: " + ", ".join(wrong))
     if EVIDENCE_ID.search(text):
         reasons.append("writes evidence ids in the text; list them only in evidence_ids")
     if ABOUT_ITSELF.search(text):
