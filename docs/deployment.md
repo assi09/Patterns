@@ -10,7 +10,7 @@ accounts and are done once.
 phone / browser ──HTTPS──> Vercel: the web app (mobile/, static)
         │
         └──────HTTPS──> Railway: API (Dockerfile, one process) ──> Railway Postgres
-                         Railway cron: python -m app.teams weekly, Mondays 06:00 UTC ──> Resend
+                         Railway cron: python -m app.teams weekly --agent, Mondays 06:00 UTC ──> Resend
 Google sign-in ──> https://<api>/google/callback
 ```
 
@@ -62,7 +62,10 @@ Google sign-in ──> https://<api>/google/callback
 5. Redeploy; the log shows the migrations, then `Uvicorn running`. `https://<api>/health` answers
    `{"status":"ok"}`.
 6. **The weekly email:** **+ New → GitHub Repo** → the same repository, then on the service:
-   start command `python -m app.teams weekly`, cron schedule `0 6 * * 1`, restart policy never.
+   start command `python -m app.teams weekly --agent`, cron schedule `0 6 * * 1`, restart policy never.
+   Variables: besides the database and email ones, `FA_OPENAI_API_KEY` and `FA_LLM_SPEND_CAP_USD` as
+   references to the `api` service's (`${{api.FA_OPENAI_API_KEY}}`), for the team agent's Monday
+   briefing; without them the job still sends the code-written report.
    Variables: `FA_DATABASE_URL`, `FA_TIMEZONE`, `FA_EMAIL_BACKEND`, `FA_APP_URL` and its own sealed
    `FA_EMAIL_API_KEY`, nothing else. It runs on Mondays and stops; its log prints counts only.
 
