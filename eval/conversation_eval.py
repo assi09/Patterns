@@ -12,9 +12,11 @@ may be printed. Results go to `eval/results/`, written as it goes.
 """
 
 import json
+import os
 import re
 import sys
 import tempfile
+import time
 import uuid
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -41,8 +43,11 @@ from sqlalchemy import create_engine, select
 STOP_AT_USD = 1.4
 HERE = Path(__file__).parent
 TODAY = datetime.now(UTC).date()
-OUT = HERE / "results" / f"conversation_eval_{TODAY}.jsonl"
-SUMMARY = HERE / "results" / f"conversation_eval_{TODAY}.json"
+# EVAL_LABEL names a run (a baseline, an experiment) so runs on one day do not overwrite each other.
+LABEL = os.environ.get("EVAL_LABEL", "")
+_NAME = f"conversation_eval_{TODAY}" + (f"_{LABEL}" if LABEL else "")
+OUT = HERE / "results" / f"{_NAME}.jsonl"
+SUMMARY = HERE / "results" / f"{_NAME}.json"
 PASSWORD = "synthetic person only"
 
 # What no reply should do, whatever the turn.
@@ -68,9 +73,11 @@ logically, without non sequiturs, irrelevant statistics or contradictions?
 - context: does it use what the person said earlier in the conversation where that matters? \
 5 when nothing earlier matters.
 - natural: does it sound like a warm, sharp person rather than a robotic report?
+- honest: does it say plainly what it cannot know or does not track (data it has no access to, \
+the future, another person), instead of inventing it or dodging? 5 when that does not arise.
 Then name the main problem in a few words, or "none".
 
-Reply with JSON only: {"sound": n, "context": n, "natural": n, "problem": "..."}"""
+Reply with JSON only: {"sound": n, "context": n, "natural": n, "honest": n, "problem": "..."}"""
 
 
 def person():
@@ -135,6 +142,16 @@ def judge(llm, history: list[tuple[str, str]], message: str, reply: str) -> dict
         return json.loads(found.group()) if found else {"problem": "judge gave no JSON"}
     except (LLMError, ValueError) as exc:  # a judge failure is recorded, never fatal
         return {"problem": f"judge failed: {exc}"}
+
+
+def walk(steps: list) -> list[dict]:
+    """Every step, with those of a consulted expert's run, which nests its own."""
+    found = []
+    for step in steps or []:
+        if isinstance(step, dict):
+            found.append(step)
+            found += walk(step.get("steps") or [])
+    return found
 
 
 def figure_in(text: str) -> bool:
@@ -212,11 +229,13 @@ def main(names: list[str]) -> None:
         for turn in conversation["turns"]:
             waiting = len(client.get("/memory", headers=headers).json()["waiting"])
             spent = spend.spent_usd
+            started = time.monotonic()
             response = client.post(
                 "/chat",
                 json={"text": turn["m"], "conversationId": chat_id},
                 headers=headers,
             )
+            seconds = round(time.monotonic() - started, 1)
             body = response.json()
             if response.status_code != 200:
                 reply, stop, kind = {"text": json.dumps(body)}, "error", None
@@ -255,6 +274,9 @@ def main(names: list[str]) -> None:
             checks = [
                 s.get("summary_problems") for s in steps if s.get("type") == "verify"
             ]
+            route = next((s for s in steps if s.get("type") == "route"), {})
+            used = [s.get("name") for s in walk(steps) if s.get("type") == "tool"]
+            calls = sum(1 for s in walk(steps) if s.get("type") == "llm")
             graded = judge(grader, history, turn["m"], reply["text"])
             row = {
                 "conversation": conversation["name"],
@@ -263,6 +285,15 @@ def main(names: list[str]) -> None:
                 "stop": stop,
                 "type": kind,
                 "cost": round(spend.spent_usd - spent, 5),
+                "seconds": seconds,
+                "words": len(reply["text"].split()),
+                "route": [
+                    route.get("action"),
+                    route.get("expert"),
+                    route.get("consult"),
+                ],
+                "model_calls": calls,
+                "tools": used,
                 "problems": problems,
                 "judge": graded,
                 "chips": len(reply.get("evidenceIds") or []),
@@ -290,7 +321,16 @@ def main(names: list[str]) -> None:
         "turns": len(rows),
         "passed_code_checks": sum(not r["problems"] for r in rows),
         "problems": dict(Counter(p.split(",")[0] for r in rows for p in r["problems"])),
-        "judge_mean": {k: mean(k) for k in ("sound", "context", "natural")},
+        "judge_mean": {k: mean(k) for k in ("sound", "context", "natural", "honest")},
+        "seconds_mean": round(float(np.mean([r["seconds"] for r in rows])), 1)
+        if rows
+        else 0,
+        "seconds_p90": round(float(np.percentile([r["seconds"] for r in rows], 90)), 1)
+        if rows
+        else 0,
+        "words_mean": round(float(np.mean([r["words"] for r in rows])), 1)
+        if rows
+        else 0,
         "judge_below_4_on_sound": sum(s.get("sound", 5) < 4 for s in scored),
         "stops": dict(Counter(r["stop"] for r in rows)),
         "agent_usd": round(spend.spent_usd, 4),

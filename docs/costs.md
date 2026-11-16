@@ -114,3 +114,5 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-11 | Memory evaluation (`eval/memory_eval.py`): first full run ($0.32 with the chats it deleted), reruns of what failed ($0.40), two final full runs ($0.57), reruns after reading the answers ($0.13), checks on the listener and guard ($0.01) | about $1.43 |
 | 2026-11-12 | Team agent evaluation (`eval/team_eval.py`): 33 privacy attacks twice ($0.10, $0.02), planted team changes twice ($0.05 each) | about $0.22 |
 | 2026-11-14 | Conversation evaluation (`eval/conversation_eval.py`, synthetic person, real chat API): a four-turn trial ($0.014), run 1 stopped halfway by the app's per-person cap ($0.12), runs 2 to 4 after fixes, 47 to 62 turns each ($0.25, $0.32, $0.32 with the judge), listener checks on three messages ($0.002) | about $1.02 |
+| 2026-11-16 | Agent tuning round, baseline: the conversation evaluation widened to 104 turns (PHIA questions, edge cases, languages, logging, reminders, memory changes) on PR #163's code ($0.54 with the judge), a check of which model settings the API accepts ($0.002), one replay of a failed turn ($0.01) | about $0.55 |
+
