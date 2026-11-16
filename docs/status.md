@@ -458,4 +458,9 @@ OpenAI ([costs.md](costs.md) has every run).
     `sleep_*_ratio` compares a night's stage with the person's usual, not a share of the night, so
     each stage came out near the whole night. Fixed in `real_data.py` (no stages for LifeSnaps);
     earlier deep-sleep questions on LifeSnaps people were graded consistently but not on real stages.
+41. **A how-to question in another language can find no passage** (found 2026-11-16). The search is
+    given the question as asked; "comment faire une planche" falls below the similarity floor (0.38)
+    while "how do I do a plank" finds it, and "combien de protéines par jour" works. Waiting, by
+    Karim's decision: the fix would search an English version of the question, at a small cost per
+    question.
 

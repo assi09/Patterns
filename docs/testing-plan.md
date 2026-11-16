@@ -158,10 +158,11 @@ checked against the titles present in the index before any search ran. Scored on
 | Meaning alone (embeddings) | 0.88, **0.82** | **0.94, 0.83** |
 | Both, the app's search | 0.88, 0.77 | 0.89, 0.76 |
 
-- **Both held-out sets rank meaning alone above the combination the app uses** (MRR 0.83 against
+- **Both held-out sets rank meaning alone above the combination the app used** (MRR 0.83 against
   0.76 on the new set). The combination was chosen on the tuning set, where it led (0.98 against
-  0.94). Switching is a one-line change, `MEANING_WEIGHT` in `retrieval.py`, left for a decision.
-- **French:** "comment faire une planche" finds nothing in any method: the best match is below the
+  0.94). **Switched the same day, on Karim's decision:** the app searches by meaning alone, and by
+  words only when embeddings are unavailable.
+- **French** (status issue 41, waiting): "comment faire une planche" finds nothing in any method: the best match is below the
   similarity floor (0.38). "Combien de protéines par jour" works. The search is given the question
   as asked, so a non-English how-to question can come back empty.
 - **Two labels were narrower than the passages:** "pushups for beginners" found "Pushups" (labelled
