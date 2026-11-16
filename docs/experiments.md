@@ -976,3 +976,25 @@ a food's calories come per 100 g; "how much protein do adults need?" can retriev
 a general dieting question got a data answer; the judge is from the same model family and is not
 checked against people.
 
+## Checking PHIA's questions before a paid batch (2026-11-16)
+
+**Tested:** whether PHIA's questions, its answer key and our grading hold before about $33 is spent
+on them (`eval/phia_bench.py`, PR #165). The four systems (Patterns, single agent, chatbot with the
+data, code-writing) were run live on six questions; the key and the questions were checked by code
+against PHIA's published answers, a second implementation and the questions' own wording.
+
+**Showed:** every system takes the data and answers, but the checks found five problems.
+- A real person's sleep can stop weeks before their steps: "last 21 days" rested on one night.
+- PHIA's key disagrees with its own words on 45 questions: comparisons reversed, light-sleep
+  questions computed on total sleep.
+- A count of days was graded within one day, not exactly.
+- Our LifeSnaps loader had invented sleep stages from ratios to the person's usual night.
+- Patterns could not count days under a threshold: its tool said it was only for goals.
+
+**Changed:** a real person gets a question only with the metric on 80% of the days it asks about;
+the 45 inconsistent questions are dropped, and every kept question's metric, kind, direction and
+period match its code; counts are graded exactly; code also reads every number in a reply and flags
+where it disagrees with the reading model; LifeSnaps has no stages; the counting tool covers any
+threshold, and Patterns then answered the count questions it had missed. Final sets: 675 questions
+on 58 real people in 2 batches, 1,411 on PHIA's 4 users in 5. No batch has run yet.
+

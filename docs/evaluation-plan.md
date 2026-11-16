@@ -1,7 +1,8 @@
 # How we defend the agent: the evaluation plan before the pilot
 
-Written 2026-11-16, to finish by 2026-11-17, before the pilot. The pilot then adds real users' own
-questions and the team feature live.
+Written 2026-11-16: how each part of the agent is defended, and why. What runs when, and its cost, is
+in [testing-plan.md](testing-plan.md). The pilot then adds real users' own questions and the team
+feature live.
 
 ## What the agent has to get right
 
@@ -112,7 +113,7 @@ mode-A batch, $5.4 per mode-B batch, about $33 in all.
 |---|---|
 | Router | the question types logged on every PHIA answer (free), and ~150 labeled questions against the keyword router |
 | Tools | unit tests on every statistic, including over many seeds (CI, free); which tool each PHIA answer used |
-| Verifier | claims rejected per answer in the PHIA runs; numbers not in the data, Patterns against the baselines |
+| Verifier | on its own: true claims built from real evidence must pass, the same claims broken one way at a time must be caught (free); in the PHIA runs, claims rejected per answer and numbers not in the data, Patterns against the baselines |
 | RAG | `rag_eval.py`: 78 labeled queries, recall@k and MRR, hybrid against BM25 and dense alone |
 | Why | `hybrid_check.py`: causes planted in real people, with no-cause controls |
 | Logging, memory, safety, conversation | generated utterances with known fields; `memory_eval.py`; refusal and privacy sets; `conversation_eval.py` |
@@ -134,15 +135,14 @@ data; correct refusals; cost and latency per answer. `three_systems.py` already 
 - A simulator's planted cause is not every real cause: results on planted causes reflect how they
   were planted, so two planting mechanisms are used and the limit is stated.
 - The judge is one model family; its agreement with people is measured, not assumed.
-- 16 + 51 people is small: intervals are reported, and the pilot adds real users.
+- 58 real people is small: intervals are reported, and the pilot adds real users.
+- PHIA is peer-reviewed (Nature Communications 2026) but recent, and its key has errors (45 dropped);
+  it is described as the closest published benchmark, not a standard.
 - The router's labels are ours, because the routes are our design.
 
 ## Order of work
 
-Today (free or nearly): PHIA templates mapped onto the oracle; rewordings; the logging utterance
-generator; router labels; RAG retrieval metrics. Tomorrow (paid, about $4.5): data answers and the
-end-to-end comparison, why with controls, logging, safety, conversation; the judge calibration with
-Karim and Jad. Then the report tables, from `docs/evaluation.md`.
+In [testing-plan.md](testing-plan.md#order-and-budget).
 
 Sources: [CheckList](https://arxiv.org/abs/2005.04118);
 [PHIA](https://arxiv.org/abs/2406.06464); [MT-Bench, LLM-as-a-judge agreement with
