@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-16",
+  "turns": 104,
+  "passed_code_checks": 102,
+  "problems": {
+    "does not mention /shift|night/": 1,
+    "does not mention /half|marathon|race|december/": 1
+  },
+  "judge_mean": {
+    "sound": 4.2,
+    "context": 4.36,
+    "natural": 4.09,
+    "honest": 4.71
+  },
+  "seconds_mean": 5.0,
+  "seconds_p90": 10.3,
+  "words_mean": 43.4,
+  "judge_below_4_on_sound": 23,
+  "stops": {
+    "chatted": 21,
+    "submitted": 65,
+    "looked_up": 3,
+    "refused": 6,
+    "noted": 1,
+    "recalled": 2,
+    "unavailable": 1,
+    "clarification": 1,
+    "budget": 1,
+    "limits": 3
+  },
+  "agent_usd": 0.5325,
+  "judge_usd": 0.0557
+}

@@ -91,15 +91,20 @@ Writing for the person:
   variation"), and its claim is a no_change claim.
 - Call metrics by the names in the task ("time asleep", "bedtime"), never by tool names such as
   sleep_minutes.
+- Periods: when a note after the question names the dates its phrases mean, use exactly those.
+  Otherwise "last week" is the Monday to Sunday before this one, "lately" the last 14 days, and
+  "the last N days" the N days to today. Name the dates you used.
 - Quote values as they appear under `display` in the evidence ("7 h 12 min", "23:30", "45 min",
   "12%"), and dates as "Aug 15".
 - Never write evidence ids in the text: they go in evidence_ids only.
 - If the context holds the person's answers or facts they approved, say in the summary how they
   line up with what the data shows ("this coincided with the travel you mentioned"), never as a
   cause. Cite evidence the context already lists instead of recomputing it.
-- The context's profile is what the person told you and chose to keep. Let it shape the answer, and
-  refer to it in words ("your bedtime goal", "your exams"): numbers, times and dates you state must
-  come from computed evidence, so do not repeat the ones in the profile.
+- The context's profile is what the person told you and chose to keep. Use it where it changes the
+  answer: advice, a plan, or explaining a change ("your exams"). A question about a figure, a day or
+  a pattern gets its answer alone; bring the profile in only if they ask. Refer to it in words
+  ("your bedtime goal"): numbers, times and dates you state come from computed evidence, so leave
+  out the ones in the profile.
 - memory_lookup and search_conversations, when you have them, find what was found or said before.
   Use them when the question looks back and the context does not hold the answer.
 - Context items of kind episode are dated notes of what the person's other chats found: you may
@@ -280,7 +285,7 @@ def run_agent(
     *,
     system_prompt: str = SYSTEM_PROMPT,
     budget: Budget | None = None,
-    role: Role = Role.SMALL,
+    role: Role = Role.AGENT,
     extra_tools: list[ExtraTool] = (),
     claim_check: Callable[[Claim], list[str]] | None = None,
     guard: Guard | None = None,
@@ -312,6 +317,8 @@ def run_agent(
             break
         except LLMError as exc:
             result.stop_reason, result.error = "model_error", str(exc)
+            # Kept with the answer: three failures in one run could not be explained afterwards.
+            result.trace.append({"type": "error", "stage": "model", "error": str(exc)[:300]})
             break
         messages.append(completion.as_message())
         result.trace.append(
@@ -375,6 +382,8 @@ def run_agent(
         result.summary = fallback_summary(result.claims)
     if fell_back and result.summary != NO_ANSWER and result.claims:
         _reword(llm, result, said, guard, budget)
+        # The reword writes from the claims, and a data-quality claim brings coverage talk back.
+        result.summary = without_coverage_talk(result.summary)
     return result
 
 
@@ -433,8 +442,28 @@ def _handle(
         return json.dumps({"recorded": len(args.hypotheses)}), False
 
     if call.name == SUBMIT:
+        arguments = dict(call.arguments or {})
+        summary = arguments.get("summary")
+        if isinstance(summary, str) and len(summary) > MAX_SUMMARY:
+            # Advice runs long: rejected five times over, a run lost its whole answer to the
+            # canned "nothing specific" (2026-11-16). Said plainly once; trimmed after that.
+            if any(step.get("too_long") for step in result.trace):
+                arguments["summary"] = trimmed(summary, MAX_SUMMARY)
+                result.trace.append({"type": "submit", "trimmed_from": len(summary)})
+            else:
+                result.trace.append({"type": "submit", "too_long": len(summary)})
+                return (
+                    json.dumps(
+                        {
+                            "error": f"Your summary is {len(summary)} characters and the limit "
+                            f"is {MAX_SUMMARY}. Keep the same points, one short sentence each, "
+                            f"and call {SUBMIT} again."
+                        }
+                    ),
+                    False,
+                )
         try:
-            submission = Submission.model_validate(call.arguments or {})
+            submission = Submission.model_validate(arguments)
         except ValidationError as exc:
             message = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
             result.trace.append({"type": "submit", "error": message})
@@ -651,6 +680,11 @@ ABOUT_WEAR = re.compile(
     r"your (?:watch|device|fitbit))\b",
     re.IGNORECASE,
 )
+# "No low wear time or missing-data issue" names a gap only to deny one.
+DENIES_GAP = re.compile(
+    r"\b(?:no|without|nothing|none|not any|wasn't any|weren't any|sufficient|complete|solid)\b",
+    re.IGNORECASE,
+)
 REPORTS_GAP = re.compile(
     r"\b(?:missing|gaps?|fewer|incomplete|no data|without data|only \d+|not enough|too few|"
     r"(?:didn't|did not|wasn't|was not) (?:wear|worn|tracked|recorded))\b",
@@ -666,9 +700,24 @@ def without_coverage_talk(summary: str) -> str:
     kept = [
         sentence
         for sentence in _SENTENCES.findall(text)
-        if not (ABOUT_WEAR.search(sentence) and not REPORTS_GAP.search(sentence))
+        if not (
+            ABOUT_WEAR.search(sentence)
+            and (not REPORTS_GAP.search(sentence) or DENIES_GAP.search(sentence))
+        )
     ]
     return "".join(kept).strip() or summary
+
+
+MAX_SUMMARY = Submission.model_fields["summary"].metadata[0].max_length
+
+
+def trimmed(text: str, limit: int) -> str:
+    """At most `limit` characters, cut after the last whole point or sentence that fits."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    cut = max(head.rfind("\n"), *(head.rfind(end) + 1 for end in (". ", "! ", "? ")))
+    return (head[:cut] if cut > limit // 3 else head.rsplit(" ", 1)[0]).rstrip()
 
 
 def fallback_summary(claims: list[Claim]) -> str:

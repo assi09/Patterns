@@ -39,7 +39,8 @@ ALARM = re.compile(r"\balarms?\b", re.IGNORECASE)
 REMINDER_NOTE = f"Here's the reminder. {TAP_SET}"
 # A reply may not say the reminder is already on: it waits for the person's tap.
 CLAIMS_SET = re.compile(
-    r"\b(?:i['’]ve|i have|has been|is now|is|are)\s+(?:set|scheduled|created|added)\b"
+    r"\b(?:i['’]ve|i have|i|has been|is now|is|are)\s+(?:just\s+)?"
+    r"(?:set|scheduled|created|added)\b(?! on the card)"
     r"|\ball set\b|\bdone\b",
     re.IGNORECASE,
 )
@@ -87,8 +88,10 @@ def reminder_tools(
     now: datetime,
     prepared: list[str],
     said: Sequence[str] = (),
+    listed: list[dict] | None = None,
 ) -> list[ExtraTool]:
-    """The two tools for one answer; ids of proposed reminders are appended to `prepared`."""
+    """The two tools for one answer; ids of proposed reminders are appended to `prepared`, and
+    what a listing found to `listed`, for a reply code can write if the agent's fails."""
 
     def propose(arguments: dict | None) -> tuple[str, dict]:
         arguments = arguments or {}
@@ -146,6 +149,8 @@ def reminder_tools(
                 for row in store.listing(db, user_id)
                 if row.status in ("proposed", "active", "paused")
             ]
+        if listed is not None:
+            listed[:] = rows
         return json.dumps({"reminders": rows}), {"count": len(rows)}
 
     return [
@@ -180,6 +185,24 @@ def reminder_tools(
             listing,
         ),
     ]
+
+
+STATUS_WORDS = {"proposed": "waiting for you to tap Set", "active": "on", "paused": "paused"}
+
+
+def listing_reply(rows: Sequence[dict]) -> str:
+    """The person's reminders, said by code from what the listing found. The agent quotes their
+    times, which no computed evidence holds, so its own reply could fail every check
+    (2026-11-16)."""
+    if not rows:
+        return 'You have no reminders yet. Ask me for one, like "remind me at 22:30 to wind down".'
+    items = "; ".join(
+        f"“{row['title']}”, {row['schedule'][:1].lower() + row['schedule'][1:]} "
+        f"({STATUS_WORDS.get(row['status'], row['status'])})"
+        for row in rows
+    )
+    count = "one reminder" if len(rows) == 1 else f"{len(rows)} reminders"
+    return f"You have {count}: {items}. You can turn them on, pause or delete them in Reminders."
 
 
 def reminder_reply(

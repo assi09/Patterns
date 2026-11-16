@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-16",
+  "turns": 43,
+  "passed_code_checks": 42,
+  "problems": {
+    "does not mention /half|marathon|race|december/": 1
+  },
+  "judge_mean": {
+    "sound": 4.05,
+    "context": 4.0,
+    "natural": 3.93,
+    "honest": 4.53
+  },
+  "seconds_mean": 4.2,
+  "seconds_p90": 7.8,
+  "words_mean": 50.2,
+  "judge_below_4_on_sound": 11,
+  "stops": {
+    "chatted": 9,
+    "submitted": 29,
+    "refused": 3,
+    "limits": 2
+  },
+  "agent_usd": 0.2525,
+  "judge_usd": 0.0266
+}

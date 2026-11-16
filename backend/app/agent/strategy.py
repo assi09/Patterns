@@ -23,7 +23,7 @@ from app.agent.agent import DEFAULT_GUIDE, ExtraTool
 from app.agent.llm import Budget
 from app.agent.present import clock, label
 from app.agent.strategy_types import DEFAULT_TYPE
-from app.agent.tools import TOOLS, Toolbox, evidence_payload
+from app.agent.tools import BUILT_FROM, TOOLS, Toolbox, evidence_payload
 from app.agent.verifier import DAY_MONTH, ISO_DATE, MENTIONS, MONTH_DAY, MONTHS, run_adjusted
 from app.agent.verifier import _significant as is_significant
 from app.analysis.coaching import WEEKDAYS, habit_options, personal_options
@@ -84,8 +84,10 @@ STRATEGIES: dict[str, Strategy] = {
         "evidence you may cite. Answer from it if it covers the day asked about; otherwise use "
         "compare_day for that day. A day said relative to an earlier answer ('the day before "
         "that', 'the next day') counts from the day that answer was about, not from today. Name "
-        "the day's date in the answer, and give each value with the usual range as shown under "
-        "display ('6 h 10 min, against your usual 6 h 50 min to 7 h 40 min'). "
+        "the day's date in the answer. Lead with the value asked about and its usual range as "
+        "shown under display ('6 h 10 min, against your usual 6 h 50 min to 7 h 40 min'). Then, "
+        "only if another figure in the snapshot explains it (a late bedtime for a short night), "
+        "give that one in a few words; leave the rest out unless they asked. "
         + ONE_THING
         + "No hypotheses. Then call submit_findings.",
         budget=Budget(max_calls=6, max_tool_calls=5, max_cost_usd=0.02),
@@ -498,6 +500,79 @@ PREMISE_GUIDE = (
     "numbers. Do not explain a change that did not happen; ask what made them feel that way, or "
     "offer what to look at instead. No hypotheses. Then call submit_findings."
 )
+
+
+# The everyday drivers a change could follow, each tested by code over the same days. Left to
+# itself the agent checked sleep for a resting heart rate raised by training and never looked at
+# activity, and named a cause in half the cases with none (docs/evaluation.md, 2026-11-10).
+CAUSE_CANDIDATES = (
+    "sleep_minutes",
+    "bedtime_hour",
+    "time_in_bed",
+    "steps",
+    "active_zone_minutes",
+    "very_active_minutes",
+    "strain",
+    "sedentary_minutes",
+)
+CAUSES_GUIDE = (
+    "The possible causes above were tested by code over the same days as the change. Explain the "
+    "change only with a candidate marked 'a clear change' in that period, as 'went with', never "
+    "'caused', with an association or change claim citing its evidence_id. If none moved, say "
+    "plainly that nothing in their data explains it yet, as a no_change claim citing those "
+    "tests, and do not reach for one that did not move."
+)
+
+
+def _related(metric: str, other: str) -> bool:
+    """One is a score built from the other, or both feed one score: their moving together says
+    nothing about a cause."""
+    for score, inputs in BUILT_FROM.items():
+        if (metric == score and other in inputs) or (other == score and metric in inputs):
+            return True
+    return False
+
+
+def candidate_causes(frame: pd.DataFrame, premise: "Premise") -> tuple[list[Evidence], str]:
+    """Each everyday driver before and after the change the premise check confirmed, over the same
+    windows, corrected for how many were tested: what explains it is code's to find, the
+    wording the model's."""
+    moved = [
+        record for record in premise.evidence if is_significant(record) and len(record.windows) == 2
+    ]
+    if not moved:
+        return [], ""
+    target, recent = moved[0].metrics[0], moved[0].windows[0]
+    tests = []
+    for metric in CAUSE_CANDIDATES:
+        if metric == target or metric not in frame.columns or _related(metric, target):
+            continue
+        # From the candidate's own change point: a cause often starts a few days before its
+        # effect, and over the target's windows that start sat in the baseline and was missed.
+        own_recent, own_baseline = _premise_windows(frame, metric, recent.end)
+        try:
+            record = compare_windows(frame, metric, own_recent, own_baseline)
+        except ToolError:
+            continue
+        if record.sufficient:
+            tests.append(record)
+    if not tests:
+        return [], ""
+    tests = run_adjusted(tests)
+    lines = []
+    for record in tests:
+        shown = evidence_payload(record)["display"]
+        verdict = "a clear change" if is_significant(record) else "no clear change"
+        lines.append(
+            f"- {label(record.metrics[0])} (evidence_id {record.id}): since "
+            f"{record.windows[0].start:%b %-d} {shown.get('mean_recent', '')} against "
+            f"{shown.get('mean_baseline', '')}: {verdict}"
+        )
+    head = (
+        f"Possible causes of the change since {recent.start:%b %-d}, each tested from when it "
+        "changed, against the 28 days before:\n"
+    )
+    return tests, head + "\n".join(lines) + "\n" + CAUSES_GUIDE
 
 
 @dataclass(frozen=True)

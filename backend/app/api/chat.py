@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.actions.schemas import Measured
 from app.actions.tools import proposal_tools
+from app.agent.agent import NO_ANSWER
 from app.agent.ask import NOTED, REMINDERS, ask, default_guard, default_router
 from app.agent.context import Attachment, ChatState, turns_from
 from app.agent.conversation import DRAFT_NOTE
@@ -39,7 +40,7 @@ from app.agent.intent import Intent
 from app.agent.listener import MAX_KNOWN, fit_to_keep, is_explicit, listen, worth_listening
 from app.agent.llm import LLM, LLMError, OpenAILLM
 from app.agent.router import Router
-from app.agent.strategy_types import REACTION, is_statement
+from app.agent.strategy_types import certain_talk, is_statement
 from app.agent.summary import FOLD_AT, fold, to_fold
 from app.agent.trace import failed_trace, personal_trace
 from app.agent.world import food_tool
@@ -67,7 +68,7 @@ from app.db.session import session_scope
 from app.outside import FoodData, Outside
 from app.reminders.schedule import describe
 from app.reminders.store import SCHEDULE, timezone_of
-from app.reminders.tools import ALARM, reminder_reply, reminder_tools
+from app.reminders.tools import ALARM, listing_reply, reminder_reply, reminder_tools
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
@@ -350,6 +351,14 @@ def listen_to(
 
 CHATTED = ("chatted", "chat_fallback")
 CARD_NOTE = "I've put that on a card below: tap Keep and I'll bear it in mind from now on."
+FORGETS = re.compile(
+    r"^\s*(?:please\s+)?(?:forget|don'?t remember|stop remembering|ignore what i said)\b",
+    re.IGNORECASE,
+)
+FORGET_NOTE = (
+    "I've put the change on a card below: tap Keep and I'll stop using the old one. You can also "
+    "remove anything I keep in Settings, under What Patterns knows."
+)
 NOT_KEPT = (
     "I didn't keep that. I keep things about you, like your routine, goals or plans: nothing "
     "medical, and nothing about how I should answer."
@@ -461,9 +470,11 @@ def _answer(
             with sessions() as db:
                 return measure_workout(db, user_id, start, end, exercise_type)
 
-        estimates: list[str] = []
         described: list[str] = []
         outside = Outside(sessions, user_id, now, _day_start(now), food_data())
+        # Present only with a food lookup to fill it: a draft with no values is then told to look
+        # the food up rather than ask the person.
+        estimates: list[str] | None = [] if outside.food_data else None
         draft_tools = proposal_tools(
             sessions,
             user_id,
@@ -482,8 +493,9 @@ def _answer(
                 food_tool(outside, estimates),
             ]
         reminders: list[str] = []
+        listed: list[dict] = []
         reminding_tools = reminder_tools(
-            sessions, user_id, now, reminders, said=[*thread, body.text]
+            sessions, user_id, now, reminders, said=[*thread, body.text], listed=listed
         )
         started = monotonic()
         try:
@@ -510,6 +522,7 @@ def _answer(
                 outside=outside,
                 food_logs=food_logs,
                 made_a_draft=lambda: bool(prepared),
+                after_draft=bool(last and last.action_ids),
             )
         except Exception:
             logger.exception("Answering failed")
@@ -522,10 +535,13 @@ def _answer(
         # Something they told us in passing: heard now too, so the reply can point to its card.
         chatted = reply is not None and reply.result.stop_reason in CHATTED
         # "That seems wrong, I walked more" disputes a figure; it says nothing lasting about them.
-        if chatted and worth_listening(body.text) and not REACTION.match(body.text):
+        # Only something they said about themselves; "delete all my data" or "who made you?"
+        # raised a card once (2026-11-16).
+        if chatted and is_statement(body.text) and not certain_talk(body.text):
             outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
             if outcome and "proposed" in outcome:
-                reply.result.summary = f"{reply.result.summary}\n\n{CARD_NOTE}"
+                note = FORGET_NOTE if FORGETS.match(body.text) else CARD_NOTE
+                reply.result.summary = f"{reply.result.summary}\n\n{note}"
         elapsed = monotonic() - started
         with sessions() as db:
             question = db.get(ChatMessage, question_id)
@@ -566,6 +582,8 @@ def _answer(
             ):  # it says a card is waiting, and there is none
                 result.summary = NO_DRAFT_REPLY
             reminding = any(step.get("reminding") for step in result.trace)
+            if listed and result.summary == NO_ANSWER:  # the listing is code's, and so is this
+                result.summary, result.claims = listing_reply(listed), []
             if reminders:
                 # The agent's words when they do not claim it is on; the card holds the details.
                 drafts = [db.get(Reminder, uuid.UUID(i)) for i in reminders]

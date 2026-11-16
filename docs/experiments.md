@@ -934,3 +934,45 @@ people; calories for a food come per 100 g, not per portion; "how much protein d
 retrieve the wrong passage; advice for training can miss a kept goal; a few coaching answers still
 read like guidelines.
 
+## Tuning the agent against the course notes, before any fine-tuning (2026-11-16)
+
+**Tested:** the course notes' tuning layers (C4: configuration, persona, instructions, thinking; C5:
+tools; C6: memory; C3: workflows and failure recovery) against the agent, on a 104-turn conversation
+set widened with PHIA's own questions, edge cases (symbols, three languages, a prompt injection,
+future and out-of-range dates, another person's data), logging, reminders and memory changes, and on
+the 33 real-people "why" questions of `hybrid_check.py`. Each change was tried on a few cases first,
+traced, and only then run at scale. The judge was itself measured: scoring the same 104 replies twice
+moved the means by 0.03 but a quarter of single scores. Two runs of identical code on 27 turns
+differed by 0.26 in mean "sound", the noise any change had to beat.
+
+**Showed, configuration (C4):** no setting beat that noise. Temperature 0.4 (the ReAct band): 4.30
+against 4.59 and 4.33 for the defaults. gpt-5.4: 4.00, six answers out of budget, 2.5 times the cost
+and slower; the agent is not short of model. Reasoning effort cannot be combined with tools on
+`gpt-5.4-mini` in Chat Completions (a 400 from the API); it would need the Responses API, which the
+gpt-5.4 result does not justify. Defaults kept; a separate `AGENT` role makes the main loop tunable
+(`FA_OPENAI_AGENT_MODEL`, `_REASONING`, `_TEMPERATURE`).
+
+**Showed, the agent's failures were in the harness, not the model:** advice lost to a 700-character
+limit repeated five times; reminder listings rejected for quoting their own times; a duplicate log
+told only "could not be prepared", so the model invented questions; "last week" meaning a different
+week from run to run; a lone "?" running a full analysis; another person's sleep given the medical
+refusal; app questions ("delete my data", "who made you?") answered with things that are not true;
+water and menstrual questions given the food-log reply; kept memory pulled into answers it does not
+change.
+
+**Changed:** code now names the dates and parts of the day a message means; untracked data, the
+future, another person's data and days outside the data each get a rule (`limits.py`); the chat reply
+knows the app's facts; overlong summaries are explained once, then trimmed; a draft's duplicate,
+missing values and refusal reasons reach the model and the trace; reminder listings are written by
+code when the agent's fails; generic foods are ranked before restaurant items; kept memory shapes
+advice and explanations only; model failures store their error. For "why", code tests every everyday
+driver from its own change point and the agent may name only one that moved: 16 to 28 of 33 right
+(15 to 21 on the 25 answered both times, p = 0.11). Two judgement calls, easy to undo: day answers
+lead with the value asked and add at most one explaining figure; a workout or meal "this morning"
+is drafted at a typical time (08:00) for the person to correct on the card.
+
+**Still weak:** model calls failed in bursts in two runs, well under the account's rate limits;
+a food's calories come per 100 g; "how much protein do adults need?" can retrieve the wrong passage;
+a general dieting question got a data answer; the judge is from the same model family and is not
+checked against people.
+

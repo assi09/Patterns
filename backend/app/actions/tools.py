@@ -46,11 +46,23 @@ def draft_sentence(payload: dict, local_now: datetime) -> str:
 
 # Values the person gave are theirs, even if the model also looked the food up.
 STATED_VALUES = re.compile(r"\d\s*(?:kcal|cal(?:ories)?|g|grams?)\b", re.IGNORECASE)
+NO_VALUES = "Supply at least one energy or macronutrient value"
+LOOK_IT_UP = (
+    "The food has no values yet. Call food_lookup with this food (and the grams if they said "
+    "them), then call propose_food_log again with the values it returns. Do not ask the person."
+)
+ALREADY_THERE = (
+    "This entry is already drafted or logged. Tell the person, in a sentence, that it is already "
+    "there and they can check it on its card or under Logged food and workouts in Settings. Do "
+    "not prepare it again or ask for details."
+)
 REFUSED_NOTE = (
     "Tell the person plainly what the problem is and what would fix it, in everyday words. Never "
     "change a time, date or duration they gave to get past it, and never ask for their time zone: "
     "the time at the top of the task is already theirs. A clock time with no day that has not "
-    "come yet today means yesterday: prepare it for yesterday rather than refusing."
+    "come yet today means yesterday: prepare it for yesterday rather than refusing. Something they "
+    "said is later today ('this evening', 'tonight') has not happened: say it can be logged once "
+    "it is done."
 )
 
 
@@ -129,11 +141,26 @@ def proposal_tools(
                     "problems": problems,
                     "note": REFUSED_NOTE,
                 }
-                return json.dumps(content), {"error": "invalid_log"}
-            except ApiError:
-                return json.dumps({"error": "The draft could not be prepared."}), {
-                    "error": "invalid_log"
+                # A food named with no values: look it up, then propose again. Told only "supply
+                # a value", the model asked the person or gave up half the time (2026-11-16).
+                if estimates is not None and any(NO_VALUES in p for p in problems):
+                    content["note"] = LOOK_IT_UP
+                # Field names and our own rules' messages hold no values: safe to keep in the trace.
+                return json.dumps(content), {
+                    "error": "invalid_log",
+                    "fields": fields,
+                    "problems": problems,
                 }
+            except ApiError as exc:
+                # Our own messages hold no values ("This entry already has a draft or a logged
+                # record."). Told only "could not be prepared", the model asked the person for
+                # details they had given (2026-11-16).
+                content = {
+                    "error": "This draft was not prepared.",
+                    "problems": [exc.message],
+                    "note": ALREADY_THERE if exc.code == "duplicate_log" else REFUSED_NOTE,
+                }
+                return json.dumps(content), {"error": exc.code}
             except Exception:
                 # SQL/transport exceptions may contain the log payload; never send or log them.
                 return json.dumps(

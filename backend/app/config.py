@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_small_model: str = "gpt-5.4-mini"
     openai_large_model: str = "gpt-5.5"
+    # The data agent's tool loop, tuned apart from the small jobs (C4: configuration per role).
+    # None keeps the small model and the API's defaults (no reasoning, temperature 1).
+    openai_agent_model: str | None = None
+    openai_agent_reasoning: Literal["none", "minimal", "low", "medium", "high"] | None = None
+    openai_agent_temperature: float | None = Field(default=None, ge=0, le=2)
     # The router: TypeSafe's Jev, given the question text only.
     typesafe_api_key: SecretStr | None = None
     fdc_api_key: SecretStr | None = None  # USDA FoodData Central; without it, no food lookups

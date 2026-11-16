@@ -63,9 +63,21 @@ from app.agent.knowledge import (
     more_passages,
     source_note,
 )
+from app.agent.limits import (
+    FUTURE_GUIDE,
+    FUTURE_TOOLS,
+    OTHER_PERSON_REPLY,
+    UNTRACKED_REPLY,
+    asks_future,
+    other_person,
+    outside_the_data,
+    untracked,
+    untracked_note,
+)
 from app.agent.listener import is_explicit, worth_listening
 from app.agent.llm import LLM, Budget
 from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
+from app.agent.periods import with_dates
 from app.agent.personal import (
     NOT_ABOUT_EATING_LEVERS,
     NOT_ABOUT_EATING_OPTIONS,
@@ -100,6 +112,7 @@ from app.agent.strategy import (
     CROSS_AREA_GUIDE,
     PREMISE_GUIDE,
     asked_day,
+    candidate_causes,
     check_premise,
     coaching_evidence,
     cross_area_evidence,
@@ -225,6 +238,30 @@ def _just_a_reply(text: str) -> bool:
 
 TOLD_HERE_TURNS = 6  # the latest messages of this chat whose statements count as context
 MAX_TOLD = 3
+
+
+# A correction to the draft just made. Drafts are edited on their card, where the values are.
+CORRECTS = re.compile(
+    r"^\s*(?:actually|no,? (?:it was|make it|i meant)|sorry,? (?:it was|i meant)|wait|oops|"
+    r"correction|make (?:it|that)|change (?:it|that)|it was (?:actually )?\d|i meant)\b",
+    re.IGNORECASE,
+)
+EDIT_ON_CARD = (
+    "Got it. Change it on the card above: tap Edit, fix it, then confirm. Nothing is sent to "
+    "Google until you do."
+)
+
+
+def plain_reply(said: str, frame: pd.DataFrame, today: date, after_draft: bool) -> str | None:
+    """What is said without a model: another person's data, a correction to the draft just made
+    (changed on its card), or days the data does not reach."""
+    if who := other_person(said):
+        return OTHER_PERSON_REPLY.format(who=who)
+    if after_draft and CORRECTS.match(said):  # "actually it was 3 eggs"
+        return EDIT_ON_CARD
+    if not frame.empty:
+        return outside_the_data(said, frame.index.min().date(), today)
+    return None
 
 
 def told_here(history: Sequence[Turn]) -> list[str]:
@@ -454,6 +491,7 @@ def ask(
     food_logs: Sequence[dict] = (),
     made_a_draft: Callable[[], bool] | None = None,
     guidance_mode: str = "picked",  # "none" and "all" exist to compare them (eval/advice_compare)
+    after_draft: bool = False,  # the last answer prepared a logging draft
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -467,8 +505,14 @@ def ask(
     offer = offer_in(history[-1].answer) if history and AFFIRM.match(question) else None
     if offer:
         question = said = as_request(offer)
+    fixed = plain_reply(said, frame, _day(today or now), after_draft)
     # What a follow-up refers to, before routing or an expert sees it.
-    if urgent_free(question) and not _certain_talk(question) and not is_statement(question):
+    if (
+        urgent_free(question)
+        and not fixed
+        and not _certain_talk(question)
+        and not is_statement(question)
+    ):
         day = today.date() if isinstance(today, datetime) else today or date.today()
         means = with_period(with_relative_day(question, history, day), history)
         question, rewrite_cost = standalone(
@@ -481,6 +525,10 @@ def ask(
     if route.action == "refuse" and OVERALL.match(said) and not MEDICAL.search(said):
         overall = replace(route.classification, question_types={"lookup": 1.0})
         route = Route("general", None, (), choice == "auto", overall)
+    # Water or a menstrual cycle is not in the data: never the "no food logged" shortcut.
+    missing = untracked(said)
+    if missing and route.action == "expert" and route.expert == "nutrition":
+        route = Route("general", None, (), route.routed, route.classification)
     # A single value, last night or advice is one expert's job; a second expert costs as much again
     # and, measured, changed nothing. Questions linking areas (why, change, pattern) keep them.
     if route.classification.question_type in NO_CONSULT and route.consult:
@@ -595,7 +643,7 @@ def ask(
     )
     plan = (
         None
-        if acting or continuing or reminding or logging_tools or world or chatting
+        if acting or continuing or reminding or logging_tools or world or chatting or fixed
         else strategy_for(route.classification.question_type)
     )
     # Someone with nothing logged can still ask how to eat better: the rest of their data and
@@ -611,6 +659,8 @@ def ask(
         lead_on_no_data = route.expert
         route = Route("general", None, (), route.routed, route.classification)
     block, evidence, owners = context.block, dict(context.evidence), dict(context.owners)
+    if missing and plan:
+        block = "\n\n".join(part for part in (block, untracked_note(missing)) if part)
     relevant: list[Relevant] = []
     fit, memory_cost, personal_ids = Fit(), Budget(), set()
     if plan and plan.coaching and guidance_mode != "none" and urgent_free(question):
@@ -655,8 +705,16 @@ def ask(
             if false_premise:
                 route = replace(route, consult=())
                 plan = replace(plan, guide=PREMISE_GUIDE, tools=("describe", "compare_windows"))
-            elif lined_up := events_during(memory, premise.evidence):
-                block = "\n\n".join((block, lined_up))
+            else:
+                if route.classification.question_type == "why":
+                    records, text = candidate_causes(frame, premise)
+                    for record in records:
+                        evidence[record.id] = record
+                        if record_owner := owner(record.metrics[0]):
+                            owners[record.id] = record_owner.name
+                    block = "\n\n".join(part for part in (block, text) if part)
+                if lined_up := events_during(memory, premise.evidence):
+                    block = "\n\n".join((block, lined_up))
     # Linking two areas: run the tests here rather than pay a second expert to choose them.
     if (
         plan
@@ -732,16 +790,21 @@ def ask(
                 if metric_owner:
                     owners.setdefault(record.id, metric_owner.name)
     deep = depth == Depth.DEEP
+    # The dates its phrases mean, named by code ("last week = Mon Nov 9 to Sun Nov 15"): only for
+    # the agent, after routing, so the router and the snapshot read the person's own words.
+    local = today if isinstance(today, datetime) else now
+    asked = with_dates(question, local) if isinstance(local, datetime) else question
     # What they said gets ignored far above the question: it has to be there at the point of use.
-    asked = question
     if relevant or fit.notes:
         what = "; ".join([*(r.text for r in relevant), *fit.notes])
-        asked = f"{question}\n(What they told you, which the advice has to fit: {what})"
+        asked = f"{asked}\n(What they told you, which the advice has to fit: {what})"
     wanted = asked_count(question) if plan and plan.coaching else 0
     passage_ids = frozenset(e.id for e in retrieved.evidence) if retrieved else frozenset()
     check = (
         personal_check(personal_ids, fit, wanted, passage_ids) if plan and plan.coaching else None
     )
+    if plan and asks_future(said) and not plan.coaching:  # "how will I sleep tonight?"
+        plan = replace(plan, guide=FUTURE_GUIDE, tools=FUTURE_TOOLS)
     if plan and OVERALL.match(said):  # "am I ok?", "how am I doing this week?"
         plan = replace(plan, guide=OVERALL_GUIDE, tools=OVERALL_TOOLS, snapshot=True)
     if plan and route.classification.question_type in STATED_TYPES:
@@ -770,6 +833,8 @@ def ask(
     if urgent:  # before anything else, and no model: this reply must not be able to go wrong
         route = replace(route, action="refuse")
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="urgent", summary=urgent)
+    elif fixed:
+        result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="limits", summary=fixed)
     elif route.action == "refuse":
         # Health-shaped (melatonin to sleep, a symptom): the medical wording; else off topic.
         medical = (
@@ -866,13 +931,24 @@ def ask(
             answer_check=check,
         )
         result.notes += _notes(frame, route, result)
-    stopped_early = result.stop_reason in ("urgent", "refused", "noted", "chatted", "chat_fallback")
+    stopped_early = result.stop_reason in (
+        "urgent",
+        "refused",
+        "noted",
+        "chatted",
+        "chat_fallback",
+        "limits",
+    )
     if plan and plan.coaching:
         result.summary = without_filler(result.summary)
         if wanted and not stopped_early:
             _fill_points(llm, result, question, wanted, guard)
     if plan and plan.coaching and result.summary in (NO_ANSWER, ""):
         result.summary = COACHING_NO_ANSWER
+    # The honest "not tracked" answer can fail the claim checks, which want a metric: said by
+    # code then, never "I couldn't pin that down" (water, a menstrual cycle; 2026-11-16).
+    if missing and result.summary in (NO_ANSWER, "", COACHING_NO_ANSWER):
+        result.summary, result.claims = UNTRACKED_REPLY.format(thing=missing), []
     if (
         plan
         and plan.coaching

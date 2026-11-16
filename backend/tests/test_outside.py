@@ -542,3 +542,48 @@ def test_sharing_only_how_it_is_cooked_is_not_the_same_food():
 
     assert not _same_food("mloukhieh cooked", {"foods": [{"food": "Bulgur, cooked"}]})
     assert _same_food("jute leaves cooked", {"foods": [{"food": "Jute, potherb, cooked"}]})
+
+
+def test_a_food_with_no_values_is_sent_to_the_lookup_not_to_the_person(engine):
+    import uuid
+
+    from app.actions.tools import LOOK_IT_UP, REFUSED_NOTE
+
+    user = person(engine)
+    draft = {
+        "foodName": "Eggs",
+        "consumedAt": (datetime.now(UTC) - timedelta(hours=1)).isoformat(),
+        "mealType": "BREAKFAST",
+    }
+
+    def note(estimates):
+        tools = proposal_tools(
+            lambda: session_scope(engine), user, uuid.uuid4(), NOW, [], None, estimates
+        )
+        return json.loads(tools["nutrition"][0].run(draft)[0])["note"]
+
+    assert note([]) == LOOK_IT_UP  # a lookup is there to fill it
+    assert note(None) == REFUSED_NOTE  # no lookup: tell the person what is missing
+
+
+def test_a_second_draft_of_the_same_entry_says_it_is_already_there(engine):
+    import uuid
+
+    from app.actions.tools import ALREADY_THERE
+
+    user = person(engine)
+    draft = {
+        "foodName": "Toast",
+        "consumedAt": (datetime.now(UTC) - timedelta(hours=1)).isoformat(),
+        "mealType": "BREAKFAST",
+        "energyKcal": 90,
+    }
+
+    def propose():
+        tools = proposal_tools(lambda: session_scope(engine), user, uuid.uuid4(), NOW, [], None)
+        return tools["nutrition"][0].run(draft)
+
+    propose()
+    content, step = propose()  # another question, the same entry
+    assert step == {"error": "duplicate_log"} and json.loads(content)["note"] == ALREADY_THERE
+    assert "already" in json.loads(content)["problems"][0]

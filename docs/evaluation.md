@@ -352,3 +352,25 @@ raises a card; follow-ups keep their day and period. **What cannot:** one synthe
 judge from the same model family, not checked against people; the set was written by us, and the
 fixes were made while reading its answers, so a fresh set would score lower. The pilot's thumbs and
 the blind grading are the outside checks.
+
+## Tuning round against the course notes (2026-11-16)
+
+Measured on `eval/conversation_eval.py` (104 turns, widened set) and the 33 real-people why questions
+of `eval/hybrid_check.py`. Judge noise: the same 104 replies scored twice, means within 0.03 and a
+quarter of single scores changed; identical code run twice on 27 turns, 0.26 apart on "sound".
+
+| | Baseline (PR #163) | After the round |
+|---|---|---|
+| Conversation turns passing every code check | 100 / 104 | 102 / 104 |
+| Judge, sound / context / natural / honest (same judge) | 4.30 / 4.35 / 4.11 / 4.70 | 4.20 / 4.36 / 4.09 / 4.71 |
+| Model errors, budget stops | 3, 1 | 0, 1 |
+| Why questions right (real people) | 16 / 33 (15 / 25 without model errors) | 28 / 33 (21 / 25) |
+
+The judge means did not move beyond their noise (23 turns better, 23 worse, read one by one: the
+worse ones were mostly judge errors and older weaknesses, and one regression, "this week" on a
+Monday, fixed after). What moved is the harness: failures that ended in "I couldn't pin that down",
+the canned food reply or a wrong refusal now end in an answer, and why answers name a cause only
+when one moved. Configuration probes (temperature, gpt-5.4) did not beat the noise and were not
+adopted. Results: `eval/results/conversation_eval_2026-11-16_*.json`; why answers in the git-ignored
+`data/eval/results`.
+

@@ -19,8 +19,9 @@ import openai
 
 
 class Role(StrEnum):
-    SMALL = "small"  # tool loops and routine runs
+    SMALL = "small"  # routine runs: rewrites, the listener, short replies
     LARGE = "large"  # final write-ups and hard cross-domain questions
+    AGENT = "agent"  # the data agent's tool loop: its own model and settings, tunable apart
 
 
 @dataclass(frozen=True)
@@ -247,12 +248,14 @@ class OpenAILLM:
         models: dict[Role, str],
         ledger: SpendLedger,
         clock=time.monotonic,
+        options: dict[Role, dict] | None = None,
     ):
         unknown = [model for model in models.values() if model not in PRICES]
         if unknown:
             raise LLMError(f"No price is known for {', '.join(unknown)}; add it to PRICES.")
         self._client = client
-        self._models = models
+        self._models = {Role.AGENT: models[Role.SMALL], **models}
+        self._options = options or {}  # per role: reasoning_effort, temperature
         self._ledger = ledger
         self._clock = clock
 
@@ -263,8 +266,21 @@ class OpenAILLM:
             raise LLMError("No OpenAI key: set FA_OPENAI_API_KEY in .env.")
         # The SDK retries timeouts, rate limits and server errors with backoff.
         client = openai.OpenAI(api_key=key, timeout=30, max_retries=3)
-        models = {Role.SMALL: settings.openai_small_model, Role.LARGE: settings.openai_large_model}
-        return cls(client, models, ledger or SpendLedger(cap_usd=settings.llm_spend_cap_usd))
+        models = {
+            Role.SMALL: settings.openai_small_model,
+            Role.LARGE: settings.openai_large_model,
+            Role.AGENT: settings.openai_agent_model or settings.openai_small_model,
+        }
+        agent = {
+            key: value
+            for key, value in (
+                ("reasoning_effort", settings.openai_agent_reasoning),
+                ("temperature", settings.openai_agent_temperature),
+            )
+            if value is not None
+        }
+        ledger = ledger or SpendLedger(cap_usd=settings.llm_spend_cap_usd)
+        return cls(client, models, ledger, options={Role.AGENT: agent})
 
     def complete(
         self,
@@ -278,7 +294,7 @@ class OpenAILLM:
             budget.check()
         self._ledger.check()
         model = self._models[role]
-        request: dict = {"model": model, "messages": messages}
+        request: dict = {"model": model, "messages": messages, **self._options.get(role, {})}
         if tools:
             request["tools"] = tools
         started = self._clock()

@@ -91,6 +91,21 @@ def _plain(text: str) -> str:
     return LINK.sub(lambda match: match.group(1) or "", text)
 
 
+RESTAURANT = re.compile(r"\b(?:[A-Z][A-Za-z]*'?[A-Z]{2,}[A-Z'S]*|(?i:fast foods?|restaurant))\b")
+
+
+def restaurant_item(description: str, query: str) -> bool:
+    """A chain's or restaurant's item ("McDONALD'S, ...", "Fast foods, ..."), unless the query
+    names it."""
+    found = RESTAURANT.search(description)
+    return bool(found) and _letters(found.group(0)) not in _letters(query)
+
+
+def _letters(text: str) -> str:
+    """Lowercase letters only, so "McDONALD'S" matches "mcdonalds"."""
+    return re.sub(r"[^a-z]", "", text.lower())
+
+
 @dataclass(frozen=True)
 class FoodData:
     """The USDA FoodData Central search API."""
@@ -131,7 +146,9 @@ class FoodData:
                 if isinstance(food.get("fdcId"), int):
                     entry["url"] = f"{FDC_HOME}food-details/{food['fdcId']}/nutrients"
                 found.append(entry)
-        return found
+        # Generic foods first: "chicken salad" came back as McDONALD'S Bacon Ranch Salad
+        # (2026-11-16). A restaurant item stays first only when they named the restaurant.
+        return sorted(found, key=lambda entry: restaurant_item(entry["food"], query))
 
 
 @dataclass
