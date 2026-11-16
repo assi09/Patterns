@@ -196,3 +196,15 @@ def test_scripted_llm_respects_the_budget():
     scripted.complete([], budget=budget)
     with pytest.raises(BudgetExceeded):
         scripted.complete([], budget=budget)
+
+
+def test_the_agents_settings_go_only_with_its_own_calls():
+    client = FakeClient(response("ok"), response("ok"))
+    agent = {Role.AGENT: {"reasoning_effort": "low", "temperature": 0.4}}
+    model = OpenAILLM(client, MODELS, SpendLedger(cap_usd=1), options=agent)
+    model.complete([{"role": "user", "content": "hi"}], role=Role.AGENT)
+    model.complete([{"role": "user", "content": "hi"}])  # a small job keeps the defaults
+    first, second = client.requests
+    assert first["reasoning_effort"] == "low" and first["temperature"] == 0.4
+    assert first["model"] == MODELS[Role.SMALL]  # the agent's model is the small one unless set
+    assert "reasoning_effort" not in second and "temperature" not in second

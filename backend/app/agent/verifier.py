@@ -265,6 +265,7 @@ def _numbers_in(value) -> list[float]:
 LEVEL_KEYS = (
     "target",
     "total",
+    "per_week",
     "mean",
     "median",
     "min",
@@ -287,6 +288,7 @@ LEVEL_KEYS = (
 # Statistics expressed in the metric's own unit, which may be quoted in a related unit.
 VALUE_KEYS = (
     "total",
+    "per_week",
     "mean",
     "median",
     "sd",

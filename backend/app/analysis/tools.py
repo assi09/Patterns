@@ -36,6 +36,7 @@ def _values(frame: pd.DataFrame, metric: str, window: Window) -> pd.Series:
     return rows.dropna()
 
 
+DAYS_PER_WEEK = 7
 # Metrics whose days add up to something a person would ask for: steps, minutes, calories.
 ADDITIVE = frozenset(
     {
@@ -64,6 +65,8 @@ def describe(frame: pd.DataFrame, metric: str, window: Window) -> Evidence:
     }
     if metric in ADDITIVE:  # "how many steps this week?" asks for the total, not the average
         summary["total"] = _round(values.sum())
+        if len(values) >= DAYS_PER_WEEK:  # "calories per week": computed here, never by the model
+            summary["per_week"] = _round(values.mean() * DAYS_PER_WEEK)
     return Evidence(
         tool="describe",
         metrics=(metric,),

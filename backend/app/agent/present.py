@@ -59,6 +59,7 @@ METRICS: dict[str, MetricInfo] = {
 LEVEL_KEYS = (
     "target",
     "total",
+    "per_week",
     "mean",
     "median",
     "min",

@@ -52,9 +52,14 @@ REACTION = re.compile(
 )
 CAPABILITIES = re.compile(
     r"\b(?:what (?:can|do) you do|what are you|who are you|what is this app|how do(?:es)? "
-    r"(?:you|this app|patterns) work|what can i ask)\b",
+    r"(?:you|this app|patterns) work|what can i ask|who (?:made|built|created|owns) "
+    r"(?:you|this|patterns)|are you (?:chat ?gpt|gpt|an ai|a bot|a robot|human|real)|"
+    r"(?:delete|erase|remove) (?:all )?(?:of )?my (?:data|account|information|info)|"
+    r"who (?:can )?see(?:s)? my data|is my data (?:safe|private|shared))\b",
     re.IGNORECASE,
 )
+# Nothing but symbols ("?", "...", an emoji): nothing to look up, so ask what they would like.
+LETTERS = re.compile(r"[^\W\d_]", re.UNICODE)
 _ASKS = re.compile(
     r"^\s*(?:and |but |so |also |please |pls )?(?:how|what|what's|whats|why|when|where|which|who|"
     r"did|do|does|is|are|was|were|can|could|should|would|will|have|has|show|tell|give|compare|"
@@ -82,7 +87,7 @@ def is_statement(text: str) -> bool:
 def certain_talk(text: str) -> bool:
     """Small talk code is sure of, whatever the router says: "hi", "thanks", "that's wrong", "what
     can you do?". A greeting with a question ("Hello! How did I sleep?") is the question."""
-    if CAPABILITIES.search(text):
+    if CAPABILITIES.search(text) or not LETTERS.search(text):
         return True
     return "?" not in text and bool(SMALL_TALK.match(text) or REACTION.match(text))
 
