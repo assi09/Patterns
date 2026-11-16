@@ -75,6 +75,17 @@ So it gets a test of its own, free and deterministic, because the verifier is co
 3. **Reported:** the share caught for each kind of break (recall) and the share of right claims
    wrongly rejected (false rejections).
 
+**First run (2026-11-16, `eval/verifier_check.py`, free):** 3,190 claims from 61 real people.
+- **True claims: 1,066 of 1,066 passed**, in every form tried (the app's format, plain minutes,
+  decimal hours, rounded counts).
+- **Caught every time:** a date outside the evidence, a reversed direction, wording against the
+  direction, the wrong metric, a change that is not significant, a "no change" that is wrong, a day
+  on the wrong side of the usual range, too little data, causal and medical wording.
+- **Missed:** a number 10% or 30% off got through 7-10% of the time, and **the highest day quoted as
+  the average got through every time (0 of 163)**. Every miss is the same gap: the verifier checks
+  that a number is somewhere in the cited evidence, not that it is the statistic the sentence names.
+  The fix would tie "average", "highest", "lowest", "total" and "usual" to their own statistics.
+
 The 30 unit tests in `backend/tests/test_verifier.py` already check one hand-written example of each
 rule. This test checks the rules on many real claims. An optional extra is Patterns with the verifier
 turned off on 100 PHIA questions, about $0.60, which would show what it adds to accuracy. Run it only

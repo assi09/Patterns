@@ -374,3 +374,12 @@ when one moved. Configuration probes (temperature, gpt-5.4) did not beat the noi
 adopted. Results: `eval/results/conversation_eval_2026-11-16_*.json`; why answers in the git-ignored
 `data/eval/results`.
 
+## The verifier on its own (2026-11-16)
+
+`eval/verifier_check.py`, free and deterministic: code writes true claims from 61 real people's
+evidence (PMData, LifeSnaps), then breaks each one way at a time. All 1,066 true claims passed.
+Every break of dates, direction, metric, significance, data sufficiency, causal and medical wording
+was caught. Wrong numbers were missed 7-10% of the time, and the highest day quoted as the average
+was never caught (0 of 163): the verifier checks that a number appears in the cited evidence, not
+that it is the statistic the sentence names. Totals in `eval/results/verifier_check_summary.json`.
+
