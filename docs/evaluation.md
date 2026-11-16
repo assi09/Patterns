@@ -398,3 +398,33 @@ answerable questions): the app's combined search recall@3 0.89, MRR 0.76; meanin
 the second held-out set in a row where it ranks better. Details and limits in
 [testing-plan.md](testing-plan.md#the-router-on-held-out-questions-2026-11-16).
 
+## PHIA's questions on real people, two batches (2026-11-16/17)
+
+`eval/phia_bench.py`, mode B: PHIA's own questions and answer logic on 48 real people a batch
+(PMData, LifeSnaps), four systems on the same model, data, date and question. Intervals resample
+people. Batch 1 was read to find faults and Patterns was fixed after it (a total with no period read
+as last night; a total answered with the average), so batch 2 is the held-out measure.
+
+| Fair accuracy | Batch 1 (338, development) | Batch 2 (337, held out) |
+|---|---|---|
+| Patterns | 93.2% (90.4-95.8) | **97.0%** (94.8-98.7) |
+| Single agent with every tool | 89.3% | 92.3% |
+| Chatbot with the data pasted in | 71.3% | 69.1% |
+| Code-writing (PHIA's baseline) | 99.4% | 99.7% |
+| Patterns against the single agent | +3.8 points, p = 0.06 | **+4.7** (by person +1.8 to +7.3), p = 0.0009 |
+| Patterns against the chatbot | +21.9 | **+27.9** (+22.4 to +33.6) |
+| Patterns against code-writing | -6.2 | -2.7 (-5.0 to -0.9) |
+
+**What can be claimed:** on held-out questions written by other researchers, about real people,
+Patterns states the right figure 97% of the time, more often than one agent with every tool and far
+more often than a chatbot reading the same data. **What cannot:** that it beats a one-line pandas
+expression at plain arithmetic: for a sum or a mean over a period, code that answers with a number
+is nearly always right, and PHIA's own paper had the agent ahead of it. Patterns answers in words,
+checks every claim and handles every other kind of question; the code baseline does none of that.
+Times in both batches include the grader's reading for the text systems and are not compared.
+
+**The earlier real-data run (2026-11-10), restated.** LifeSnaps' sleep-stage ratios had been read as
+minutes and impossible zeros as values; regraded on the corrected key, its LifeSnaps half no longer
+matches a question and is left out until rerun. On PMData alone the result holds: 82.4% of 261
+answers (by person 76.7-87.4), and 84.7% against the chatbot's 62.2% on 111 shared questions.
+
