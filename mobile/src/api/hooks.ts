@@ -62,6 +62,14 @@ export function useHourlySteps(date?: ISODate) {
   });
 }
 
+export function useSleepStages(date?: ISODate) {
+  return useQuery({
+    queryKey: ['sleep', date],
+    queryFn: () => api.getSleepStages(date!),
+    enabled: !!date,
+  });
+}
+
 export function useCheckIn(date?: ISODate) {
   return useQuery({
     queryKey: ['checkin', date],
@@ -430,7 +438,7 @@ export async function requestSync(client: QueryClient): Promise<void> {
 /** What a finished sync can change: refetched so new numbers appear without another pull. */
 export function refreshSyncedData(client: QueryClient): Promise<unknown> {
   return Promise.all(
-    [['day'], ['workouts'], ['hourly'], ['metric'], ['evidence'], keys.report, keys.dataStatus].map(
+    [['day'], ['workouts'], ['hourly'], ['sleep'], ['metric'], ['evidence'], keys.report, keys.dataStatus].map(
       (queryKey) => client.invalidateQueries({ queryKey }),
     ),
   );

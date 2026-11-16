@@ -144,6 +144,17 @@ export interface HourlySteps {
   steps: (number | null)[]; // 24 local hours
 }
 
+export type SleepStageKind = 'awake' | 'light' | 'deep' | 'rem' | 'asleep' | 'restless';
+
+/** The night ending on a day, stage by stage (`asleep` and `restless` only on "classic" nights). */
+export interface NightStages {
+  available: boolean; // false without a Google Health connection or a main sleep that night
+  start?: ISODateTime | null;
+  end?: ISODateTime | null;
+  staged?: boolean;
+  stages: { start: ISODateTime; end: ISODateTime; stage: SleepStageKind }[];
+}
+
 export const CHECKIN_TAGS = [
   'hard_training',
   'alcohol',
@@ -519,6 +530,7 @@ export interface ApiClient {
   getDay(date: ISODate | 'latest'): Promise<DaySummary>;
   getWorkouts(date: ISODate): Promise<DayWorkouts>;
   getHourlySteps(date: ISODate): Promise<HourlySteps>;
+  getSleepStages(date: ISODate): Promise<NightStages>;
   getCheckIn(date: ISODate): Promise<CheckIn | null>;
   saveCheckIn(checkIn: CheckIn): Promise<CheckIn>; // today only
   getMetricSeries(metric: string, options: { end?: ISODate; days: number }): Promise<MetricSeries>;

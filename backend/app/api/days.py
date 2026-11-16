@@ -8,7 +8,7 @@ import logging
 import threading
 import time
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -215,6 +215,59 @@ def get_hourly(day: date, db: Db, user: Person) -> schemas.HourlySteps:
         logger.warning("Could not read the day's hourly steps")
         return schemas.HourlySteps(available=False, steps=[])
     return schemas.HourlySteps(available=True, steps=steps)
+
+
+STAGES = {"AWAKE": "awake", "LIGHT": "light", "DEEP": "deep", "REM": "rem", "ASLEEP": "asleep"}
+STAGES |= {"RESTLESS": "restless"}
+
+
+def _stage(entry: dict) -> schemas.SleepStage | None:
+    stage = STAGES.get(str(entry.get("type", "")).upper())
+    if not stage or not entry.get("startTime") or not entry.get("endTime"):
+        return None
+    return schemas.SleepStage(start=entry["startTime"], end=entry["endTime"], stage=stage)
+
+
+@router.get("/days/{day}/sleep", response_model=schemas.NightStages)
+def get_sleep(day: date, db: Db, user: Person) -> schemas.NightStages:
+    """The night that ended on this local day, stage by stage: the main sleep, the longest if
+    there are two, as the daily totals choose it. Read live, like the hourly steps."""
+    health = _health(db, user.id)
+    if health is None:
+        return schemas.NightStages(available=False)
+
+    def read() -> schemas.NightStages:
+        start, end = _local_day(day)
+        field = "sleep.interval.end_time"
+        query = (
+            f'{field} >= "{start.astimezone(UTC):%Y-%m-%dT%H:%M:%SZ}" AND '
+            f'{field} < "{end.astimezone(UTC):%Y-%m-%dT%H:%M:%SZ}"'
+        )
+        nights = [
+            p["sleep"]
+            for p in health.list_points("sleep", filter=query, page_size=25)
+            if p.get("sleep", {}).get("metadata", {}).get("mainSleep")
+        ]
+        if not nights:
+            return schemas.NightStages(available=False)
+        night = max(nights, key=lambda s: _number(s.get("summary", {}).get("minutesAsleep")) or 0)
+        stages = sorted(
+            (s for e in night.get("stages", []) if (s := _stage(e))), key=lambda s: s.start
+        )
+        interval = night.get("interval", {})
+        return schemas.NightStages(
+            available=bool(stages),
+            start=interval.get("startTime"),
+            end=interval.get("endTime"),
+            staged=night.get("type") == "STAGES",
+            stages=stages,
+        )
+
+    try:
+        return _cached((user.id, day, "sleep"), read)
+    except SyncError:
+        logger.warning("Could not read the night's sleep stages")
+        return schemas.NightStages(available=False)
 
 
 # The morning check-in

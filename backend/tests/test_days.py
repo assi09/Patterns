@@ -314,3 +314,101 @@ def test_only_todays_check_in_can_be_set(tmp_path, synthetic):
         headers=headers,
     )
     assert unknown.json()["error"]["code"] == "invalid_checkin"
+
+
+def test_the_nights_stages_from_google(tmp_path, synthetic, monkeypatch):
+    import httpx2
+
+    from app.api import days as api
+
+    asked = []
+
+    def stage(start: str, end: str, kind: str) -> dict:
+        return {"startTime": start, "endTime": end, "type": kind}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        asked.append(request)
+        nap = {
+            "sleep": {
+                "type": "STAGES",
+                "interval": {
+                    "startTime": "2026-08-10T13:00:00Z",
+                    "endTime": "2026-08-10T13:40:00Z",
+                },
+                "summary": {"minutesAsleep": "35"},
+                "stages": [stage("2026-08-10T13:00:00Z", "2026-08-10T13:40:00Z", "LIGHT")],
+            }
+        }
+        night = {
+            "sleep": {
+                "type": "STAGES",
+                "metadata": {"mainSleep": True},
+                "interval": {
+                    "startTime": "2026-08-09T23:30:00Z",
+                    "endTime": "2026-08-10T07:00:00Z",
+                },
+                "summary": {"minutesAsleep": "420"},
+                "stages": [  # out of order, as a list may come
+                    stage("2026-08-10T01:00:00Z", "2026-08-10T02:00:00Z", "DEEP"),
+                    stage("2026-08-09T23:30:00Z", "2026-08-10T01:00:00Z", "LIGHT"),
+                    stage("2026-08-10T02:00:00Z", "2026-08-10T06:50:00Z", "REM"),
+                    stage("2026-08-10T06:50:00Z", "2026-08-10T07:00:00Z", "AWAKE"),
+                    stage("2026-08-10T03:00:00Z", "2026-08-10T03:05:00Z", "UNKNOWN_KIND"),
+                ],
+            }
+        }
+        return httpx2.Response(200, json={"dataPoints": [nap, night]})
+
+    monkeypatch.setattr(api, "_live", {})
+    monkeypatch.setattr(api, "_health", lambda db, user_id: fake_google(handler))
+    client, headers = signed_in_client(tmp_path, synthetic)
+    body = client.get("/days/2026-08-10/sleep", headers=headers).json()
+    assert body["available"] is True and body["staged"] is True
+    assert [s["stage"] for s in body["stages"]] == ["light", "deep", "rem", "awake"]
+    assert body["start"].startswith("2026-08-09T23:30") and body["end"].startswith("2026-08-10T07")
+    assert "sleep.interval.end_time" in asked[0].url.params["filter"]
+    client.get("/days/2026-08-10/sleep", headers=headers)
+    assert len(asked) == 1  # kept for a few minutes
+
+
+def test_no_night_a_classic_night_and_no_google(tmp_path, synthetic, monkeypatch):
+    import httpx2
+
+    from app.api import days as api
+
+    points: list[dict] = []
+    monkeypatch.setattr(api, "_live", {})
+    monkeypatch.setattr(
+        api,
+        "_health",
+        lambda db, user_id: fake_google(
+            lambda request: httpx2.Response(200, json={"dataPoints": points})
+        ),
+    )
+    client, headers = signed_in_client(tmp_path, synthetic)
+    assert client.get("/days/2026-08-10/sleep", headers=headers).json()["available"] is False
+    points.append(
+        {
+            "sleep": {
+                "type": "CLASSIC",
+                "metadata": {"mainSleep": True},
+                "interval": {
+                    "startTime": "2026-08-10T23:00:00Z",
+                    "endTime": "2026-08-11T06:00:00Z",
+                },
+                "summary": {"minutesAsleep": "400"},
+                "stages": [
+                    {
+                        "startTime": "2026-08-10T23:00:00Z",
+                        "endTime": "2026-08-11T06:00:00Z",
+                        "type": "ASLEEP",
+                    }
+                ],
+            }
+        }
+    )
+    body = client.get("/days/2026-08-11/sleep", headers=headers).json()
+    assert body["available"] is True and body["staged"] is False
+    assert body["stages"][0]["stage"] == "asleep"
+    monkeypatch.setattr(api, "_health", lambda db, user_id: None)
+    assert client.get("/days/2026-08-12/sleep", headers=headers).json()["available"] is False

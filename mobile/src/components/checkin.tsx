@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { useCheckIn, useSaveCheckIn } from '@/api/hooks';
 import { CHECKIN_TAGS, type CheckIn, type ISODate } from '@/api/types';
@@ -23,7 +23,15 @@ export const TAG_LABELS: Record<CheckIn['tags'][number], string> = {
  * "How do you feel this morning?": a rating from 1 to 5 and optional tags. It is the ground truth
  * the recovery score is compared with, and something the agent can look at.
  */
-export function CheckInSection({ day, today }: { day: ISODate; today: boolean }) {
+export function CheckInSection({
+  day,
+  today,
+  style,
+}: {
+  day: ISODate;
+  today: boolean;
+  style?: StyleProp<ViewStyle>; // Today shows it as a tile
+}) {
   const colors = useColors();
   const checkIn = useCheckIn(day);
   const save = useSaveCheckIn();
@@ -37,7 +45,7 @@ export function CheckInSection({ day, today }: { day: ISODate; today: boolean })
 
   if (saved && !editing) {
     return (
-      <Section title="Check-in">
+      <Section title="Check-in" style={style}>
         <Pressable
           accessibilityRole={today ? 'button' : undefined}
           accessibilityHint={today ? 'Change your check-in' : undefined}
@@ -71,6 +79,7 @@ export function CheckInSection({ day, today }: { day: ISODate; today: boolean })
   const chosen = rating ?? saved?.rating;
   return (
     <Section
+      style={style}
       title="Check-in"
       footer="How you feel is compared with your recovery score over time. Optional, and only for you."
     >

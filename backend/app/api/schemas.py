@@ -136,6 +136,22 @@ class HourlySteps(ApiModel):
     steps: list[int | None]  # 24 local hours; None for an hour with no data
 
 
+class SleepStage(ApiModel):
+    start: datetime
+    end: datetime
+    stage: Literal["awake", "light", "deep", "rem", "asleep", "restless"]
+
+
+class NightStages(ApiModel):
+    """The night ending on a day, stage by stage, as the tracker scored it."""
+
+    available: bool  # false without a Google Health connection, or no main sleep that night
+    start: datetime | None = None
+    end: datetime | None = None
+    staged: bool = False  # false for a "classic" night, which knows only asleep, restless, awake
+    stages: list[SleepStage] = []
+
+
 class CheckIn(ApiModel):
     day: date
     rating: int = Field(ge=1, le=5)

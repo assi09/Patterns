@@ -8,6 +8,7 @@ import { ApiError } from './http';
 import { getToken } from './token';
 import type {
   MemoryFact,
+  NightStages,
   AlarmSettings,
   AppNotification,
   AccessRequest,
@@ -51,7 +52,7 @@ import type {
 const DAYS = 28;
 const LATENCY_MS = 400;
 
-function isoDate(daysAgo: number): ISODate {
+export function isoDate(daysAgo: number): ISODate {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() - daysAgo);
   return date.toISOString().slice(0, 10);
@@ -148,7 +149,7 @@ function mockUsual(metric: number, daysAgo: number): Usual | null {
 
 let checkIns: CheckIn[] = [];
 
-function mockDay(date: ISODate): DaySummary {
+export function mockDay(date: ISODate): DaySummary {
   const ago = daysAgoOf(date);
   if (ago < 0 || ago >= HISTORY_DAYS) {
     throw new ApiError('There is no data for that day.', 'no_data', 404);
@@ -664,6 +665,42 @@ function message(fields: Omit<ChatMessage, 'id' | 'createdAt'>): ChatMessage {
 
 // Accounts work like the backend's: sign-ups wait for approval, and the made-up demo owner can
 // sign in and approve them.
+/** A made-up night ending on `date`, from that day's bedtime and time in bed: about five
+ * 90-minute cycles, deep sleep early and REM late, so the chart agrees with the day's numbers. */
+export function mockNight(date: ISODate): NightStages {
+  const rand = random(daysAgoOf(date) * 7 + 3);
+  const ago = Math.max(0, daysAgoOf(date));
+  const column = (name: string) => DAILY.findIndex(([metric]) => metric === name);
+  const bedtime = dailyValue(column('bedtime_hour'), ago) ?? 0; // hours from midnight
+  const inBed = dailyValue(column('time_in_bed'), ago) ?? 480;
+  const [y, m, d] = date.split('-').map(Number);
+  const start = new Date(y, m - 1, d, 0, Math.round(bedtime * 60)).getTime();
+  const parts: [NightStages['stages'][number]['stage'], number][] = [['awake', 6 + rand() * 8]];
+  for (let cycle = 0; cycle < 5; cycle++) {
+    parts.push(['light', 20 + rand() * 15]);
+    parts.push(['deep', Math.max(4, 30 - cycle * 7 + rand() * 8)]);
+    parts.push(['light', 10 + rand() * 10]);
+    parts.push(['rem', 6 + cycle * 6 + rand() * 6]);
+    if (rand() < 0.45) parts.push(['awake', 2 + rand() * 5]);
+  }
+  parts.push(['awake', 4 + rand() * 6]);
+  const scale = inBed / parts.reduce((sum, [, minutes]) => sum + minutes, 0);
+  let at = start;
+  const stages = parts.map(([stage, minutes]) => {
+    const end = at + Math.round(minutes * scale) * 60_000;
+    const entry = { start: new Date(at).toISOString(), end: new Date(end).toISOString(), stage };
+    at = end;
+    return entry;
+  });
+  return {
+    available: true,
+    start: stages[0].start,
+    end: stages[stages.length - 1].end,
+    staged: true,
+    stages,
+  };
+}
+
 export const DEMO_OWNER = { email: 'demo@patterns.app', password: 'demo-password' };
 export const DEMO_SUPERVISOR = { email: 'lead@patterns.app', password: 'demo-password' };
 
@@ -1544,6 +1581,8 @@ export const mockClient: ApiClient = {
           : Math.round(random(hour * 31 + daysAgoOf(date))() * 900),
       ),
     })),
+
+  getSleepStages: (date) => later(() => mockNight(date)),
 
   getCheckIn: (date) => later(() => checkIns.find((c) => c.day === date) ?? null),
 
