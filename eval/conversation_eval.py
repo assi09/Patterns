@@ -77,6 +77,12 @@ logically, without non sequiturs, irrelevant statistics or contradictions?
 the future, another person), instead of inventing it or dodging? 5 when that does not arise.
 Then name the main problem in a few words, or "none".
 
+Facts about this app, so you do not mark them wrong: a reminder or a logging draft waits on a card \
+the person taps, so "tap Set on the card" or "confirm it on the card" is correct and honest. Named \
+public sources (NHS, CDC, MedlinePlus) come from passages the app retrieved and links. What the \
+person chose to keep, listed with the conversation, is real memory from earlier chats: using it is \
+not inventing, though dragging it into an answer it does not change is a fault of soundness.
+
 Reply with JSON only: {"sound": n, "context": n, "natural": n, "honest": n, "problem": "..."}"""
 
 
@@ -128,10 +134,14 @@ def sign_in(client, engine) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def judge(llm, history: list[tuple[str, str]], message: str, reply: str) -> dict:
+def judge(
+    llm, history: list[tuple[str, str]], message: str, reply: str, kept: list[str] = ()
+) -> dict:
     before = "\n".join(f"Person: {q}\nAssistant: {a}" for q, a in history) or "(none)"
+    memory = "; ".join(kept) or "(nothing)"
     task = (
-        f"Conversation before:\n{before}\n\nPerson: {message}\nReply to grade:\n{reply}"
+        f"What the person chose to keep: {memory}\n\nConversation before:\n{before}\n\n"
+        f"Person: {message}\nReply to grade:\n{reply}"
     )
     try:
         done = llm.complete(
@@ -238,7 +248,11 @@ def main(names: list[str]) -> None:
             seconds = round(time.monotonic() - started, 1)
             body = response.json()
             if response.status_code != 200:
-                reply, stop, kind = {"text": json.dumps(body)}, "error", None
+                reply, stop, kind = (
+                    {"text": json.dumps(body)},
+                    f"http_{response.status_code}",
+                    None,
+                )
             else:
                 reply = body[-1]
                 with session_scope(engine) as db:
@@ -259,25 +273,28 @@ def main(names: list[str]) -> None:
                 )
             problems = check(turn, reply, stop, waiting, len(cards))
             new_cards = [c["text"] for c in cards[: max(0, len(cards) - waiting)]]
-            with session_scope(engine) as db:
-                steps = (
-                    trace.steps
-                    if (
-                        trace := db.scalar(
-                            select(AnswerTrace).where(
-                                AnswerTrace.message_id == uuid.UUID(reply["id"])
-                            )
+            steps = []
+            if (
+                "id" in reply
+            ):  # an HTTP error has no stored answer, and is recorded as such
+                with session_scope(engine) as db:
+                    found = db.scalar(
+                        select(AnswerTrace).where(
+                            AnswerTrace.message_id == uuid.UUID(reply["id"])
                         )
                     )
-                    else []
-                )
+                    steps = found.steps if found else []
             checks = [
                 s.get("summary_problems") for s in steps if s.get("type") == "verify"
             ]
             route = next((s for s in steps if s.get("type") == "route"), {})
             used = [s.get("name") for s in walk(steps) if s.get("type") == "tool"]
             calls = sum(1 for s in walk(steps) if s.get("type") == "llm")
-            graded = judge(grader, history, turn["m"], reply["text"])
+            errors = [s.get("error") for s in walk(steps) if s.get("type") == "error"]
+            kept = [
+                c["text"] for c in client.get("/memory", headers=headers).json()["kept"]
+            ]
+            graded = judge(grader, history, turn["m"], reply["text"], kept)
             row = {
                 "conversation": conversation["name"],
                 "m": turn["m"],
@@ -293,11 +310,13 @@ def main(names: list[str]) -> None:
                     route.get("consult"),
                 ],
                 "model_calls": calls,
+                "errors": errors,
                 "tools": used,
                 "problems": problems,
                 "judge": graded,
                 "chips": len(reply.get("evidenceIds") or []),
                 "new_cards": new_cards,
+                "kept": kept,
                 "check_problems": [p for p in checks if p],
                 "reply": reply["text"],
             }

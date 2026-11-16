@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "turns": 27,
+  "passed_code_checks": 27,
+  "problems": {},
+  "judge_mean": {
+    "sound": 4.3,
+    "context": 4.44,
+    "natural": 4.15,
+    "honest": 4.7
+  },
+  "seconds_mean": 4.1,
+  "seconds_p90": 7.8,
+  "words_mean": 47.5,
+  "judge_below_4_on_sound": 5,
+  "stops": {
+    "chatted": 2,
+    "submitted": 23,
+    "limits": 2
+  },
+  "agent_usd": 0.173,
+  "judge_usd": 0.014
+}
