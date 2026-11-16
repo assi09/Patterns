@@ -419,3 +419,25 @@ was briefed right in 3 of 3 runs once the instructions said what counts as a cha
 round, and a steady team was told it held steady; about $0.01 a team a week. Next: warnings before a
 noted crunch from what similar notes did before, and a one-question anonymous pulse.
 
+## Warning before a noted crunch (2026-11-17)
+
+Supervisors note deadlines and releases. What each past dated note was followed by is measured by
+code (`note_aftermath`): the team's two weeks from its start against the four weeks before, on
+sleep, steps, recovery, load and physical stress signs, with the same team statistics and the
+alerts' rule for what counts, corrected together across notes and metrics. On the Monday run, for
+each note coming up in the next four weeks and each past note followed by a real change, the model
+answers one question, whether the two are the same kind of event (a language judgement, not a word
+list); code then writes the warning with every figure from the evidence: "Release 2.0 is on Thu
+Nov 5. In the two weeks after Release 1.0, time asleep changed by a median -73 min (7 of 7
+people); ... a lighter week after it, or fewer late meetings, could help." It is added to the
+briefing, and still goes when the agent's own part does not check out. The supervisor can ask the
+team agent about past notes too.
+
+Built after measuring: left to the agent inside its investigation, the warning came in 1 of 4
+runs and a steady team was once told to plan around a past "small lift". Two more faults found on
+the way: one bad claim of five cost the whole briefing (now only the checked claims are told, in
+their own words), and the model read p = 0.02 as a change the checks then rejected (team_week now
+shows the checks' own verdict, `counts_as_a_change`). Live, on made-up teams of seven: warned in
+3 of 3 teams whose last release was followed by a drop, never in 2 control teams; every briefing
+produced. Known limit: a number is checked but not its unit ("recovery up by 8 min" once passed).
+

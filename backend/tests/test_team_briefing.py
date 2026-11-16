@@ -223,3 +223,141 @@ def test_the_supervisor_reads_the_briefing_with_the_report(engine, monkeypatch):
     assert body["briefing"]["summary"].startswith("Time asleep has been lower")
     assert body["briefing"]["items"][0]["metric"] == "sleep_minutes"
     assert body["briefing"]["proposals"] == 0
+
+
+def test_what_past_notes_were_followed_by_and_which_are_coming_up(engine):
+    from app.db.models import TeamNote
+    from app.teams.agent import _team_change_moved
+
+    release = TODAY - timedelta(days=40)
+    team_id = make_team(engine, effects=(Step("sleep_minutes", release, -75.0),))
+    with session_scope(engine) as db:
+        team = db.get(Team, uuid.UUID(team_id))
+        for text, start in (
+            ("Release 1.0", release),
+            ("Offsite", TODAY - timedelta(days=70)),  # nothing happened after it
+            ("Release 2.0", TODAY + timedelta(days=10)),
+            ("Planning week", TODAY + timedelta(days=60)),  # too far ahead to count
+        ):
+            db.add(TeamNote(team_id=team.id, text=text, starts_on=start, created_at=NOW))
+        db.flush()
+        box = TeamTools(db, team, TODAY, NOW)
+        found = box.run("note_aftermath", {})
+        assert [n["note"] for n in found["coming_up"]] == ["Release 2.0"]
+        after = {p["note"]["note"]: p["team_after"] for p in found["past"]}
+        sleep_after_release = next(e for e in after["Release 1.0"] if e["metric"] == SLEEP)
+        record = box.evidence[sleep_after_release["evidence_id"]]
+        assert "p_value_adjusted" in record.stats  # corrected with the other tests
+        assert _team_change_moved(record) and record.stats["median_change"] < 0
+        sleep_after_offsite = next(e for e in after["Offsite"] if e["metric"] == SLEEP)
+        assert not _team_change_moved(box.evidence[sleep_after_offsite["evidence_id"]])
+
+
+def _crunch_team(engine, moved: bool) -> str:
+    from app.db.models import TeamNote
+
+    release = TODAY - timedelta(days=40)
+    effects = (
+        (
+            Step("sleep_minutes", release, -75.0),
+            Step("sleep_minutes", release + timedelta(days=14), 75.0),
+        )
+        if moved
+        else ()
+    )
+    team_id = make_team(engine, effects=effects)
+    with session_scope(engine) as db:
+        team = db.get(Team, uuid.UUID(team_id))
+        db.add(TeamNote(team_id=team.id, text="Release 1.0", starts_on=release, created_at=NOW))
+        db.add(
+            TeamNote(
+                team_id=team.id,
+                text="Release 2.0",
+                starts_on=TODAY + timedelta(days=10),
+                created_at=NOW,
+            )
+        )
+    return team_id
+
+
+def steady_briefing(messages):
+    return ScriptedLLM.call(
+        ANSWER,
+        summary="The team held steady last week.",
+        claims=[sleep_claim(messages) | {"kind": "no_change", "direction": None}],
+    )
+
+
+@pytest.mark.parametrize("judged_alike", [True, False])
+def test_a_coming_note_is_warned_about_from_what_a_past_one_was_followed_by(engine, judged_alike):
+    team_id = _crunch_team(engine, moved=True)
+    alike = ScriptedLLM.say("yes" if judged_alike else "no")
+    found, llm = run(engine, team_id, [ScriptedLLM.call("team_overview"), steady_briefing, alike])
+    with session_scope(engine) as db:
+        briefing = db.scalar(select(TeamReport)).body.get("briefing")
+    assert found is not None
+    summary = briefing["summary"]
+    asked = llm.requests[-1]["messages"][1]["content"]
+    assert "Release 2.0" in asked and "Release 1.0" in asked  # only the notes, nothing else
+    if judged_alike:
+        assert "Release 2.0 is on" in summary and "time asleep changed by a median -" in summary
+        assert any(item["kind"] == "ahead" for item in briefing["items"])
+    else:
+        assert "Release 2.0" not in summary
+
+
+def test_no_warning_and_no_question_when_nothing_followed_the_past_note(engine):
+    team_id = _crunch_team(engine, moved=False)
+    found, llm = run(engine, team_id, [ScriptedLLM.call("team_overview"), steady_briefing])
+    assert found is not None and "Release 2.0" not in found.text
+    assert not any("Coming:" in str(r["messages"]) for r in llm.requests)
+
+
+def test_the_look_ahead_still_goes_when_the_agents_briefing_fails(engine):
+    team_id = _crunch_team(engine, moved=True)
+    wrong = {
+        "text": "Time asleep rose across the team.",
+        "kind": "change",
+        "metric": "sleep_minutes",
+        "direction": "up",
+        "evidence_ids": ["nonexistent"],
+    }
+    bad = ScriptedLLM.call(ANSWER, summary="Sleep went up.", claims=[wrong])
+    found, _ = run(
+        engine,
+        team_id,
+        [ScriptedLLM.call("team_overview"), bad, bad, bad, ScriptedLLM.say("yes")],
+    )
+    assert found is not None and found.stop == "ahead_only"
+    with session_scope(engine) as db:
+        report = db.scalar(select(TeamReport))
+        briefing = report.body["briefing"]
+        assert briefing["summary"].startswith("Release 2.0 is on")
+        assert "Sleep went up" not in briefing["summary"]
+        assert [i["kind"] for i in briefing["items"]] == ["ahead"]
+        assert "briefing_failed" in report.body  # why the agent's part was left out
+
+
+def test_when_one_claim_fails_only_the_checked_claims_are_told_in_their_own_words(engine):
+    team_id = make_team(engine)
+    wrong = {
+        "text": "Steps doubled across the team.",
+        "kind": "change",
+        "metric": "steps",
+        "direction": "up",
+        "evidence_ids": ["nonexistent"],
+    }
+
+    def mixed(messages):
+        return ScriptedLLM.call(
+            ANSWER,
+            summary="Sleep fell and steps doubled.",
+            claims=[sleep_claim(messages), wrong],
+        )
+
+    found, _ = run(engine, team_id, [ScriptedLLM.call("team_overview"), mixed, mixed, mixed])
+    assert found is not None
+    with session_scope(engine) as db:
+        report = db.scalar(select(TeamReport))
+        assert report.body["briefing"]["summary"] == "Time asleep fell across the team."
+        assert "briefing_partial" in report.body

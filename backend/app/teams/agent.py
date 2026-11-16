@@ -24,7 +24,7 @@ from app.agent.sanitize import reads_like_instruction
 from app.agent.trace import team_trace
 from app.agent.verifier import DOWN_WORDS, MEDICAL, UP_WORDS, text_problems
 from app.analysis.evidence import Evidence, Window
-from app.analysis.screen import FDR
+from app.analysis.screen import FDR, benjamini_hochberg
 from app.analysis.team import (
     MIN_MEMBERS,
     TEAM_METRICS,
@@ -49,7 +49,7 @@ from app.db.models import (
 )
 from app.teams.memberships import overlap_problem
 from app.teams.narrative import INDIVIDUAL
-from app.teams.reports import _member_frames, last_full_week
+from app.teams.reports import _member_frames, last_full_week, member_frames
 
 ANSWER = "answer_team"
 MAX_CALLS = 6
@@ -64,6 +64,13 @@ ASKS = re.compile(
     re.IGNORECASE,
 )
 CHALLENGE_DAYS = (7, 28)
+# What a dated note was followed by: the team's two weeks from its start against the four before,
+# on one metric per area. Code measures; the agent judges which past note is like a coming one.
+AFTERMATH_DAYS = 14
+AFTERMATH_METRICS = ("sleep_minutes", "steps", "recovery_score", "strain", "stress_score")
+AFTERMATH_NOTES = 6  # the most recent past notes measured
+COMING_DAYS = 28  # how far ahead a note counts as coming up
+HISTORY_LIMIT = 180  # the furthest back a past note's aftermath is read
 # Part of the team, to compare with the rest: differencing two groups can single people out.
 GROUP_WORDS = (
     r"(?:people|persons?|members?|employees?|colleagues?|staff|hires?|newcomers?|engineers?|"
@@ -200,10 +207,11 @@ meetings, schedules, a team challenge. "Physical stress signs" is a score from h
 sleep, never how anyone feels: do not call it stress or wellbeing.
 
 How to work: call team_overview first. Use team_week for one week, team_alerts for recent alerts, \
-team_notes for what the supervisor told you. When they tell you about an event worth remembering \
-(a deadline, a release, travel), save it with save_team_note. Propose an action with \
-propose_team_action only when they ask what to do or a lasting change calls for it; it waits for \
-their approval. Then call answer_team: a short friendly summary of two to four sentences that \
+team_notes for what the supervisor told you, and note_aftermath for what past dated notes \
+(deadlines, releases) were followed by and which are coming up. When they tell you about an event \
+worth remembering (a deadline, a release, travel), save it with save_team_note. Propose an action \
+with propose_team_action only when they ask what to do or a lasting change calls for it; it waits \
+for their approval. Then call answer_team: a short friendly summary of two to four sentences that \
 leads with the answer, and claims, each citing evidence ids. Never medical, never about one \
 person.
 Asked what they said earlier in this chat, answer from the chat (it may need no claims); if it is \
@@ -309,6 +317,13 @@ def tools() -> list[dict]:
             ("kind", "title", "body"),
         ),
         _tool(
+            "note_aftermath",
+            "The supervisor's dated notes: those coming up in the next four weeks, and for past "
+            "ones what the team's next two weeks looked like against the four before (sleep, "
+            "steps, recovery, load, physical stress signs), tested by code. Use it to warn ahead "
+            "when a coming note is like a past one that moved the team.",
+        ),
+        _tool(
             "team_actions",
             "Team actions proposed in the last 90 days, with their status (proposed, approved, "
             "declined), kind, dates and metric: find challenges that have ended.",
@@ -345,9 +360,12 @@ class TeamTools:
         for record in records:
             self.evidence[record.id] = record
             label = team_info(record.metrics[0]).label if record.metrics else None
-            shown.append(
-                {"evidence_id": record.id, "tool": record.tool, "metric": label, **record.stats}
-            )
+            entry = {"evidence_id": record.id, "tool": record.tool, "metric": label, **record.stats}
+            if record.tool == "team_change":
+                # The checks' own verdict, so the model does not read p = 0.02 as a change the
+                # checks then reject: corrected for the other tests, and big and broad enough.
+                entry["counts_as_a_change"] = bool(_team_change_moved(record))
+            shown.append(entry)
         return shown
 
     def run(self, name: str, arguments: dict) -> dict:
@@ -408,11 +426,63 @@ class TeamTools:
             return {"saved": self._keep([_note_evidence(note)])}
         if name == "propose_team_action":
             return self._propose(arguments)
+        if name == "note_aftermath":
+            return self._aftermath()
         if name == "team_actions":
             return {"actions": self._keep(self._actions())}
         if name == "action_result":
             return self._result(str(arguments.get("action_id", "")))
         return {"error": f"Unknown tool {name!r}."}
+
+    def _aftermath(self) -> dict:
+        notes = [n for n in notes_of(self.db, self.team) if n.starts_on]
+        coming = [
+            n for n in notes if self.today < n.starts_on <= self.today + timedelta(COMING_DAYS)
+        ]
+        past = sorted(
+            (n for n in notes if n.starts_on + timedelta(AFTERMATH_DAYS) <= self.today),
+            key=lambda n: n.starts_on,
+            reverse=True,
+        )[:AFTERMATH_NOTES]
+        past = [n for n in past if n.starts_on >= self.today - timedelta(HISTORY_LIMIT)]
+        found: list[tuple[TeamNote, list[Evidence]]] = []
+        if past:
+            start = min(n.starts_on for n in past) - timedelta(days=28)
+            frames = [prepare(f) for f in member_frames(self.db, self.team, start, self.today)]
+            for note in past:
+                window = Window(
+                    start=note.starts_on, end=note.starts_on + timedelta(AFTERMATH_DAYS - 1)
+                )
+                found.append(
+                    (
+                        note,
+                        [
+                            team_change(
+                                [c for f in frames if (c := member_change(f, m, window))], m, window
+                            )
+                            for m in AFTERMATH_METRICS
+                        ],
+                    )
+                )
+        # Every note and metric is a test: corrected together, as the app's other screens are.
+        tests = [e for _, records in found for e in records if e.stats.get("p_value") is not None]
+        adjusted = benjamini_hochberg([e.stats["p_value"] for e in tests])
+        for record, p in zip(tests, adjusted, strict=True):
+            record.stats["p_value_adjusted"] = round(float(p), 6)
+        return {
+            "coming_up": self._keep([_note_evidence(n) for n in coming]),
+            "past": [
+                {
+                    "note": self._keep([_note_evidence(note)])[0],
+                    # Decided by code: a real, big and broad change, by the alerts' rule.
+                    "followed_by_a_change": [
+                        team_info(e.metrics[0]).label for e in records if _team_change_moved(e)
+                    ],
+                    "team_after": self._keep([e for e in records if e.sufficient]),
+                }
+                for note, records in found
+            ],
+        }
 
     def _actions(self) -> list[Evidence]:
         since = self.now - timedelta(days=90)
@@ -838,6 +908,7 @@ def run_agent(
     system: str = SYSTEM,
     rounds: int = MAX_CALLS,
     repairs: int = 1,
+    leave_out: tuple[str, ...] = (),  # tools this run is not offered
 ) -> TeamReply:
     """The agent's loop over its tools until it hands in an answer whose claims check out."""
     messages: list[dict] = [
@@ -847,7 +918,8 @@ def run_agent(
     reply = TeamReply(FALLBACK, stop="no_answer")
     for _ in range(rounds):
         try:
-            done = llm.complete(messages, tools=tools(), budget=budget)
+            offered = [t for t in tools() if t["function"]["name"] not in leave_out]
+            done = llm.complete(messages, tools=offered, budget=budget)
         except (BudgetExceeded, LLMError) as error:
             reply.trace.append({"error": type(error).__name__})
             break
