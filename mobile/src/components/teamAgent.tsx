@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { type StyleProp, StyleSheet, TextInput, View, type ViewStyle } from 'react-native';
 
 import { ApiError } from '@/api/http';
 import {
@@ -21,14 +21,23 @@ import { fonts, radius, spacing, useColors } from '@/theme';
 const KIND_ORDER = { concern: 0, change: 1, improvement: 2 };
 
 /** Changes in the team's aggregate, raised once by the daily check (docs/teams.md). */
-export function AlertsSection({ teamId }: { teamId: string }) {
+export function AlertsSection({
+  teamId,
+  style,
+  endedOnly = false,
+}: {
+  teamId: string;
+  style?: StyleProp<ViewStyle>;
+  endedOnly?: boolean; // where the open ones are already in the briefing
+}) {
   const alerts = useTeamAlerts(teamId);
-  const open = (alerts.data ?? []).filter((a) => !a.resolvedAt);
+  const open = endedOnly ? [] : (alerts.data ?? []).filter((a) => !a.resolvedAt);
   const ended = (alerts.data ?? []).filter((a) => a.resolvedAt).slice(0, 3);
   if (!open.length && !ended.length) return null;
   return (
     <Section
-      title="Alerts"
+      style={style}
+      title={endedOnly ? 'Earlier alerts' : 'Alerts'}
       footer="Team figures from at least five people. A change has to hold for several days before it is raised."
     >
       {[...open]
@@ -62,7 +71,13 @@ function when(action: TeamAction): string {
 }
 
 /** What the agent proposed for the whole team; nothing reaches members before approval. */
-export function ProposalsSection({ teamId }: { teamId: string }) {
+export function ProposalsSection({
+  teamId,
+  style,
+}: {
+  teamId: string;
+  style?: StyleProp<ViewStyle>;
+}) {
   const actions = useTeamActions(teamId);
   const decide = useDecideTeamAction(teamId);
   const [told, setTold] = useState<string | null>(null);
@@ -71,7 +86,8 @@ export function ProposalsSection({ teamId }: { teamId: string }) {
   if (!waiting.length && !decided.length) return null;
   return (
     <Section
-      title="Proposals"
+      style={style}
+      title="Waiting for you"
       footer="Approving sends it to every member's inbox, signed by no one."
     >
       {waiting.map((action) => (
@@ -126,7 +142,13 @@ export function ProposalsSection({ teamId }: { teamId: string }) {
 }
 
 /** What the supervisor told the agent about the team's work, so changes can be lined up with it. */
-export function NotesSection({ teamId }: { teamId: string }) {
+export function NotesSection({
+  teamId,
+  style,
+}: {
+  teamId: string;
+  style?: StyleProp<ViewStyle>;
+}) {
   const colors = useColors();
   const notes = useTeamNotes(teamId);
   const add = useAddTeamNote(teamId);
@@ -135,6 +157,7 @@ export function NotesSection({ teamId }: { teamId: string }) {
   const save = () => text.trim() && add.mutate(text.trim(), { onSuccess: () => setText('') });
   return (
     <Section
+      style={style}
       title="Team notes"
       footer="Deadlines, releases or travel help the agent line changes up with what the team was doing. Nothing about one person."
     >

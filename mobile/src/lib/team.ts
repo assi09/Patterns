@@ -206,3 +206,38 @@ export function teamStatus(alerts: TeamAlert[] = [], report?: TeamReport): TeamS
     line: 'No team-wide change worth acting on.',
   };
 }
+
+export interface BriefingItem {
+  key: string;
+  kind: AreaState;
+  label: string;
+  text: string;
+  when: string; // "ongoing", "lasting", "this week"
+}
+
+/**
+ * The week's briefing, as numbered items: open alerts first (the daily check is the newest word),
+ * concerns before changes before good news, then the report's priorities on other metrics.
+ */
+export function briefingItems(
+  alerts: TeamAlert[] = [],
+  report?: TeamReport,
+  most = 5,
+): BriefingItem[] {
+  const order: Record<AreaState, number> = { concern: 0, change: 1, improvement: 2, steady: 3 };
+  const open = alerts
+    .filter((a) => !a.resolvedAt)
+    .sort((a, b) => order[a.kind] - order[b.kind])
+    .map((a) => ({ key: a.id, kind: a.kind, label: a.label, text: a.text, when: 'ongoing' }));
+  const seen = new Set(alerts.filter((a) => !a.resolvedAt).map((a) => a.metric));
+  const found = (report?.status === 'ready' ? report.priorities : [])
+    .filter((f) => !seen.has(f.metric))
+    .map((f) => ({
+      key: `${f.metric}-${f.status}`,
+      kind: f.kind,
+      label: f.label,
+      text: f.text,
+      when: f.status === 'lasting' ? 'lasting' : 'this week',
+    }));
+  return [...open, ...found].slice(0, most);
+}

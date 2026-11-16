@@ -36,25 +36,26 @@ const MAX_LENGTH = 600;
 
 /** The supervisor's conversation with the team agent, on a page of its own. */
 export default function TeamChatScreen() {
-  const { team: asked } = useLocalSearchParams<{ team?: string }>();
+  // A suggested question from the dashboard arrives typed, for the supervisor to send or change.
+  const { team: asked, q } = useLocalSearchParams<{ team?: string; q?: string }>();
   const teams = useTeams();
   const team = teams.data?.find((t) => t.id === asked) ?? teams.data?.[0];
   return (
     <>
       <Stack.Screen options={{ title: team ? `Ask about ${team.name}` : 'Ask about your team' }} />
-      {team ? <Conversation teamId={team.id} /> : null}
+      {team ? <Conversation teamId={team.id} question={q} /> : null}
     </>
   );
 }
 
-function Conversation({ teamId }: { teamId: string }) {
+function Conversation({ teamId, question }: { teamId: string; question?: string }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const chat = useTeamChat(teamId);
   const ask = useAskTeamAgent(teamId);
   const rate = useRateTeamAnswer(teamId);
   const { ref, onScroll, onContentSizeChange, onLayout, showJump, pin } = useStickToBottom();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(question ?? '');
   const [proposed, setProposed] = useState<TeamAction[]>([]);
   const messages = chat.data ?? [];
 
