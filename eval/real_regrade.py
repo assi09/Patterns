@@ -11,7 +11,7 @@ import json
 import random
 import re
 import statistics
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import oracle
@@ -89,8 +89,14 @@ def main() -> None:
     done, kinds, both = [], defaultdict(list), []
     alarms = {"agent": [], "plain_chatbot": []}
     found = {"agent": [], "plain_chatbot": []}
+    # Questions the loader fixes of 2026-11-16 removed (LifeSnaps has no sleep stages: its ratios
+    # had been read as stage minutes) are left out and counted, never graded on the old key.
+    dropped = Counter()
     for row in rows:
-        item = keys[(row["person"], row["kind"], row["q"])]
+        item = keys.get((row["person"], row["kind"], row["q"]))
+        if item is None:
+            dropped[row["person"][:3] + ":" + str(row.get("metric"))] += 1
+            continue
         refused = row["stop"] == "refused"
         hit = regraded(item, row["agent"], row["read"], refused)
         if hit is None:
@@ -136,6 +142,7 @@ def main() -> None:
         "correct_when_key_says_no_effect": {k: rate(v) for k, v in alarms.items()},
         "correct_when_key_says_an_effect": {k: rate(v) for k, v in found.items()},
         "planted_change_found_by_the_answer_key": rate(power) | {"opposite": wrong_way},
+        "left_out_no_longer_asked": dict(dropped),
         "mean_hit_per_person": round(
             statistics.mean(
                 statistics.mean(h for p, h in done if p == name) for name in {p for p, _ in done}

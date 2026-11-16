@@ -935,3 +935,41 @@ def test_the_ledger_starts_with_the_costs_already_stored(tmp_path):
     with old.begin() as db:
         rows = db.exec_driver_sql("SELECT kind, cost_usd FROM spend").all()
     assert rows == [("answer", 0.004)]
+
+
+def test_a_correction_replaces_the_draft_and_log_it_points_to_the_card(client, engine, agent):
+    # "Nah I meant 100 g of each" made no new card, and "Log it" then failed (2026-11-16).
+    from app.agent.ask import CONFIRM_ON_CARD
+    from app.agent.intent import Intent
+    from app.db.models import HealthAction
+
+    headers = signed_in(client, engine)
+    agent.router.result = Classification(
+        dict.fromkeys(LABELS, 0.0) | {"nutrition": 0.95},
+        dict.fromkeys(EXPERT_LABELS, 0.0),
+        source="test",
+        intent_probabilities={str(i): float(i == Intent.LOG) for i in Intent},
+    )
+    eaten = (datetime.now(UTC) - timedelta(hours=1)).replace(microsecond=0).isoformat()
+
+    def propose(name: str, kcal: int):
+        return ScriptedLLM.call(
+            "propose_food_log",
+            foodName=name,
+            consumedAt=eaten,
+            mealType="SNACK",
+            energyKcal=kcal,
+        )
+
+    agent.llm.turns += [propose("Apple", 95), submission("Ready")]
+    first = ask(client, headers, "Log a snack: an apple, 95 kcal").json()[-1]
+    agent.llm.turns += [propose("Two apples", 190), submission("Ready")]
+    second = ask(client, headers, "Nah I meant 2 apples, 190 kcal").json()[-1]
+    assert second["actionIds"] and second["actionIds"] != first["actionIds"]
+    with session_scope(engine) as db:
+        status = {str(a.id): a.status for a in db.scalars(select(HealthAction))}
+    assert status[first["actionIds"][0]] == "cancelled"
+    assert status[second["actionIds"][0]] == "draft"
+    asked = len(agent.llm.requests)
+    third = ask(client, headers, "Log it").json()[-1]
+    assert third["text"] == CONFIRM_ON_CARD and len(agent.llm.requests) == asked

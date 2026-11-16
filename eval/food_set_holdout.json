@@ -1,0 +1,30 @@
+{
+ "note": "Held-out foods, written 2026-11-16 after the ranking was chosen on food_set.json and scored once: everyday foods, a few Lebanese, as a person logs them, with the calories per 100 g the right food has (standard nutrition tables).",
+ "foods": [
+  {"q": "pita bread", "kcal": [260, 285]},
+  {"q": "labneh", "kcal": [140, 240]},
+  {"q": "cooked bulgur", "kcal": [80, 95]},
+  {"q": "fried egg", "kcal": [180, 210]},
+  {"q": "scrambled eggs", "kcal": [140, 215]},
+  {"q": "skim milk", "kcal": [30, 40]},
+  {"q": "roasted chicken thigh", "kcal": [175, 250]},
+  {"q": "baked cod", "kcal": [80, 110]},
+  {"q": "boiled potatoes", "kcal": [75, 95]},
+  {"q": "french fries", "kcal": [270, 330]},
+  {"q": "cooked spaghetti", "kcal": [140, 165]},
+  {"q": "raw tomato", "kcal": [15, 22]},
+  {"q": "lettuce", "kcal": [12, 18]},
+  {"q": "pear", "kcal": [50, 62]},
+  {"q": "pineapple", "kcal": [45, 55]},
+  {"q": "dates", "kcal": [270, 300]},
+  {"q": "cashews", "kcal": [550, 600]},
+  {"q": "mozzarella cheese", "kcal": [250, 310]},
+  {"q": "plain yogurt", "kcal": [55, 75]},
+  {"q": "dark chocolate", "kcal": [540, 610]},
+  {"q": "grilled lamb chop", "kcal": [230, 300]},
+  {"q": "cooked kidney beans", "kcal": [120, 135]},
+  {"q": "green peas cooked", "kcal": [75, 90]},
+  {"q": "corn on the cob", "kcal": [85, 100]},
+  {"q": "zucchini", "kcal": [15, 20]}
+ ]
+}

@@ -101,33 +101,91 @@ def food_tool(outside: Outside, estimates: list[str]) -> ExtraTool:
 
     def run(arguments: dict | None) -> tuple[str, dict]:
         arguments = arguments or {}
+        if isinstance(arguments.get("items"), list) and arguments["items"]:
+            return meal(outside, arguments["items"], estimates)
         grams = arguments.get("grams")
         grams = float(grams) if isinstance(grams, int | float) else None
         try:
             found = outside.food(str(arguments.get("query", "")), grams)
         except LookupRefused as exc:
             return json.dumps({"error": str(exc)}), {"refused": True}
+        asked = str(arguments.get("query", ""))[:80]
         if "error" in found:
-            return json.dumps(found), {"found": False}
+            return json.dumps(found), {"found": False, "asked": [asked]}
         estimates.append(f"{found['source']}: {found['foods'][0]['food']}"[:160])
-        return json.dumps(found), {"found": True}
+        # What was asked and matched, in the trace: a wrong match is found from the trace alone.
+        return json.dumps(found), {"found": True, "asked": [asked], "matched": [estimates[-1]]}
 
     return ExtraTool(
         FOOD_LOOKUP,
         "When the person logs a food without its values: typical USDA values for it. Give the "
         "portion in grams if they said it, and copy the scaled values into the draft; use the "
-        "closest match rather than asking which variety. The draft "
+        "closest match rather than asking which variety. A meal of several foods ('chicken and "
+        "rice, 100 g each') is never one query: pass items, one per food with its own grams, and "
+        "copy meal_total into one draft named for the meal; code adds them up. The draft "
         "is labelled an estimate for them to check.",
         {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "maxLength": 200},
                 "grams": {"type": "number"},
+                "items": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "maxLength": 200},
+                            "grams": {"type": "number"},
+                        },
+                        "required": ["query"],
+                    },
+                },
             },
-            "required": ["query"],
         },
         run,
     )
+
+
+MEAL_KEYS = ("energy_kcal", "protein_g", "carbohydrate_g", "fat_g")
+
+
+def meal(outside: Outside, items: list, estimates: list[str]) -> tuple[str, dict]:
+    """Each food of a meal looked up with its own grams, and the meal's total added up by code:
+    one query for "chicken and rice" matched a dish and gave 102 kcal for 200 g (2026-11-16)."""
+    found_items, total, missing = [], dict.fromkeys(MEAL_KEYS, 0.0), []
+    for item in items[:8]:
+        query = str((item or {}).get("query", "")).strip()
+        grams = item.get("grams") if isinstance(item.get("grams"), int | float) else None
+        if not query:
+            continue
+        try:
+            found = outside.food(query, grams)
+        except LookupRefused as exc:
+            return json.dumps({"error": str(exc)}), {"refused": True}
+        if "error" in found:
+            missing.append(query)
+            continue
+        food = found["foods"][0]
+        values = food.get(f"for_{grams:g}g") if grams else None
+        if values is None:
+            missing.append(f"{query} (no grams given)")
+            continue
+        estimates.append(f"{found['source']}: {food['food']}"[:160])
+        found_items.append({"asked": query, "food": food["food"], "grams": grams, **values})
+        for key in MEAL_KEYS:
+            total[key] = round(total[key] + (values.get(key) or 0), 1)
+    asked = [str((item or {}).get("query", ""))[:80] for item in items[:8]]
+    if missing:
+        return json.dumps(
+            {"error": "Not every food could be looked up with its grams.", "missing": missing}
+        ), {"found": False, "asked": asked}
+    matched = [f"{item['food']} ({item['grams']:g} g)" for item in found_items]
+    return json.dumps({"items": found_items, "meal_total": total}), {
+        "found": True,
+        "asked": asked,
+        "matched": matched,
+    }
 
 
 def food_sentence(found: dict) -> str:
