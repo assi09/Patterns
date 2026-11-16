@@ -22,8 +22,17 @@ LIFESNAPS_PEOPLE = 30
 LOW_WEAR_NOT_RECORDED = 900.0  # LifeSnaps has no wear time; nights and steps exist, so assume worn
 
 
+# A zero these can never truly be: a day the watch was not worn (0 steps), a night not recorded
+# (0 minutes asleep), a reading not taken (an HRV of 0 ms on 24 LifeSnaps days). Read as values they
+# made "your HRV today was 0" a correct answer (found 2026-11-16).
+NEVER_ZERO = ("steps", "sleep_minutes", "time_in_bed", "hrv_ms", "resting_hr")
+
+
 def _daily(frame: pd.DataFrame) -> pd.DataFrame:
     frame = frame.sort_index()
+    for column in NEVER_ZERO:
+        if column in frame:
+            frame[column] = frame[column].mask(frame[column] == 0)
     index = pd.date_range(frame.index.min(), frame.index.max(), freq="D", name="date")
     return frame.reindex(index)
 
@@ -60,12 +69,10 @@ def load_lifesnaps() -> dict[str, pd.DataFrame]:
                 "time_in_bed": pd.to_numeric(rows["sleep_duration"], errors="coerce") / 60_000,
                 "sleep_efficiency": pd.to_numeric(rows["sleep_efficiency"], errors="coerce"),
                 "awake_in_bed_minutes": pd.to_numeric(rows["minutesAwake"], errors="coerce"),
-                "deep_sleep_minutes": pd.to_numeric(rows["sleep_deep_ratio"], errors="coerce")
-                * asleep,
-                "rem_sleep_minutes": pd.to_numeric(rows["sleep_rem_ratio"], errors="coerce")
-                * asleep,
-                "light_sleep_minutes": pd.to_numeric(rows["sleep_light_ratio"], errors="coerce")
-                * asleep,
+                # No stage minutes: LifeSnaps' sleep_*_ratio columns compare each night's stage
+                # with the person's usual (they average 1.0), so they are not a share of the
+                # night. Multiplied by time asleep, each stage came out near the whole night
+                # (found 2026-11-16); stage questions go to PMData people instead.
                 "sedentary_minutes": pd.to_numeric(rows["sedentary_minutes"], errors="coerce"),
                 "lightly_active_minutes": pd.to_numeric(
                     rows["lightly_active_minutes"], errors="coerce"

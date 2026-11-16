@@ -1,6 +1,19 @@
 # Project status
 
-The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-11-11.
+The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-11-16.
+
+## Since 2026-11-11
+
+- **Pilot ready:** traces and thumbs (#151), the pilot report (#152), account deletion (#161), the
+  team screens checked on the real backend (#162). Caps on Railway: $0.50 per person a day, $5 a
+  day, $50 in all.
+- **The agent tuned against the course notes** (#163, #164): code names dates and refuses what the
+  data cannot answer; "why" answers on real people 16 to 28 of 33.
+- **Testing plan written** ([testing-plan.md](testing-plan.md), with the methods in
+  [evaluation-plan.md](evaluation-plan.md)): PHIA's questions on 58 real people and on PHIA's own
+  users, against three baselines, as the main benchmark for data answers (pipeline in #165, checked,
+  waiting for the card); the verifier, RAG, logging and the router each tested on their own; then
+  the pilot and the team feature live.
 
 ## Where we are (2026-11-11)
 
@@ -441,4 +454,13 @@ OpenAI ([costs.md](costs.md) has every run).
     under the account's rate limits (5,000 requests and 2 million tokens a minute). The cause is not
     known yet: failures now store their error in the answer's trace (2026-11-16), so the next burst
     can be read in Railway.
+40. **LifeSnaps sleep stages were wrong in the real-data evaluation** (found 2026-11-16).
+    `sleep_*_ratio` compares a night's stage with the person's usual, not a share of the night, so
+    each stage came out near the whole night. Fixed in `real_data.py` (no stages for LifeSnaps);
+    earlier deep-sleep questions on LifeSnaps people were graded consistently but not on real stages.
+41. **A how-to question in another language can find no passage** (found 2026-11-16). The search is
+    given the question as asked; "comment faire une planche" falls below the similarity floor (0.38)
+    while "how do I do a plank" finds it, and "combien de protéines par jour" works. Waiting, by
+    Karim's decision: the fix would search an English version of the question, at a small cost per
+    question.
 

@@ -1,0 +1,124 @@
+{
+ "people": 61,
+ "claims": 3184,
+ "true_claims_passed": 1.0,
+ "broken_claims_caught": 1.0,
+ "by_kind": {
+  "break: causal wording": {
+   "cases": 193,
+   "right": 193,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: change not significant": {
+   "cases": 136,
+   "right": 136,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: date outside": {
+   "cases": 193,
+   "right": 193,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: day on the wrong side": {
+   "cases": 110,
+   "right": 110,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: highest quoted as the average": {
+   "cases": 163,
+   "right": 163,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: medical wording": {
+   "cases": 193,
+   "right": 193,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: number 10% off": {
+   "cases": 193,
+   "right": 193,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: number 30% off": {
+   "cases": 380,
+   "right": 379,
+   "rate": 0.997,
+   "when_wrong": {
+    "passed": 1
+   }
+  },
+  "break: reversed direction": {
+   "cases": 57,
+   "right": 57,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: says no change": {
+   "cases": 57,
+   "right": 57,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: too little data": {
+   "cases": 193,
+   "right": 193,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: wording against direction": {
+   "cases": 57,
+   "right": 57,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "break: wrong metric": {
+   "cases": 193,
+   "right": 193,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "true: average": {
+   "cases": 364,
+   "right": 364,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "true: change": {
+   "cases": 64,
+   "right": 64,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "true: day": {
+   "cases": 193,
+   "right": 193,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "true: highest": {
+   "cases": 193,
+   "right": 193,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "true: no change": {
+   "cases": 136,
+   "right": 136,
+   "rate": 1.0,
+   "when_wrong": {}
+  },
+  "true: total": {
+   "cases": 116,
+   "right": 116,
+   "rate": 1.0,
+   "when_wrong": {}
+  }
+ }
+}

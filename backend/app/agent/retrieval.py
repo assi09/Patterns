@@ -231,11 +231,16 @@ def search(
     area: str | None = None,
     k: int = 3,
     index: Index | None = None,
-    use_words: bool = True,
+    use_words: bool | None = None,
     use_vectors: bool = True,
 ) -> Retrieved:
     """The best `k` passages, in the routed expert's area if `area` is given, and everywhere if
-    nothing there fits."""
+    nothing there fits.
+
+    By meaning alone: on two held-out sets it ranked the right passage higher than meaning and words
+    merged (MRR 0.82 and 0.83 against 0.77 and 0.76; docs/testing-plan.md), which had led only on
+    the questions it was tuned on. Words answer when there are no vectors (no model, or the
+    embedding failed), and `use_words=True` merges them in, for comparison."""
     if off_limits(question):
         return Retrieved(method="refused")
     index = index or load_index()
@@ -244,6 +249,8 @@ def search(
     if llm is not None and use_vectors and index.vectors is not None:
         query = _query_vector(llm, question, budget)
     cosines = None if query is None else index.vectors @ query
+    if use_words is None:
+        use_words = cosines is None
     keyword = index.bm25(words) if use_words else np.zeros(len(index.passages))
 
     def attempt(allowed: np.ndarray) -> tuple[list[Found], float | None]:

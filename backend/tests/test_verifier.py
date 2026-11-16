@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.agent.verifier import Claim, check_claim, verify
+from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, Window
 from app.analysis.tools import change_point, compare_windows, correlate, coverage, describe
 from app.synthetic import Coupling, Step, generate
@@ -389,3 +390,76 @@ def test_the_app_talking_about_the_person_in_the_third_person_is_sent_back():
         "talks about itself" in reason
         for reason in text_problems("The person asked for water.", [])
     )
+
+
+def test_a_number_must_be_the_statistic_the_sentence_names(evidence):
+    # The highest night quoted as the average was never caught on real people's claims.
+    frame = generate(START, 60, (), seed=5).frame
+    week = describe(frame, "steps", window(30, 50))
+    found = {"week": week}
+    s = week.stats
+    mean, high = f"{s['mean']:,.0f}", f"{s['max']:,.0f}"
+    assert (
+        reasons(
+            found,
+            f"Your average steps were {mean}.",
+            kind="value",
+            ids=("week",),
+            metric="steps",
+            direction=None,
+        )
+        == []
+    )
+    swapped = reasons(
+        found,
+        f"Your average steps were {high}.",
+        kind="value",
+        ids=("week",),
+        metric="steps",
+        direction=None,
+    )
+    assert "another statistic as the average" in " ".join(swapped)
+    assert (
+        reasons(
+            found,
+            f"Your highest was {high}, and your average over the last 21 days was {mean}.",
+            kind="value",
+            ids=("week",),
+            metric="steps",
+            direction=None,
+        )
+        == []
+    )
+
+
+def test_a_change_size_after_average_is_not_a_swapped_statistic(evidence):
+    stats = evidence["sleep"].stats
+    text = f"Your average sleep fell by {abs(stats['difference']):.0f} minutes a night."
+    assert reasons(evidence, text) == []
+
+
+def test_a_day_claim_must_quote_the_days_own_value():
+    frame = generate(START, 60, (), seed=7).frame
+    day = compare_day(frame, "steps", START + timedelta(59))
+    found = {"day": day}
+    s = day.stats
+    direction = {"above": "up", "below": "down", "within": None}[s["position"]]
+    said = f"On {START + timedelta(59):%b} {(START + timedelta(59)).day}, your steps were"
+    ok = reasons(
+        found,
+        f"{said} {s['value']:,.0f}.",
+        kind="day",
+        ids=("day",),
+        metric="steps",
+        direction=direction,
+    )
+    assert ok == []
+    wrong = reasons(
+        found,
+        f"{said} {s['usual_high']:,.0f}.",
+        kind="day",
+        ids=("day",),
+        metric="steps",
+        direction=direction,
+    )
+    assert "another statistic as the day's value" in " ".join(wrong)

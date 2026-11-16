@@ -36,6 +36,10 @@ buffer and rehearsal. What was built since this plan was written is in
 
 ### What still has to be tested
 
+**Replaced on 2026-11-16 by [testing-plan.md](testing-plan.md)**, which adds the PHIA benchmark on
+real people and the verifier, RAG, logging and router tests on their own. The table below is kept
+for the record.
+
 Each test has its rule written before it runs, like the expert decisions in
 [evaluation.md](evaluation.md). Paid runs are logged in [costs.md](costs.md).
 

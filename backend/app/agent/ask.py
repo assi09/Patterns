@@ -741,7 +741,7 @@ def ask(
         visible = sorted(_scope(route) or frame.columns)
         found: list[tuple[list[Evidence], str]] = []
         if plan.snapshot and (lead_on_no_data or route.expert) != "nutrition":
-            found.append(snapshot(frame, visible, asked_day(question, today, frame)))
+            found.append(snapshot(frame, visible, asked_day(question, today, frame), question))
         if plan.coaching:
             lead = lead_on_no_data or route.expert
             eating = lead == "nutrition"

@@ -374,3 +374,27 @@ when one moved. Configuration probes (temperature, gpt-5.4) did not beat the noi
 adopted. Results: `eval/results/conversation_eval_2026-11-16_*.json`; why answers in the git-ignored
 `data/eval/results`.
 
+## The verifier on its own (2026-11-16)
+
+`eval/verifier_check.py`, free and deterministic: code writes true claims from 61 real people's
+evidence (PMData, LifeSnaps), then breaks each one way at a time. All 1,066 true claims passed.
+Every break of dates, direction, metric, significance, data sufficiency, causal and medical wording
+was caught. Wrong numbers were missed 7-10% of the time, and the highest day quoted as the average
+was never caught (0 of 163): the verifier checks that a number appears in the cited evidence, not
+that it is the statistic the sentence names.
+
+**Fixed the same day:** a number after "average", "highest", "lowest", "total", "median" or "usual
+range" must be that statistic, and in a one-day claim an unlabeled number must be the day's value.
+Retested: true claims 1,066 of 1,066 still pass; the highest-as-average swap is caught 163 of 163;
+all broken claims 2,117 of 2,118 (99.95%). The one miss is a wrong value that equals the usual
+range's window length (28 days). Totals in `eval/results/verifier_check_summary.json`.
+
+## The router and RAG on held-out sets (2026-11-16)
+
+Router (`eval/router_eval.py`, 152 questions never used to tune it, 40 of them PHIA's): Jev routes
+150 (98.7%) to the right place, all 40 PHIA questions, with the right question type for 109 of 112;
+the keyword fallback routes 126 (82.9%). RAG (`eval/rag_eval.py --set`, a second held-out set of 35
+answerable questions): the app's combined search recall@3 0.89, MRR 0.76; meaning alone 0.94, 0.83,
+the second held-out set in a row where it ranks better. Details and limits in
+[testing-plan.md](testing-plan.md#the-router-on-held-out-questions-2026-11-16).
+
