@@ -122,6 +122,9 @@ STRATEGIES: dict[str, Strategy] = {
         guide="How to work: answer the value asked for with the fewest tool calls (the snapshot "
         "below may already cover it), and state the figure as shown under display. 'How many' "
         "over a period ('steps this week') is the total, with the daily average after it. "
+        "Asked for a total or sum, lead with the total (describe's total), never only the "
+        "average; asked for an average, median, highest or lowest, give that one. Over the whole "
+        "history, use describe over every day there is data and say the dates. "
         + ONE_THING
         + "No hypotheses. Then call submit_findings.",
         budget=Budget(max_calls=6, max_tool_calls=5, max_cost_usd=0.02),
