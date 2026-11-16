@@ -242,9 +242,21 @@ MAX_TOLD = 3
 
 # A correction to the draft just made. Drafts are edited on their card, where the values are.
 CORRECTS = re.compile(
-    r"^\s*(?:actually|no,? (?:it was|make it|i meant)|sorry,? (?:it was|i meant)|wait|oops|"
-    r"correction|make (?:it|that)|change (?:it|that)|it was (?:actually )?\d|i meant)\b",
+    r"^\s*(?:actually|(?:no|nah|nope|sorry|oops|wait)\b[\s,.!]*(?:i meant|it was|it's|its|"
+    r"make it|i had|i ate|that was|should be|\d)|wait|oops|correction|make (?:it|that)|"
+    r"change (?:it|that)|it was (?:actually )?\d|it should be|should be|i meant)\b",
     re.IGNORECASE,
+)
+# "Log it", "yes", "looks good" while a draft waits: the card is where it is confirmed.
+CONFIRMS = re.compile(
+    r"^\s*(?:yes|yeah|yep|yup|ok|okay|sure|log it|log that|confirm(?: it)?|save it|add it|"
+    r"do it|go ahead|sounds good|looks good|looks right|correct|perfect|great)"
+    r"[\s.!]*(?:please|pls|plz)?[\s.!]*$",
+    re.IGNORECASE,
+)
+CONFIRM_ON_CARD = (
+    "Tap Log it on the card above to add it. I don't send anything to Google myself, so it stays "
+    "a draft until you do."
 )
 EDIT_ON_CARD = (
     "Got it. Change it on the card above: tap Edit, fix it, then confirm. Nothing is sent to "
@@ -257,6 +269,8 @@ def plain_reply(said: str, frame: pd.DataFrame, today: date, after_draft: bool) 
     (changed on its card), or days the data does not reach."""
     if who := other_person(said):
         return OTHER_PERSON_REPLY.format(who=who)
+    if after_draft and CONFIRMS.match(said):  # "log it": a person's tap on the card logs it
+        return CONFIRM_ON_CARD
     if after_draft and CORRECTS.match(said):  # "actually it was 3 eggs"
         return EDIT_ON_CARD
     if not frame.empty:

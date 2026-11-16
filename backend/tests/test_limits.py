@@ -339,3 +339,25 @@ def test_a_total_typed_as_one_day_gets_the_tools_that_add_days_up(frame):
     ask(llm, Router("day"), frame, "How did I sleep last night?", today=now, now=now)
     offered = set(llm.requests[-1]["tools"])
     assert "describe" not in offered  # a real day question keeps the day strategy
+
+
+@pytest.mark.parametrize(
+    "said, kind",
+    [
+        ("Nah i meant 100g cooked chicken and 100g cooked rice", "correct"),
+        ("no, it was 3 eggs", "correct"),
+        ("actually 2 slices", "correct"),
+        ("it should be 250 kcal", "correct"),
+        ("Log it", "confirm"),
+        ("yes please", "confirm"),
+        ("looks good!", "confirm"),
+        ("no thanks", None),
+        ("now log a run too", None),
+        ("yes, and how did I sleep?", None),
+    ],
+)
+def test_what_reads_as_a_correction_or_a_confirmation_of_a_draft(said, kind):
+    from app.agent.ask import CONFIRMS, CORRECTS
+
+    found = "confirm" if CONFIRMS.match(said) else "correct" if CORRECTS.match(said) else None
+    assert found == kind

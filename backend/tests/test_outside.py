@@ -447,7 +447,8 @@ def test_a_draft_after_a_food_lookup_is_labelled_by_code(engine):
     outside = way_out(engine, usda(), user)
     tool = food_tool(outside, estimates)
     text, step = tool.run({"query": "jute", "grams": 200})
-    assert step == {"found": True} and json.loads(text)["foods"][0]["for_200g"]["energy_kcal"] == 74
+    assert step["found"] is True and step["asked"] == ["jute"]  # what was looked up, traced
+    assert json.loads(text)["foods"][0]["for_200g"]["energy_kcal"] == 74
     assert estimates == [f"{FDC_SOURCE}: Jute, potherb, cooked"]
 
     import uuid
