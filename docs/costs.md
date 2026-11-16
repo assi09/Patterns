@@ -120,5 +120,6 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-16 | PHIA real people: batch 1 first 20 ($0.37), traces of two misses ($0.02), the rest of batch 1 ($3.96); the totals fix checked on 8 failures and 40 regressions ($0.15); the team agent's Monday run on made-up teams, eight runs ($0.08) | about $4.58 |
 | 2026-11-17 | PHIA real people, batch 2: 39 questions on the code before the totals fix ($0.45, stopped), then the batch on the fixed code with Patterns asked again on those 39 ($3.79) | about $4.24 |
 | 2026-11-17 | Meal logging fix: replays of Karim's chicken-and-rice conversation (six, $0.07), food ranking on 45 and 25 held-out foods with embeddings and the model's choice (about $0.03) | about $0.10 |
+| 2026-11-17 | Team warning before a noted crunch: about 30 Monday runs on made-up teams while measuring and fixing it | about $0.35 |
 | 2026-11-16 | Router on 152 held-out questions, Jev twice ($0.0124, $0.0125); RAG on the second held-out set and ten borderline queries (embeddings, under $0.01) | about $0.03 |
 

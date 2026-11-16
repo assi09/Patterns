@@ -222,14 +222,17 @@ def challenges(db: Session, team: Team, week: Window, frames: list) -> list[tupl
 
 
 def _member_frames(db: Session, team: Team, week: Window) -> list:
+    return member_frames(db, team, week.start - timedelta(days=HISTORY_DAYS), week.end)
+
+
+def member_frames(db: Session, team: Team, start: date, last: date) -> list:
+    """Each current member's daily data from `start` to `last`, those with any."""
     users = db.scalars(
         select(TeamMembership.user_id).where(
             TeamMembership.team_id == team.id, TeamMembership.left_at.is_(None)
         )
     ).all()
-    start = week.start - timedelta(days=HISTORY_DAYS)
-    end = week.end + timedelta(days=1)
-    frames = [load_daily(db, user_id, SOURCE, start, end) for user_id in users]
+    frames = [load_daily(db, user_id, SOURCE, start, last + timedelta(days=1)) for user_id in users]
     return [frame for frame in frames if not frame.empty]
 
 
