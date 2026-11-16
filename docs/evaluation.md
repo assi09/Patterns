@@ -381,5 +381,11 @@ evidence (PMData, LifeSnaps), then breaks each one way at a time. All 1,066 true
 Every break of dates, direction, metric, significance, data sufficiency, causal and medical wording
 was caught. Wrong numbers were missed 7-10% of the time, and the highest day quoted as the average
 was never caught (0 of 163): the verifier checks that a number appears in the cited evidence, not
-that it is the statistic the sentence names. Totals in `eval/results/verifier_check_summary.json`.
+that it is the statistic the sentence names.
+
+**Fixed the same day:** a number after "average", "highest", "lowest", "total", "median" or "usual
+range" must be that statistic, and in a one-day claim an unlabeled number must be the day's value.
+Retested: true claims 1,066 of 1,066 still pass; the highest-as-average swap is caught 163 of 163;
+all broken claims 2,117 of 2,118 (99.95%). The one miss is a wrong value that equals the usual
+range's window length (28 days). Totals in `eval/results/verifier_check_summary.json`.
 

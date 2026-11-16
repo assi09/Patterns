@@ -288,15 +288,16 @@ def cases_for(frame: pd.DataFrame, metric: str) -> list[Case]:
                 [day],
                 "down" if direction == "up" else "up",
             )
-        add(
-            "break: number 30% off",
-            False,
-            f"On {short_date(end)}, your {name(metric)} was "
-            f"{wrong(metric, st['value'], 1.3)}.",
-            "day",
-            [day],
-            direction,
-        )
+        if abs(st["value"]) >= 1:  # 30% off 0 is still 0: no break at all
+            add(
+                "break: number 30% off",
+                False,
+                f"On {short_date(end)}, your {name(metric)} was "
+                f"{wrong(metric, st['value'], 1.3)}.",
+                "day",
+                [day],
+                direction,
+            )
     return out
 
 

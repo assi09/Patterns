@@ -1,8 +1,8 @@
 {
  "people": 61,
- "claims": 3190,
+ "claims": 3184,
  "true_claims_passed": 1.0,
- "broken_claims_caught": 0.899,
+ "broken_claims_caught": 1.0,
  "by_kind": {
   "break: causal wording": {
    "cases": 193,
@@ -30,11 +30,9 @@
   },
   "break: highest quoted as the average": {
    "cases": 163,
-   "right": 0,
-   "rate": 0.0,
-   "when_wrong": {
-    "passed": 163
-   }
+   "right": 163,
+   "rate": 1.0,
+   "when_wrong": {}
   },
   "break: medical wording": {
    "cases": 193,
@@ -44,18 +42,16 @@
   },
   "break: number 10% off": {
    "cases": 193,
-   "right": 179,
-   "rate": 0.927,
-   "when_wrong": {
-    "passed": 14
-   }
+   "right": 193,
+   "rate": 1.0,
+   "when_wrong": {}
   },
   "break: number 30% off": {
-   "cases": 386,
-   "right": 349,
-   "rate": 0.904,
+   "cases": 380,
+   "right": 379,
+   "rate": 0.997,
    "when_wrong": {
-    "passed": 37
+    "passed": 1
    }
   },
   "break: reversed direction": {

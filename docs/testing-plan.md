@@ -86,6 +86,28 @@ So it gets a test of its own, free and deterministic, because the verifier is co
   that a number is somewhere in the cited evidence, not that it is the statistic the sentence names.
   The fix would tie "average", "highest", "lowest", "total" and "usual" to their own statistics.
 
+**Fixed and retested the same day.** A number that follows "average", "highest", "lowest", "total",
+"median" or "usual range" in the same clause must now be that statistic, and in a claim about one
+day, a number with no such word must be the day's own value. It is rejected only when it is a
+*different* level in the evidence, so a change's size, a count of days or a window's length after
+"average" is left alone.
+
+| | Before | After |
+|---|---|---|
+| True claims passed | 1,066 / 1,066 | **1,066 / 1,066** |
+| Highest day quoted as the average | 0 / 163 | **163 / 163** |
+| Number 10% off | 179 / 193 | **193 / 193** |
+| Number 30% off | 349 / 386 | **379 / 380** |
+| Every other break | 100% | **100%** |
+| All broken claims | 89.9% | **99.95% (2,117 / 2,118)** |
+
+Six "30% off" cases were dropped from the test: on days with 0 steps, 30% off is still 0, so they
+were not breaks. The one miss left is a coincidence the verifier cannot see: a wrong HRV value that
+equals 28, the number of days in the usual range's window. Unit tests for the rule were added
+(35 verifier tests; 1,665 in all pass). The risk is in live answers: a true sentence worded in a way
+the rule misreads would now be sent back. The first 20 PHIA questions record every rejection, so
+they are read for that before the rest of the batch.
+
 The 30 unit tests in `backend/tests/test_verifier.py` already check one hand-written example of each
 rule. This test checks the rules on many real claims. An optional extra is Patterns with the verifier
 turned off on 100 PHIA questions, about $0.60, which would show what it adds to accuracy. Run it only

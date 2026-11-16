@@ -373,6 +373,115 @@ def _quoted_durations(text: str) -> list[float]:
     return [int(h) * 60 + int(m or 0) for h, m in DURATION.findall(text)]
 
 
+# Words that name one statistic, and the evidence keys that hold it. A number after one of them, in
+# the same clause, must be that statistic: "your average was 9,800" when 9,800 is the highest day
+# passed, because the check only asked whether the number was somewhere in the evidence (0 of 163
+# such swaps caught on real people's claims, 2026-11-16).
+STATISTIC_WORDS = (
+    (
+        re.compile(r"\b(?:usual|normal|typical) range\b|\busual(?:ly)?\b", re.I),
+        "the usual range",
+        lambda key: key.startswith("usual"),
+    ),
+    (
+        re.compile(r"\baverag\w*|\bmean\b", re.I),
+        "the average",
+        lambda key: "mean" in key or key == "per_week",
+    ),
+    (
+        re.compile(r"\b(?:highest|maximum|max|peak\w*)\b", re.I),
+        "the highest",
+        lambda key: key in ("max", "highest", "maximum"),
+    ),
+    (
+        re.compile(r"\b(?:lowest|minimum|fewest)\b", re.I),
+        "the lowest",
+        lambda key: key in ("min", "lowest", "minimum"),
+    ),
+    (
+        re.compile(r"\b(?:total\w*|in all|altogether)\b", re.I),
+        "the total",
+        lambda key: key in ("total", "per_week"),
+    ),
+    (re.compile(r"\b(?:median|middle)\b", re.I), "the median", lambda key: "median" in key),
+)
+# Where a word's reach ends: a sentence or clause, but not the point of "7.5" or comma of "9,800".
+CLAUSE_END = re.compile(r"[.;!?](?!\d)|,(?!\d{3})|\b(?:but|while|whereas|although)\b", re.I)
+OTHER_LEVELS = ("highest", "lowest", "maximum", "minimum")
+
+
+def _blank(pattern: re.Pattern, text: str) -> str:
+    return pattern.sub(lambda m: " " * len(m.group()), text)
+
+
+def _figures(text: str) -> list[tuple[int, float, int]]:
+    """Each number and duration in a sentence with its position and decimals; dates, clock times
+    and evidence ids left out. Durations are in minutes."""
+    for pattern in (EVIDENCE_ID, ISO_DATE, MONTH_DAY, DAY_MONTH, CLOCK):
+        text = _blank(pattern, text)
+    found = [
+        (m.start(), int(m.group(1)) * 60 + int(m.group(2) or 0), 0) for m in DURATION.finditer(text)
+    ]
+    text = _blank(DURATION, text)
+    for m in NUMBER.finditer(text):
+        raw = m.group().replace(",", "")
+        found.append((m.start(), abs(float(raw)), len(raw.split(".")[1]) if "." in raw else 0))
+    return sorted(found)
+
+
+def _level_values(cited: list[Evidence], wanted) -> list[float]:
+    values: list[float] = []
+    for evidence in cited:
+        factors = {f for metric in evidence.metrics for f in _conversions(metric)}
+        for key, value in evidence.stats.items():
+            if wanted(key):
+                values += [abs(n) * f for n in _numbers_in(value) for f in factors]
+    return values
+
+
+def _scopes(text: str) -> list[tuple[int, int, str, Callable[[str], bool]]]:
+    """Each statistic word's reach: from the word to the next one or the end of its clause."""
+    words = sorted(
+        (m.start(), m.end(), said, wanted)
+        for pattern, said, wanted in STATISTIC_WORDS
+        for m in pattern.finditer(text)
+    )
+    scopes = []
+    for i, (_, end, said, wanted) in enumerate(words):
+        stop = words[i + 1][0] if i + 1 < len(words) else len(text)
+        if boundary := CLAUSE_END.search(text, end):
+            stop = min(stop, boundary.start())
+        scopes.append((end, stop, said, wanted))
+    return scopes
+
+
+def wrong_statistic(text: str, cited: list[Evidence], day: bool = False) -> list[str]:
+    """Numbers quoted as one statistic that are another: the average given the highest day's value.
+    Only a number that is a different level in the evidence is rejected; a change's size, a count
+    of days or a window's length after "average" is left to the other checks. In a claim about one
+    day, a number no statistic word governs must be the day's own value."""
+    levels = set(LEVEL_KEYS) | set(OTHER_LEVELS)
+    scopes, figures = _scopes(text), _figures(text)
+    if day:
+        free = [(0, len(text), "the day's value", lambda key: key == "value")]
+        governed = [f for f in figures if any(start <= f[0] < stop for start, stop, *_ in scopes)]
+        figures_free = [f for f in figures if f not in governed]
+    problems = []
+    for start, stop, said, wanted in scopes + (free if day else []):
+        right = _level_values(cited, wanted)
+        if not right:
+            continue  # nothing cited holds that statistic: the other checks decide
+        other = _level_values(cited, lambda key, wanted=wanted: key in levels and not wanted(key))
+        pool = figures_free if said == "the day's value" else figures
+        for at, number, decimals in pool:
+            if not start <= at < stop or _matches(number, decimals, right):
+                continue
+            if _matches(number, decimals, other):
+                problems.append(f"quotes another statistic as {said}: {number:g}")
+                break
+    return problems
+
+
 def _quoted_clock_times(text: str) -> list[float]:
     """Times of day ("23:30", "11:30 pm"), as hours relative to midnight (23:30 -> -0.5)."""
     times = []
@@ -600,6 +709,9 @@ def text_problems(
     }
     if bad := _unsupported_dates(text, years, cited):
         reasons.append("mentions dates outside the cited evidence: " + ", ".join(map(str, bad)))
+    day = any(e.tool == "compare_day" for e in cited) and len(cited) == 1
+    if not general and (swapped := wrong_statistic(text, cited, day)):
+        reasons += swapped
     if wrong := wrong_weekdays(text, years):
         reasons.append("names the wrong day of the week: " + ", ".join(wrong))
     if EVIDENCE_ID.search(text):
