@@ -60,12 +60,10 @@ def load_lifesnaps() -> dict[str, pd.DataFrame]:
                 "time_in_bed": pd.to_numeric(rows["sleep_duration"], errors="coerce") / 60_000,
                 "sleep_efficiency": pd.to_numeric(rows["sleep_efficiency"], errors="coerce"),
                 "awake_in_bed_minutes": pd.to_numeric(rows["minutesAwake"], errors="coerce"),
-                "deep_sleep_minutes": pd.to_numeric(rows["sleep_deep_ratio"], errors="coerce")
-                * asleep,
-                "rem_sleep_minutes": pd.to_numeric(rows["sleep_rem_ratio"], errors="coerce")
-                * asleep,
-                "light_sleep_minutes": pd.to_numeric(rows["sleep_light_ratio"], errors="coerce")
-                * asleep,
+                # No stage minutes: LifeSnaps' sleep_*_ratio columns compare each night's stage
+                # with the person's usual (they average 1.0), so they are not a share of the
+                # night. Multiplied by time asleep, each stage came out near the whole night
+                # (found 2026-11-16); stage questions go to PMData people instead.
                 "sedentary_minutes": pd.to_numeric(rows["sedentary_minutes"], errors="coerce"),
                 "lightly_active_minutes": pd.to_numeric(
                     rows["lightly_active_minutes"], errors="coerce"

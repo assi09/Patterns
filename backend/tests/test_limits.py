@@ -167,6 +167,7 @@ def test_additive_metrics_have_a_weekly_figure(frame):
     steps = describe(frame, "steps", window).stats
     assert steps["per_week"] == pytest.approx(steps["mean"] * 7, rel=1e-3)
     assert "per_week" not in describe(frame, "resting_hr", window).stats
+    assert "total" in describe(frame, "sleep_minutes", window).stats  # total sleep over a period
 
 
 def test_an_overlong_summary_is_explained_once_then_trimmed(frame):

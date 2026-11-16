@@ -48,6 +48,13 @@ ADDITIVE = frozenset(
         "lightly_active_minutes",
         "moderately_active_minutes",
         "very_active_minutes",
+        # "How much did I sleep over the last 30 days?" is a total too (97 of PHIA's questions).
+        "sleep_minutes",
+        "time_in_bed",
+        "deep_sleep_minutes",
+        "light_sleep_minutes",
+        "rem_sleep_minutes",
+        "awake_in_bed_minutes",
     }
 )
 

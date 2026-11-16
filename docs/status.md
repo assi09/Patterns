@@ -437,6 +437,10 @@ OpenAI ([costs.md](costs.md) has every run).
     withheld week read "Steady" on every area; it now says "Not enough yet" and why.
 38. **Blind grading is not done.** `eval/results/phia_blind_2026-11-10.csv` (51 answers) waits for
     Karim and Jad, and about 30 of the grader's readings should be checked by hand.
+40. **LifeSnaps sleep stages were wrong in the real-data evaluation** (found 2026-11-16).
+    `sleep_*_ratio` compares a night's stage with the person's usual, not a share of the night, so
+    each stage came out near the whole night. Fixed in `real_data.py` (no stages for LifeSnaps);
+    earlier deep-sleep questions on LifeSnaps people were graded consistently but not on real stages.
 39. **Model calls sometimes fail in bursts** (8 of 33 in one evaluation run, 3 of 104 in another), well
     under the account's rate limits (5,000 requests and 2 million tokens a minute). The cause is not
     known yet: failures now store their error in the answer's trace (2026-11-16), so the next burst
