@@ -507,6 +507,20 @@ def _frame_for(item: dict, cache: dict) -> pd.DataFrame:
     return cache[item["person"]]
 
 
+def broken(answer: dict) -> bool:
+    """A failure of the model service, not of the system: retried, never scored as wrong."""
+    return "error" in answer or answer.get("stop") == "model_error"
+
+
+def latest(lines: list[str]) -> dict[str, dict]:
+    """The rows of a run file, the last one for each question (a retry replaces a failure)."""
+    rows = {}
+    for line in lines:
+        row = json.loads(line)
+        rows[row["id"]] = row
+    return rows
+
+
 def run(mode: str, batch: int, first: int | None, stop: float, systems: tuple) -> None:
     items = [
         i
@@ -514,11 +528,12 @@ def run(mode: str, batch: int, first: int | None, stop: float, systems: tuple) -
         if i["mode"] == mode and i["batch"] == batch
     ]
     out = ANSWERS / f"phia_bench_{mode}{batch}.jsonl"
-    done = (
-        {json.loads(line)["id"] for line in out.read_text().splitlines()}
-        if out.exists()
-        else set()
-    )
+    earlier = latest(out.read_text().splitlines()) if out.exists() else {}
+    done = {
+        i
+        for i, r in earlier.items()
+        if not any(broken(r.get(s, {"error": 1})) for s in systems)
+    }
     todo = [i for i in items if i["id"] not in done][: first or None]
     llm = OpenAILLM.from_settings(settings, SpendLedger(cap_usd=stop + 0.5))
     router, guard, spent, cache = (
@@ -531,12 +546,13 @@ def run(mode: str, batch: int, first: int | None, stop: float, systems: tuple) -
     print(
         f"{mode}{batch}: {len(todo)} to ask ({len(done)} already answered), systems {systems}"
     )
+    asked = 0
     for n, item in enumerate(todo, start=1):
         if spent[0] >= stop:
             print("Stopped at the spending limit.")
             break
         frame = _frame_for(item, cache)
-        row = {
+        row = earlier.get(item["id"]) or {
             k: item[k]
             for k in (
                 "id",
@@ -551,6 +567,8 @@ def run(mode: str, batch: int, first: int | None, stop: float, systems: tuple) -
             )
         }
         for system in systems:
+            if system in row and not broken(row[system]):
+                continue  # answered before; only failures are asked again
             try:
                 row[system] = ask_one(system, llm, router, guard, item, frame, spent)
             except Exception as exc:  # noqa: BLE001 a crash is that system's failure, counted
@@ -559,18 +577,22 @@ def run(mode: str, batch: int, first: int | None, stop: float, systems: tuple) -
                     "strict": False,
                     "fair": False,
                 }
-            broken = "error" in row[system] or row[system].get("stop") == "model_error"
-            failing[system] = failing[system] + 1 if broken else 0
+            failing[system] = failing[system] + 1 if broken(row[system]) else 0
         with out.open("a") as file:
             file.write(json.dumps(row, default=float) + "\n")
-        marks = " ".join(f"{s[:6]}:{'Y' if row[s]['fair'] else '-'}" for s in systems)
+        asked += 1
+        marks = " ".join(
+            f"{s[:6]}:{'!' if broken(row[s]) else 'Y' if row[s]['fair'] else '-'}"
+            for s in systems
+        )
         print(f"{n:3d} ${spent[0]:.3f} {marks} | {item['q'][:70]}")
         if bad := [s for s, count in failing.items() if count >= STOP_AFTER]:
             print(
                 f"Stopped: {bad} failed {STOP_AFTER} times in a row. Fix before going on."
             )
             break
-    print(f"spent ${spent[0]:.3f}")
+    each = spent[0] / asked if asked else 0
+    print(f"spent ${spent[0]:.3f}, ${each:.4f} a question")
 
 
 # Reporting (free)
@@ -587,17 +609,23 @@ def wilson(hits: int, n: int) -> list[float]:
 
 def report() -> dict:
     rows = [
-        json.loads(line)
+        row
         for path in sorted(ANSWERS.glob("phia_bench_*.jsonl"))
-        for line in path.read_text().splitlines()
+        for row in latest(path.read_text().splitlines()).values()
     ]
     summary: dict = {}
     for mode in ("A", "B"):
-        group = [r for r in rows if r["mode"] == mode]
-        systems = [s for s in SYSTEMS if all(s in r for r in group)] if group else []
-        if not group:
+        every = [r for r in rows if r["mode"] == mode]
+        systems = [s for s in SYSTEMS if all(s in r for r in every)] if every else []
+        if not every:
             continue
-        part: dict = {"questions": len(group), "systems": {}}
+        # Scored on questions every system answered: a service failure is no one's wrong answer.
+        group = [r for r in every if not any(broken(r[s]) for s in systems)]
+        part: dict = {
+            "questions": len(group),
+            "left_out_failed": len(every) - len(group),
+        }
+        part["systems"] = {}
         for system in systems:
             for score in ("strict", "fair"):
                 hits = sum(r[system][score] for r in group)

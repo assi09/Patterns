@@ -22,8 +22,17 @@ LIFESNAPS_PEOPLE = 30
 LOW_WEAR_NOT_RECORDED = 900.0  # LifeSnaps has no wear time; nights and steps exist, so assume worn
 
 
+# A zero these can never truly be: a day the watch was not worn (0 steps), a night not recorded
+# (0 minutes asleep), a reading not taken (an HRV of 0 ms on 24 LifeSnaps days). Read as values they
+# made "your HRV today was 0" a correct answer (found 2026-11-16).
+NEVER_ZERO = ("steps", "sleep_minutes", "time_in_bed", "hrv_ms", "resting_hr")
+
+
 def _daily(frame: pd.DataFrame) -> pd.DataFrame:
     frame = frame.sort_index()
+    for column in NEVER_ZERO:
+        if column in frame:
+            frame[column] = frame[column].mask(frame[column] == 0)
     index = pd.date_range(frame.index.min(), frame.index.max(), freq="D", name="date")
     return frame.reindex(index)
 
