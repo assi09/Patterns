@@ -1,0 +1,73 @@
+{
+ "questions": 35,
+ "scores": {
+  "old cards": {
+   "recall@1": 0.143,
+   "recall@3": 0.143,
+   "recall@5": 0.143,
+   "mrr": 0.143
+  },
+  "words": {
+   "recall@1": 0.371,
+   "recall@3": 0.514,
+   "recall@5": 0.571,
+   "mrr": 0.44
+  },
+  "meaning": {
+   "recall@1": 0.743,
+   "recall@3": 0.943,
+   "recall@5": 0.971,
+   "mrr": 0.831
+  },
+  "both": {
+   "recall@1": 0.657,
+   "recall@3": 0.886,
+   "recall@5": 0.914,
+   "mrr": 0.76
+  },
+  "both, in the expert's area": {
+   "recall@1": 0.629,
+   "recall@3": 0.886,
+   "recall@5": 0.914,
+   "mrr": 0.74
+  }
+ },
+ "misses_top3": [
+  {
+   "q": "do I need rest days between hard workouts",
+   "got": [
+    "Physical Activity Guidelines for America",
+    "Physical Activity Guidelines for America",
+    "Physical Activity Guidelines for America"
+   ]
+  },
+  {
+   "q": "comment faire une planche",
+   "got": []
+  },
+  {
+   "q": "wat is a good bedtime routine",
+   "got": [
+    "Moving bedtime in small steps",
+    "Time to wind down",
+    "Prepare for Sleep"
+   ]
+  },
+  {
+   "q": "pushups for beginners",
+   "got": [
+    "Pushups",
+    "Pushups (Close and Wide Hand Positions)",
+    "Push Up to Side Plank"
+   ]
+  }
+ ],
+ "unanswerable_silent": [
+  2,
+  4
+ ],
+ "medical_silent": [
+  2,
+  4
+ ]
+}

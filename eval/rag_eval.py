@@ -4,7 +4,8 @@
 Scores the labelled questions in `rag_set.json`: Recall@1, @3, @5 and MRR, for the old keyword
 cards, words alone, meaning alone, both, and both within the expert's area; and how often a question the
 passages cannot answer finds nothing. A quarter of the questions are held out: tune on the rest, and
-pass `--final` once, at the end.
+pass `--final` once, at the end. `--set FILE` scores every question of another labelled set (such
+as the second held-out set, `rag_heldout_2026-11-16.json`) and saves the totals to `eval/results`.
 """
 
 import json
@@ -44,10 +45,16 @@ def rank(found, item) -> int | None:
 
 def main() -> None:
     final = "--final" in sys.argv
+    other = sys.argv[sys.argv.index("--set") + 1] if "--set" in sys.argv else None
+    labelled = json.loads(Path(other).read_text()) if other else SET
     llm = OpenAILLM.from_settings(settings)
     load_index()
-    answerable = [q for q in SET["questions"] if not q.get("none")]
-    chosen = [q for i, q in enumerate(answerable) if (i % 4 == 3) == final]
+    answerable = [q for q in labelled["questions"] if not q.get("none")]
+    chosen = (
+        answerable
+        if other
+        else [q for i, q in enumerate(answerable) if (i % 4 == 3) == final]
+    )
     methods = {
         "words": {"use_vectors": False},
         "meaning": {"use_words": False},
@@ -61,7 +68,10 @@ def main() -> None:
         wanted = item.get("titles", ())
         titles = [c.title.lower() for c in found]
         ranks.append(
-            next((i + 1 for i, t in enumerate(titles) if any(w in t for w in wanted)), None)
+            next(
+                (i + 1 for i, t in enumerate(titles) if any(w in t for w in wanted)),
+                None,
+            )
         )
     results["old cards"] = score(ranks)
     misses: list = []
@@ -77,15 +87,23 @@ def main() -> None:
         at = rank([f.passage for f in done.found], item)
         ranks.append(at)
         if at is None or at > 3:
-            misses.append({"q": item["q"], "got": [f.passage.title[:40] for f in done.found[:3]]})
+            misses.append(
+                {"q": item["q"], "got": [f.passage.title[:40] for f in done.found[:3]]}
+            )
     results["both, in the expert's area"] = score(ranks)
-    empty = [q for q in SET["questions"] if q.get("none")]
+    empty = [q for q in labelled["questions"] if q.get("none")]
     silent = sum(not search(q["q"], llm=llm).found for q in empty)
-    refused = sum(not search(q, llm=llm).found for q in SET["medical"])
-    print(("HELD OUT" if final else "TUNING SET"), len(chosen), "questions")
+    refused = sum(not search(q, llm=llm).found for q in labelled["medical"])
+    print(other or ("HELD OUT" if final else "TUNING SET"), len(chosen), "questions")
     print(json.dumps(results, indent=1))
     print(f"no answer found for unanswerable questions: {silent}/{len(empty)}")
-    print(f"medical questions returning nothing: {refused}/{len(SET['medical'])}")
+    print(f"medical questions returning nothing: {refused}/{len(labelled['medical'])}")
+    if other:
+        out = Path("eval/results") / f"rag_eval_{Path(other).stem}.json"
+        totals = {"questions": len(chosen), "scores": results, "misses_top3": misses}
+        totals |= {"unanswerable_silent": [silent, len(empty)]}
+        totals |= {"medical_silent": [refused, len(labelled["medical"])]}
+        out.write_text(json.dumps(totals, indent=1, ensure_ascii=False) + "\n")
     if not final:
         print("misses:", json.dumps(misses, indent=0)[:3500])
 

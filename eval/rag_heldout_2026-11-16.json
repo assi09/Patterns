@@ -1,0 +1,316 @@
+{
+ "note": "A second held-out set, written 2026-11-16 after all tuning and never used for it: everyday wording, typos, French, rewordings of tuning topics, questions the passages cannot answer (no HRV or heart-rate passage exists), and medical ones. Same relevance rule as rag_set.json; labels checked against passage titles present in the index before any search was run. Scored once.",
+ "questions": [
+  {
+   "q": "how much protein should i eat in a day",
+   "area": "nutrition",
+   "titles": [
+    "prioritize protein"
+   ],
+   "text": [
+    "grams of protein per kilogram"
+   ]
+  },
+  {
+   "q": "is it ok to drink coffee at 4pm if I want to sleep well",
+   "area": "sleep",
+   "titles": [
+    "caffeine"
+   ]
+  },
+  {
+   "q": "how long should a nap be so I don't wake up groggy",
+   "area": "sleep",
+   "titles": [
+    "nap duration",
+    "nap times",
+    "planned naps"
+   ]
+  },
+  {
+   "q": "my room is noisy and bright at night, does that matter for sleep",
+   "area": "sleep",
+   "titles": [
+    "a quiet, dark, cool room",
+    "what disrupts sleep"
+   ]
+  },
+  {
+   "q": "I fly to Tokyo next week, how do I deal with the time difference",
+   "area": "sleep",
+   "titles": [
+    "jet lag"
+   ]
+  },
+  {
+   "q": "I work nights at the hospital, how do I sleep during the day",
+   "area": "sleep",
+   "titles": [
+    "night shift",
+    "planned naps",
+    "improve sleep by avoiding light"
+   ]
+  },
+  {
+   "q": "does getting sunlight in the morning help my sleep",
+   "area": "sleep",
+   "titles": [
+    "daylight during the day",
+    "effects of light",
+    "using light"
+   ]
+  },
+  {
+   "q": "should I wake up at the same time on weekends too",
+   "area": "sleep",
+   "titles": [
+    "a steady wake-up time"
+   ]
+  },
+  {
+   "q": "eating late dinner bad for sleep?",
+   "area": "sleep",
+   "titles": [
+    "big meals close to bedtime"
+   ]
+  },
+  {
+   "q": "scrolling tiktok in bed keeps me awake",
+   "area": "sleep",
+   "titles": [
+    "screens before bed"
+   ]
+  },
+  {
+   "q": "how many minutes of exercise a week do adults need",
+   "area": "activity",
+   "titles": [
+    "physical activity guidelines",
+    "adults"
+   ],
+   "text": [
+    "150 minutes"
+   ]
+  },
+  {
+   "q": "how often should I do strength training",
+   "area": "activity",
+   "titles": [
+    "muscle-strengthening",
+    "physical activity guidelines"
+   ],
+   "text": [
+    "2 or more days",
+    "two or more days"
+   ]
+  },
+  {
+   "q": "how do i do a plank correctly",
+   "area": "activity",
+   "titles": [
+    "plank"
+   ]
+  },
+  {
+   "q": "proper form for a bodyweight squat",
+   "area": "activity",
+   "titles": [
+    "bodyweight squat"
+   ]
+  },
+  {
+   "q": "a good stretch for tight hamstrings",
+   "area": "activity",
+   "titles": [
+    "hamstring stretch",
+    "hamstring"
+   ]
+  },
+  {
+   "q": "how to do a glute bridge",
+   "area": "activity",
+   "titles": [
+    "glute bridge",
+    "butt lift (bridge)",
+    "hip bridge"
+   ]
+  },
+  {
+   "q": "easy calf exercise I can do at home",
+   "area": "activity",
+   "titles": [
+    "calf raise",
+    "calf stretch"
+   ]
+  },
+  {
+   "q": "do I need rest days between hard workouts",
+   "area": "activity",
+   "titles": [
+    "rest days between hard sessions"
+   ]
+  },
+  {
+   "q": "I sit at a desk 9 hours a day, what's the risk",
+   "area": "activity",
+   "titles": [
+    "breaking up long sitting",
+    "health risks of an inactive"
+   ]
+  },
+  {
+   "q": "exercise ideas for my 70 year old dad",
+   "area": "activity",
+   "titles": [
+    "older adults",
+    "exercise for older adults"
+   ]
+  },
+  {
+   "q": "is 8 glasses of water a day right",
+   "area": "nutrition",
+   "titles": [
+    "drinking water"
+   ]
+  },
+  {
+   "q": "how much sugar is too much",
+   "area": "nutrition",
+   "titles": [
+    "added sugars"
+   ]
+  },
+  {
+   "q": "why is fiber good and where do I get it",
+   "area": "nutrition",
+   "titles": [
+    "dietary fiber",
+    "focus on whole grains",
+    "gut health"
+   ]
+  },
+  {
+   "q": "how much salt per day is ok",
+   "area": "nutrition",
+   "titles": [
+    "sodium"
+   ]
+  },
+  {
+   "q": "how many calories do I need a day",
+   "area": "nutrition",
+   "titles": [
+    "how many calories do you need",
+    "calories"
+   ]
+  },
+  {
+   "q": "should I eat dairy",
+   "area": "nutrition",
+   "titles": [
+    "consume dairy"
+   ]
+  },
+  {
+   "q": "healthy snack ideas under 100 calories",
+   "area": "nutrition",
+   "titles": [
+    "100-calorie snacks"
+   ]
+  },
+  {
+   "q": "what can I eat on night duty to stay alert",
+   "area": "nutrition",
+   "titles": [
+    "diet suggestions for night-shift"
+   ]
+  },
+  {
+   "q": "how many cups of vegetables a day",
+   "area": "nutrition",
+   "titles": [
+    "main food groups",
+    "eat vegetables & fruits"
+   ]
+  },
+  {
+   "q": "what do 'light' and 'organic' on food labels mean",
+   "area": "nutrition",
+   "titles": [
+    "light, low-calorie, organic labeling"
+   ]
+  },
+  {
+   "q": "tips 4 better sleep when stressed",
+   "area": "sleep",
+   "titles": [
+    "what disrupts sleep",
+    "stress"
+   ],
+   "text": [
+    "stress"
+   ]
+  },
+  {
+   "q": "comment faire une planche",
+   "area": "activity",
+   "titles": [
+    "plank"
+   ]
+  },
+  {
+   "q": "combien de protéines par jour",
+   "area": "nutrition",
+   "titles": [
+    "prioritize protein"
+   ],
+   "text": [
+    "grams of protein"
+   ]
+  },
+  {
+   "q": "wat is a good bedtime routine",
+   "area": "sleep",
+   "titles": [
+    "good night’s sleep",
+    "screens before bed",
+    "a steady wake-up time",
+    "a quiet, dark, cool room"
+   ]
+  },
+  {
+   "q": "pushups for beginners",
+   "area": "activity",
+   "titles": [
+    "incline push-up",
+    "push-up"
+   ]
+  },
+  {
+   "q": "what is a good HRV score",
+   "area": "general",
+   "none": true
+  },
+  {
+   "q": "what resting heart rate is normal for my age",
+   "area": "general",
+   "none": true
+  },
+  {
+   "q": "is keto better than paleo",
+   "area": "general",
+   "none": true
+  },
+  {
+   "q": "how do I get a six pack in a month",
+   "area": "general",
+   "none": true
+  }
+ ],
+ "medical": [
+  "what pills help me sleep",
+  "is my chest pain from running dangerous",
+  "how much melatonin should I take",
+  "do I have diabetes if I'm always thirsty"
+ ]
+}
