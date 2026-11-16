@@ -417,3 +417,20 @@ def test_the_snapshot_covers_the_day_the_question_names():
     assert asked_day("And the day before yesterday?", today, frame) == two_back
     assert asked_day("How did I sleep yesterday?", today, frame) == end
     assert asked_day("How did I sleep?", today, frame) is None
+
+
+def test_the_snapshot_covers_the_metric_the_question_names(frame):
+    # "My deep sleep today" got time asleep and efficiency, and its deep-sleep sentence was sent
+    # back for citing nothing about deep sleep.
+    frame = frame.copy()
+    frame["deep_sleep_minutes"] = 60.0 + (frame.index.day % 7)
+    frame["awake_in_bed_minutes"] = 40.0 + (frame.index.day % 5)
+    columns = list(frame.columns)
+    found, text = snapshot(frame, columns, question="What were my deep sleep minutes today?")
+    assert (
+        found[0].metrics == ("deep_sleep_minutes",) and "deep sleep" in text.splitlines()[1].lower()
+    )
+    found, _ = snapshot(frame, columns, question="What is the total awake minutes today")
+    assert found[0].metrics == ("awake_in_bed_minutes",)
+    plain, _ = snapshot(frame, columns, question="How did I sleep?")
+    assert "deep_sleep_minutes" not in {e.metrics[0] for e in plain}

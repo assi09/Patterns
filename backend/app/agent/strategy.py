@@ -46,6 +46,21 @@ SNAPSHOT_METRICS = (
     "strain",
     "stress_score",
 )
+# How a question names a metric outside the usual snapshot: the verifier's distinctive terms, and
+# everyday words it leaves out because they are too loose for checking an answer.
+ASKED_ABOUT = {
+    **MENTIONS,
+    "awake_in_bed_minutes": re.compile(r"\bawake\b|\btime awake\b", re.IGNORECASE),
+    "resting_hr": re.compile(r"resting heart rate|\bRHR\b|\bresting HR\b", re.IGNORECASE),
+    "steps": re.compile(r"\bsteps?\b|\bwalked\b", re.IGNORECASE),
+}
+
+
+def asked_metrics(question: str, metrics: list[str]) -> list[str]:
+    """The metrics a question names, among those in scope."""
+    return [m for m, pattern in ASKED_ABOUT.items() if m in metrics and pattern.search(question)]
+
+
 # The metrics a coaching goal is about, by the expert that leads.
 GOALS = {
     "sleep": ("sleep_efficiency", "sleep_minutes"),
@@ -254,33 +269,41 @@ def asked_day(question: str, today, frame: pd.DataFrame) -> date | None:
 
 
 def snapshot(
-    frame: pd.DataFrame, metrics: list[str], day: date | None = None
+    frame: pd.DataFrame, metrics: list[str], day: date | None = None, question: str = ""
 ) -> tuple[list[Evidence], str]:
-    """One day (the latest, unless given) against the usual range for the main metrics in scope,
-    as evidence."""
+    """One day (the latest, unless given) against the usual range for the metrics the question
+    names, first, then the main metrics in scope, as evidence. Without the named ones, "my deep
+    sleep today" got time asleep and efficiency: deep sleep had no evidence, so the verifier
+    rightly sent back every sentence about it (PHIA's questions on real people, 2026-11-16)."""
     if frame.empty:
         return [], ""
     name = "the day asked about" if day else "the latest day"
     day = day or frame.index.max().date()
     found = []
-    for metric in SNAPSHOT_METRICS:
+    named = asked_metrics(question, metrics)
+    for metric in dict.fromkeys([*named, *SNAPSHOT_METRICS]):
         if metric not in metrics:
             continue
         try:
             evidence = compare_day(frame, metric, day)
         except ToolError:
             continue
-        if "position" in evidence.stats:
+        # A named metric is shown with its value even when the usual range is too thin to place it.
+        if "position" in evidence.stats or (metric in named and evidence.sufficient):
             found.append(evidence)
     if not found:
         return [], ""
     lines = []
     for e in found:
         shown = evidence_payload(e)["display"]
-        lines.append(
-            f"- {label(e.metrics[0])} (evidence_id {e.id}): {shown.get('value', '')}, usual "
-            f"{shown.get('usual_low', '')} to {shown.get('usual_high', '')}, "
+        where = (
+            f", usual {shown.get('usual_low', '')} to {shown.get('usual_high', '')}, "
             f"{e.stats['position']} the usual range"
+            if "position" in e.stats
+            else ", too few earlier days for a usual range"
+        )
+        lines.append(
+            f"- {label(e.metrics[0])} (evidence_id {e.id}): {shown.get('value', '')}{where}"
         )
     header = f"Snapshot of {name} ({day:%A} {day.isoformat()}; sleep is the night ending that "
     header += "morning), computed:\n"
