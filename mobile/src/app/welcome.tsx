@@ -122,7 +122,7 @@ export default function Welcome() {
             give medical advice.
           </Text>
           <Text variant="caption" color="faint" style={styles.note}>
-            EECE 503P · Fall 2026 · Photos from Pixabay
+            Photos from Pixabay
           </Text>
         </View>
       </ScrollExpandHero>
