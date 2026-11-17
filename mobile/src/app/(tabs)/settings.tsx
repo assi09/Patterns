@@ -50,6 +50,14 @@ export default function SettingsScreen() {
             onPress={() => router.push('/approvals')}
           />
         ) : null}
+        {account?.isAdmin ? (
+          <Row
+            icon="speedometer-outline"
+            title="Operations"
+            detail="How the agent is used, how well, how fast and at what cost"
+            onPress={() => router.push('/ops')}
+          />
+        ) : null}
       </Section>
 
       <Section title="Memory">

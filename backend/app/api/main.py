@@ -23,6 +23,7 @@ from app.api import (
     days,
     google,
     memory,
+    metrics,
     notifications,
     reminders,
     reports,
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(days.router)
     app.include_router(notifications.router)
     app.include_router(memory.router)
+    app.include_router(metrics.router)
     app.include_router(reminders.router)
     app.include_router(reports.router)
     app.include_router(teams.router)
