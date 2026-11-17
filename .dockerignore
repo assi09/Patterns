@@ -4,5 +4,10 @@
 !backend/app
 !backend/alembic.ini
 !backend/migrations
+# The monitoring images' own files (their secrets, monitoring/monitoring.env, stay out).
+!monitoring/prometheus/prometheus.yml
+!monitoring/prometheus/start.sh
+!monitoring/grafana/provisioning
+!monitoring/grafana/dashboards
 **/__pycache__
 **/*.pyc

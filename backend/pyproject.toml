@@ -16,6 +16,7 @@ dependencies = [
     "numpy>=1.26",
     "openai>=3.35",
     "pandas>=2.2",
+    "prometheus-client>=0.21",
     "psycopg[binary]>=3.3",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",

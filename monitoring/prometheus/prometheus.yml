@@ -1,0 +1,16 @@
+# Filled in by start.sh at boot: __SCHEME__ and __TARGET__ come from API_SCHEME and API_TARGET.
+global:
+  scrape_interval: 30s
+  scrape_timeout: 20s
+
+scrape_configs:
+  - job_name: patterns-api
+    scheme: __SCHEME__
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /tmp/metrics-token
+    static_configs:
+      - targets: ["__TARGET__"]
+        labels:
+          environment: production

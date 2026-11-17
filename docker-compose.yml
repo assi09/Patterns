@@ -17,5 +17,36 @@ services:
       timeout: 3s
       retries: 20
 
+  # Monitoring the deployed API from this machine (docs/monitoring.md): put METRICS_TOKEN and
+  # GF_SECURITY_ADMIN_PASSWORD in monitoring/monitoring.env (git-ignored), then
+  # `docker compose --profile monitoring up -d --build`; Grafana on http://localhost:3001 (sign in).
+  # History is kept in the volumes across restarts and rebuilds (Prometheus: 90 days).
+  prometheus:
+    build:
+      context: .
+      dockerfile: monitoring/prometheus/Dockerfile
+    profiles: ["monitoring"]
+    env_file: monitoring/monitoring.env
+    restart: unless-stopped
+    volumes:
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    build:
+      context: .
+      dockerfile: monitoring/grafana/Dockerfile
+    profiles: ["monitoring"]
+    depends_on: [prometheus]
+    env_file: monitoring/monitoring.env
+    restart: unless-stopped
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+
 volumes:
   db-data:
+  prometheus-data:
+  grafana-data:

@@ -25,6 +25,7 @@ from app.api import (
     memory,
     metrics,
     notifications,
+    prometheus,
     reminders,
     reports,
     teams,
@@ -96,6 +97,8 @@ def create_app() -> FastAPI:
     @app.exception_handler(RequestValidationError)
     async def validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
         return _error(422, "invalid_request", "The request is not valid.")
+
+    prometheus.install(app)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:

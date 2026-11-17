@@ -57,6 +57,7 @@ Google sign-in ──> https://<api>/google/callback
    | `FA_OPENAI_API_KEY`, `FA_TYPESAFE_API_KEY` | as in `.env` |
    | `FA_EMAIL_BACKEND` | `resend` |
    | `FA_EMAIL_API_KEY`, `FA_EMAIL_FROM` | as in `.env` |
+   | `FA_METRICS_TOKEN` | optional: `openssl rand -hex 32`; turns on `/metrics` for Prometheus or Grafana Cloud ([monitoring.md](monitoring.md)) |
 
    Spending caps (`FA_CHAT_DAILY_CAP_*`, `FA_LLM_SPEND_CAP_USD`) keep their defaults unless set.
 5. Redeploy; the log shows the migrations, then `Uvicorn running`. `https://<api>/health` answers

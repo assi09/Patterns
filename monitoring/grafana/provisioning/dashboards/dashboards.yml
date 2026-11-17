@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: patterns
+    folder: Patterns
+    type: file
+    options:
+      path: /etc/grafana/dashboards
