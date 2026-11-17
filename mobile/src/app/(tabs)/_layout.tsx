@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { Tabs } from 'expo-router';
-import type { ComponentProps } from 'react';
+import { router, Tabs } from 'expo-router';
+import { type ComponentProps, useEffect } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 
 import { useAutoSync, useNotifications, useSyncTimezone } from '@/api/hooks';
 import { select } from '@/lib/haptics';
 import { useSession } from '@/lib/session';
+import { tourSeen } from '@/lib/tour';
 import { floatingTabBar as glass } from '@/lib/platform';
 import { CONTENT_WIDTH, fonts, useColors, useScheme } from '@/theme';
 
@@ -38,6 +39,18 @@ export default function TabLayout() {
   const unread = useNotifications().data?.unread ?? 0;
   const supervisor = account?.role === 'supervisor';
   const colors = useColors();
+  const email = account?.email;
+  // The first time an account opens the app on this device, show the guide once.
+  useEffect(() => {
+    if (!email) return;
+    let live = true;
+    void tourSeen(email).then((seen) => {
+      if (live && !seen) router.push('/tour');
+    });
+    return () => {
+      live = false;
+    };
+  }, [email]);
   const scheme = useScheme();
   // On wide screens keep the tabs within the content column instead of spread edge to edge.
   const { width } = useWindowDimensions();
