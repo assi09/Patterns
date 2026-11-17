@@ -3,5 +3,4 @@
 FROM prom/prometheus:v2.51.2
 COPY prometheus.yml /etc/prometheus/prometheus.template.yml
 COPY start.sh /start.sh
-VOLUME ["/prometheus"]
 ENTRYPOINT ["/bin/sh", "/start.sh"]
