@@ -17,29 +17,31 @@ services:
       timeout: 3s
       retries: 20
 
-  # Monitoring the deployed API from this machine (docs/monitoring.md):
-  # `docker compose --profile monitoring up -d`, then Grafana on http://localhost:3001.
+  # Monitoring the deployed API from this machine (docs/monitoring.md): put METRICS_TOKEN and
+  # GF_SECURITY_ADMIN_PASSWORD in monitoring/monitoring.env (git-ignored), then
+  # `docker compose --profile monitoring up -d --build`; Grafana on http://localhost:3001 (sign in).
+  # History is kept in the volumes across restarts and rebuilds (Prometheus: 90 days).
   prometheus:
-    image: prom/prometheus:v2.51.2
+    build:
+      context: .
+      dockerfile: monitoring/prometheus/Dockerfile
     profiles: ["monitoring"]
+    env_file: monitoring/monitoring.env
+    restart: unless-stopped
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/metrics-token:/etc/prometheus/metrics-token:ro
       - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
 
   grafana:
-    image: grafana/grafana:10.4.2
+    build:
+      context: .
+      dockerfile: monitoring/grafana/Dockerfile
     profiles: ["monitoring"]
     depends_on: [prometheus]
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"  # local only: bound to 127.0.0.1 below
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/patterns.json
+    env_file: monitoring/monitoring.env
+    restart: unless-stopped
     volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     ports:
       - "127.0.0.1:3001:3000"

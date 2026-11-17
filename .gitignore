@@ -19,4 +19,4 @@ build/
 .DS_Store
 .vscode/
 .idea/
-monitoring/metrics-token
+monitoring/monitoring.env

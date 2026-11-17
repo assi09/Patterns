@@ -30,41 +30,78 @@ The dashboard is `monitoring/grafana/dashboards/patterns.json` (24 panels in fou
 the agent, cost and caps, data, people and the API); `monitoring/patterns-dashboard-import.json` is
 the same dashboard for importing into another Grafana.
 
-## Step 1: give the API a token (once)
+## How it is protected
 
-1. Make a token: `openssl rand -hex 32`. Keep it out of git, chat and screenshots.
-2. Railway → project `patterns` → `api` → Variables → add `FA_METRICS_TOKEN` with it. The API
-   redeploys; `curl -s -o /dev/null -w "%{http_code}" https://api-production-eccff.up.railway.app/metrics`
-   should then print `401` (before: `404`).
+- **The API's numbers:** `/metrics` exists only when `FA_METRICS_TOKEN` is set, and answers only to
+  that bearer token (401 otherwise). The token lives in Railway variables and git-ignored files,
+  never in the repository or an image.
+- **Prometheus:** no public address. On Railway it has no domain, so only services in the project
+  reach it over the private network; on a laptop it listens on 127.0.0.1 only.
+- **Grafana:** sign-in required. No anonymous access, no sign-ups, no new organisations, no public
+  snapshots; the admin password is `GF_SECURITY_ADMIN_PASSWORD`, set as a secret, never committed.
+  Without signing in, the API answers 401 and pages redirect to the login.
 
-## Option A: Grafana Cloud (recommended: always on, alerts, a link to share)
+## How the history is kept
 
-1. Create a free account at grafana.com and a stack (any region).
-2. In the stack: **Connections → Add new connection → Metrics Endpoint**. Scrape URL
-   `https://api-production-eccff.up.railway.app/metrics`, authentication **Bearer**, the token from
-   step 1, interval 1 minute. Test the connection, then save.
-3. **Dashboards → New → Import**, upload `monitoring/patterns-dashboard-import.json`, and choose the
-   stack's Prometheus data source (`grafanacloud-…-prom`).
-4. Alerts worth adding (**Alerting → Alert rules → New**, each on the stack's Prometheus):
-   - the API is unreachable: `up{job=~".*patterns.*"} == 0` for 5 minutes;
+Prometheus stores its history on a volume mounted at `/prometheus` and keeps 90 days
+(`RETENTION`). Grafana keeps its users and settings on a volume at `/var/lib/grafana`; the
+dashboard and the data source are provisioned from the image, so a fresh volume recreates them.
+Restarts, rebuilds and redeploys keep both. Prometheus' scraping pauses while it is down; the
+agent, spending and sync numbers come from the API's database, so once it is back they are right
+again, and only the per-minute shape of that gap is missing.
+
+## Option A: on Railway, always on (recommended)
+
+Two services in the `patterns` project, both from this repository, each with a volume.
+
+1. **The API's token:** `api` → Variables → `FA_METRICS_TOKEN` = `${{secret(48)}}` (Railway generates
+   it; nobody has to see it). After the redeploy,
+   `curl -s -o /dev/null -w "%{http_code}" https://api-production-eccff.up.railway.app/metrics` prints
+   `401`.
+2. **Prometheus:** New → GitHub repo → this repository; name it `prometheus`.
+   - Variables: `RAILWAY_DOCKERFILE_PATH` = `monitoring/prometheus/Dockerfile`;
+     `METRICS_TOKEN` = `${{api.FA_METRICS_TOKEN}}`; `RAILWAY_RUN_UID` = `0` (Railway volumes belong
+     to root; Prometheus' image runs as `nobody` and could not write otherwise).
+   - Volume: mount path `/prometheus`.
+   - Networking: **no** public domain.
+3. **Grafana:** New → GitHub repo → this repository; name it `grafana`.
+   - Variables: `RAILWAY_DOCKERFILE_PATH` = `monitoring/grafana/Dockerfile`;
+     `PROMETHEUS_URL` = `http://prometheus.railway.internal:9090`;
+     `GF_SECURITY_ADMIN_PASSWORD` = `${{secret(24)}}`; `GF_SERVER_ROOT_URL` = the domain from the
+     next line; `GF_SECURITY_COOKIE_SECURE` = `true`; `PORT` = `3000`.
+   - Volume: mount path `/var/lib/grafana`.
+   - Networking: generate a domain (port 3000). Sign in as `admin` with the generated password
+     (Variables → reveal).
+4. Alerts (Grafana → Alerting → Alert rules → New, on the Prometheus data source), sent to Karim's
+   email:
+   - the API is unreachable: `up{job="patterns-api"} == 0` for 5 minutes;
    - the database is unreadable: `patterns_database_up == 0` for 5 minutes;
    - the day's spending passes 80% of its cap:
      `patterns_spend_today_usd{who="everyone"} > 0.8 * patterns_spend_cap_usd{cap="daily_total"}`;
    - Google syncs failing: `increase(patterns_sync_runs_total{status="failed"}[1h]) > 3`;
    - answers getting slow: `patterns_answer_latency_seconds{quantile="0.5"} > 30` for 15 minutes.
-   Send them to Karim's email (the default contact point).
+   Grafana's email needs SMTP settings (`GF_SMTP_*`); until then, alerts show on its Alerting page.
 
-## Option B: on a laptop (for working offline, or without an account)
+Railway bills the two services and their volumes by use: small, a few dollars a month at this load.
+
+## Option B: Grafana Cloud (no services of ours)
+
+Grafana's free hosted stack keeps the history itself. In the stack: Connections → Add new connection
+→ **Metrics Endpoint**, URL `https://api-production-eccff.up.railway.app/metrics`, Bearer
+authentication with the API's token, every minute; then Dashboards → Import
+`monitoring/patterns-dashboard-import.json`. Grafana Cloud accounts require sign-in.
+
+## Option C: on a laptop
 
 ```bash
-echo -n "<the token from step 1>" > monitoring/metrics-token   # git-ignored
-docker compose --profile monitoring up -d                      # Prometheus and Grafana
-open http://localhost:3001                                     # the dashboard opens first
+cp monitoring/monitoring.env.example monitoring/monitoring.env   # git-ignored: fill in both values
+docker compose --profile monitoring up -d --build prometheus grafana
+open http://localhost:3001                                        # sign in as admin
 ```
 
-Prometheus keeps its data in a Docker volume on the laptop and scrapes production every 30 s, but
-only while the laptop is on: closed hours are gaps, and nothing alerts. `docker compose --profile
-monitoring down` stops it. `docker compose up -d db` still starts only Postgres.
+The same images as on Railway, the history in Docker volumes (kept across restarts and rebuilds),
+both bound to 127.0.0.1. It only scrapes while the laptop is on. `docker compose up -d db` still
+starts only Postgres.
 
 ## How it was checked (2026-11-17)
 
@@ -76,3 +113,7 @@ monitoring down` stops it. `docker compose up -d db` still starts only Postgres.
   Prometheus (target `up`), the dashboard provisioned in Grafana and each headline query returning
   the expected value on planted data (success 100%, median answer time 8.4 s, question types 4/4/4,
   one account waiting, $0.132 spent today).
+- Protection, on the built images: Grafana's API answers 401 and its dashboard redirects to the
+  login without signing in, and lists the dashboard with the admin password.
+- History: the stored samples went 3, then 4 after a restart, then 5 after rebuilding the container
+  (a lost history would start again at 1).
