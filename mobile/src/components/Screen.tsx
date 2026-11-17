@@ -1,12 +1,20 @@
 import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
 import { useQueryClient } from '@tanstack/react-query';
-import { useContext, type ReactNode } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { type ComponentRef, type ReactNode, useContext, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { requestSync } from '@/api/hooks';
 import { PressableScale } from '@/components/PressableScale';
 import { WIDE_CONTENT } from '@/lib/layout';
+import { PULL_TRIGGER, useWebPull } from '@/lib/pull';
 import { floatingTabBar } from '@/lib/platform';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
@@ -37,9 +45,23 @@ export function Screen({
   // On iOS the tab bar floats over the content, so leave room for it.
   const barHeight = useContext(BottomTabBarHeightContext) ?? 0;
   const tabBarHeight = floatingTabBar ? barHeight : 0;
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const [reloading, setReloading] = useState(false);
+  const refresh = () => {
+    // Pulling to refresh also fetches new data from Google when it is due.
+    void requestSync(client);
+    return onRefresh ? onRefresh() : client.invalidateQueries();
+  };
+  // The web build (and an app added to the home screen) gets the pull from touch events.
+  const pulled = useWebPull(scroll, () => {
+    setReloading(true);
+    void Promise.resolve(refresh()).finally(() => setReloading(false));
+  });
+  const webSpinner = Platform.OS === 'web' && (pulled > 0 || reloading || refreshing);
 
   return (
     <ScrollView
+      ref={scroll}
       contentContainerStyle={[
         styles.content,
         wide && { maxWidth: WIDE_CONTENT },
@@ -53,15 +75,27 @@ export function Screen({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => {
-              // Pulling to refresh also fetches new data from Google when it is due.
-              void requestSync(client);
-              void onRefresh(); // React Native 0.88 types the callback's result
+              void refresh(); // React Native 0.88 types the callback's result
             }}
             tintColor={colors.muted}
           />
         )
       }
     >
+      {webSpinner && (
+        <View
+          style={[
+            styles.pull,
+            {
+              height: reloading || refreshing ? 44 : pulled,
+              opacity: Math.min(1, pulled / PULL_TRIGGER) || 1,
+            },
+          ]}
+          accessibilityLabel="Refreshing"
+        >
+          <ActivityIndicator color={colors.muted} />
+        </View>
+      )}
       {header}
       {title && !header && (
         <View style={styles.header}>
@@ -132,6 +166,7 @@ export function QueryState({
 const styles = StyleSheet.create({
   content: { ...column, paddingHorizontal: spacing.lg, gap: spacing.md },
   header: { gap: 2, marginBottom: spacing.sm },
+  pull: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   error: {
     padding: spacing.xl,
     alignItems: 'center',
