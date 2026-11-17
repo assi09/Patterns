@@ -49,6 +49,7 @@ from app.db.models import (
 )
 from app.teams.memberships import overlap_problem
 from app.teams.narrative import INDIVIDUAL
+from app.teams.pulse import pulse_evidence
 from app.teams.reports import _member_frames, last_full_week, member_frames
 
 ANSWER = "answer_team"
@@ -324,6 +325,12 @@ def tools() -> list[dict]:
             "when a coming note is like a past one that moved the team.",
         ),
         _tool(
+            "team_pulse",
+            "How demanding the team said its days were last week (the nightly question, 1 light "
+            "to 5 very heavy), against the four weeks before: team figures from at least five "
+            "people who answered, descriptive, never one person.",
+        ),
+        _tool(
             "team_actions",
             "Team actions proposed in the last 90 days, with their status (proposed, approved, "
             "declined), kind, dates and metric: find challenges that have ended.",
@@ -428,6 +435,8 @@ class TeamTools:
             return self._propose(arguments)
         if name == "note_aftermath":
             return self._aftermath()
+        if name == "team_pulse":
+            return {"pulse": self._keep([pulse_evidence(self.db, self.team, self.week)])}
         if name == "team_actions":
             return {"actions": self._keep(self._actions())}
         if name == "action_result":

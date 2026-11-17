@@ -86,6 +86,26 @@ export function useSaveCheckIn() {
   });
 }
 
+export function usePulse() {
+  return useQuery({ queryKey: ['pulse'], queryFn: () => api.getPulse() });
+}
+
+export function useSavePulse() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (rating: number) => api.savePulse(rating),
+    onSuccess: (saved) => client.setQueryData(['pulse'], saved),
+  });
+}
+
+export function useTeamPulse(teamId?: string) {
+  return useQuery({
+    queryKey: ['team-pulse', teamId],
+    queryFn: () => api.getTeamPulse(teamId!),
+    enabled: !!teamId,
+  });
+}
+
 export function useMetricSeries(metric: string, days: number, end?: ISODate) {
   return useQuery({
     queryKey: ['metric', metric, days, end ?? 'latest'],
@@ -438,9 +458,16 @@ export async function requestSync(client: QueryClient): Promise<void> {
 /** What a finished sync can change: refetched so new numbers appear without another pull. */
 export function refreshSyncedData(client: QueryClient): Promise<unknown> {
   return Promise.all(
-    [['day'], ['workouts'], ['hourly'], ['sleep'], ['metric'], ['evidence'], keys.report, keys.dataStatus].map(
-      (queryKey) => client.invalidateQueries({ queryKey }),
-    ),
+    [
+      ['day'],
+      ['workouts'],
+      ['hourly'],
+      ['sleep'],
+      ['metric'],
+      ['evidence'],
+      keys.report,
+      keys.dataStatus,
+    ].map((queryKey) => client.invalidateQueries({ queryKey })),
   );
 }
 

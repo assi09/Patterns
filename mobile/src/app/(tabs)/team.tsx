@@ -30,6 +30,7 @@ import type {
 } from '@/api/types';
 import { Row, Section } from '@/components/list';
 import { AlertsSection, NotesSection, ProposalsSection } from '@/components/teamAgent';
+import { TeamPulseTile } from '@/components/pulse';
 import { AreaChips, AskBar, BriefingCard } from '@/components/teamBrief';
 import { TILE_RADIUS } from '@/components/widgets';
 import { ChangeChart, KeyFigures, LevelsTable, WeekdayChart } from '@/components/teamReport';
@@ -228,6 +229,7 @@ function TeamView({ team }: { team: SupervisedTeam }) {
         teamId={team.id}
         briefing={latest.data?.briefing}
       />
+      <TeamPulseTile teamId={team.id} />
       <ProposalsSection teamId={team.id} style={card} />
       <AskBar teamId={team.id} />
       <ReportSection team={team} reports={reports.data} report={report.data} card={card} />

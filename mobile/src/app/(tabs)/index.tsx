@@ -17,6 +17,7 @@ import { CheckInSection } from '@/components/checkin';
 import { DayHeader } from '@/components/day';
 import { QuestionCard } from '@/components/insights';
 import { Section } from '@/components/list';
+import { PulseCard } from '@/components/pulse';
 import {
   ChangeChips,
   InsightBar,
@@ -210,6 +211,7 @@ function DayBody({
         />
       ))
     : null;
+  const pulse = <PulseCard today={day.partial} />;
   const checkIn = (
     <CheckInSection
       day={day.date}
@@ -242,6 +244,7 @@ function DayBody({
       <>
         {rings}
         {insight}
+        {pulse}
         {steps}
         {sleep}
         {heart}
@@ -258,6 +261,7 @@ function DayBody({
       {insight}
       <View style={styles.columns}>
         <View style={styles.column}>
+          {pulse}
           {sleep}
           {heart}
           {checkIn}

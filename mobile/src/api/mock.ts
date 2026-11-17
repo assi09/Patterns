@@ -9,6 +9,8 @@ import { getToken } from './token';
 import type {
   MemoryFact,
   NightStages,
+  PulseToday,
+  TeamPulse,
   AlarmSettings,
   AppNotification,
   AccessRequest,
@@ -148,6 +150,43 @@ function mockUsual(metric: number, daysAgo: number): Usual | null {
 }
 
 let checkIns: CheckIn[] = [];
+// The demo person is in a team, so the nightly question is asked; answers kept by day.
+const pulseAnswers = new Map<ISODate, number>();
+const PULSE_QUESTION = 'How demanding was your day?';
+const PULSE_SCALE = ['Light', 'Easy', 'Moderate', 'Heavy', 'Very heavy'];
+
+function mockPulse(): PulseToday {
+  return {
+    asked: true,
+    day: isoDate(0),
+    question: PULSE_QUESTION,
+    scale: PULSE_SCALE,
+    rating: pulseAnswers.get(isoDate(0)) ?? null,
+  };
+}
+
+/** Five full weeks, the last one heavier, the first with too few answers to show. */
+export function mockTeamPulse(): TeamPulse {
+  const lastStart = new Date();
+  lastStart.setDate(lastStart.getDate() - ((lastStart.getDay() + 6) % 7) - 7);
+  const day = (offset: number) => {
+    const d = new Date(lastStart);
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` as ISODate;
+  };
+  const means = [null, 2.6, 2.8, 2.7, 3.6];
+  const respondents = [3, 6, 7, 6, 7];
+  return {
+    question: PULSE_QUESTION,
+    minimum: 5,
+    weeks: means.map((mean, i) => ({
+      start: day((i - 4) * 7),
+      end: day((i - 4) * 7 + 6),
+      respondents: respondents[i],
+      mean,
+    })),
+  };
+}
 
 export function mockDay(date: ISODate): DaySummary {
   const ago = daysAgoOf(date);
@@ -1600,6 +1639,23 @@ export const mockClient: ApiClient = {
   getSleepStages: (date) => later(() => mockNight(date)),
 
   getCheckIn: (date) => later(() => checkIns.find((c) => c.day === date) ?? null),
+
+  getPulse: () => later(() => mockPulse()),
+
+  savePulse: (rating) =>
+    later(() => {
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        throw new ApiError('The answer is a whole number from 1 to 5.', 'invalid_pulse', 422);
+      }
+      pulseAnswers.set(isoDate(0), rating);
+      return mockPulse();
+    }),
+
+  getTeamPulse: (teamId) =>
+    later(() => {
+      ownTeam(teamId);
+      return mockTeamPulse();
+    }),
 
   saveCheckIn: (checkIn) =>
     later(() => {

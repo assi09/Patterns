@@ -441,3 +441,22 @@ shows the checks' own verdict, `counts_as_a_change`). Live, on made-up teams of 
 3 of 3 teams whose last release was followed by a drop, never in 2 control teams; every briefing
 produced. Known limit: a number is checked but not its unit ("recovery up by 8 min" once passed).
 
+## The nightly team pulse (2026-11-17)
+
+The watch cannot say how heavy a week felt: the app's physical stress score showed no link with
+self-reported stress (median rho -0.03 on PMData). So every member of a team is asked one question
+in the app each evening, from 18:00 local time on Today: "How demanding was your day?", 1 light to 5
+very heavy (`app/teams/pulse.py`, table `pulses`, one answer a person a day whatever their teams,
+changeable until midnight).
+
+**What the supervisor sees:** weekly team figures only, on the Team tab ("How the week felt"): how
+many answered and the team's average, compared with the four weeks before, and only for a week at
+least five people answered. Never one person's answer and never a single day, which a few people
+could be picked out of. Each person's week is their own average first, so answering every night
+does not weigh more than answering twice. **The team agent** gets it as a tool (`team_pulse`), and
+the Monday briefing reads it beside the watch's figures: "the team rated the week 3.6 of 5, against
+2.7 in the weeks before". Deleting an account deletes its answers.
+
+Decided with Karim: asked every night, in the app. Defaults chosen and open to change: the question's
+wording, weekly figures only, five people minimum.
+
