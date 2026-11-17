@@ -1,4 +1,215 @@
 {
+  "A1": {
+    "questions": 281,
+    "people": 4,
+    "left_out_failed": 2,
+    "systems": {
+      "patterns": {
+        "strict": {
+          "rate": 0.794,
+          "wilson_95": [
+            0.742,
+            0.837
+          ],
+          "by_person_95": [
+            0.739,
+            0.836
+          ]
+        },
+        "fair": {
+          "rate": 0.957,
+          "wilson_95": [
+            0.927,
+            0.975
+          ],
+          "by_person_95": [
+            0.942,
+            0.976
+          ]
+        },
+        "cost_per_answer": 0.00275,
+        "seconds_mean": 3.3,
+        "seconds_include_reading": false,
+        "tools_used": {
+          "describe": 147,
+          "rank_days": 44,
+          "goal_progress": 25,
+          "compare_day": 1
+        },
+        "claims_rejected": 4
+      },
+      "single_agent": {
+        "strict": {
+          "rate": 0.769,
+          "wilson_95": [
+            0.716,
+            0.814
+          ],
+          "by_person_95": [
+            0.713,
+            0.816
+          ]
+        },
+        "fair": {
+          "rate": 0.922,
+          "wilson_95": [
+            0.884,
+            0.948
+          ],
+          "by_person_95": [
+            0.89,
+            0.961
+          ]
+        },
+        "cost_per_answer": 0.0065,
+        "seconds_mean": 7.7,
+        "seconds_include_reading": false,
+        "tools_used": {
+          "compare_windows": 170,
+          "coverage": 138,
+          "describe": 126,
+          "rank_days": 92,
+          "compare_day": 86,
+          "correlate": 64,
+          "change_point": 51,
+          "weekday_split": 50
+        },
+        "claims_rejected": 49
+      },
+      "chatbot": {
+        "strict": {
+          "rate": 0.676,
+          "wilson_95": [
+            0.619,
+            0.728
+          ],
+          "by_person_95": [
+            0.627,
+            0.721
+          ]
+        },
+        "fair": {
+          "rate": 0.74,
+          "wilson_95": [
+            0.686,
+            0.788
+          ],
+          "by_person_95": [
+            0.7,
+            0.775
+          ]
+        },
+        "cost_per_answer": 0.0009,
+        "seconds_mean": 1.1,
+        "seconds_include_reading": false
+      },
+      "code": {
+        "strict": {
+          "rate": 0.808,
+          "wilson_95": [
+            0.758,
+            0.85
+          ],
+          "by_person_95": [
+            0.753,
+            0.851
+          ]
+        },
+        "fair": {
+          "rate": 0.972,
+          "wilson_95": [
+            0.945,
+            0.986
+          ],
+          "by_person_95": [
+            0.954,
+            0.992
+          ]
+        },
+        "cost_per_answer": 0.00026,
+        "seconds_mean": 0.9,
+        "seconds_include_reading": false
+      }
+    },
+    "patterns_vs_single_agent": {
+      "only_patterns_right": 17,
+      "only_other_right": 7,
+      "p": 0.0639,
+      "difference": 0.036,
+      "difference_by_person_95": [
+        0.014,
+        0.053
+      ]
+    },
+    "patterns_vs_chatbot": {
+      "only_patterns_right": 71,
+      "only_other_right": 10,
+      "p": 0.0,
+      "difference": 0.217,
+      "difference_by_person_95": [
+        0.173,
+        0.267
+      ]
+    },
+    "patterns_vs_code": {
+      "only_patterns_right": 7,
+      "only_other_right": 11,
+      "p": 0.4807,
+      "difference": -0.014,
+      "difference_by_person_95": [
+        -0.035,
+        0.007
+      ]
+    },
+    "router_types": {
+      "day": 74,
+      "lookup": 207
+    },
+    "router_type_right": 1.0,
+    "readers_disagree": {
+      "patterns": 5,
+      "single_agent": 9,
+      "chatbot": 23
+    },
+    "fair_by_kind": {
+      "sum": {
+        "patterns": 0.976,
+        "single_agent": 0.878,
+        "chatbot": 0.488,
+        "code": 0.976
+      },
+      "mean": {
+        "patterns": 0.982,
+        "single_agent": 0.982,
+        "chatbot": 0.782,
+        "code": 0.964
+      },
+      "max": {
+        "patterns": 0.911,
+        "single_agent": 0.911,
+        "chatbot": 0.839,
+        "code": 0.982
+      },
+      "min": {
+        "patterns": 0.9,
+        "single_agent": 0.9,
+        "chatbot": 0.8,
+        "code": 0.98
+      },
+      "median": {
+        "patterns": 1.0,
+        "single_agent": 0.889,
+        "chatbot": 0.852,
+        "code": 0.963
+      },
+      "count": {
+        "patterns": 1.0,
+        "single_agent": 1.0,
+        "chatbot": 0.48,
+        "code": 0.96
+      }
+    }
+  },
   "B1": {
     "questions": 338,
     "people": 48,
