@@ -12,4 +12,3 @@ ENV GF_AUTH_ANONYMOUS_ENABLED=false \
     GF_SNAPSHOTS_EXTERNAL_ENABLED=false \
     GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/dashboards/patterns.json \
     PROMETHEUS_URL=http://prometheus:9090
-VOLUME ["/var/lib/grafana"]
