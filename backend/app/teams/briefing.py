@@ -29,7 +29,8 @@ MAX_TOOL_CALLS = 14
 TASK = """It is Monday {today}, and you are briefing the supervisor of the team {team!r} on the \
 week that just ended ({week}). Nobody asked a question: work out what they most need to know.
 
-1. Call team_overview, then team_week for that week, team_alerts and team_notes.
+1. Call team_overview, then team_week for that week, team_alerts, team_notes and team_pulse \
+(how demanding the team said its days were: their own word on the week, beside the watch's).
 2. Call team_actions; for each approved challenge that has ended, call action_result.
 3. If a lasting concern calls for it and nothing like it is already proposed, propose one \
 team-level action with propose_team_action. Otherwise propose nothing.

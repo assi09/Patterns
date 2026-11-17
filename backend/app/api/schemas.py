@@ -158,6 +158,33 @@ class CheckIn(ApiModel):
     tags: list[str] = []
 
 
+class PulseToday(ApiModel):
+    """The nightly team question for the signed-in person."""
+
+    asked: bool  # in a team: only then is the question shown
+    day: date
+    question: str
+    scale: list[str]  # the words for 1 to 5
+    rating: int | None = None
+
+
+class PulseAnswer(ApiModel):
+    rating: int = Field(ge=1, le=5)
+
+
+class PulseWeek(ApiModel):
+    start: date
+    end: date
+    respondents: int
+    mean: float | None = None  # only from at least `minimum` people
+
+
+class TeamPulse(ApiModel):
+    question: str
+    minimum: int
+    weeks: list[PulseWeek]  # oldest first
+
+
 class MetricSeries(ApiModel):
     metric: str
     points: list[Point]

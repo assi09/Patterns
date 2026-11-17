@@ -155,6 +155,22 @@ export interface NightStages {
   stages: { start: ISODateTime; end: ISODateTime; stage: SleepStageKind }[];
 }
 
+/** The nightly team question for the signed-in person (only shown to people in a team). */
+export interface PulseToday {
+  asked: boolean;
+  day: ISODate;
+  question: string;
+  scale: string[]; // the words for 1 to 5
+  rating: number | null;
+}
+
+/** A team's weekly pulse: a figure only from at least `minimum` people who answered that week. */
+export interface TeamPulse {
+  question: string;
+  minimum: number;
+  weeks: { start: ISODate; end: ISODate; respondents: number; mean: number | null }[];
+}
+
 export const CHECKIN_TAGS = [
   'hard_training',
   'alcohol',
@@ -542,6 +558,9 @@ export interface ApiClient {
   getSleepStages(date: ISODate): Promise<NightStages>;
   getCheckIn(date: ISODate): Promise<CheckIn | null>;
   saveCheckIn(checkIn: CheckIn): Promise<CheckIn>; // today only
+  getPulse(): Promise<PulseToday>;
+  savePulse(rating: number): Promise<PulseToday>; // today only
+  getTeamPulse(teamId: string): Promise<TeamPulse>; // the last five full weeks, oldest first
   getMetricSeries(metric: string, options: { end?: ISODate; days: number }): Promise<MetricSeries>;
   getEvidence(id: string): Promise<Evidence>; // any evidence a finding or chat answer cites
   answerQuestion(questionId: string, answer: string): Promise<ContextQuestion>;

@@ -1,4 +1,4 @@
-import { DEMO_SUPERVISOR, isoDate, mockClient, mockDay, mockNight, routeQuestion } from '../mock';
+import { DEMO_SUPERVISOR, isoDate, mockClient, mockDay, mockNight, mockTeamPulse, routeQuestion } from '../mock';
 import { saveToken } from '../token';
 import type { SendOptions } from '../types';
 
@@ -512,5 +512,24 @@ describe('mock night and day', () => {
     expect((minutesPastMidnight - bedtime + 1440) % 1440).toBe(0);
     const length = (Date.parse(night.end!) - Date.parse(night.start!)) / 60_000;
     expect(Math.abs(length - value('time_in_bed'))).toBeLessThanOrEqual(night.stages.length);
+  });
+});
+
+describe('mock team pulse', () => {
+  it('keeps one answer from 1 to 5 for today and refuses anything else', async () => {
+    await expect(mockClient.savePulse(9)).rejects.toThrow('1 to 5');
+    const saved = await mockClient.savePulse(3);
+    expect(saved.rating).toBe(3);
+    expect((await mockClient.getPulse()).rating).toBe(3);
+  });
+  it('shows five whole weeks, oldest first, and no figure from too few people', () => {
+    const { weeks, minimum } = mockTeamPulse();
+    expect(weeks).toHaveLength(5);
+    for (const week of weeks) {
+      expect(week.mean === null || week.respondents >= minimum).toBe(true);
+      const days = (Date.parse(week.end) - Date.parse(week.start)) / 86_400_000;
+      expect(Math.round(days)).toBe(6);
+    }
+    expect(weeks[0].mean).toBeNull();
   });
 });

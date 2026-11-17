@@ -335,6 +335,24 @@ class CheckIn(Base):
     )
 
 
+class Pulse(Base):
+    """A team member's answer to the nightly question, "How demanding was your day?" (1 light to
+    5 very heavy). One per person a day, whatever their teams; a supervisor only ever sees weekly
+    team figures from at least five people (docs/teams.md)."""
+
+    __tablename__ = "pulses"
+    __table_args__ = (CheckConstraint("rating BETWEEN 1 AND 5", name="ck_pulses_rating"),)
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    rating: Mapped[int]
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
 class MemoryFact(Base):
     """Something the person said about themselves (semantic memory). The listener hears it as a
     candidate, it is proposed once said twice or asked for, and it is kept only once the person

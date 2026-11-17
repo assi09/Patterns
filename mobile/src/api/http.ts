@@ -21,6 +21,8 @@ import type {
   HealthAction,
   HourlySteps,
   NightStages,
+  PulseToday,
+  TeamPulse,
   Inbox,
   Membership,
   MetricSeries,
@@ -248,6 +250,14 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     getHourlySteps: (date) => request<HourlySteps>(baseUrl, `/days/${date}/hourly`),
     getSleepStages: (date) => request<NightStages>(baseUrl, `/days/${date}/sleep`),
     getCheckIn: (date) => request<CheckIn | null>(baseUrl, `/checkins/${date}`),
+    getPulse: () => request<PulseToday>(baseUrl, '/pulse/today'),
+    savePulse: (rating) =>
+      request<PulseToday>(baseUrl, '/pulse/today', {
+        method: 'PUT',
+        body: JSON.stringify({ rating }),
+      }),
+    getTeamPulse: (teamId) =>
+      request<TeamPulse>(baseUrl, `/teams/${encodeURIComponent(teamId)}/pulse`),
     saveCheckIn: (checkIn) =>
       request<CheckIn>(baseUrl, `/checkins/${checkIn.day}`, {
         method: 'PUT',

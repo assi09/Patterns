@@ -29,7 +29,7 @@ from app.reminders.schedule import zone
 from app.teams import actions as team_actions
 from app.teams import agent as team_agent
 from app.teams import memberships as teams
-from app.teams import reports
+from app.teams import pulse, reports
 
 router = APIRouter(tags=["teams"])
 # Wrong codes count like wrong passwords, so codes cannot be guessed one after another.
@@ -166,6 +166,43 @@ def _report(db, team: Team, report: TeamReport, user: User, clock) -> schemas.Te
             )
             for email, found in shared
         ],
+    )
+
+
+# The nightly team pulse
+
+
+@router.get("/pulse/today", response_model=schemas.PulseToday)
+def get_pulse(db: Db, user: Person, clock: Now) -> schemas.PulseToday:
+    today = _local_today(user, clock)
+    return schemas.PulseToday(
+        asked=pulse.asked(db, user.id),
+        day=today,
+        question=pulse.QUESTION,
+        scale=list(pulse.SCALE),
+        rating=pulse.answer_of(db, user.id, today),
+    )
+
+
+@router.put("/pulse/today", response_model=schemas.PulseToday)
+def put_pulse(body: schemas.PulseAnswer, db: Db, user: Person, clock: Now) -> schemas.PulseToday:
+    today = _local_today(user, clock)
+    try:
+        pulse.save(db, user.id, today, body.rating, today=today)
+    except pulse.PulseRejected as exc:
+        raise ApiError(422, "invalid_pulse", str(exc)) from None
+    return get_pulse(db, user, clock)
+
+
+@router.get("/teams/{team_id}/pulse", response_model=schemas.TeamPulse)
+def get_team_pulse(team_id: str, db: Db, user: Supervisor, clock: Now) -> schemas.TeamPulse:
+    """Weekly team figures only, each from at least five people; never a person or a day."""
+    team = teams.supervised_team(db, user, team_id)
+    last = reports.last_full_week(_local_today(user, clock))
+    return schemas.TeamPulse(
+        question=pulse.QUESTION,
+        minimum=MIN_MEMBERS,
+        weeks=[schemas.PulseWeek(**w) for w in pulse.weeks(db, team, last)],
     )
 
 
