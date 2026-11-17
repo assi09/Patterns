@@ -1,6 +1,10 @@
 # Project status
 
-The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-11-16.
+The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-11-17.
+
+**The pilot started on 2026-11-17**: 10 testers invited for about two weeks, all listed as Google
+test users, one team with Karim as supervisor. What was built and checked for it, and what is
+left, is in [progress-2026-11-17.md](progress-2026-11-17.md).
 
 ## Since 2026-11-11
 
