@@ -155,6 +155,77 @@ export interface NightStages {
   stages: { start: ISODateTime; end: ISODateTime; stage: SleepStageKind }[];
 }
 
+/** A spread of values: count, mean, median, 90th percentile and maximum (null when empty). */
+export interface Spread {
+  n: number;
+  mean: number | null;
+  median: number | null;
+  p90: number | null;
+  max: number | null;
+}
+
+/** The operations page (admins only): totals over the pilot's people, never one person. */
+export interface OpsMetrics {
+  period: { since: ISODate; until: ISODate; days: number };
+  madeAt: string;
+  people: {
+    approved: number;
+    withData: number;
+    askedThisPeriod: number;
+    waitingForApproval: number;
+  };
+  chat: {
+    questions: number;
+    answers: number;
+    outcomes: Record<string, number>;
+    successRate: number | null;
+    refusalRate: number | null;
+    latencyS: Spread;
+    modelS: Spread;
+    toolCalls: Spread;
+    withToolErrors: number;
+    rejectedClaims: number;
+    questionTypes: Record<string, number>;
+    costUsd: { total: number; perAnswer: Spread; perPersonPerDay: number | null };
+    thumbs: { rated: number; up: number; down: number; upRate: number | null };
+  };
+  days: {
+    day: ISODate;
+    questions: number;
+    answers: number;
+    successRate: number | null;
+    medianLatencyS: number | null;
+    thumbsUp: number;
+    thumbsDown: number;
+    costUsd: number;
+  }[];
+  spend: {
+    todayUsd: number;
+    todayCapUsd: number;
+    highestPersonTodayUsd: number;
+    personCapUsd: number;
+    peopleAtTheirCapToday: number;
+    allTimeUsd: number;
+    allTimeCapUsd: number;
+  };
+  accuracy: { claims: number; checked: number; agree: number; agreement: number | null };
+  recall: { questionsChecked: number; changesFoundByKey: number; recall: number | null };
+  syncs: {
+    runs: number;
+    successRate: number | null;
+    seconds: Spread;
+    connected: number;
+    reconnectNeeded: number;
+  };
+  engagement: {
+    checkIns: number;
+    checkInRate: number | null;
+    teamMembers: number;
+    eveningAnswers: number;
+    eveningRate: number | null;
+  };
+}
+
 /** The nightly team question for the signed-in person (only shown to people in a team). */
 export interface PulseToday {
   asked: boolean;
@@ -561,6 +632,7 @@ export interface ApiClient {
   getPulse(): Promise<PulseToday>;
   savePulse(rating: number): Promise<PulseToday>; // today only
   getTeamPulse(teamId: string): Promise<TeamPulse>; // the last five full weeks, oldest first
+  getOpsMetrics(days: number): Promise<OpsMetrics>; // admins only
   getMetricSeries(metric: string, options: { end?: ISODate; days: number }): Promise<MetricSeries>;
   getEvidence(id: string): Promise<Evidence>; // any evidence a finding or chat answer cites
   answerQuestion(questionId: string, answer: string): Promise<ContextQuestion>;

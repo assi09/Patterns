@@ -9,6 +9,7 @@ import { getToken } from './token';
 import type {
   MemoryFact,
   NightStages,
+  OpsMetrics,
   PulseToday,
   TeamPulse,
   AlarmSettings,
@@ -162,6 +163,82 @@ function mockPulse(): PulseToday {
     question: PULSE_QUESTION,
     scale: PULSE_SCALE,
     rating: pulseAnswers.get(isoDate(0)) ?? null,
+  };
+}
+
+const spread = (median: number, n: number) => ({
+  n,
+  mean: median * 1.1,
+  median,
+  p90: median * 2,
+  max: median * 3,
+});
+
+/** Made-up operations numbers for the demo owner: a small pilot, a few answers a day. */
+export function mockOpsMetrics(days: number): OpsMetrics {
+  const series = Array.from({ length: days }, (_, i) => {
+    const answers = 6 + ((i * 7) % 9);
+    return {
+      day: isoDate(days - 1 - i),
+      questions: answers,
+      answers,
+      successRate: 0.88 + ((i * 3) % 10) / 100,
+      medianLatencyS: 6 + ((i * 5) % 7) / 2,
+      thumbsUp: 2 + (i % 3),
+      thumbsDown: i % 4 === 0 ? 1 : 0,
+      costUsd: Math.round(answers * 0.011 * 1000) / 1000,
+    };
+  });
+  const answers = series.reduce((sum, d) => sum + d.answers, 0);
+  return {
+    period: { since: isoDate(days - 1), until: isoDate(0), days },
+    madeAt: new Date().toISOString(),
+    people: { approved: 8, withData: 7, askedThisPeriod: 6, waitingForApproval: 1 },
+    chat: {
+      questions: answers,
+      answers,
+      outcomes: { answered: answers - 9, answered_in_part: 4, refused: 3, failed_checks: 2 },
+      successRate: 0.93,
+      refusalRate: 0.04,
+      latencyS: spread(7.2, answers),
+      modelS: spread(5.1, answers),
+      toolCalls: spread(3, answers),
+      withToolErrors: 2,
+      rejectedClaims: 11,
+      questionTypes: { lookup: 40, change: 22, why: 12, coaching: 9, chat: 7 },
+      costUsd: {
+        total: series.reduce((s, d) => s + d.costUsd, 0),
+        perAnswer: spread(0.011, answers),
+        perPersonPerDay: 0.08,
+      },
+      thumbs: { rated: 30, up: 26, down: 4, upRate: 0.87 },
+    },
+    days: series,
+    spend: {
+      todayUsd: 0.62,
+      todayCapUsd: 5,
+      highestPersonTodayUsd: 0.21,
+      personCapUsd: 0.5,
+      peopleAtTheirCapToday: 0,
+      allTimeUsd: 4.1,
+      allTimeCapUsd: 50,
+    },
+    accuracy: { claims: 120, checked: 64, agree: 61, agreement: 0.95 },
+    recall: { questionsChecked: 14, changesFoundByKey: 18, recall: 0.78 },
+    syncs: {
+      runs: 96,
+      successRate: 0.98,
+      seconds: spread(4.2, 94),
+      connected: 7,
+      reconnectNeeded: 1,
+    },
+    engagement: {
+      checkIns: 5 * days,
+      checkInRate: 0.62,
+      teamMembers: 8,
+      eveningAnswers: 4 * days,
+      eveningRate: 0.5,
+    },
   };
 }
 
@@ -1287,7 +1364,10 @@ export const mockClient: ApiClient = {
       const at = messages.findIndex((m) => m.id === messageId && m.role === 'agent');
       if (at < 0) throw new ApiError('That answer is no longer in this chat.', 'not_found', 404);
       const rated = { ...messages[at], rating };
-      teamChats.set(teamId, messages.map((m, i) => (i === at ? rated : m)));
+      teamChats.set(
+        teamId,
+        messages.map((m, i) => (i === at ? rated : m)),
+      );
       return rated;
     }),
   getTeamNotes: (teamId) =>
@@ -1300,7 +1380,7 @@ export const mockClient: ApiClient = {
       ownTeam(teamId);
       if (ABOUT_A_PERSON.test(text) || /\b(sick|ill|unwell)\b/i.test(text)) {
         throw new ApiError(
-          "Not saved: it would single out a person; keep it about the whole team.",
+          'Not saved: it would single out a person; keep it about the whole team.',
           'unsafe_note',
           422,
         );
@@ -1641,6 +1721,12 @@ export const mockClient: ApiClient = {
   getCheckIn: (date) => later(() => checkIns.find((c) => c.day === date) ?? null),
 
   getPulse: () => later(() => mockPulse()),
+
+  getOpsMetrics: (days) =>
+    later(() => {
+      adminAccount();
+      return mockOpsMetrics(days);
+    }),
 
   savePulse: (rating) =>
     later(() => {
