@@ -22,9 +22,7 @@ services:
   # `docker compose --profile monitoring up -d --build`; Grafana on http://localhost:3001 (sign in).
   # History is kept in the volumes across restarts and rebuilds (Prometheus: 90 days).
   prometheus:
-    build:
-      context: .
-      dockerfile: monitoring/prometheus/Dockerfile
+    build: monitoring/prometheus
     profiles: ["monitoring"]
     env_file: monitoring/monitoring.env
     restart: unless-stopped
@@ -34,9 +32,7 @@ services:
       - "127.0.0.1:9090:9090"
 
   grafana:
-    build:
-      context: .
-      dockerfile: monitoring/grafana/Dockerfile
+    build: monitoring/grafana
     profiles: ["monitoring"]
     depends_on: [prometheus]
     env_file: monitoring/monitoring.env

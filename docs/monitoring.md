@@ -59,13 +59,15 @@ Two services in the `patterns` project, both from this repository, each with a v
    `curl -s -o /dev/null -w "%{http_code}" https://api-production-eccff.up.railway.app/metrics` prints
    `401`.
 2. **Prometheus:** New → GitHub repo → this repository; name it `prometheus`.
-   - Variables: `RAILWAY_DOCKERFILE_PATH` = `monitoring/prometheus/Dockerfile`;
+   - Settings: root directory `monitoring/prometheus` (so the API's `railway.json` does not apply).
+   - Variables:
      `METRICS_TOKEN` = `${{api.FA_METRICS_TOKEN}}`; `RAILWAY_RUN_UID` = `0` (Railway volumes belong
      to root; Prometheus' image runs as `nobody` and could not write otherwise).
    - Volume: mount path `/prometheus`.
    - Networking: **no** public domain.
 3. **Grafana:** New → GitHub repo → this repository; name it `grafana`.
-   - Variables: `RAILWAY_DOCKERFILE_PATH` = `monitoring/grafana/Dockerfile`;
+   - Settings: root directory `monitoring/grafana`.
+   - Variables:
      `PROMETHEUS_URL` = `http://prometheus.railway.internal:9090`;
      `GF_SECURITY_ADMIN_PASSWORD` = `${{secret(24)}}`; `GF_SERVER_ROOT_URL` = the domain from the
      next line; `GF_SECURITY_COOKIE_SECURE` = `true`; `PORT` = `3000`.
