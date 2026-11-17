@@ -489,8 +489,14 @@ export function useAutoSync() {
   useEffect(() => {
     if (wasSyncing.current && !syncing) void refreshSyncedData(client);
     wasSyncing.current = syncing;
+    if (!syncing) return;
+    // A first sync stores the newest months first and can run for minutes: show them as they land.
+    const timer = setInterval(() => void refreshSyncedData(client), SYNC_REFRESH_MS);
+    return () => clearInterval(timer);
   }, [client, syncing]);
 }
+
+export const SYNC_REFRESH_MS = 15_000;
 
 // Teams, as a member (docs/teams.md)
 
