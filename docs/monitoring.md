@@ -52,6 +52,10 @@ again, and only the per-minute shape of that gap is missing.
 
 ## Option A: on Railway, always on (recommended)
 
+**Live since 2026-11-17:** Grafana at https://grafana-production-9dd0690c.up.railway.app (sign in
+as `admin`; the password is the `grafana` service's `GF_SECURITY_ADMIN_PASSWORD` in Railway →
+Variables). Prometheus has no public address. Both secrets were generated straight into Railway.
+
 Two services in the `patterns` project, both from this repository, each with a volume.
 
 1. **The API's token:** `api` → Variables → `FA_METRICS_TOKEN` = `${{secret(48)}}` (Railway generates
@@ -70,7 +74,9 @@ Two services in the `patterns` project, both from this repository, each with a v
    - Variables:
      `PROMETHEUS_URL` = `http://prometheus.railway.internal:9090`;
      `GF_SECURITY_ADMIN_PASSWORD` = `${{secret(24)}}`; `GF_SERVER_ROOT_URL` = the domain from the
-     next line; `GF_SECURITY_COOKIE_SECURE` = `true`; `PORT` = `3000`.
+     next line; `GF_SECURITY_COOKIE_SECURE` = `true`; `PORT` = `3000`; `GF_SERVER_HTTP_ADDR` =
+     `0.0.0.0` (**not** `::`: Grafana 10.4 exits at once with code 255 on `::`);
+     `RAILWAY_RUN_UID` = `0` (as for Prometheus: the volume belongs to root).
    - Volume: mount path `/var/lib/grafana`.
    - Networking: generate a domain (port 3000). Sign in as `admin` with the generated password
      (Variables → reveal).
@@ -119,3 +125,11 @@ starts only Postgres.
   login without signing in, and lists the dashboard with the admin password.
 - History: the stored samples went 3, then 4 after a restart, then 5 after rebuilding the container
   (a lost history would start again at 1).
+- **On Railway (2026-11-17):** Prometheus scrapes the API every 30 s with the token (the API's log
+  shows `GET /metrics` 200 from `Prometheus/2.51.2`); Grafana reads Prometheus over the private
+  network (`up` = 1, `patterns_database_up` = 1, 40 series); without signing in Grafana's API
+  answers 401, the dashboard redirects to the login and sign-up is refused (401); a redeploy of
+  Prometheus kept its history (114 stored samples before, 126 after).
+- **What Railway needed beyond the images:** each service built from its own folder (the root
+  `railway.json` is the API's), no `VOLUME` in the Dockerfiles, `RAILWAY_RUN_UID=0` for both, and
+  `GF_SERVER_HTTP_ADDR=0.0.0.0` for Grafana.
