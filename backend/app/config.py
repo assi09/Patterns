@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # Connecting Google Health from the app: the key that encrypts stored tokens (Fernet), this
     # server's address for Google's callback, and the app's address to send the browser back to.
     token_key: SecretStr | None = None
+    # The bearer token Prometheus or Grafana Cloud scrapes /metrics with; unset: no /metrics.
+    metrics_token: SecretStr | None = None
     public_url: str = "http://127.0.0.1:8000"
     app_url: str = "http://localhost:8081"
     # Send due reminders from a loop inside the API, once a minute.
