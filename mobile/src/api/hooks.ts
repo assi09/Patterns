@@ -86,6 +86,15 @@ export function useSaveCheckIn() {
   });
 }
 
+export function useOpsMetrics(days: number) {
+  return useQuery({
+    queryKey: ['ops-metrics', days],
+    queryFn: () => api.getOpsMetrics(days),
+    refetchInterval: 60_000, // the server caches a minute too
+    placeholderData: (previous) => previous,
+  });
+}
+
 export function usePulse() {
   return useQuery({ queryKey: ['pulse'], queryFn: () => api.getPulse() });
 }

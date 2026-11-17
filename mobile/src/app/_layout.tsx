@@ -112,6 +112,7 @@ function Navigation() {
           />
           <Stack.Protected guard={account?.isAdmin === true} redirectTo={home}>
             <Stack.Screen name="approvals" options={{ title: 'Access requests' }} />
+            <Stack.Screen name="ops" options={{ title: '' }} />
           </Stack.Protected>
         </Stack.Protected>
       </Stack>
