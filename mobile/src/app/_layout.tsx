@@ -94,6 +94,10 @@ function Navigation() {
           <Stack.Screen name="chats" options={{ title: 'Your chats' }} />
           <Stack.Screen name="team-chat" options={{ title: 'Ask about your team' }} />
           <Stack.Screen name="teams" options={{ title: 'Teams' }} />
+          <Stack.Screen
+            name="tour"
+            options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
+          />
           <Stack.Screen name="memory" options={{ title: '' }} />
           <Stack.Screen name="data" options={{ headerShown: false }} />
           <Stack.Screen

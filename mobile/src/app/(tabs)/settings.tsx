@@ -36,6 +36,12 @@ export default function SettingsScreen() {
     <Screen title="Settings">
       <Section title="Account">
         <Row icon="person-circle-outline" title={account?.email ?? 'Signed in'} />
+        <Row
+          icon="help-circle-outline"
+          title="How Patterns works"
+          detail="The short guide from your first visit"
+          onPress={() => router.push('/tour')}
+        />
         {account?.isAdmin ? (
           <Row
             icon="people-outline"
