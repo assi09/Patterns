@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AppState, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { useSession } from '@/lib/session';
 import { radius, spacing, useColors } from '@/theme';
+
+const RECHECK_MS = 20_000;
 
 /** Where a signed-in account waits until the owner approves it (or sees that they did not). */
 export default function Waiting() {
@@ -21,6 +23,20 @@ export default function Waiting() {
     await refresh();
     setChecking(false);
   }
+
+  // Approval sends nothing, so look again on our own: every so often, and on coming back to the
+  // app. Once approved, the session's account changes and navigation leaves this screen.
+  useEffect(() => {
+    if (rejected) return;
+    const timer = setInterval(() => void refresh(), RECHECK_MS);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refresh();
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [refresh, rejected]);
 
   return (
     <View
