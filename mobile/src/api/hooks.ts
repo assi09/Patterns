@@ -8,6 +8,7 @@ import type {
   Account,
   AlarmSettings,
   ChatMessage,
+  FeedbackIn,
   CheckIn,
   GoogleStatus,
   ISODate,
@@ -84,6 +85,18 @@ export function useSaveCheckIn() {
     mutationFn: (checkIn: CheckIn) => api.saveCheckIn(checkIn),
     onSuccess: (saved) => client.setQueryData(['checkin', saved.day], saved),
   });
+}
+
+export function useSendFeedback() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (feedback: FeedbackIn) => api.sendFeedback(feedback),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['feedback'] }),
+  });
+}
+
+export function useFeedback() {
+  return useQuery({ queryKey: ['feedback'], queryFn: () => api.getFeedback() });
 }
 
 export function useOpsMetrics(days: number) {

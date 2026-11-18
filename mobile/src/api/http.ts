@@ -21,6 +21,7 @@ import type {
   HealthAction,
   HourlySteps,
   NightStages,
+  FeedbackRow,
   OpsMetrics,
   PulseToday,
   TeamPulse,
@@ -253,6 +254,13 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     getCheckIn: (date) => request<CheckIn | null>(baseUrl, `/checkins/${date}`),
     getPulse: () => request<PulseToday>(baseUrl, '/pulse/today'),
     getOpsMetrics: (days) => request<OpsMetrics>(baseUrl, `/admin/metrics?days=${days}`),
+    sendFeedback: async (feedback) => {
+      await request<unknown>(baseUrl, '/feedback', {
+        method: 'POST',
+        body: JSON.stringify(feedback),
+      });
+    },
+    getFeedback: () => request<FeedbackRow[]>(baseUrl, '/admin/feedback'),
     savePulse: (rating) =>
       request<PulseToday>(baseUrl, '/pulse/today', {
         method: 'PUT',

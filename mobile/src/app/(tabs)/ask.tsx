@@ -24,7 +24,7 @@ import {
   useReport,
   useSendMessage,
 } from '@/api/hooks';
-import type { Attachment, Depth, ExpertChoice, Finding } from '@/api/types';
+import type { Attachment, Depth, ExpertChoice, FeedbackIn, Finding } from '@/api/types';
 import { type Anchor, AttachSheet } from '@/components/attach';
 import { MessageBubble, Thinking } from '@/components/chat';
 import { MemoryPrompts } from '@/components/MemoryPrompt';
@@ -35,6 +35,7 @@ import { QueryState } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Chip } from '@/components/ui';
 import { expertInfo, useExpertColor } from '@/lib/experts';
+import { FeedbackSheet } from '@/components/feedback';
 import { metricLabel } from '@/lib/format';
 import { DURATION, EASE_OUT } from '@/lib/motion';
 import { useStickToBottom } from '@/lib/stickToBottom';
@@ -110,6 +111,8 @@ export default function AskScreen() {
     target === 'new' ? 'New chat' : conversations.data?.find((x) => x.id === openId)?.title;
   const report = useReport();
   const send = useSendMessage();
+  // The feedback form: about one answer, or the open chat; null when closed.
+  const [feedback, setFeedback] = useState<Omit<FeedbackIn, 'text'> | null>(null);
   const rate = useRateAnswer();
   const [draft, setDraft] = useState('');
   // A suggested question fills the composer; the person reads it and sends it.
@@ -256,6 +259,13 @@ export default function AskScreen() {
         >
           {started && openTitle ? openTitle : 'Ask'}
         </Text>
+        {started && openId && (
+          <HeaderButton
+            icon="chatbox-ellipses-outline"
+            label="Feedback on this chat"
+            onPress={() => setFeedback({ kind: 'feedback', conversationId: openId })}
+          />
+        )}
         {/* On phones the list of chats is a page of its own; wide screens show it beside. */}
         {!wide && (
           <View style={styles.headerActions}>
@@ -303,6 +313,11 @@ export default function AskScreen() {
                       onRate={
                         message.role === 'assistant'
                           ? (rating) => rate.mutate({ id: message.id, rating })
+                          : undefined
+                      }
+                      onReport={
+                        message.role === 'assistant'
+                          ? () => setFeedback({ kind: 'report', messageId: message.id })
                           : undefined
                       }
                     />
@@ -412,7 +427,22 @@ export default function AskScreen() {
     </KeyboardAvoidingView>
   );
 
-  if (!wide) return conversation;
+  const sheet = (
+    <FeedbackSheet
+      key={
+        feedback ? `${feedback.kind}-${feedback.messageId ?? feedback.conversationId}` : 'closed'
+      }
+      target={feedback}
+      onClose={() => setFeedback(null)}
+    />
+  );
+  if (!wide)
+    return (
+      <>
+        {conversation}
+        {sheet}
+      </>
+    );
   return (
     <View style={[styles.split, { backgroundColor: colors.background }]}>
       {sidebarOpen ? (
@@ -443,6 +473,7 @@ export default function AskScreen() {
         </View>
       )}
       {conversation}
+      {sheet}
     </View>
   );
 }
@@ -452,7 +483,7 @@ function HeaderButton({
   label,
   onPress,
 }: {
-  icon: 'albums-outline' | 'create-outline';
+  icon: 'albums-outline' | 'create-outline' | 'chatbox-ellipses-outline';
   label: string;
   onPress: () => void;
 }) {

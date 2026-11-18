@@ -97,6 +97,7 @@ export const MessageBubble = memo(function MessageBubble({
   onEdit,
   onRetry,
   onRate,
+  onReport,
   busy = false,
 }: {
   message: ChatMessage;
@@ -105,6 +106,7 @@ export const MessageBubble = memo(function MessageBubble({
   onEdit?: (text: string) => void; // sends the edited question in place of this one
   onRetry?: () => void; // asks the question this answers again
   onRate?: (rating: Rating | null) => void; // thumbs on an answer; null takes it back
+  onReport?: () => void; // opens the form to tell the team what was wrong with this answer
   busy?: boolean; // an answer is on its way: no edits or retries meanwhile
 }) {
   const colors = useColors();
@@ -282,6 +284,15 @@ export const MessageBubble = memo(function MessageBubble({
               />
             )}
             {onRate && <RatingButtons rating={message.rating} onRate={onRate} hover={hover} />}
+            {onReport && (
+              <ActionButton
+                icon="flag-outline"
+                label="Report"
+                hideLabel
+                hover={hover}
+                onPress={onReport}
+              />
+            )}
           </View>
         </View>
       </Pressable>
