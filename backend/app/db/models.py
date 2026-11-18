@@ -335,6 +335,28 @@ class CheckIn(Base):
     )
 
 
+class Feedback(Base):
+    """What a tester wrote to the team from the app: a report about one answer, or feedback on a
+    whole chat. Kept with a copy of the answer it is about, so it still reads right if the chat is
+    deleted; it goes when the person's account does."""
+
+    __tablename__ = "feedback"
+    __table_args__ = (CheckConstraint("kind IN ('report', 'feedback')", name="ck_feedback_kind"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))
+    text: Mapped[str] = mapped_column(Text)
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"), default=None
+    )
+    message_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="SET NULL"), default=None
+    )
+    quoted: Mapped[str | None] = mapped_column(Text, default=None)  # the answer, as it read
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class Pulse(Base):
     """A team member's answer to the nightly question, "How demanding was your day?" (1 light to
     5 very heavy). One per person a day, whatever their teams; a supervisor only ever sees weekly

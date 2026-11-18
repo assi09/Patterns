@@ -533,3 +533,17 @@ describe('mock team pulse', () => {
     expect(weeks[0].mean).toBeNull();
   });
 });
+
+describe('mock feedback', () => {
+  it('refuses an empty note, keeps a real one, and lists it for the owner', async () => {
+    const signed = await mockClient.logIn({ email: 'demo@patterns.app', password: 'demo-password' });
+    await saveToken(signed.token);
+    await expect(mockClient.sendFeedback({ kind: 'feedback', text: '   ' })).rejects.toThrow(
+      'Write a few words',
+    );
+    await mockClient.sendFeedback({ kind: 'feedback', text: 'Love the Today page' });
+    const [latest] = await mockClient.getFeedback();
+    expect(latest.text).toBe('Love the Today page');
+    expect(latest.kind).toBe('feedback');
+  });
+});

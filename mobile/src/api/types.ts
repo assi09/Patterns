@@ -155,6 +155,23 @@ export interface NightStages {
   stages: { start: ISODateTime; end: ISODateTime; stage: SleepStageKind }[];
 }
 
+/** A tester's note to the team: a report about one answer, or feedback on a chat. */
+export interface FeedbackIn {
+  kind: 'report' | 'feedback';
+  text: string;
+  conversationId?: string;
+  messageId?: string; // a report is about one answer
+}
+
+export interface FeedbackRow {
+  id: string;
+  kind: 'report' | 'feedback';
+  text: string;
+  createdAt: string;
+  quoted?: string | null; // the answer it is about, as it read
+  email: string; // admins only: who wrote it
+}
+
 /** A spread of values: count, mean, median, 90th percentile and maximum (null when empty). */
 export interface Spread {
   n: number;
@@ -633,6 +650,8 @@ export interface ApiClient {
   savePulse(rating: number): Promise<PulseToday>; // today only
   getTeamPulse(teamId: string): Promise<TeamPulse>; // the last five full weeks, oldest first
   getOpsMetrics(days: number): Promise<OpsMetrics>; // admins only
+  sendFeedback(feedback: FeedbackIn): Promise<void>;
+  getFeedback(): Promise<FeedbackRow[]>; // admins only, newest first
   getMetricSeries(metric: string, options: { end?: ISODate; days: number }): Promise<MetricSeries>;
   getEvidence(id: string): Promise<Evidence>; // any evidence a finding or chat answer cites
   answerQuestion(questionId: string, answer: string): Promise<ContextQuestion>;

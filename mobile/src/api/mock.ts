@@ -9,6 +9,7 @@ import { getToken } from './token';
 import type {
   MemoryFact,
   NightStages,
+  FeedbackRow,
   OpsMetrics,
   PulseToday,
   TeamPulse,
@@ -165,6 +166,8 @@ function mockPulse(): PulseToday {
     rating: pulseAnswers.get(isoDate(0)) ?? null,
   };
 }
+
+const mockFeedback: FeedbackRow[] = [];
 
 const spread = (median: number, n: number) => ({
   n,
@@ -1721,6 +1724,31 @@ export const mockClient: ApiClient = {
   getCheckIn: (date) => later(() => checkIns.find((c) => c.day === date) ?? null),
 
   getPulse: () => later(() => mockPulse()),
+
+  sendFeedback: (feedback) =>
+    later(() => {
+      const text = feedback.text.trim();
+      if (!text || text.length > 2000) {
+        throw new ApiError('Write a few words first (up to 2000 characters).', 'invalid_request', 422);
+      }
+      const quoted = feedback.messageId
+        ? chat.find((m) => m.id === feedback.messageId)?.text
+        : undefined;
+      mockFeedback.unshift({
+        id: `feedback-${mockFeedback.length + 1}`,
+        kind: feedback.kind,
+        text,
+        createdAt: new Date().toISOString(),
+        quoted: quoted ?? null,
+        email: currentAccount().email,
+      });
+    }),
+
+  getFeedback: () =>
+    later(() => {
+      adminAccount();
+      return mockFeedback;
+    }),
 
   getOpsMetrics: (days) =>
     later(() => {

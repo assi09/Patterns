@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useOpsMetrics } from '@/api/hooks';
+import { useFeedback, useOpsMetrics } from '@/api/hooks';
 import type { OpsMetrics } from '@/api/types';
 import { QueryState, Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -43,6 +43,7 @@ export default function Ops() {
         accessibilityLabel="Period"
       />
       <QueryState query={metrics}>{() => <Page m={metrics.data!} />}</QueryState>
+      <TesterFeedback />
     </Screen>
   );
 }
@@ -160,6 +161,38 @@ function Page({ m }: { m: OpsMetrics }) {
         (admins left out). Totals and rates; no one is named. Updated every minute.
       </Text>
     </>
+  );
+}
+
+/** What testers sent from the app, newest first: who, when, and the answer a report is about. */
+function TesterFeedback() {
+  const colors = useColors();
+  const feedback = useFeedback();
+  const rows = feedback.data ?? [];
+  return (
+    <Section title={`Feedback from testers${rows.length ? ` (${rows.length})` : ''}`}>
+      {rows.length === 0 ? (
+        <Text color="muted">
+          Nothing yet. Testers can report an answer (the flag under it) or send feedback on a chat
+          (the button at the top of Ask).
+        </Text>
+      ) : (
+        rows.map((row) => (
+          <View key={row.id} style={[styles.note, { borderColor: colors.border }]}>
+            <Text variant="caption" color="muted">
+              {row.kind === 'report' ? 'Report on an answer' : 'Feedback'} · {row.email} ·{' '}
+              {new Date(row.createdAt).toLocaleString()}
+            </Text>
+            <Text>{row.text}</Text>
+            {row.quoted ? (
+              <Text variant="caption" color="faint" numberOfLines={3}>
+                About: {row.quoted}
+              </Text>
+            ) : null}
+          </View>
+        ))
+      )}
+    </Section>
   );
 }
 
@@ -300,4 +333,5 @@ const styles = StyleSheet.create({
   track: { height: 8, borderRadius: 4, overflow: 'hidden' },
   bars: { flexDirection: 'row', alignItems: 'flex-end', height: 56, gap: 3 },
   barSlot: { flex: 1, height: '100%', justifyContent: 'flex-end' },
+  note: { gap: 2, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
 });

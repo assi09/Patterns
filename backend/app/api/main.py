@@ -21,6 +21,7 @@ from app.api import (
     chat,
     data,
     days,
+    feedback,
     google,
     memory,
     metrics,
@@ -113,6 +114,7 @@ def create_app() -> FastAPI:
     app.include_router(days.router)
     app.include_router(notifications.router)
     app.include_router(memory.router)
+    app.include_router(feedback.router)
     app.include_router(metrics.router)
     app.include_router(reminders.router)
     app.include_router(reports.router)
