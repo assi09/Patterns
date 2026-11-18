@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     typesafe_base_url: str = "https://api.typesafe.ai"
     # Accounts: who may approve sign-ups, and how long a device stays signed in.
     admin_emails: list[str] = []
+    # People invited to the pilot: their sign-up is approved at once instead of waiting. Set only
+    # on the server (FA_INVITED_EMAILS), never in the repository: these are people's addresses.
+    invited_emails: list[str] = []
     session_days: int = 30
     # Questions from the app: daily spending caps (US dollars, from stored answer costs, per local
     # day) and how long a request waits for the answer before telling the app to check back.

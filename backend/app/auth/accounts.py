@@ -15,6 +15,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.auth.passwords import DUMMY_HASH, hash_password, verify_password
+from app.config import settings
 from app.db.models import AuthSession, User
 
 MIN_PASSWORD = 10
@@ -56,9 +57,27 @@ def sign_up(session: Session, email: str, password: str) -> User:
     if session.scalar(select(User.id).where(User.email == email)) is not None:
         raise AuthError(409, "email_taken", "An account with this email already exists.")
     user = User(email=email, password_hash=hash_password(password), status="pending")
+    if invited(email):
+        user.status = "approved"  # the owner already chose them; no wait before connecting
     session.add(user)
     session.flush()
     return user
+
+
+def mailbox(email: str) -> str:
+    """One form per mailbox: lower case, and for Gmail without dots or a "+tag" (Gmail ignores
+    both), so "Some.Person@gmail.com" matches an invite to "someperson@gmail.com"."""
+    local, _, domain = email.strip().lower().partition("@")
+    if domain in ("gmail.com", "googlemail.com"):
+        local = local.split("+", 1)[0].replace(".", "")
+        domain = "gmail.com"
+    return f"{local}@{domain}"
+
+
+def invited(email: str) -> bool:
+    """Whether this address was invited to the pilot. Sign-up does not verify addresses, so this
+    trusts that the invited addresses are not known to others: fine for a small private pilot."""
+    return mailbox(email) in {mailbox(e) for e in settings.invited_emails if "@" in e}
 
 
 def log_in(session: Session, email: str, password: str) -> User:
