@@ -74,7 +74,11 @@ class GoalArguments(MetricPeriod):
         description="The number from what they said, in the metric's unit; a bedtime is in hours "
         "from midnight, so 23:00 is -1"
     )
-    direction: Literal["at_least", "at_most"]
+    direction: Literal["above", "at_least", "below", "at_most", "exactly"] = Field(
+        description="The comparison exactly as they said it: above (>, 'more than', 'strictly "
+        "above', 'not counting equal'), at_least (>=, 'or more', 'including'), below (<, 'under', "
+        "'less than'), at_most (<=, 'or less', 'no more than'), exactly (==)"
+    )
 
 
 class DayOnly(_Arguments):

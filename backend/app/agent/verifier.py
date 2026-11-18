@@ -833,6 +833,129 @@ def attributed(summary: str) -> list[str]:
     return []
 
 
+# "Held steady" or "no clear change": what a summary says when nothing changed.
+STEADY = re.compile(
+    r"\b(no clear (?:change|difference|shift)|not clearly (?:changed?|different)|held steady|"
+    r"stayed (?:steady|stable|flat|about the same)|steady|stable|unchanged|no (?:real )?change|"
+    r"did(?:n't| not) (?:clearly )?change|about the same|flat)\b",
+    re.IGNORECASE,
+)
+CHANGE_TESTS = ("compare_windows", "change_point", "trend")
+
+
+# The comparison a counting question states outright; an unclear one ("over 10k") is left to the
+# model.
+ASKED_COMPARISON = (
+    (
+        "above",
+        re.compile(
+            r"\bstrictly (?:above|over|more than|greater than)\b|"
+            r"\b(?:not|without) (?:counting|including) (?:equal|the same|ties)|"
+            r"\bexcluding (?:equal|ties)|\bmore than\b|\bgreater than\b",
+            re.I,
+        ),
+    ),
+    (
+        "at_least",
+        re.compile(
+            r"\bat least\b|\bor more\b|\bor above\b|\bor higher\b|"
+            r"\bno (?:less|fewer) than\b|\bincluding (?:equal|ties|the same)",
+            re.I,
+        ),
+    ),
+    (
+        "below",
+        re.compile(
+            r"\bstrictly (?:below|under|less than)\b|\bless than\b|"
+            r"\bfewer than\b",
+            re.I,
+        ),
+    ),
+    (
+        "at_most",
+        re.compile(
+            r"\bat most\b|\bor less\b|\bor fewer\b|\bor below\b|"
+            r"\bno (?:more|greater) than\b",
+            re.I,
+        ),
+    ),
+    ("exactly", re.compile(r"\bexactly (?:\d|equal)", re.I)),
+)
+NO_DAY_EQUAL = re.compile(r"\bno (?:day|night)s? (?:had |was |were )?(?:exactly|equal)", re.I)
+
+
+def asked_comparison(question: str) -> str | None:
+    """The comparison a question states outright, when it states exactly one."""
+    said = {name for name, pattern in ASKED_COMPARISON if pattern.search(question)}
+    if "above" in said and "at_least" in said:  # "more than or including": not outright
+        return None
+    return said.pop() if len(said) == 1 else None
+
+
+def comparison_problems(question: str, summary: str, evidence: list[Evidence]) -> list[str]:
+    """A count made with another comparison than the question's, or "no day equalled it" when
+    the count shows one did."""
+    problems = []
+    counts = [e for e in evidence if e.tool == "goal_progress"]
+    wanted = asked_comparison(question)
+    if wanted and counts and all(e.stats.get("direction") != wanted for e in counts):
+        used = counts[-1].stats.get("direction")
+        problems.append(
+            f"the question asks for days {wanted.replace('_', ' ')} the value, but the count used "
+            f"{str(used).replace('_', ' ')}; count again with direction {wanted}"
+        )
+    if NO_DAY_EQUAL.search(summary) and any(e.stats.get("days_equal") for e in counts):
+        problems.append("says no day equalled the value, but the count shows one did")
+    return problems
+
+
+def contradicted(summary: str, evidence: list[Evidence]) -> list[str]:
+    """What a summary says about a metric that the run's own tests contradict.
+
+    The audit (2026-11-18) saw "time asleep showed no clear change" over a clear drop, the
+    verifier having rejected that very claim, and an answer opening "sleep increased" over a clear
+    decrease. Judged per metric and only where the run's tests of it agree: a metric whose tests
+    disagree (steady this week, changed over three months) may be described either way, since the
+    summary could mean either test."""
+    by_metric: dict[str, list[Evidence]] = {}
+    for e in evidence:
+        if e.tool in CHANGE_TESTS and _p(e) is not None:
+            for metric in e.metrics[:1]:
+                by_metric.setdefault(metric, []).append(e)
+    clear = {
+        metric: signs
+        for metric, tests in by_metric.items()
+        if all(_significant(t) for t in tests)
+        and (signs := {(_sign(t) or 0) > 0 for t in tests if _sign(t)})
+        and len(signs) == 1
+    }
+    flagged: dict[str, str] = {}
+    for sentence in SENTENCES.split(summary):
+        if HEDGED.search(sentence) and not STEADY.search(sentence):
+            continue
+        for clause in CLAUSES.split(sentence):
+            if not clause or OPTION_WORDS.search(clause):
+                continue
+            up, down = UP_WORDS.search(clause), DOWN_WORDS.search(clause)
+            for metric, pattern in MENTIONS.items():
+                if metric not in clear or metric in flagged or not pattern.search(clause):
+                    continue
+                went_up = next(iter(clear[metric]))
+                if STEADY.search(clause) and not (up or down):
+                    flagged[metric] = "called steady"
+                elif NEGATED.search(clause) or bool(up) == bool(down):
+                    continue
+                elif bool(up) != went_up:
+                    flagged[metric] = "said to have gone up" if up else "said to have gone down"
+    if not flagged:
+        return []
+    said = ", ".join(f"{label(m)} ({why})" for m, why in flagged.items())
+    return [
+        f"contradicts this run's own tests: {said}, where every test of it shows a clear change "
+        "(the other way, or at all); say what the tests show"
+    ]
+
+
 def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
     """Metrics a summary describes as changing that no significant test in the run supports.
 

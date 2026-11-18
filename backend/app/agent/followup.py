@@ -114,6 +114,12 @@ def with_period(question: str, history: Sequence[Turn]) -> str:
         return question
     if len(question.split()) > MAX_WORDS or not (found := PERIOD.search(turns[-1].question)):
         return question
+    # A question naming its own metric stands on its own: "what's my average HRV?" after steps
+    # this week is not about that week (the audit's guardrail, 2026-11-18).
+    from app.agent.strategy import ASKED_ABOUT
+
+    if any(pattern.search(question) for pattern in ASKED_ABOUT.values()):
+        return question
     text = question.rstrip().rstrip("?").rstrip()
     return f"{text} {found.group().lower()}?"
 

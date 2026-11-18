@@ -31,6 +31,8 @@ from app.agent.verifier import (
     Submission,
     Verdict,
     attributed,
+    comparison_problems,
+    contradicted,
     overstated,
     ranked_problems,
     run_adjusted,
@@ -410,6 +412,7 @@ def _reword(llm: LLM, result: AgentResult, said: str, guard: Guard | None, budge
     problems = (
         text_problems(text, evidence, said)
         + overstated(text, evidence)
+        + contradicted(text, evidence)
         + ranked_problems(text, evidence)
         + attributed(text)
         if text
@@ -512,6 +515,8 @@ def _handle(
             general=any(c.kind == "guidance" for c in verdict.accepted),
         )
         summary_problems += overstated(submission.summary, run_evidence)
+        summary_problems += contradicted(submission.summary, run_evidence)
+        summary_problems += comparison_problems(said, submission.summary, run_evidence)
         summary_problems += ranked_problems(submission.summary, run_evidence)
         summary_problems += attributed(submission.summary)
         if answer_check and repairs_left > 0:  # worth one more try, not an answer lost over it

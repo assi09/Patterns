@@ -21,13 +21,17 @@ RECENT = timedelta(hours=24)  # with no day named, "at 3 pm" is the latest 3 pm 
 TOLERANCE_S = 60
 
 _NUMBER_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3}
+# Between a number and its unit: a space or a hyphen ("35-minute walk", "a 1-hour run"), which
+# went unread and asked for a duration already given (the audit of 2026-11-18).
+JOIN = r"[\s\-\u2010\u2011\u2013]*"
 DURATION = re.compile(
     r"\b(?:"
     r"(?P<half>half (?:an? )?hour)"
     r"|(?P<one_half>(?:(?:an?|one|1) )?hour and (?:a )?half)"
-    r"|(?:(?P<hours>\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b|(?P<word>an?|one|two|three) hours?\b)"
-    r"(?:\s*(?:and\s*)?(?P<and_minutes>\d+)\s*(?:minutes?|mins?)\b)?"
-    r"|(?P<minutes>\d+)\s*(?:minutes?|mins?)\b"
+    r"|(?:(?P<hours>\d+(?:\.\d+)?)" + JOIN + r"(?:hours?|hrs?|h)\b"
+    r"|(?P<word>an?|one|two|three)" + JOIN + r"hours?\b)"
+    r"(?:\s*(?:and\s*)?(?P<and_minutes>\d+)" + JOIN + r"(?:minutes?|mins?)\b)?"
+    r"|(?P<minutes>\d+)" + JOIN + r"(?:minutes?|mins?)\b"
     r")",
     re.IGNORECASE,
 )

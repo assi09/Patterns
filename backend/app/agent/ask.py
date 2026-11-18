@@ -107,6 +107,8 @@ from app.agent.router import (
     decide,
 )
 from app.agent.sanitize import clean
+from app.agent.scope import note as scope_note
+from app.agent.scope import with_scope
 from app.agent.strategy import (
     BROAD_GUIDE,
     COACHING_OFFER,
@@ -254,12 +256,15 @@ CORRECTS = re.compile(
     re.IGNORECASE,
 )
 # "Log it", "yes", "looks good" while a draft waits: the card is where it is confirmed.
-CONFIRMS = re.compile(
-    r"^\s*(?:yes|yeah|yep|yup|ok|okay|sure|log it|log that|confirm(?: it)?|save it|add it|"
-    r"do it|go ahead|sounds good|looks good|looks right|correct|perfect|great)"
-    r"[\s.!]*(?:please|pls|plz)?[\s.!]*$",
-    re.IGNORECASE,
+# "Yes", "log it", and the two together ("Yes, log it", "yes, log that walking workout"), which
+# lost the draft waiting above and asked what to log (the audit of 2026-11-18). A few words may
+# name what it is; a number would be a new entry, not this one.
+_CONFIRM = (
+    r"(?:yes|yeah|yep|yup|ok|okay|sure|confirm(?: it)?|save it|add it|do it|go ahead|"
+    r"sounds good|looks good|looks right|correct|perfect|great|please|pls|plz|"
+    r"(?:log|save|add) (?:it|that|this|the)(?: [a-z]+){0,3})"
 )
+CONFIRMS = re.compile(rf"^\s*{_CONFIRM}(?:[\s,.!]+{_CONFIRM}){{0,3}}[\s.!]*$", re.IGNORECASE)
 CONFIRM_ON_CARD = (
     "Tap Log it on the card above to add it. I don't send anything to Google myself, so it stays "
     "a draft until you do."
@@ -267,6 +272,25 @@ CONFIRM_ON_CARD = (
 EDIT_ON_CARD = (
     "Got it. Change it on the card above: tap Edit, fix it, then confirm. Nothing is sent to "
     "Google until you do."
+)
+
+
+# "During it", "that one": a how-to follow-up about the thing the last question named.
+REFERS_TO_IT = re.compile(r"\b(?:it|that one|this one|that exercise|that move|doing that)\b", re.I)
+
+
+# "Does that mean walking caused my shorter sleep?", "can you tell me it definitely causes it?":
+# about the link just shown. Sent to the general lookup, it was refused as off topic (the audit of
+# 2026-11-18); the honest answer is the same every time, so code gives it.
+CAUSE_FOLLOW_UP = re.compile(
+    r"^(?=.*\b(?:caus(?:e|es|ed|ing)|is (?:it|that) because)\b)(?=.*\b(?:it|that|this|so)\b)",
+    re.IGNORECASE,
+)
+ASSOCIATION_REPLY = (
+    "No. What your data shows is that these go together, not that one causes the other. That "
+    "doesn't rule a cause out either: other things that changed at the same time could explain "
+    "both. Trying a change for a couple of weeks and watching what follows is the closest your "
+    "own data can get."
 )
 
 
@@ -526,6 +550,14 @@ def ask(
     if offer:
         question = said = as_request(offer)
     fixed = plain_reply(said, frame, _day(today or now), after_draft)
+    if (
+        not fixed
+        and history
+        and history[-1].claims
+        and CAUSE_FOLLOW_UP.search(said)
+        and "?" in said
+    ):
+        fixed = ASSOCIATION_REPLY
     # What a follow-up refers to, before routing or an expert sees it.
     if (
         urgent_free(question)
@@ -534,10 +566,18 @@ def ask(
         and not is_statement(question)
     ):
         day = today.date() if isinstance(today, datetime) else today or date.today()
-        means = with_period(with_relative_day(question, history, day), history)
-        question, rewrite_cost = standalone(
-            llm, question, history, means if means != question else None
-        )
+        # Which days and metrics "those dates" or "and the median?" mean, by code (scope.py).
+        resolved = with_scope(question, history, day)
+        if resolved.ask:
+            fixed = resolved.ask
+        elif resolved.inherited:
+            first = frame.index.min().date() if len(frame.index) else None
+            question = f"{question} {scope_note(resolved, first, day)}"
+        else:
+            means = with_period(with_relative_day(question, history, day), history)
+            question, rewrite_cost = standalone(
+                llm, question, history, means if means != question else None
+            )
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)
@@ -914,7 +954,10 @@ def ask(
         # Keeping it is the person's tap on the card the listener raises; no data to look at.
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="noted", summary=NOTED)
     elif world:
-        result = answer_world(llm, question, outside, guard=guard)
+        refers = history and REFERS_TO_IT.search(said)
+        result = answer_world(
+            llm, question, outside, guard=guard, earlier=history[-1].question if refers else None
+        )
     elif chatting:
         result = chat_reply(
             llm,

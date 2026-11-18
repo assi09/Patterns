@@ -92,11 +92,62 @@ def untracked_note(thing: str) -> str:
     )
 
 
+# Someone else as the one who slept or walked, whatever the word for them: "how did my coworker
+# sleep?", "how many steps did my neighbour take?". The audit of 2026-11-18 had a coworker's
+# sleep called a medical question; a list of relations can never be complete, the sentence's
+# shape can. The words that only describe the person's own data are not someone else.
+THEIR_ACTION = re.compile(
+    r"\b(?:did|does|do|has|have|is|was|were)\s+(?:my|his|her|our)\s+([a-z][a-z-]*)\s+"
+    r"(?:sleep|slept|walk\w*|run|ran|rest|recover\w*|do|did|take|took|get|got|burn\w*|train\w*)\b",
+    re.IGNORECASE,
+)
+THEIR_DATA = re.compile(
+    r"\b(?:my|his|her|our)\s+([a-z][a-z-]*)'s\s+(?:\w+\s+)?(?:sleep|steps?|heart|hrv|data|"
+    r"calories|activity|workouts?|rest\w*|recover\w*|stress\w*)\b",
+    re.IGNORECASE,
+)
+OWN_WORDS = frozenset(
+    [
+        "own",
+        "average",
+        "total",
+        "daily",
+        "deep",
+        "light",
+        "rem",
+        "night",
+        "nightly",
+        "weekly",
+        "usual",
+        "resting",
+        "body",
+        "heart",
+        "sleep",
+        "step",
+        "steps",
+        "recovery",
+        "overall",
+        "fitbit",
+        "watch",
+        "tracker",
+        "data",
+        "last",
+        "first",
+        "best",
+        "worst",
+    ]
+)
+
+
 def other_person(text: str) -> str | None:
     """ "How did my wife sleep?": whose data they ask about, when it is not theirs."""
     found = OTHER_PERSON.search(text)
     if found and ABOUT_THEIR_DATA.search(text) and ASKING.search(text):
         return found.group(1).lower()
+    for pattern in (THEIR_ACTION, THEIR_DATA):
+        found = pattern.search(text)
+        if found and found.group(1).lower() not in OWN_WORDS and ASKING.search(text):
+            return found.group(1).lower()
     return None
 
 
