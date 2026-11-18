@@ -8,7 +8,12 @@ the draft the agent prepares is read from the database and compared field by fie
 argument match. Nothing is ever sent to Google: drafts wait for a person's tap.
 
     PYTHONPATH=backend:eval python eval/logging_eval.py --list     # the requests, free
-    PYTHONPATH=backend:eval python eval/logging_eval.py            # the run, about $0.30
+    PYTHONPATH=backend:eval python eval/logging_eval.py            # the run, about $1.50
+
+How many: 90 meals, 70 workouts and 90 requests that must not become a draft (250). Per kind,
+about 80-90 requests estimate an accuracy near 85% within roughly +-7 points (95% Wilson), the
+whole set within about +-4; and if none of the 90 must-not requests becomes a draft, the 95% upper
+bound on that failure rate is 3/90 = 3.3% (the rule of three), where 8 cases could only say 37%.
 
 Everything is made up, so requests and drafts may be printed. Results go to `eval/results/`.
 """
@@ -29,7 +34,7 @@ from app.db.session import session_scope
 from conversation_eval import app_for, database, sign_in
 from sqlalchemy import select
 
-STOP_AT_USD = 0.6
+STOP_AT_USD = 2.5
 SEED = 503
 HERE = Path(__file__).parent
 OUT = HERE / "results" / f"logging_eval_{datetime.now(UTC).date()}.jsonl"
@@ -46,6 +51,26 @@ FOODS = [  # (name in the request, word the draft's name must contain)
     ("a plate of spaghetti bolognese", "spaghetti"),
     ("a greek yogurt", "yogurt"),
     ("a falafel wrap", "falafel"),
+    ("an apple", "apple"),
+    ("a bowl of lentil soup", "lentil"),
+    ("a cheeseburger", "burger"),
+    ("a glass of orange juice", "orange"),
+    ("a plate of grilled salmon", "salmon"),
+    ("a croissant", "croissant"),
+    ("a protein bar", "bar"),
+    ("a bowl of rice", "rice"),
+    ("a chocolate chip cookie", "cookie"),
+    ("a tuna sandwich", "tuna"),
+    ("a bowl of hummus with bread", "hummus"),
+    ("a mango smoothie", "smoothie"),
+    ("a handful of almonds", "almond"),
+    ("a shawarma wrap", "shawarma"),
+    ("a bowl of cereal with milk", "cereal"),
+    ("a latte", "latte"),
+    ("a slice of cheesecake", "cheesecake"),
+    ("a chicken burrito", "burrito"),
+    ("a plate of fries", "fries"),
+    ("a bowl of fruit salad", "fruit"),
 ]
 MEALS = {
     "breakfast": "BREAKFAST",
@@ -77,6 +102,8 @@ WORKOUTS = [  # (words, types accepted)
     ),
     ("a hike", ("HIKING",)),
     ("a tennis match", ("TENNIS",)),
+    ("a football game", ("SOCCER", "FOOTBALL")),
+    ("a basketball game", ("BASKETBALL",)),
 ]
 
 
@@ -92,7 +119,7 @@ def generate(now: datetime) -> list[dict]:
     rng = random.Random(SEED)
     yesterday = (now - timedelta(days=1)).date()
     items: list[dict] = []
-    for i, (said, word) in enumerate(FOODS * 2):
+    for i, (said, word) in enumerate(FOODS * 3):
         meal_said, meal = list(MEALS.items())[i % 4]
         low, high = MEAL_HOURS[meal]
         hour, minute = rng.randint(low, high - 1), rng.choice((0, 15, 30, 45))
@@ -119,7 +146,7 @@ def generate(now: datetime) -> list[dict]:
                 "kcal": kcal,
             }
         )
-    for i, (said, types) in enumerate(WORKOUTS * 3):
+    for i, (said, types) in enumerate(WORKOUTS * 7):
         hour, minute = rng.randint(6, 20), rng.choice((0, 30))
         length = rng.choice((20, 30, 45, 60, 75, 90))
         twelve, twentyfour = clock(hour, minute)
@@ -152,49 +179,63 @@ def generate(now: datetime) -> list[dict]:
                 "km": km,
             }
         )
-    # Must not become a draft.
-    items += [
-        {
-            "m": "log a run yesterday at 7am",
-            "kind": "none",
-            "why": "no length: ask for it",
-        },
-        {
-            "m": "log my swim from yesterday morning",
-            "kind": "none",
-            "why": "no length: ask for it",
-        },
-        {
-            "m": "log a 45 minute run tomorrow at 7am",
-            "kind": "none",
-            "why": "not happened yet",
-        },
-        {
-            "m": "log my dinner tonight, a steak",
-            "kind": "none",
-            "why": "not happened yet",
-        },
-        {
-            "m": "I had a pizza yesterday",
-            "kind": "none",
-            "why": "a statement: ask what they want",
-        },
-        {
-            "m": "went for a long walk yesterday",
-            "kind": "none",
-            "why": "a statement: ask",
-        },
-        {
-            "m": "how many calories are in a banana?",
-            "kind": "none",
-            "why": "a question, not a log",
-        },
-        {
-            "m": "did my run yesterday help my sleep?",
-            "kind": "none",
-            "why": "a question about data",
-        },
-    ]
+    # Must not become a draft: 18 of each of five reasons, worded several ways.
+    reasons = (
+        (
+            "no length: ask for it",
+            (
+                "log {w} yesterday at {at}",
+                "log my {b} from yesterday morning",
+                "I did {w} yesterday, please log it",
+                "add {w} from this morning",
+            ),
+        ),
+        (
+            "not happened yet",
+            (
+                "log {w} tomorrow at {at} for 45 minutes",
+                "log my dinner tonight, {f}",
+                "add {f} for breakfast tomorrow",
+                "log {w} next Monday at {at}, 30 minutes",
+            ),
+        ),
+        (
+            "a statement: ask what they want",
+            (
+                "I had {f} yesterday",
+                "went for {w} yesterday",
+                "ate {f} for lunch",
+                "just finished {w}",
+            ),
+        ),
+        (
+            "a question, not a log",
+            (
+                "how many calories are in {f}?",
+                "is {w} good for recovery?",
+                "how much protein is in {f}?",
+                "how long should {w} last?",
+            ),
+        ),
+        (
+            "a question about data",
+            (
+                "did {w} yesterday help my sleep?",
+                "do I sleep better after {w}?",
+                "how many steps did I take on the day of {w}?",
+                "was my resting heart rate higher after {f}?",
+            ),
+        ),
+    )
+    for r, (why, forms) in enumerate(reasons):
+        for k in range(18):
+            food = FOODS[(k * 7 + r) % len(FOODS)][0]
+            work = WORKOUTS[(k * 3 + r) % len(WORKOUTS)][0]
+            twelve, _ = clock(rng.randint(6, 20), 0)
+            text = forms[k % len(forms)].format(
+                w=work, b=work.removeprefix("a ").removeprefix("an "), f=food, at=twelve
+            )
+            items.append({"m": text, "kind": "none", "why": why})
     return items
 
 
