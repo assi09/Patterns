@@ -493,3 +493,25 @@ def test_a_new_sync_replaces_the_cached_analysis(client, engine, owner_data):
     assert before["range"]["end"] == "2026-08-30"
     assert after["range"]["end"] == "2026-09-09"
     assert after["lastSync"].startswith("2026-09-10T06:00")
+
+
+def test_an_invited_address_is_approved_at_sign_up_and_others_still_wait(client, monkeypatch):
+    monkeypatch.setattr(
+        settings, "invited_emails", ["invited.person@gmail.com", "guest@example.com"]
+    )
+    # Gmail ignores dots, capitals and +tags, so the same mailbox matches however it is typed.
+    for email in ("Invited.Person@gmail.com", "GUEST@example.com"):
+        token = sign_up(client, email)["token"]
+        me = client.get("/auth/me", headers=headers(token)).json()
+        assert me["status"] == "approved", email
+    token = sign_up(client, "invitedperson+pilot@gmail.com")["token"]  # same Gmail mailbox
+    assert client.get("/auth/me", headers=headers(token)).json()["status"] == "approved"
+    token = sign_up(client, "stranger@example.com")["token"]
+    assert client.get("/auth/me", headers=headers(token)).json()["status"] == "pending"
+
+
+def test_dots_only_fold_for_gmail():
+    from app.auth.accounts import mailbox
+
+    assert mailbox(" A.B+x@GoogleMail.com ") == "ab@gmail.com"
+    assert mailbox("a.b@example.com") == "a.b@example.com"  # other providers keep their dots
