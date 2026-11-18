@@ -634,3 +634,44 @@ def test_food_readback_is_not_bounded_by_the_wearable_history_start():
         food_logs=entries,
     ).result
     assert "Example oats" in result.summary and "310 kcal" in result.summary
+
+
+@pytest.mark.parametrize(
+    "question, anchor",
+    [
+        ("What was the total steps last 7 days", "today"),
+        ("What is my mean deep sleep minutes yesterday?", "today"),
+        ("How many days did I sleep under 7 hours in the past 14 days?", "today"),
+        ("And the day before that?", "previous"),  # points at the earlier request
+        ("Same measure, 24 hours earlier than that day", "previous"),
+    ],
+)
+def test_a_period_counted_from_today_is_anchored_to_today_by_code(question, anchor):
+    """The reader anchored "yesterday" and "last 7 days" to a previous request that did not
+    exist, and asked which one was meant on 30 of 50 PHIA questions (2026-11-18)."""
+    from app.agent.requests import Part, Period, Reading, anchored_by_code
+
+    period = Period(kind="relative", anchor="previous", offset_days=-1)
+    reading = Reading(
+        kind="data", parts=[Part(metrics=["steps"], operation="sum", periods=[period])]
+    )
+    fixed = anchored_by_code(reading, question)
+    assert fixed.parts[0].periods[0].anchor == anchor
+
+
+@pytest.mark.parametrize(
+    "question, offset",
+    [
+        ("What was my average steps last 7 days?", 0),
+        ("Total REM sleep over the past 14 days", 0),
+        ("Average steps over the 7 complete days ending yesterday", -1),
+    ],
+)
+def test_last_n_days_ends_today_as_everywhere_else_in_the_app(question, offset):
+    from app.agent.requests import Part, Period, Reading, anchored_by_code
+
+    period = Period(kind="rolling", anchor="today", offset_days=-1, days=7)
+    reading = Reading(
+        kind="data", parts=[Part(metrics=["steps"], operation="mean", periods=[period])]
+    )
+    assert anchored_by_code(reading, question).parts[0].periods[0].offset_days == offset

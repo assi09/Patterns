@@ -114,6 +114,21 @@ questions are refused by the router before any search.
 
 ## Structured request implementation (2026-11-18, local)
 
+**PHIA check on the new path (2026-11-19).** Precise questions now go through the request reader
+and code, so the earlier PHIA scores no longer described the path. Patterns re-asked the first 50
+questions of two batches, graded as before:
+
+| | Before (old path) | New path as first built | After two fixes |
+|---|---:|---:|---:|
+| A1 (the fixes were made on these) | 49 / 50 | **19 / 50** | 50 / 50 |
+| A2 (not looked at while fixing) | 45 / 50 | not run | **49 / 50** (4 better, none worse) |
+
+The drop to 19 was the reader anchoring "yesterday" and "last 7 days" to a previous request that
+did not exist, then asking "which earlier period?"; and reading "the last 7 days" as ending
+yesterday where the rest of the app ends it today. Code now reads both itself (a period counted
+from today is anchored to today; "last N days" ends today unless "complete days" or "ending
+yesterday" is said). A2 is the figure to quote; A1 was used to find the fixes.
+
 The complete backend suite passes **1,920 tests**, 95 more than the starting revision; Ruff and
 format checks pass. The new tests cover structured output, calendars and reference ambiguity,
 all registered metrics, missing versus zero, threshold equality/units, multiple operations and

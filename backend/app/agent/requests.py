@@ -153,6 +153,49 @@ class RetryReading(Ambiguous):
     """An interpretation contradicts a known capability or actual server action state."""
 
 
+# Periods counted from today, read by code: "yesterday", "last 7 days", "this week". The reader
+# anchored them to the previous request instead, and with none asked "which earlier period?" for
+# 30 of 50 PHIA questions (2026-11-18). Words pointing at the earlier request keep its anchor.
+FROM_TODAY = re.compile(
+    r"\b(?:yesterday|today|tonight|last night|this (?:week|month|year)|"
+    r"(?:last|past|previous) (?:\d+|one|two|three|four|five|six|seven|ten|fourteen|thirty) "
+    r"(?:days?|weeks?|months?)|(?:last|past) (?:week|month|year|fortnight)|\d+ days? ago)\b",
+    re.IGNORECASE,
+)
+REFERS_TO_EARLIER = re.compile(
+    r"\b(?:that|those|then|same|earlier than|before that|after that|previous (?:one|date|day)|"
+    r"prior (?:one|date|day))\b",
+    re.IGNORECASE,
+)
+
+
+# "The last 7 days" ends today, as everywhere else in the app (periods.period); only "complete
+# days" or "ending yesterday" ends the day before. The reader ended it yesterday, so the same
+# words meant different days here and in the rest of the app (PHIA, 2026-11-18).
+LAST_DAYS = re.compile(r"\b(?:last|past) (?:\d+|[a-z]+) days?\b", re.IGNORECASE)
+ENDING_YESTERDAY = re.compile(r"\bcomplete days?\b|\bending yesterday\b|\bup to yesterday\b", re.I)
+
+
+def anchored_by_code(reading: "Reading", question: str) -> "Reading":
+    """Code's own reading of the anchor: a period the question counts from today is anchored
+    to today, whatever the model said, unless the question points at the earlier request."""
+    if not FROM_TODAY.search(question) or REFERS_TO_EARLIER.search(question):
+        return reading
+    ends_today = bool(LAST_DAYS.search(question)) and not ENDING_YESTERDAY.search(question)
+
+    def fixed(period: "Period") -> "Period":
+        update: dict = {"anchor": "today"} if period.anchor == "previous" else {}
+        if ends_today and period.kind == "rolling":
+            update["offset_days"] = 0
+        return period.model_copy(update=update) if update else period
+
+    parts = [
+        part.model_copy(update={"periods": [fixed(p) for p in part.periods]})
+        for part in reading.parts
+    ]
+    return reading.model_copy(update={"parts": parts})
+
+
 def previous_state(history: Sequence[Turn]) -> dict:
     return next((t.request_state for t in reversed(history) if t.request_state), {})
 
@@ -347,8 +390,11 @@ when the user asks to repeat the previous computation; standalone new questions 
 Thresholds are in the metric's native units. When the user supplies hours for a minutes metric,
 keep their number unchanged and set threshold_unit hours; code converts it. Never do that math.
 Dates: explicit only for dates named by the user; relative/rolling for offsets (24 hours earlier
-is relative anchor previous offset_days -1), calendar for calendar weeks/months/years. Code does
-the arithmetic. Rolling last N complete days ends yesterday (offset_days -1). No period in a
+is relative anchor previous offset_days -1), calendar for calendar weeks/months/years. anchor
+previous only when the message points at the earlier request's dates; "yesterday", "last 7 days"
+and "this week" count from today (anchor today). Code does
+the arithmetic. "Last N days" is rolling ending today (offset_days 0); only "N complete days" or
+"ending yesterday" ends yesterday (offset_days -1). No period in a
 standalone question means history; a reference to the prior interval means inherit. A new period
 replaces old dates while a follow-up can inherit the operation/metric. reference is a zero-based
 prior data-part index only if clearly identified; leave null when ambiguous. A shift of a prior
@@ -443,7 +489,9 @@ def interpret(
                 raise Ambiguous(
                     "Could you specify the measurement and dates, or the topic you mean?"
                 )
-            reading = Reading.model_validate(completion.tool_calls[0].arguments)
+            reading = anchored_by_code(
+                Reading.model_validate(completion.tool_calls[0].arguments), question
+            )
             try:
                 if reading.kind == "confirmation" and not pending_draft:
                     raise RetryReading(
