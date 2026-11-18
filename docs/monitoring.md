@@ -80,15 +80,29 @@ Two services in the `patterns` project, both from this repository, each with a v
    - Volume: mount path `/var/lib/grafana`.
    - Networking: generate a domain (port 3000). Sign in as `admin` with the generated password
      (Variables → reveal).
-4. Alerts (Grafana → Alerting → Alert rules → New, on the Prometheus data source), sent to Karim's
-   email:
-   - the API is unreachable: `up{job="patterns-api"} == 0` for 5 minutes;
-   - the database is unreadable: `patterns_database_up == 0` for 5 minutes;
-   - the day's spending passes 80% of its cap:
-     `patterns_spend_today_usd{who="everyone"} > 0.8 * patterns_spend_cap_usd{cap="daily_total"}`;
-   - Google syncs failing: `increase(patterns_sync_runs_total{status="failed"}[1h]) > 3`;
-   - answers getting slow: `patterns_answer_latency_seconds{quantile="0.5"} > 30` for 15 minutes.
-   Grafana's email needs SMTP settings (`GF_SMTP_*`); until then, alerts show on its Alerting page.
+4. **Alerts** are provisioned from `monitoring/grafana/provisioning/alerting/patterns.yml` (in the image,
+   so they come back on every deploy) and emailed to `ALERT_EMAIL` through Resend's SMTP, whose test
+   sender delivers to the account owner only, which is who alerts are for. Grafana variables:
+   `ALERT_EMAIL` (the owner's address), `GF_SMTP_ENABLED=true`, `GF_SMTP_HOST=smtp.resend.com:465`,
+   `GF_SMTP_USER=resend`, `GF_SMTP_PASSWORD=${{api.FA_EMAIL_API_KEY}}`,
+   `GF_SMTP_FROM_ADDRESS=onboarding@resend.dev`, `GF_SMTP_FROM_NAME=Patterns alerts`.
+
+   | Alert | Fires when | Why it matters |
+   |---|---|---|
+   | API down | `up` < 1 for 5 min (also when the scrape is missing) | testers cannot use the app |
+   | Database down | `patterns_database_up` < 1 for 5 min | nothing loads |
+   | Server errors | more than 5 responses 5xx in 15 min | something is breaking |
+   | Answers failing | over 30% of an hour's answers failed, with at least 5 answers | the agent is struggling |
+   | Answers slow | typical answer time over 30 s for 15 min | the app feels broken |
+   | Daily spend high | today's spending over 80% of the daily cap | chat stops for everyone at 100% |
+   | Overall budget | all spending over 80% of the overall cap | the pilot budget is nearly gone |
+   | Tester at daily limit | someone reached their daily cap | they are blocked until tomorrow |
+   | Google syncs failing | more than 3 failed syncs in an hour | data stops arriving |
+   | Reconnect needed | a Google sign-in expired, for 1 h | a tester's data has stopped |
+   | Waiting for approval | an account waiting over 2 h | someone is stuck at the door |
+
+   Checked 2026-11-18: all 11 load in Grafana 10.4 from the file, and each query runs on the live
+   Prometheus (none firing: API and database up, no errors, 0.5% of the overall budget).
 
 Railway bills the two services and their volumes by use: small, a few dollars a month at this load.
 
