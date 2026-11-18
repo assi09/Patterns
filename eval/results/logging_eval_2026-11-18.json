@@ -1,0 +1,223 @@
+{
+ "requests": 250,
+ "all_fields_right": 230,
+ "by_kind": {
+  "food": [
+   86,
+   90
+  ],
+  "workout": [
+   63,
+   70
+  ],
+  "none": [
+   81,
+   90
+  ]
+ },
+ "fields": {
+  "food.day": [
+   86,
+   86
+  ],
+  "food.drafted": [
+   86,
+   90
+  ],
+  "food.kcal": [
+   59,
+   59
+  ],
+  "food.meal": [
+   86,
+   86
+  ],
+  "food.name": [
+   86,
+   86
+  ],
+  "food.time": [
+   86,
+   86
+  ],
+  "none.no_draft": [
+   81,
+   90
+  ],
+  "workout.day": [
+   70,
+   70
+  ],
+  "workout.drafted": [
+   70,
+   70
+  ],
+  "workout.km": [
+   12,
+   12
+  ],
+  "workout.minutes": [
+   70,
+   70
+  ],
+  "workout.time": [
+   70,
+   70
+  ],
+  "workout.type": [
+   63,
+   70
+  ]
+ },
+ "cost_usd": 0.8081,
+ "wrong": [
+  {
+   "m": "Can you record a chicken caesar salad for a snack, yesterday at 4pm?",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "Please add a bowl of rice I had yesterday at 12:15pm for lunch",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "Please add a chicken caesar salad I had yesterday at 1:45pm for lunch",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "yesterday 18:30 dinner: a turkey sandwich. log it",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "Add a football game: yesterday 16:30, 30 minutes",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "log a football game yesterday at 16:00 for 45 minutes",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "I did a football game yesterday, started at 16:30, 60 minutes. please log it",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "Add a football game: yesterday 06:00, 60 minutes",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "log a football game yesterday at 10:30 for 1 hour 30 minutes",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "I did a football game yesterday, started at 20:00, 90 minutes. please log it",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "Add a football game: yesterday 12:00, 75 minutes",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "log a walk tomorrow at 10am for 45 minutes",
+   "fields": {
+    "no_draft": false
+   }
+  },
+  {
+   "m": "add a croissant for breakfast tomorrow",
+   "fields": {
+    "no_draft": false
+   }
+  },
+  {
+   "m": "log a swim tomorrow at 2pm for 45 minutes",
+   "fields": {
+    "no_draft": false
+   }
+  },
+  {
+   "m": "log strength training tomorrow at 6am for 45 minutes",
+   "fields": {
+    "no_draft": false
+   }
+  },
+  {
+   "m": "log my dinner tonight, a slice of pepperoni pizza",
+   "fields": {
+    "no_draft": false
+   }
+  },
+  {
+   "m": "add a bowl of lentil soup for breakfast tomorrow",
+   "fields": {
+    "no_draft": false
+   }
+  },
+  {
+   "m": "log a tennis match tomorrow at 2pm for 45 minutes",
+   "fields": {
+    "no_draft": false
+   }
+  },
+  {
+   "m": "add a falafel wrap for breakfast tomorrow",
+   "fields": {
+    "no_draft": false
+   }
+  },
+  {
+   "m": "log a basketball game tomorrow at 9am for 45 minutes",
+   "fields": {
+    "no_draft": false
+   }
+  }
+ ]
+}
