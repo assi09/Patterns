@@ -246,14 +246,28 @@ def tag_effect(frame: pd.DataFrame, tag: str, metric: str, window: Window) -> Ev
     )
 
 
+COMPARISONS = {
+    "above": lambda values, target: values > target,
+    "at_least": lambda values, target: values >= target,
+    "below": lambda values, target: values < target,
+    "at_most": lambda values, target: values <= target,
+    "exactly": lambda values, target: values == target,
+}
+
+
 def goal_progress(
     frame: pd.DataFrame, metric: str, target: float, direction: str, window: Window
 ) -> Evidence:
-    """How often a day met a target the person set, overall and over the last week of the period."""
-    if direction not in ("at_least", "at_most"):
-        raise ToolError("direction must be at_least or at_most")
+    """How often a day met a target the person set, overall and over the last week of the period.
+
+    `direction` is the comparison, said exactly: "above" (>), "at_least" (>=), "below" (<),
+    "at_most" (<=) or "exactly" (==). "Strictly above 11,243" counted with >= gave five days
+    instead of four, and the answer then said no day equalled it when one did (the audit of
+    2026-11-18): the days equal to the value are always counted too, so that can be said."""
+    if direction not in COMPARISONS:
+        raise ToolError(f"direction must be one of {', '.join(COMPARISONS)}")
     values = _values(frame, metric, window)
-    met = values >= target if direction == "at_least" else values <= target
+    met = COMPARISONS[direction](values, target)
     last_week = met[met.index > pd.Timestamp(window.end - timedelta(days=7))]
     return Evidence(
         tool="goal_progress",
@@ -265,6 +279,7 @@ def goal_progress(
             "target": _round(target),
             "direction": direction,
             "days_met": int(met.sum()),
+            "days_equal": int((values == target).sum()),
             "days_counted": len(values),
             "share_met": _round(met.mean()) if len(met) else None,
             "last_week_met": int(last_week.sum()),

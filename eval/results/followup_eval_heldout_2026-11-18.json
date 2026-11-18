@@ -1,0 +1,11 @@
+{
+ "split": "heldout",
+ "graded_turns": 22,
+ "passed": 21,
+ "rate": 0.955,
+ "wilson_95": [
+  0.782,
+  0.992
+ ],
+ "cost_usd": 0.0751
+}

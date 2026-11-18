@@ -54,9 +54,19 @@ SPAN = re.compile(
 )
 
 
+# Two dates joined, "2026-11-11 to 2026-11-17" or "Nov 11 through 17": a span, not one day.
+DATE_RANGE = re.compile(
+    r"(?:\d{4}-\d{2}-\d{2}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\.? \d{1,2})"
+    r"\s*(?:to|through|thru|until|till|-|–)\s*"
+    r"(?:\d{4}-\d{2}-\d{2}|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\.? )?\d{1,2})",
+    re.IGNORECASE,
+)
+
+
 def asks_over_days(question: str) -> bool:
     """A value over several days (a total, average or extreme), not about one day."""
-    return bool(AGGREGATE.search(question)) and not ONE_DAY.search(question)
+    one_day = ONE_DAY.search(question) and not DATE_RANGE.search(question)
+    return bool(AGGREGATE.search(question)) and not one_day
 
 
 def names_no_period(question: str) -> bool:
