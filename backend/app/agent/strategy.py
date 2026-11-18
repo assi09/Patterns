@@ -20,7 +20,9 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 
 from app.agent.agent import DEFAULT_GUIDE, ExtraTool
+from app.agent.experts import owner
 from app.agent.llm import Budget
+from app.agent.periods import asked_period
 from app.agent.present import clock, label
 from app.agent.strategy_types import DEFAULT_TYPE
 from app.agent.tools import BUILT_FROM, TOOLS, Toolbox, evidence_payload
@@ -30,6 +32,7 @@ from app.analysis.coaching import WEEKDAYS, habit_options, personal_options
 from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
 from app.analysis.habits import BETTER
+from app.analysis.screen import BASELINE_DAYS, NOT_SCREENED, screen_windows, without_low_wear
 from app.analysis.tools import change_point, compare_windows, correlate
 
 EXPAND = "expand_tools"
@@ -557,6 +560,155 @@ def _related(metric: str, other: str) -> bool:
         if (metric == score and other in inputs) or (other == score and metric in inputs):
             return True
     return False
+
+
+# How big a change is, from |Cliff's delta| (Romano et al. 2006).
+SIZES = ((0.47, "large"), (0.33, "medium"), (0.15, "small"), (0.0, "very small"))
+MIN_OVERVIEW_DAYS = 5  # a shorter span than this compares too few days to say anything
+MEDIUM, ALPHA = 0.33, 0.05
+BROAD_GUIDE = (
+    "How to work: the overview below compares every metric they have over the period, already "
+    "corrected for testing them all at once, and ranks the clear changes by size. Answer from it "
+    "and cite its evidence_ids. Lead with the clear changes in that order, across areas, not only "
+    "one area; call a change the biggest, the main or the most only if it is first in the list. "
+    "Say in one sentence which areas held steady, backing it with a no_change claim on one of that "
+    "area's listed metrics. If nothing changed clearly, open with that ('Nothing has changed "
+    "clearly over Oct 5 to Oct 18') and only then, if at all, a possible change with a hedge in "
+    "the same sentence. Never write about the method (how many metrics or comparisons were "
+    "tested, corrections). Look "
+    "closer with compare_windows, change_point or trend only at a change the overview lists. A "
+    "feeling they describe (tired, drained, stressed, off) is not something the watch measures: "
+    "never say it is caused by or because of anything. Give the clear changes that could bear on "
+    "it as possible contributors ('your time asleep is down, which can add to feeling tired'), "
+    "most relevant first, and if their check-ins changed, say so. No hypotheses. Then call "
+    "submit_findings."
+)
+
+
+def size_of(delta: float) -> str:
+    return next(word for bound, word in SIZES if abs(delta) >= bound)
+
+
+def overview_evidence(
+    frame: pd.DataFrame, question: str, today: date | None
+) -> tuple[list[Evidence], str]:
+    """Every metric compared over the period a broad question means (the last 14 days against the
+    28 before when it names none), corrected for testing them all at once, the clear changes
+    ranked by size: what changed most is code's to find, not the model's to pick (2026-11-18:
+    asked "what changed most this month?", the agent compared four sleep metrics and named one
+    that ranked fourth of eighteen, while two others had changed clearly)."""
+    if frame.empty:
+        return [], ""
+    cleaned = without_low_wear(frame)
+    asked = asked_period(question, today) if today else None
+    last = min(asked[1], cleaned.index.max().date()) if asked else None
+    # The period they named, if their data covers enough of it; otherwise their latest data (data
+    # that stopped before the period would compare nothing).
+    if asked and last and (last - asked[0]).days + 1 >= MIN_OVERVIEW_DAYS:
+        recent = Window(start=asked[0], end=last)
+        baseline_end = recent.start - timedelta(days=1)
+        baseline = Window(start=baseline_end - timedelta(days=BASELINE_DAYS - 1), end=baseline_end)
+    else:
+        recent, baseline = screen_windows(cleaned)
+    tests = []
+    for metric in cleaned.columns:
+        if metric in NOT_SCREENED:
+            continue
+        try:
+            record = compare_windows(cleaned, metric, recent, baseline)
+        except ToolError:
+            continue
+        if record.sufficient:
+            tests.append(record)
+    if not tests:
+        return [], ""
+    tests = [
+        e.model_copy(update={"stats": {**e.stats, "overview": True}}) for e in run_adjusted(tests)
+    ]
+    clear = sorted(
+        (e for e in tests if is_significant(e)),
+        key=lambda e: abs(e.stats.get("cliffs_delta") or 0),
+        reverse=True,
+    )
+    ranks = {e.id: i for i, e in enumerate(clear, 1)}
+    tests = [
+        e.model_copy(update={"stats": {**e.stats, "overview_rank": ranks[e.id]}})
+        if e.id in ranks
+        else e
+        for e in tests
+    ]
+    by_id = {e.id: e for e in tests}
+    lines = []
+    for e in clear:
+        shown = evidence_payload(by_id[e.id])["display"]
+        direction = "up" if (e.stats.get("difference") or 0) > 0 else "down"
+        lines.append(
+            f"{ranks[e.id]}. {label(e.metrics[0])} ({_area(e.metrics[0])}, evidence_id {e.id}): "
+            f"{direction}, {shown.get('mean_recent', '')} against {shown.get('mean_baseline', '')}"
+            f", a {size_of(e.stats.get('cliffs_delta') or 0)} change"
+        )
+    # A possible change: a medium or larger effect, significant on its own but not once every
+    # metric's test is counted; worth naming with a hedge, never as a finding.
+    possible = sorted(
+        (
+            e
+            for e in tests
+            if e.id not in ranks
+            and (e.stats.get("p_value") or 1) < ALPHA
+            and abs(e.stats.get("cliffs_delta") or 0) >= MEDIUM
+        ),
+        key=lambda e: abs(e.stats.get("cliffs_delta") or 0),
+        reverse=True,
+    )
+    hedge = {e.id for e in possible}
+    tests = [
+        e.model_copy(update={"stats": {**e.stats, "overview_possible": True}})
+        if e.id in hedge
+        else e
+        for e in tests
+    ]
+    steady: dict[str, list[str]] = {}
+    for e in tests:
+        if e.id not in ranks and e.id not in hedge:
+            steady.setdefault(_area(e.metrics[0]), []).append(
+                f"{label(e.metrics[0])} (evidence_id {e.id})"
+            )
+    head = (
+        f"Overview: all {len(tests)} metrics with data compared, {recent.start:%b %-d} to "
+        f"{recent.end:%b %-d} against {baseline.start:%b %-d} to {baseline.end:%b %-d}, corrected "
+        "for testing them all at once."
+    )
+    parts = [head]
+    if lines:
+        parts.append("Clear changes, largest first:\n" + "\n".join(lines))
+    else:
+        parts.append("Clear changes: none.")
+    if possible:
+        parts.append(
+            f"Possible changes, not clear once all {len(tests)} tests are counted (name one only "
+            "with a hedge in the same sentence, such as 'though with this many checks that could "
+            "be normal variation'), largest first:\n"
+            + "\n".join(
+                f"- {label(e.metrics[0])} ({_area(e.metrics[0])}, evidence_id {e.id}): "
+                f"{'up' if (e.stats.get('difference') or 0) > 0 else 'down'}, "
+                f"{evidence_payload(e)['display'].get('mean_recent', '')} against "
+                f"{evidence_payload(e)['display'].get('mean_baseline', '')}"
+                for e in possible
+            )
+        )
+    if steady:
+        parts.append(
+            "No clear change (cite one of these to say an area held steady): "
+            + "; ".join(f"{area}: {', '.join(names)}" for area, names in sorted(steady.items()))
+            + "."
+        )
+    return tests, "\n".join(parts)
+
+
+def _area(metric: str) -> str:
+    """The area a metric belongs to, by the expert who owns it."""
+    found = owner(metric)
+    return found.name if found else "other"
 
 
 def candidate_causes(frame: pd.DataFrame, premise: "Premise") -> tuple[list[Evidence], str]:

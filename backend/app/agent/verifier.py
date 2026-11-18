@@ -770,6 +770,69 @@ HEDGED = re.compile(
 IN_RANGE = re.compile(r"\b(?:within|in|inside)\b[^.]*\b(?:usual|normal|typical)\b", re.IGNORECASE)
 
 
+# "Biggest", "main" or "changed the most" ranks one change above the rest, which only a test of
+# every metric can show (the overview a broad question gets).
+SUPERLATIVE = re.compile(
+    r"\b(biggest|largest|greatest|mainly|primarily|top change|"
+    r"(?:main|primary|single biggest) (?:change|shift|thing|story|driver|difference|reason)|"
+    r"(?:changed|moved|shifted|stood out|stands out) (?:the )?most|"
+    r"most (?:notable|noticeable|significant|striking))\b",
+    re.IGNORECASE,
+)
+# Saying the person feels or does something because of a metric claims a cause; the data shows
+# what moved together, never why ("you're tired mainly because you've been sleeping less").
+ATTRIBUTED = re.compile(
+    r"\bbecause (?:you|your|of your)\b|\b(?:that|this|which)(?:'s| is| explains) why you\b",
+    re.IGNORECASE,
+)
+
+
+def ranked_problems(summary: str, evidence: list[Evidence]) -> list[str]:
+    """A superlative about a metric the overview did not rank first. Only answers that got the
+    overview are checked: elsewhere nothing compared every metric, so nothing can rank them."""
+    ranked = {
+        e.metrics[0]: e.stats["overview_rank"] for e in evidence if "overview_rank" in e.stats
+    }
+    possible = [e for e in evidence if e.stats.get("overview_possible")]
+    if not ranked and not possible:
+        return []
+    top = next((m for m, rank in ranked.items() if rank == 1), None)
+    if top is None and possible:
+        possible.sort(key=lambda e: abs(e.stats.get("cliffs_delta") or 0), reverse=True)
+        top_possible = possible[0].metrics[0]
+    else:
+        top_possible = None
+    for sentence in SENTENCES.split(summary):
+        if not SUPERLATIVE.search(sentence):
+            continue
+        named = [m for m, pattern in MENTIONS.items() if pattern.search(sentence)]
+        for metric in named:
+            if metric == top:
+                continue
+            if metric == top_possible and HEDGED.search(sentence):
+                continue
+            if top:
+                return [
+                    f"calls {label(metric)} the biggest or main change, but the overview ranks "
+                    f"{label(top)} first; rank the changes as the overview does"
+                ]
+            return [
+                f"calls {label(metric)} the biggest or main change, but nothing changed clearly; "
+                "say so, and name the largest move only with a hedge"
+            ]
+    return []
+
+
+def attributed(summary: str) -> list[str]:
+    """Wording that gives a metric as the reason for how the person is or feels."""
+    if ATTRIBUTED.search(summary):
+        return [
+            "gives a metric as the reason for how they feel or what they do ('because you...'); "
+            "the data shows what changed alongside it, so say it could be contributing"
+        ]
+    return []
+
+
 def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
     """Metrics a summary describes as changing that no significant test in the run supports.
 

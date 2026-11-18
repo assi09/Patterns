@@ -1,0 +1,310 @@
+{
+ "batch": "A1",
+ "questions": 50,
+ "right_before": 49,
+ "right_now": 50,
+ "same_grade": 49,
+ "cost_usd": 0.1377,
+ "rows": [
+  {
+   "id": "A1-000",
+   "q": "What are the total sleep time yesterday",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-001",
+   "q": "What are the sum of the active zone minutes today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-002",
+   "q": "What were my mean steps I walked",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-003",
+   "q": "What are the total REM sleep minutes last 14 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-004",
+   "q": "What were my highest heart rate variability yesterday?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-005",
+   "q": "What are my lowest steps I walked today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-006",
+   "q": "What were my mean REM sleep minutes today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-007",
+   "q": "What were the total minutes awake last 14 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-008",
+   "q": "What is my highest deep sleep minutes?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-009",
+   "q": "What is the sum of the active zone minutes yesterday",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-010",
+   "q": "What was the total steps last 7 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-011",
+   "q": "What was the sum of the time awake yesterday",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-012",
+   "q": "What are the total REM sleep minutes yesterday?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-013",
+   "q": "What is the lowest light sleep minutes yesterday?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-014",
+   "q": "What were my median resting heart rate yesterday",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-015",
+   "q": "What were my lowest REM sleep minutes",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-016",
+   "q": "What is my mean active zone minutes today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-017",
+   "q": "What is my mean deep sleep minutes yesterday?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-018",
+   "q": "What were the median of my steps I took?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-019",
+   "q": "What are my highest light sleep minutes?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-020",
+   "q": "What were my highest active zone minutes today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-021",
+   "q": "What was my average REM sleep minutes last 30 days?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-022",
+   "q": "What was my median active zone minutes",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-023",
+   "q": "What were my mean minutes I slept?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-024",
+   "q": "What were the highest heart rate yesterday",
+   "before": false,
+   "now": true
+  },
+  {
+   "id": "A1-025",
+   "q": "What is the lowest active zone minutes last 21 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-026",
+   "q": "What was the average of my deep sleep minutes last 30 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-027",
+   "q": "What was my highest light sleep minutes last 14 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-028",
+   "q": "What were the mean of my light sleep minutes last 7 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-029",
+   "q": "What were my highest light sleep minutes today",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-030",
+   "q": "What are my mean active zone minutes today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-031",
+   "q": "What are the median of my steps I took today",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-032",
+   "q": "What are my lowest deep sleep minutes last 14 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-033",
+   "q": "How many days did I had less than 10 hours of sleep last 21 days?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-034",
+   "q": "How many days did I had fewer than 37 minutes of rem sleep last 30 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-035",
+   "q": "What was the average of my awake minutes today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-036",
+   "q": "What was the mean of my steps yesterday?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-037",
+   "q": "What is the highest deep sleep minutes last 30 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-038",
+   "q": "What are my average steps I took today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-039",
+   "q": "What is the sum of the time I slept today",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-040",
+   "q": "What are the average of my light sleep minutes yesterday",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-041",
+   "q": "How many days did I slept more than 3 hours last 21 days?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-042",
+   "q": "What was my mean deep sleep minutes today",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-043",
+   "q": "What was the total steps I walked yesterday?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-044",
+   "q": "What were the total light sleep minutes last 21 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-045",
+   "q": "What were the average of my steps I walked last 14 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-048",
+   "q": "What is my average steps I took last 7 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-049",
+   "q": "What were the total active zone minutes last 21 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-050",
+   "q": "What is the highest heart rate variability last 14 days?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A1-051",
+   "q": "What was my highest minutes awake last 7 days",
+   "before": true,
+   "now": true
+  }
+ ]
+}

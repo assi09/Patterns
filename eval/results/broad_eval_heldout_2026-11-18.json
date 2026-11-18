@@ -1,0 +1,60 @@
+{
+ "split": "heldout",
+ "questions": 12,
+ "answers": 60,
+ "broad": {
+  "k": 45,
+  "n": 60,
+  "rate": 0.75,
+  "wilson_95": [
+   0.628,
+   0.842
+  ]
+ },
+ "leads_right": {
+  "k": 42,
+  "n": 48,
+  "rate": 0.875,
+  "wilson_95": [
+   0.753,
+   0.941
+  ]
+ },
+ "wrong_biggest": {
+  "k": 1,
+  "n": 60,
+  "rate": 0.017,
+  "wilson_95": [
+   0.003,
+   0.089
+  ]
+ },
+ "cause_wording": {
+  "k": 0,
+  "n": 60,
+  "rate": 0.0,
+  "wilson_95": [
+   -0.0,
+   0.06
+  ]
+ },
+ "overclaims": {
+  "k": 0,
+  "n": 60,
+  "rate": 0.0,
+  "wilson_95": [
+   -0.0,
+   0.06
+  ]
+ },
+ "quiet_ok": {
+  "k": 12,
+  "n": 12,
+  "rate": 1.0,
+  "wilson_95": [
+   0.757,
+   1.0
+  ]
+ },
+ "cost_usd": 0.468
+}
