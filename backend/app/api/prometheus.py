@@ -17,11 +17,13 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
 from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
 from prometheus_client.registry import Collector
 from sqlalchemy import func, select
 
+from app import email as mail
 from app.config import settings
 from app.db.models import (
     AnswerTrace,
@@ -217,6 +219,26 @@ class DatabaseCollector(Collector):
 _collector: DatabaseCollector | None = None
 
 
+def alert_email(payload: dict, to: str) -> mail.Email:
+    """Grafana's webhook body as a short email: what fired or resolved, and why it matters."""
+    alerts = [a for a in payload.get("alerts") or [] if isinstance(a, dict)]
+    firing = [a for a in alerts if a.get("status") == "firing"]
+    lines = []
+    for a in alerts:
+        name = (a.get("labels") or {}).get("alertname", "Alert")
+        summary = (a.get("annotations") or {}).get("summary", "")
+        state = "RESOLVED" if a.get("status") == "resolved" else "FIRING"
+        lines.append(f"{state}: {name}. {summary}".strip())
+    head = (firing or alerts or [{}])[0]
+    name = (head.get("labels") or {}).get("alertname", "Alert")
+    more = f" (+{len(alerts) - 1})" if len(alerts) > 1 else ""
+    state = "FIRING" if firing else "RESOLVED"
+    text = "\n".join(lines) or "Grafana sent an alert with no details."
+    text += "\n\nDashboard: https://grafana-production-9dd0690c.up.railway.app"
+    html = "<br>".join(line.replace("&", "&amp;").replace("<", "&lt;") for line in text.split("\n"))
+    return mail.Email(to=to, subject=f"[Patterns] {state}: {name}{more}", text=text, html=html)
+
+
 def _route(request: Request) -> str:
     route = request.scope.get("route")
     return getattr(route, "path", None) or "unmatched"  # a pattern, never the real path
@@ -239,6 +261,32 @@ def install(app: FastAPI, sessions=session_scope) -> None:
             REQUESTS.labels(request.method, route, str(response.status_code)).inc()
             DURATION.labels(request.method, route).observe(time.perf_counter() - started)
         return response
+
+    @app.post("/alerts/grafana", include_in_schema=False)
+    async def grafana_alert(request: Request) -> Response:
+        """Grafana's webhook: Railway blocks the email ports Grafana's own mail would use, so its
+        alerts come here (with the metrics token) and leave by Resend's HTTPS API, to the admins."""
+        token = settings.metrics_token.get_secret_value() if settings.metrics_token else ""
+        if not token:
+            return Response(status_code=404)
+        given = request.headers.get("authorization", "")
+        if not hmac.compare_digest(given, f"Bearer {token}"):
+            return Response(status_code=401, headers={"WWW-Authenticate": "Bearer"})
+        try:
+            payload = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "not JSON"}, status_code=422)
+        if not isinstance(payload, dict):
+            return JSONResponse({"error": "not an object"}, status_code=422)
+        sent = 0
+        try:
+            mailer = mail.mailer_from_settings(settings)
+            for to in settings.admin_emails:
+                mailer.send(alert_email(payload, to))
+                sent += 1
+        except mail.MailError as error:
+            return JSONResponse({"error": str(error)}, status_code=502)
+        return JSONResponse({"sent": sent})
 
     @app.get("/metrics", include_in_schema=False)
     def metrics(request: Request) -> Response:

@@ -132,3 +132,45 @@ def test_a_database_outage_is_reported_not_raised(client):
     prometheus._collector.sessions = broken
     prometheus._collector._last = None
     assert "patterns_database_up 0.0" in scrape(client)
+
+
+class FakeMailer:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, email):
+        self.sent.append(email)
+
+
+def test_grafana_alerts_arrive_by_email_only_with_the_token(client, monkeypatch):
+    from app import email as mail
+
+    fake = FakeMailer()
+    monkeypatch.setattr(mail, "mailer_from_settings", lambda _settings: fake)
+    monkeypatch.setattr(settings, "admin_emails", ["owner@example.com"])
+    body = {
+        "status": "firing",
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {"alertname": "API down"},
+                "annotations": {"summary": "Prometheus cannot reach the Patterns API."},
+            },
+            {"status": "firing", "labels": {"alertname": "Database down"}, "annotations": {}},
+        ],
+    }
+    assert client.post("/alerts/grafana", json=body).status_code == 401
+    wrong = {"Authorization": "Bearer guessed"}
+    assert client.post("/alerts/grafana", json=body, headers=wrong).status_code == 401
+    auth = {"Authorization": f"Bearer {TOKEN}"}
+    response = client.post("/alerts/grafana", json=body, headers=auth)
+    assert response.status_code == 200 and response.json() == {"sent": 1}
+    (email,) = fake.sent
+    assert email.to == "owner@example.com"
+    assert email.subject == "[Patterns] FIRING: API down (+1)"
+    assert "cannot reach the Patterns API" in email.text and "Database down" in email.text
+    resolved = {"alerts": [{"status": "resolved", "labels": {"alertname": "API down"}}]}
+    client.post("/alerts/grafana", json=resolved, headers=auth)
+    assert fake.sent[-1].subject == "[Patterns] RESOLVED: API down"
+    bad = client.post("/alerts/grafana", content=b"not json", headers=auth)
+    assert bad.status_code == 422

@@ -81,11 +81,10 @@ Two services in the `patterns` project, both from this repository, each with a v
    - Networking: generate a domain (port 3000). Sign in as `admin` with the generated password
      (Variables → reveal).
 4. **Alerts** are provisioned from `monitoring/grafana/provisioning/alerting/patterns.yml` (in the image,
-   so they come back on every deploy) and emailed to `ALERT_EMAIL` through Resend's SMTP, whose test
-   sender delivers to the account owner only, which is who alerts are for. Grafana variables:
-   `ALERT_EMAIL` (the owner's address), `GF_SMTP_ENABLED=true`, `GF_SMTP_HOST=smtp.resend.com:465`,
-   `GF_SMTP_USER=resend`, `GF_SMTP_PASSWORD=${{api.FA_EMAIL_API_KEY}}`,
-   `GF_SMTP_FROM_ADDRESS=onboarding@resend.dev`, `GF_SMTP_FROM_NAME=Patterns alerts`.
+   so they come back on every deploy). Railway blocks outgoing email ports (Grafana's own email timed
+   out on 465 and 2465), so Grafana posts each alert to the API's `POST /alerts/grafana` with the
+   metrics token, and the API emails the admins (`FA_ADMIN_EMAILS`) through Resend's HTTPS API, like
+   the Monday team email. Grafana variable: `ALERT_WEBHOOK_TOKEN` = `${{api.FA_METRICS_TOKEN}}`.
 
    | Alert | Fires when | Why it matters |
    |---|---|---|
