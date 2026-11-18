@@ -108,10 +108,12 @@ from app.agent.router import (
 )
 from app.agent.sanitize import clean
 from app.agent.strategy import (
+    BROAD_GUIDE,
     COACHING_OFFER,
     CROSS_AREA_GUIDE,
     PREMISE_GUIDE,
     asked_day,
+    asked_metrics,
     candidate_causes,
     check_premise,
     coaching_evidence,
@@ -119,6 +121,7 @@ from app.agent.strategy import (
     eating_context,
     expand_tool,
     figures_check,
+    overview_evidence,
     premise_answer_check,
     scaled,
     snapshot,
@@ -134,7 +137,7 @@ from app.agent.strategy_types import (
     is_statement,
     offer_in,
 )
-from app.agent.verifier import MEDICAL, Claim
+from app.agent.verifier import MEDICAL, STATISTIC_WORDS, Claim
 from app.agent.world import answer_world
 from app.analysis.evidence import Evidence
 from app.outside import Outside
@@ -214,6 +217,9 @@ class Answer:
 
 LINKING_TYPES = ("why", "change", "pattern")
 ASKS_WHY = ("why", "change")
+# Broad when the question names no metric (and, for a lookup, no statistic either).
+BROAD_TYPES = ("why", "change", "lookup")
+BROAD_TOOLS = ("compare_windows", "change_point", "trend", "coverage", "checkins", "correlate")
 NO_CONSULT = ("day", "lookup", "coaching")
 STATED_TYPES = ("day", "lookup", "change", "pattern")  # answered with the figures themselves
 MAX_REPLY_WORDS = 12
@@ -753,6 +759,44 @@ def ask(
                 guide=CROSS_AREA_GUIDE,
                 tools=("coverage", "correlate", "compare_windows", "change_point"),
             )
+    # A broad question ("what changed most?", "why do I feel tired?", "how has life been?") names
+    # no metric: code compares every metric first, so the answer is not one area the model chose.
+    broad = bool(
+        plan
+        and not plan.coaching
+        and not false_premise
+        # Routed to an area they have no data for ("how much protein did I eat?"): the reply that
+        # says nothing is logged there is the answer, not an overview of everything else.
+        and not (
+            route.action == "expert"
+            and route.expert in EXPERTS
+            and not available(EXPERTS[route.expert], frame)
+        )
+        and (
+            OVERALL.match(said)
+            or (
+                route.classification.question_type in BROAD_TYPES
+                and not asked_metrics(question, list(frame.columns))
+                # "Summarise how I've been" routes as a lookup; "what's my average?" stays one.
+                and (
+                    route.classification.question_type != "lookup"
+                    or not any(words.search(question) for words, _, _ in STATISTIC_WORDS)
+                )
+            )
+        )
+    )
+    if broad:
+        records, text = overview_evidence(frame, question, _day(today or now))
+        if records:
+            for record in records:
+                evidence[record.id] = record
+                if record_owner := owner(record.metrics[0]):
+                    owners[record.id] = record_owner.name
+            block = "\n\n".join(part for part in (block, text) if part)
+            route = Route("general", None, (), route.routed, route.classification)
+            plan = replace(plan, guide=BROAD_GUIDE, tools=BROAD_TOOLS, snapshot=False)
+        else:
+            broad = False
     if plan and not plan.coaching and (said_before := told_here(history)):
         block = "\n\n".join(part for part in (block, told_block(said_before)) if part)
     if plan:
@@ -824,7 +868,7 @@ def ask(
     )
     if plan and asks_future(said) and not plan.coaching:  # "how will I sleep tonight?"
         plan = replace(plan, guide=FUTURE_GUIDE, tools=FUTURE_TOOLS)
-    if plan and OVERALL.match(said):  # "am I ok?", "how am I doing this week?"
+    if plan and OVERALL.match(said) and not broad:  # "am I ok?" with too little data to compare
         plan = replace(plan, guide=OVERALL_GUIDE, tools=OVERALL_TOOLS, snapshot=True)
     if plan and route.classification.question_type in STATED_TYPES:
         check = figures_check

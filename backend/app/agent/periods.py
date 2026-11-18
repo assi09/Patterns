@@ -92,6 +92,39 @@ def period(name: str, today: date, days: str | None = None) -> str | None:
     return None
 
 
+def period_range(name: str, today: date, days: str | None = None) -> tuple[date, date] | None:
+    """The first and last day one period phrase means: the dates `period` names, as dates. A
+    night or a single day is not a span to compare and gives None."""
+    name = name.lower()
+    monday = today - timedelta(days=today.weekday())
+    if name == "this week":
+        if (today - monday).days + 1 < MIN_WEEK_DAYS:
+            return today - timedelta(days=6), today
+        return monday, today
+    if name in ("last week", "past week"):
+        return monday - timedelta(days=7), monday - timedelta(days=1)
+    if name == "this month":
+        if today.day < MIN_MONTH_DAYS:
+            return today - timedelta(days=29), today
+        return today.replace(day=1), today
+    if name == "last month":
+        end = today.replace(day=1) - timedelta(days=1)
+        return end.replace(day=1), end
+    if name in ("lately", "recently"):
+        return today - timedelta(days=13), today
+    if days and 0 < int(days) <= MAX_DAYS:
+        return today - timedelta(days=int(days) - 1), today
+    return None
+
+
+def asked_period(question: str, today: date) -> tuple[date, date] | None:
+    """The span the first period phrase in a question means, if it names one."""
+    for found in PERIODS.finditer(question):
+        if span := period_range(found.group(1), today, found.group(2)):
+            return span
+    return None
+
+
 def part_of_day(name: str, hour: int, minute: int, now: datetime) -> str:
     at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if at > now:

@@ -30,7 +30,9 @@ from app.agent.verifier import (
     Rejection,
     Submission,
     Verdict,
+    attributed,
     overstated,
+    ranked_problems,
     run_adjusted,
     text_problems,
     verify,
@@ -406,7 +408,12 @@ def _reword(llm: LLM, result: AgentResult, said: str, guard: Guard | None, budge
     text = (done.text or "").strip()
     evidence = list(result.evidence.values())
     problems = (
-        text_problems(text, evidence, said) + overstated(text, evidence) if text else ["empty"]
+        text_problems(text, evidence, said)
+        + overstated(text, evidence)
+        + ranked_problems(text, evidence)
+        + attributed(text)
+        if text
+        else ["empty"]
     )
     if not problems and guard:
         try:
@@ -476,10 +483,28 @@ def _handle(
         # The run's own tests are judged together; evidence from the screen, a consult or an
         # earlier answer keeps the correction of the run that made it.
         own = [toolbox.evidence[i] for i in toolbox.produced]
-        toolbox.evidence.update({e.id: e for e in run_adjusted(own)})
+        # After an overview of every metric, a test the agent runs joins that family: retested in
+        # a run of two, an unclear change would otherwise pass as clear (2026-11-18: calories,
+        # 0.15 across every metric, 0.01 alone).
+        family = [e for e in toolbox.evidence.values() if e.stats.get("overview")]
+        known = {e.id for e in own}
+        together = [*own, *(e for e in family if e.id not in known)]
+        toolbox.evidence.update({e.id: e for e in run_adjusted(together)})
         verdict = verify(claims, toolbox.evidence, claim_check)
         # The summary is shown too: it may only use what the run's evidence holds.
         run_evidence = list(toolbox.evidence.values())
+        # A claim's own words are shown when the summary is rebuilt from claims: one that states
+        # a change no significant test shows ("calories burned was down", filed as no_change) is
+        # turned back like the summary would be.
+        overclaimed = [(c, overstated(c.text, run_evidence)) for c in verdict.accepted]
+        if any(why for _, why in overclaimed):
+            verdict = Verdict(
+                accepted=tuple(c for c, why in overclaimed if not why),
+                rejected=(
+                    *verdict.rejected,
+                    *(Rejection(c, tuple(why)) for c, why in overclaimed if why),
+                ),
+            )
         summary_problems = text_problems(
             submission.summary,
             run_evidence,
@@ -487,6 +512,8 @@ def _handle(
             general=any(c.kind == "guidance" for c in verdict.accepted),
         )
         summary_problems += overstated(submission.summary, run_evidence)
+        summary_problems += ranked_problems(submission.summary, run_evidence)
+        summary_problems += attributed(submission.summary)
         if answer_check and repairs_left > 0:  # worth one more try, not an answer lost over it
             summary_problems += answer_check(list(verdict.accepted), submission.summary)
         if verdict.accepted and all(c.kind == "data_quality" for c in verdict.accepted):
