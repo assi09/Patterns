@@ -1,0 +1,389 @@
+# Patterns alert rules (docs/monitoring.md). Sent to $ALERT_EMAIL, set on the server only.
+apiVersion: 1
+groups:
+- orgId: 1
+  name: patterns
+  folder: Patterns
+  interval: 1m
+  rules:
+  - uid: api-down
+    title: API down
+    condition: C
+    for: 5m
+    noDataState: Alerting
+    execErrState: Error
+    annotations:
+      summary: 'Prometheus cannot reach the Patterns API: testers cannot use the app.'
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: up{job="patterns-api"}
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+  - uid: db-down
+    title: Database down
+    condition: C
+    for: 5m
+    noDataState: Alerting
+    execErrState: Error
+    annotations:
+      summary: 'The API cannot read its database: nothing loads in the app.'
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: patterns_database_up
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+  - uid: server-errors
+    title: Server errors
+    condition: C
+    for: 0s
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: More than 5 server errors (5xx) in 15 minutes.
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: sum(increase(patterns_http_requests_total{status=~"5.."}[15m]))
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 5
+  - uid: answers-failing
+    title: Answers failing
+    condition: C
+    for: 0s
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: Over 30% of the last hour's answers failed (at least 5 answers).
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: (sum(increase(patterns_answers_total{outcome=~"failed|failed_checks|budget"}[1h])) / sum(increase(patterns_answers_total[1h])))
+          and on() (sum(increase(patterns_answers_total[1h])) >= 5)
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.3
+  - uid: answers-slow
+    title: Answers slow
+    condition: C
+    for: 15m
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: The typical answer took over 30 seconds for 15 minutes.
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: patterns_answer_latency_seconds{quantile="0.5"}
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 30
+  - uid: daily-spend
+    title: Daily spend high
+    condition: C
+    for: 0s
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: 'Today''s spending passed 80% of the daily cap: chat stops for everyone at 100%.'
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: patterns_spend_today_usd{who="everyone"} / on() patterns_spend_cap_usd{cap="daily_total"}
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.8
+  - uid: overall-budget
+    title: Overall budget
+    condition: C
+    for: 0s
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: Spending passed 80% of the overall cap ($50 for the pilot).
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: sum(patterns_llm_spend_usd_total) / on() patterns_spend_cap_usd{cap="all_time"}
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.8
+  - uid: tester-at-limit
+    title: Tester at daily limit
+    condition: C
+    for: 0s
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: A tester reached their daily limit and is blocked until tomorrow.
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: patterns_people_at_daily_cap
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+  - uid: syncs-failing
+    title: Google syncs failing
+    condition: C
+    for: 0s
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: 'More than 3 Google syncs failed in the last hour: data stops arriving.'
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: increase(patterns_sync_runs_total{status="failed"}[1h])
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 3
+  - uid: reconnect-needed
+    title: Reconnect needed
+    condition: C
+    for: 1h
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: 'A tester''s Google sign-in expired: their data has stopped. Remind them to tap Reconnect.'
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: patterns_google_connections{status="reconnect_needed"}
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+  - uid: waiting-approval
+    title: Waiting for approval
+    condition: C
+    for: 2h
+    noDataState: OK
+    execErrState: Error
+    annotations:
+      summary: 'Someone has waited over 2 hours for approval: Settings > Access requests.'
+    labels:
+      project: patterns
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: patterns_accounts{status="pending"}
+        instant: true
+        intervalMs: 60000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+contactPoints:
+- orgId: 1
+  name: owner-email
+  receivers:
+  - uid: owner-email
+    type: email
+    settings:
+      addresses: $ALERT_EMAIL
+      singleEmail: true
+policies:
+- orgId: 1
+  receiver: owner-email
+  group_by:
+  - alertname
+  group_wait: 1m
+  group_interval: 10m
+  repeat_interval: 12h
