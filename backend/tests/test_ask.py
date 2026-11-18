@@ -188,18 +188,18 @@ def earlier_sleep_turn(evidence, answered_by="sleep"):
     from app.agent.context import Turn
 
     claim = {
-        "text": "Your time asleep held steady.",
-        "kind": "no_change",
+        "text": "Your time asleep values were recorded.",
+        "kind": "value",
         "evidence_ids": [evidence.id],
         "metric": "sleep_minutes",
     }
-    return Turn("How is my sleep?", "Your time asleep held steady.", (claim,), answered_by)
+    return Turn("How is my sleep?", "Your time asleep values were recorded.", (claim,), answered_by)
 
 
 def steady_sleep_claim(evidence) -> dict:
     return {
-        "text": "Your time asleep held steady.",
-        "kind": "no_change",
+        "text": "Your time asleep values were recorded.",
+        "kind": "value",
         "evidence_ids": [evidence.id],
         "metric": "sleep_minutes",
     }
@@ -317,7 +317,7 @@ def sleep_answer(text: str, summary: str = "Here is what I found."):
         )
         claim = {
             "text": text,
-            "kind": "no_change",
+            "kind": "value",
             "evidence_ids": [payload["evidence_id"]],
             "metric": "sleep_minutes",
         }
@@ -335,7 +335,7 @@ DESCRIBE_SLEEP = ScriptedLLM.call(
 def test_advice_the_word_check_misses_is_sent_back_then_dropped(frame):
     from app.agent.guard import REASON
 
-    advice = "Your time asleep held steady; cutting caffeine would help."
+    advice = "Your time asleep values were recorded; cutting caffeine would help."
     llm = ScriptedLLM([DESCRIBE_SLEEP, sleep_answer(advice), sleep_answer(advice)])
     guard = FakeGuard("caffeine")
     reply = ask(llm, FixedRouter(("sleep",), sleep=1.0), frame, "How is my sleep?", guard=guard)
@@ -347,7 +347,7 @@ def test_advice_the_word_check_misses_is_sent_back_then_dropped(frame):
 
 
 def test_a_sound_answer_passes_the_guard_and_only_shown_text_is_checked(frame):
-    sound = "Your time asleep held steady."
+    sound = "Your time asleep values were recorded."
     llm = ScriptedLLM([DESCRIBE_SLEEP, sleep_answer(sound)])
     guard = FakeGuard("caffeine")
     reply = ask(llm, FixedRouter(("sleep",), sleep=1.0), frame, "How is my sleep?", guard=guard)
@@ -356,7 +356,7 @@ def test_a_sound_answer_passes_the_guard_and_only_shown_text_is_checked(frame):
 
 
 def test_a_summary_that_advises_is_replaced_by_a_verified_claim(frame):
-    sound = "Your time asleep held steady."
+    sound = "Your time asleep values were recorded."
     advising = "Try going to bed earlier."
     llm = ScriptedLLM(
         [DESCRIBE_SLEEP, sleep_answer(sound, advising), sleep_answer(sound, advising)]
@@ -372,7 +372,7 @@ def test_a_summary_that_advises_is_replaced_by_a_verified_claim(frame):
 
 
 def test_when_the_guard_is_down_the_word_checks_alone_apply(frame):
-    sound = "Your time asleep held steady."
+    sound = "Your time asleep values were recorded."
     llm = ScriptedLLM([DESCRIBE_SLEEP, sleep_answer(sound)])
     guard = FakeGuard(fail=True)
     reply = ask(llm, FixedRouter(("sleep",), sleep=1.0), frame, "How is my sleep?", guard=guard)
@@ -413,7 +413,7 @@ def claims_from(*specs):
             claims.append(
                 {
                     "text": text,
-                    "kind": "no_change",
+                    "kind": "no_change" if tool == "correlate" else "value",
                     "evidence_ids": [payload["evidence_id"]],
                     "metric": metric,
                 }
@@ -424,9 +424,9 @@ def claims_from(*specs):
     return turn
 
 
-SLEEP_ONLY = claims_from(("describe", "Your time asleep held steady.", "sleep_minutes"))
+SLEEP_ONLY = claims_from(("describe", "Your time asleep values were recorded.", "sleep_minutes"))
 WITH_STEPS = claims_from(
-    ("describe", "Your time asleep held steady.", "sleep_minutes"),
+    ("describe", "Your time asleep values were recorded.", "sleep_minutes"),
     ("correlate", "Your steps did not clearly go with your time asleep.", "sleep_minutes"),
 )
 EXERCISE_QUESTION = "Does exercising more change how I sleep?"

@@ -96,6 +96,8 @@ from app.agent.personal import (
     top_up,
     without_filler,
 )
+from app.agent.requested import execute as execute_request
+from app.agent.requests import interpret
 from app.agent.router import (
     OFF_TOPIC,
     FallbackRouter,
@@ -287,10 +289,9 @@ CAUSE_FOLLOW_UP = re.compile(
     re.IGNORECASE,
 )
 ASSOCIATION_REPLY = (
-    "No. What your data shows is that these go together, not that one causes the other. That "
-    "doesn't rule a cause out either: other things that changed at the same time could explain "
-    "both. Trying a change for a couple of weeks and watching what follows is the closest your "
-    "own data can get."
+    "These observational records cannot establish or rule out a cause. Whether the measurements "
+    "move together needs a relationship test with enough paired data; a missing measurement or "
+    "an inconclusive test does not establish an association."
 )
 
 
@@ -536,6 +537,7 @@ def ask(
     made_a_draft: Callable[[], bool] | None = None,
     guidance_mode: str = "picked",  # "none" and "all" exist to compare them (eval/advice_compare)
     after_draft: bool = False,  # the last answer prepared a logging draft
+    request_bundle: tuple | None = None,  # the API may interpret before preparing action tools
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -545,13 +547,32 @@ def ask(
     reply_text = question.rsplit("Their reply: ", 1)[-1]
     said = question  # their own words: small talk is judged on these, never on a rewrite
     rewrite_cost = 0.0
+    typed, request_state, reading_budget = (None, {}, Budget())
+    if urgent_free(question):
+        typed, request_state, reading_budget = request_bundle or interpret(
+            llm, reply_text, history, _day(today or now), pending_draft=after_draft
+        )
     # "Yes" to the offer the last answer ended on takes it up, rather than reading as small talk.
     offer = offer_in(history[-1].answer) if history and AFFIRM.match(question) else None
     if offer:
         question = said = as_request(offer)
     fixed = plain_reply(said, frame, _day(today or now), after_draft)
+    if typed is not None:
+        # Wearable bounds do not bound confirmed food or public guidance. Precise requests
+        # determine availability per source/part, including mixed food and wearable questions.
+        if typed.subject != "other" and typed.kind in ("data", "causality", "guidance"):
+            fixed = None
+        # The reader resolves subjects semantically; a metric noun is not somebody's name.
+        if typed.subject == "self" and other_person(said):
+            fixed = None
+        if typed.subject == "other" and typed.kind != "guidance":
+            fixed = "I can only see your own data, not another person's records."
+        elif typed.clarification:
+            fixed = typed.clarification
+        question = typed.question(question)
     if (
-        not fixed
+        typed is None
+        and not fixed
         and history
         and history[-1].claims
         and CAUSE_FOLLOW_UP.search(said)
@@ -561,6 +582,7 @@ def ask(
     # What a follow-up refers to, before routing or an expert sees it.
     if (
         urgent_free(question)
+        and typed is None
         and not fixed
         and not _certain_talk(question)
         and not is_statement(question)
@@ -581,6 +603,66 @@ def ask(
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)
+    if (
+        typed is not None
+        and typed.kind in ("data", "causality", "clarify", "guidance")
+        and (
+            urgent_free(said)
+            and not MEDICAL.search(said)
+            and (typed.kind != "guidance" or outside is not None)
+        )
+    ):
+        # A precise validated request does not need a second model to choose statistics
+        # and a third to restate them. Guidance still uses retrieved public passages.
+        classification = replace(
+            route.classification,
+            question_types={"world" if typed.kind == "guidance" else "lookup": 1.0},
+            intent_probabilities={str(i): float(i == Intent.READ) for i in Intent},
+        )
+        route = Route("general", None, (), choice == "auto", classification)
+        context = build(
+            history,
+            stored_evidence or {},
+            attachment,
+            memory=memory,
+            scope=set(),
+            now=now,
+            chat=chat,
+        )
+        if fixed:
+            result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="limits", summary=fixed)
+        elif typed.kind == "guidance":
+            result = answer_world(
+                llm,
+                question,
+                outside,
+                guard=guard,
+                topic=typed.topics[0] if len(typed.topics) == 1 else None,
+            )
+            known = {link["url"] for link in result.sources}
+            result.sources += [s for s in cited_sources(result) if s["url"] not in known]
+        else:
+            result = execute_request(
+                typed,
+                frame,
+                _day(today or now),
+                food_logs=food_logs,
+                zone=(now.tzinfo if now else None),
+            )
+        result.budget.calls += reading_budget.calls
+        result.budget.cost_usd += reading_budget.cost_usd
+        result.trace[:0] = [
+            _context_step(context),
+            _route_step(route),
+            {
+                "type": "request",
+                "request": typed.model_dump(mode="json"),
+                "state": request_state,
+                "cost_usd": reading_budget.cost_usd,
+                "model_calls": reading_budget.calls,
+            },
+        ]
+        return Answer(route, result, context)
     # "Am I ok?" asks how their data looks, not for a diagnosis: answered, as an overall look.
     if route.action == "refuse" and OVERALL.match(said) and not MEDICAL.search(said):
         overall = replace(route.classification, question_types={"lookup": 1.0})
@@ -597,6 +679,18 @@ def ask(
     # and, measured, changed nothing. Questions linking areas (why, change, pattern) keep them.
     if route.classification.question_type in NO_CONSULT and route.consult:
         route = replace(route, consult=())
+    correcting_draft = typed is not None and typed.kind == "correction" and continuing_log
+    if correcting_draft:
+        route = Route(
+            "expert",
+            continuing_log,
+            (),
+            True,
+            replace(
+                route.classification,
+                intent_probabilities={str(i): float(i == Intent.LOG) for i in Intent},
+            ),
+        )
     continuing = (
         (continuing_log in (action_tools or {}) or continuing_log == "general")
         and (
@@ -604,7 +698,8 @@ def ask(
             or (continuing_log == "general" and choice in (action_tools or {}))
         )
         and (
-            route.classification.intent == Intent.CLARIFY
+            correcting_draft
+            or route.classification.intent == Intent.CLARIFY
             # "40 minutes, no wait 50" reads as a statement about data; a new question does not.
             or (route.classification.intent == Intent.READ and _just_a_reply(reply_text))
         )
@@ -1084,6 +1179,18 @@ def ask(
     if not stopped_early and not world and (note := source_note(result)):
         result.notes.append(note)
     result.budget.cost_usd += rewrite_cost
+    result.budget.cost_usd += reading_budget.cost_usd
+    result.budget.calls += reading_budget.calls
+    if typed is not None:
+        result.trace.append(
+            {
+                "type": "request",
+                "request": typed.model_dump(mode="json"),
+                "state": request_state,
+                "cost_usd": reading_budget.cost_usd,
+                "model_calls": reading_budget.calls,
+            }
+        )
     result.trace[:0] = [_context_step(context), _route_step(route)]
     if continuing:
         result.trace[1]["continuing_log_expert"] = continuing_log

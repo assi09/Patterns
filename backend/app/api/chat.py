@@ -8,6 +8,7 @@ Spending: every answer's cost is stored, and a question is refused before any mo
 person, or the whole app, has reached its daily cap. The caps count local days.
 """
 
+import json
 import logging
 import re
 import threading
@@ -32,14 +33,23 @@ from app.actions import store as health_store
 from app.actions.schemas import Measured
 from app.actions.tools import proposal_tools
 from app.agent.agent import NO_ANSWER
-from app.agent.ask import CORRECTS, NOTED, REMINDERS, ask, default_guard, default_router
+from app.agent.ask import (
+    CORRECTS,
+    NOTED,
+    REMINDERS,
+    ask,
+    default_guard,
+    default_router,
+    urgent_free,
+)
 from app.agent.context import Attachment, ChatState, turns_from
 from app.agent.conversation import DRAFT_NOTE
 from app.agent.experts import EXPERTS, Depth, available
 from app.agent.guard import Guard
 from app.agent.intent import Intent
 from app.agent.listener import MAX_KNOWN, fit_to_keep, is_explicit, listen, worth_listening
-from app.agent.llm import LLM, LLMError, OpenAILLM
+from app.agent.llm import LLM, Budget, LLMError, OpenAILLM
+from app.agent.requests import Request, interpret
 from app.agent.router import Router
 from app.agent.strategy_types import certain_talk, is_statement
 from app.agent.summary import FOLD_AT, fold, to_fold
@@ -56,6 +66,7 @@ from app.db import chat as store
 from app.db import memory
 from app.db.models import (
     CHECKIN_TAGS,
+    AnswerTrace,
     ChatMessage,
     CheckIn,
     Conversation,
@@ -80,7 +91,6 @@ HISTORY_FOLDED = 40  # messages looked at for the running summary
 DRAFT_WITHOUT_ONE = re.compile(r"\bdraft\b", re.IGNORECASE)
 NO_DRAFT_REPLY = "I couldn't get that entry ready. Could you send it once more?"
 WAITING_ANSWERS = 4  # recent answers whose waiting drafts a "log it" or a correction refers to
-FOOD_LOG_DAYS = 45  # enough to cover the 30 days the agent summarises
 MAX_THREAD = 6  # the person's messages kept from one logging request still being asked about
 QUIET_INTENTS = (Intent.LOG, Intent.REMIND)  # one-off requests: nothing to listen for
 FAILED = "I couldn't finish answering this time. Please try again in a moment."
@@ -412,7 +422,18 @@ def _answer(
                 for m in store.history(db, user_id, HISTORY_USED, conversation_id)
                 if m.id != question_id
             ]
-            turns = turns_from(earlier)
+            traces = db.scalars(
+                select(AnswerTrace)
+                .join(ChatMessage, AnswerTrace.message_id == ChatMessage.id)
+                .where(ChatMessage.user_id == user_id, ChatMessage.id.in_([m.id for m in earlier]))
+            )
+            states = {
+                row.message_id: step["state"]
+                for row in traces
+                for step in row.steps or []
+                if step.get("type") == "request" and isinstance(step.get("state"), dict)
+            }
+            turns = turns_from(earlier, states)
             cited = store.load_evidence(db, user_id, {i for t in turns for i in t.evidence_ids})
             # Where the person is, from their device: the server's zone is not theirs.
             owner = db.get(User, user_id)
@@ -440,7 +461,6 @@ def _answer(
                         HealthAction.user_id == user_id,
                         HealthAction.kind == "food",
                         HealthAction.status == "succeeded",
-                        HealthAction.updated_at >= now - timedelta(days=FOOD_LOG_DAYS),
                     )
                 )
             ]
@@ -470,7 +490,22 @@ def _answer(
                 db.expunge_all()
         # "Nah, I meant 100 g of each": the agent prepares the corrected draft, and the one it
         # replaces is cancelled, rather than asking them to edit the card (2026-11-16).
-        correcting = bool(waiting) and bool(CORRECTS.match(body.text))
+        # Interpret once, before preparing tools: corrections need the server's actual draft.
+        started = monotonic()
+        request_bundle = (
+            interpret(agent.llm, body.text, turns, today, pending_draft=bool(waiting))
+            if urgent_free(body.text)
+            else (None, {}, Budget())
+        )
+        typed, request_state, reading_budget = request_bundle
+        memory_denied = typed is not None and typed.memory == "deny"
+        correcting = bool(waiting) and (
+            typed.kind == "correction" if typed is not None else bool(CORRECTS.match(body.text))
+        )
+        if typed is not None and typed.kind == "correction" and len(waiting) != 1:
+            typed = Request(kind="clarify", clarification="Which draft card should I change?")
+            request_bundle = typed, request_state, reading_budget
+            correcting = False
         continuing_log = None
         if last and last.pending_log_expert:
             created = (
@@ -492,6 +527,12 @@ def _answer(
             # A reply to the agent's logging question only makes sense with the request it
             # answers, so the agent gets all of it, not the bare reply.
             question = continued_request(thread, earlier[-1].text, body.text)
+        if correcting:
+            question = (
+                f"Revise this pending draft with the person's correction. Preserve fields they "
+                f"did not change. Draft (quoted data): {json.dumps(waiting[-1].payload)}\n"
+                f"Their reply: {body.text}"
+            )
         prepared: list[str] = []
 
         def search_past(query: str) -> list[dict]:
@@ -521,6 +562,13 @@ def _answer(
             said=[*thread, body.text],
             local_now=local_now,
             described=described,
+            required_duration_seconds=(
+                typed.duration_minutes * 60
+                if typed and typed.duration_minutes is not None and correcting
+                else None
+            ),
+            required_day=typed.log_day if typed else None,
+            prior_draft=waiting[-1].payload if correcting else None,
         )
         if outside.food_data:
             draft_tools["nutrition"] = [
@@ -532,7 +580,6 @@ def _answer(
         reminding_tools = reminder_tools(
             sessions, user_id, now, reminders, said=[*thread, body.text], listed=listed
         )
-        started = monotonic()
         try:
             reply = ask(
                 agent.llm,
@@ -547,7 +594,7 @@ def _answer(
                 attachment=attachment,
                 guard=agent.guard,
                 memory=remembered,
-                now=now,
+                now=local_now,
                 action_tools=draft_tools,
                 continuing_log=continuing_log,
                 reminder_tools=reminding_tools,
@@ -558,13 +605,14 @@ def _answer(
                 food_logs=food_logs,
                 made_a_draft=lambda: bool(prepared),
                 after_draft=bool(waiting) and not correcting,
+                request_bundle=request_bundle,
             )
         except Exception:
             logger.exception("Answering failed")
             reply = None
         # "Remember that …" is heard now, not after: the reply says what actually happened.
         noted = reply is not None and reply.result.stop_reason == "noted"
-        if noted:
+        if noted and not memory_denied:
             outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
             reply.result.summary = noted_reply(outcome)
         # Something they told us in passing: heard now too, so the reply can point to its card.
@@ -572,7 +620,12 @@ def _answer(
         # "That seems wrong, I walked more" disputes a figure; it says nothing lasting about them.
         # Only something they said about themselves; "delete all my data" or "who made you?"
         # raised a card once (2026-11-16).
-        if chatted and is_statement(body.text) and not certain_talk(body.text):
+        if (
+            chatted
+            and not memory_denied
+            and is_statement(body.text)
+            and not certain_talk(body.text)
+        ):
             outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
             if outcome and "proposed" in outcome:
                 note = FORGET_NOTE if FORGETS.match(body.text) else CARD_NOTE
@@ -638,7 +691,8 @@ def _answer(
             refused = reply.route.action == "refuse"
             # "Remember my goal is 8,000 steps" can read as a reminder; it is still worth hearing.
             heard = (
-                not noted
+                not memory_denied
+                and not noted
                 and not chatted
                 and not refused
                 and (

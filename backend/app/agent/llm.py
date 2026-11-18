@@ -224,6 +224,9 @@ def _safe_errors() -> Generator[None]:
 
 
 class OpenAILLM:
+    def read_request(self, messages: list[dict], *, tools: list[dict], budget: Budget):
+        return self.complete(messages, role=Role.SMALL, tools=tools, budget=budget)
+
     def embed(self, texts: Sequence[str], *, budget: Budget | None = None) -> Embedded:
         """Vectors for `texts`; charged like any other call, with no model round counted."""
         if budget:
@@ -370,6 +373,19 @@ class ScriptedLLM:
     searches: list[WebAnswer] = field(default_factory=list)  # what `search` returns, in order
     searched: list[str] = field(default_factory=list)
     embeddings_fail: bool = False
+    # Separate stage: old fixtures describe the downstream agent, new fixtures can exercise both.
+    request_turns: list[Completion] | None = None
+
+    def read_request(self, messages: list[dict], *, tools: list[dict], budget: Budget):
+        if self.request_turns is None:
+            return None
+        if not self.request_turns:
+            raise LLMError("The request-reader script has no more turns.")
+        budget.check()
+        self.requests.append({"messages": messages, "role": Role.SMALL, "tools": ["read_request"]})
+        completion = self.request_turns.pop(0)
+        budget.charge(completion)
+        return completion
 
     @staticmethod
     def say(text: str, cost_usd: float = 0.0) -> Completion:

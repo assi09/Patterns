@@ -5,7 +5,7 @@ import re
 import uuid
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -77,6 +77,9 @@ def proposal_tools(
     said: Sequence[str] = (),
     local_now: datetime | None = None,
     described: list[str] | None = None,
+    required_duration_seconds: float | None = None,
+    required_day: date | None = None,
+    prior_draft: dict | None = None,
 ) -> dict[str, list[ExtraTool]]:
     """`estimates` holds what food lookups found in this answer: a food draft made after one is
     labelled as an estimate by code, whatever the model says. `said` is the person's own words in
@@ -99,14 +102,57 @@ def proposal_tools(
                 given = {k: v for k, v in (arguments or {}).items() if k not in owned}
                 if model is FoodLog and estimates and not STATED_VALUES.search(" ".join(said)):
                     given |= {"provenance": "estimated", "estimateSource": estimates[-1]}
-                if model is WorkoutLog and said and lacks_a_duration(said):
+                checked_said = list(said)
+                expected_day = required_day
+                if prior_draft and local_now:
+                    # An owned, already validated card supplies unchanged facts. A date-only
+                    # correction must not have to restate its duration to replace the card.
+                    when_key = "startTime" if prior_draft["kind"] == "workout" else "consumedAt"
+                    prior_start = datetime.fromisoformat(prior_draft[when_key])
+                    old_day = prior_start.astimezone(local_now.tzinfo).date()
+                    expected_day = expected_day or old_day
+                    previous = f"Previously stated day: {old_day}."
+                    if prior_draft["kind"] == "workout":
+                        elapsed = (
+                            datetime.fromisoformat(prior_draft["endTime"]) - prior_start
+                        ).total_seconds()
+                        previous += f" Previously stated duration: {elapsed / 60:g} minutes."
+                    checked_said.insert(0, previous)
+                if required_duration_seconds is not None:
+                    checked_said.append(f"Correction: {required_duration_seconds / 60:g} minutes")
+                if model is WorkoutLog and checked_said and lacks_a_duration(checked_said):
                     problem = "The person did not say how long it lasted. Ask them, kindly."
                     content = {"error": "This draft was not prepared.", "problems": [problem]}
                     return json.dumps(content | {"note": REFUSED_NOTE}), {"error": "not_as_said"}
                 if said and local_now:
-                    given = latest_past(given, said, local_now)
+                    given = latest_past(given, checked_said, local_now)
                 log = model.model_validate(given)
-                if said and local_now and (problem := mismatch(log, said, local_now)):
+                if isinstance(log, WorkoutLog) and required_duration_seconds is not None:
+                    seconds = (log.end_time - log.start_time).total_seconds()
+                    if (
+                        abs(seconds - required_duration_seconds) > 1
+                        or abs(log.active_seconds - required_duration_seconds) > 1
+                    ):
+                        return json.dumps(
+                            {
+                                "error": "Use the corrected duration, preserving the "
+                                "other draft fields. Do not reuse the old duration."
+                            }
+                        ), {"error": "stale_duration"}
+                if expected_day is not None and local_now is not None:
+                    moment = log.start_time if isinstance(log, WorkoutLog) else log.consumed_at
+                    if moment.astimezone(local_now.tzinfo).date() != expected_day:
+                        return json.dumps(
+                            {
+                                "error": "Use the day the person named. Future entries "
+                                "can be logged after they happen; do not move them."
+                            }
+                        ), {"error": "wrong_day"}
+                if (
+                    checked_said
+                    and local_now
+                    and (problem := mismatch(log, checked_said, local_now))
+                ):
                     content = {"error": "This draft was not prepared.", "problems": [problem]}
                     return json.dumps(content | {"note": REFUSED_NOTE}), {"error": "not_as_said"}
                 payload = with_measurement(

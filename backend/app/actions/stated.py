@@ -99,7 +99,8 @@ JUST_NOW = re.compile(r"\bjust (?:now|did|finished|ended|got back)\b", re.IGNORE
 CORRECTION = re.compile(r"\b(?:no wait|actually|sorry|i mean|make that|correction)\b", re.I)
 OWN_OFFSET = re.compile(r"\b(?:utc|gmt)\b|[+-]\d{2}:\d{2}\b", re.IGNORECASE)
 NAMED_DAY = re.compile(
-    r"\b(?:yesterday|last (?:night|week)|\d+ days? ago|(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|"
+    r"\b(?:today|tomorrow|yesterday|next \w+|last (?:night|week)|\d+ days? ago|"
+    r"(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|"
     r"sat(?:ur)?|sun)(?:day)?|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|"
     r"aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2}(?:st|nd|rd|th)|"
     r"\d{1,2}[/-]\d{1,2})\b",
@@ -209,6 +210,11 @@ def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime
     zone = local_now.tzinfo
     start = (log.start_time if isinstance(log, WorkoutLog) else log.consumed_at).astimezone(zone)
     moments = [start]
+    if (
+        re.search(r"\btomorrow\b", text, re.I)
+        and start.date() != (local_now + timedelta(days=1)).date()
+    ):
+        return "The person named tomorrow. Do not move a future entry to today or yesterday."
     if isinstance(log, WorkoutLog):
         moments.append(log.end_time.astimezone(zone))
         stated = _corrected(said) or durations(text)

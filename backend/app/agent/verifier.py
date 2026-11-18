@@ -589,8 +589,20 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
             signs = {(_sign(e) or 0) > 0 for e in support}
             if signs != {claim.direction == "up"}:
                 reasons.append(f"the evidence does not point {claim.direction}")
-    if claim.kind == "no_change" and any(_significant(e) for e in about if e.tool != "coverage"):
-        reasons.append("claims no change, but the cited evidence shows a significant one")
+    if claim.kind == "no_change":
+        relationship = bool(
+            re.search(r"\b(?:link|association|relationship|correlat\w*)\b", claim.text, re.I)
+        ) or any(e.tool == "correlate" for e in about)
+        tools = (
+            ("correlate",)
+            if relationship
+            else ("compare_windows", "change_point", "trend", "weekday_split", "tag_effect")
+        )
+        tested = [e for e in about if e.tool in tools]
+        if not tested:
+            reasons.append("a no-pattern claim must cite a test of that relationship or change")
+        if any(_significant(e) for e in tested):
+            reasons.append("claims no change, but the cited evidence shows a significant one")
     if claim.kind == "suggestion":
         # An everyday habit to try, grounded in this person's own data: some cited evidence about
         # it must show a real pattern (a significant test, or a lever habit_options supports).

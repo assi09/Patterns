@@ -55,6 +55,12 @@ ADDITIVE = frozenset(
         "light_sleep_minutes",
         "rem_sleep_minutes",
         "awake_in_bed_minutes",
+        "wear_minutes",
+        "still_minutes",
+        "hr_zone_light_minutes",
+        "hr_zone_moderate_minutes",
+        "hr_zone_vigorous_minutes",
+        "hr_zone_peak_minutes",
     }
 )
 

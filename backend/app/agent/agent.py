@@ -388,6 +388,9 @@ def run_agent(
         _reword(llm, result, said, guard, budget)
         # The reword writes from the claims, and a data-quality claim brings coverage talk back.
         result.summary = without_coverage_talk(result.summary)
+    if answer_check and (problems := answer_check(result.claims, result.summary)):
+        result.trace.append({"type": "final_check", "problems": problems})
+        result.summary = fallback_summary(result.claims)
     return result
 
 
@@ -519,7 +522,7 @@ def _handle(
         summary_problems += comparison_problems(said, submission.summary, run_evidence)
         summary_problems += ranked_problems(submission.summary, run_evidence)
         summary_problems += attributed(submission.summary)
-        if answer_check and repairs_left > 0:  # worth one more try, not an answer lost over it
+        if answer_check:  # repair limits must never turn validation off
             summary_problems += answer_check(list(verdict.accepted), submission.summary)
         if verdict.accepted and all(c.kind == "data_quality" for c in verdict.accepted):
             summary_problems.append(
@@ -551,7 +554,7 @@ def _handle(
                 list(verdict.rejected), len(verdict.accepted), summary_problems, uncovered
             )
             return message, False
-        if summary_problems:  # still wrong after the repair: written from the verified claims
+        if summary_problems or verdict.rejected:
             result.summary = fallback_summary(list(verdict.accepted))
         return json.dumps({"accepted_claims": len(verdict.accepted)}), True
 

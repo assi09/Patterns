@@ -43,6 +43,11 @@ ASKS = re.compile(
     re.IGNORECASE,
 )
 CLAUSE = re.compile(r"[^,;.!?\n]+[,;.!?\n]*")
+NO_MEMORY = re.compile(
+    r"\b(?:(?:do not|don't|dont|never) (?:save|store|remember|keep|record)|"
+    r"(?:no|without) (?:saving|storing|memory)|off the record)\b",
+    re.I,
+)
 
 PROMPT = f"""You read one message a person sent to Patterns, an app that reads their tracker \
 data, and note what it says about their life that would still matter in a later chat.
@@ -126,7 +131,7 @@ def is_explicit(message: str) -> bool:
 def worth_listening(message: str) -> bool:
     """Whether a message may hold something about the person: a statement, not just a question."""
     text = message.strip()
-    if len(text) < MIN_CHARS:
+    if len(text) < MIN_CHARS or NO_MEMORY.search(text):
         return False
     # An attempt to change how the assistant behaves is never heard as something about them.
     if reads_like_instruction(text) or ABOUT_THE_ASSISTANT.search(text):
