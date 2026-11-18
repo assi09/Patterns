@@ -1,6 +1,13 @@
 # Project status
 
-The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-11-17.
+The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-11-18.
+
+**Local agent changes, 2026-11-18:** structured request interpretation now separates metric,
+operation, threshold and dates from statistical computation, with persistent conversation scope,
+direct evidence-bound data answers, food readback, corrected drafts and guidance variant selection.
+The implementation, development failures, costs and remaining evaluation limits are recorded in
+[typed-requests.md](typed-requests.md). This is local work on `feat/structured-requests`; earlier
+benchmark results are historical and must not be presented as measurements of this new path.
 
 **The pilot started on 2026-11-17**: 10 testers invited for about two weeks, all listed as Google
 test users, one team with Karim as supervisor. What was built and checked for it, and what is

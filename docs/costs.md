@@ -128,4 +128,14 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-17 | Meal logging fix: replays of Karim's chicken-and-rice conversation (six, $0.07), food ranking on 45 and 25 held-out foods with embeddings and the model's choice (about $0.03) | about $0.10 |
 | 2026-11-17 | Team warning before a noted crunch: about 30 Monday runs on made-up teams while measuring and fixing it | about $0.35 |
 | 2026-11-16 | Router on 152 held-out questions, Jev twice ($0.0124, $0.0125); RAG on the second held-out set and ten borderline queries (embeddings, under $0.01) | about $0.03 |
+| 2026-11-18 | Structured requests, synthetic smoke: 10 answers and 5 reader-only checks; 14/15 checks, one access-limit miss fixed | $0.011193492 |
+| 2026-11-18 | Structured requests, first fresh synthetic set: 83 turns, 72 automated passes; direct source review also found a variant mismatch. No paid judge or Google writes | $0.061797732 |
+| 2026-11-18 | Constrained reader and variant selection, fresh 78-turn set: 75 strict passes, all 34 metric/date-shift pairs correct | $0.081097904 |
+| 2026-11-18 | Request-capability repair: 4 fresh probes plus 78 regression turns, 80/82 strict passes; two remaining contract failures fixed | $0.094112192 |
+| 2026-11-18 | Final threshold/food contract regressions: 4/4 passes; no new overall accuracy claim | $0.006452634 |
+
+These implementation checks total **$0.254653954** (OpenAI $0.232608700, Jev $0.022045254).
+Including the earlier independently requested audits (about $0.4588 and $1.330020434), the shared
+$3 request is at about $2.04. See [methods, failures and limits](typed-requests.md). All new data
+is made up; provider-reported usage is logged and raw runs remain under ignored `data/eval/`.
 

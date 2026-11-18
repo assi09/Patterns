@@ -112,6 +112,22 @@ questions are refused by the router before any search.
   as values; the old real-data run is restated on PMData alone, and its LifeSnaps half needs a
   rerun before it is quoted.
 
+## Structured request implementation (2026-11-18, local)
+
+The complete backend suite passes **1,920 tests**, 95 more than the starting revision; Ruff and
+format checks pass. The new tests cover structured output, calendars and reference ambiguity,
+all registered metrics, missing versus zero, threshold equality/units, multiple operations and
+multiple-testing correction, confirmed food readback, real local draft replacement, ownership,
+persistent scope, memory opt-out and grounded guidance fallback.
+
+Paid checks are intentionally separate from the main benchmark: 15 smoke checks, a fresh 83-turn
+set, a second fresh 78-turn set, four additional new probes with the 78-turn regression set, and
+four final regressions. Their original scores and failures remain in
+[typed-requests.md](typed-requests.md); final regressions pass, but are not held-out accuracy.
+All responses were directly inspected as well as checked against the synthetic frame and
+evidence. Total reported API cost: **$0.254653954**. No real health values, Google writes, or
+paid judge were used. The earlier 369-turn real-history audit has not been replayed on this path.
+
 ## To be filled in
 
 - Logging: each field's accuracy, and the requests that must not become a draft.

@@ -371,10 +371,15 @@ measurement: where it and their data disagree, the data wins and the answer says
 what is known about them, recall starts from the profile; another chat's older wording is out of
 date, and if a reply fails its checks the fallback lists what was kept, never an old chat.
 
-**Time in follow-ups.** "The day before that" is turned into a date by code, from the day the last
-answer was about, before the follow-up is rewritten; a question naming a day ("around Aug 15") is
-checked and answered on that day, and an event the person kept that overlaps it is put in front of
-the agent, to be said in their words as something that lined up, never as a cause or a statistic.
+**Time in follow-ups (local update, 2026-11-18).** A constrained small-model reader interprets
+the request into typed metrics, operations, comparisons and date expressions. Code performs
+calendar arithmetic, validates references/capabilities and retains data scope separately from
+guidance subjects in the owned conversation's existing answer trace. Precise supported data
+questions execute and render directly from deterministic evidence; broad investigations retain
+the expert loop. The former phrase-based scope path remains for legacy adapters/scripted fixtures,
+not the normal OpenAI reader path. An event the person kept that overlaps a question's dates can
+still be described as something that lined up, never as a cause or a statistic. See
+[the request contract, validation and limits](typed-requests.md).
 
 ### Searching
 

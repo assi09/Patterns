@@ -998,3 +998,24 @@ where it disagrees with the reading model; LifeSnaps has no stages; the counting
 threshold, and Patterns then answered the count questions it had missed. Final sets: 675 questions
 on 58 real people in 2 batches, 1,411 on PHIA's 4 users in 5. No batch has run yet.
 
+## Structured requests after the follow-up audit (2026-11-18)
+
+**Question:** can interpretation be separated from arithmetic without just adding more phrases?
+The local implementation reads typed requests, calculates dates and statistics in code, persists
+data and guidance scope separately, and renders precise data answers from their evidence.
+
+**Observed:** the first fresh synthetic set exposed malformed/invalid interpretations and a
+wrong-date follow-up. Constrained decoding then passed every one of the 34 metric/date-shift
+pairs in a second fresh set, while multipart requests, guidance attributes and confirmed food
+exposed further failures. Direct passage review caught a cue borrowed from a weighted squat;
+named-variant selection and a conservative failed-grounding fallback now prevent that path.
+Capability checks and one bounded interpretation repair handle impossible totals, threshold
+counts confused with overlapping window tests, absent pending drafts and food/wearable metric
+mixing. Four new probes passed; two remaining replay failures were repaired and their final
+four-turn count/food regression passed. The full backend suite passes 1,920 tests.
+
+**Limits:** this is development evidence on synthetic rows, not an independent final accuracy
+score or proof about all why/coaching questions. Every intermediate score remains recorded in
+[typed-requests.md](typed-requests.md). Reported API cost across the implementation checks:
+$0.254653954. No real Google write or paid judge was used.
+

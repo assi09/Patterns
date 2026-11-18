@@ -3,6 +3,12 @@
 Run on 2026-11-10. Costs are in [costs.md](costs.md), the running history in
 [experiments.md](experiments.md). Every script is in `eval/`, every result in `eval/results/`.
 
+**Version note, 2026-11-18:** a new structured-request path is implemented locally. Its targeted
+synthetic checks and failures are recorded separately in [typed-requests.md](typed-requests.md).
+The benchmark results below remain results for their recorded earlier implementations. The new
+path has not received a fresh final evaluation on real-history conversations; successful regression
+turns must not be substituted for that measurement.
+
 ## The systems compared
 
 | System | What it is |

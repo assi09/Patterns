@@ -11,6 +11,15 @@ applicable bonus practice is in it.
 Each item is its own small PR, per [AGENTS.md](../AGENTS.md). Open issues are the numbered list in
 [status.md](status.md#open-issues); they are referred to here as "issue n".
 
+## Agent reliability update (2026-11-18)
+
+The independent follow-up audit takes priority over further feature breadth. The authorized
+structured-request work is implemented locally; see [implementation and checks](typed-requests.md).
+Its remaining delivery steps are review/CI through protected `main`, then a new independent
+conversation evaluation on real histories before claiming a final reliability score. Keep the
+old 369 turns as regression/development material. Do not publish a replay or the small successful
+final regression as held-out accuracy. Actual Google writes still require separate approval.
+
 ## Where we are and what is left (2026-11-11)
 
 **Presentations are on 2026-12-05.** The finish target stays Sunday 2026-11-23; Nov 24 to Dec 4 is
