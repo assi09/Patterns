@@ -259,7 +259,9 @@ def test_comparison_equality_zero_and_missing_have_separate_meanings(comparison,
     record = next(iter(result.evidence.values()))
     assert record.stats["days_met"] == wanted and record.stats["days_equal"] == 1
     assert record.stats["days_counted"] == 5
-    assert f"{wanted} of 5" in result.summary and comparison in result.summary
+    from app.agent.requested import SAID
+
+    assert f"{wanted} of 5" in result.summary and f" {SAID[comparison]} " in result.summary
 
 
 def test_multiple_operations_do_not_collapse_into_one_answer():
@@ -280,7 +282,10 @@ def test_multiple_operations_do_not_collapse_into_one_answer():
     )
     result = execute(request, frame, TODAY)
     assert len(result.claims) == 2
-    assert "total 30" in result.summary and "median 54 bpm" in result.summary
+    assert (
+        "Total steps from Sun, Nov 1 to Tue, Nov 3: 30," in result.summary
+        and "Median resting heart rate from Sun, Nov 1 to Tue, Nov 3: 54 bpm" in result.summary
+    )
 
 
 def test_missing_rem_does_not_substitute_total_sleep_and_rating_does_not_become_recovery():
@@ -297,9 +302,10 @@ def test_missing_rem_does_not_substitute_total_sleep_and_rating_does_not_become_
         TODAY,
     )
     result = execute(request, frame, TODAY)
-    assert "not available" in result.summary and "no other metric" in result.summary
+    assert "doesn't include" in result.summary and "another measure" in result.summary
     assert (
-        "daily average 2" in result.summary
+        "Daily average morning check-in rating" in result.summary
+        and ": 2" in result.summary
         and "82" not in result.summary
         and "420" not in result.summary
     )
@@ -327,7 +333,7 @@ def test_food_uses_local_dates_confirmed_entries_and_preserves_missing_nutrients
     assert stats["meals_logged"] == 2 and stats["totals"]["energyKcal"] == 1040
     assert stats["totals"]["proteinG"] == 17 and stats["totals"]["fatG"] is None
     assert stats["entries_with_values"]["proteinG"] == 1
-    assert "1040 kcal" in result.summary and "consumed" in result.summary
+    assert "1,040 kcal" in result.summary and "consumed" in result.summary
     assert "2200" not in result.summary
 
 
@@ -386,11 +392,11 @@ def test_causality_follows_observed_association_state(mode):
         parts=[ResolvedPart(metrics=["steps", "hrv_ms"], operation="correlate", history=True)],
     )
     result = execute(request, frame, TODAY)
-    assert "cannot establish or rule out a cause" in result.summary
+    assert "can't establish or rule out a cause" in result.summary
     assert ("tended to move together" in result.summary) == (mode == "positive")
     assert ("opposite directions" in result.summary) == (mode == "negative")
     if mode in ("missing", "constant"):
-        assert "insufficient paired data" in result.summary
+        assert "aren't enough days with both" in result.summary
 
 
 @pytest.mark.parametrize(

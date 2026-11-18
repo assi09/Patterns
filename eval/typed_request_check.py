@@ -442,11 +442,7 @@ def grade(result, request, want, data):
         return problems
     if want.get("access"):
         return [] if "only see your own" in result.summary else ["access reply missing"]
-    if (
-        not request
-        or request.get("kind") != "data"
-        or len(request.get("parts", [])) != 1
-    ):
+    if not request or request.get("kind") != "data" or len(request.get("parts", [])) != 1:
         return ["wrong request kind or part count"]
     part = request["parts"][0]
     for field in ("metrics", "operation", "windows", "comparison", "threshold"):
@@ -467,7 +463,7 @@ def grade(result, request, want, data):
     if not records:
         return ["no matching computed evidence"]
     if metric == "food_logs":
-        if "confirmed food entries" not in result.summary:
+        if "you logged" not in result.summary:
             problems.append("food answer missing")
         for name in want.get("foods", []):
             if name not in result.summary:
@@ -499,9 +495,7 @@ def grade(result, request, want, data):
             "sum": lambda: float(np.sum(values)),
         }[operation]()
         key = {"value": "mean", "sum": "total"}.get(operation, operation)
-        if not any(
-            abs(e.stats.get(key, float("inf")) - expected) < 0.001 for e in records
-        ):
+        if not any(abs(e.stats.get(key, float("inf")) - expected) < 0.001 for e in records):
             problems.append("wrong statistic")
         if format_level(metric, expected) not in result.summary:
             problems.append("value not answered in prose")
@@ -538,10 +532,7 @@ def main():
     ]
     (args.out / "implementation_hashes.json").write_text(
         json.dumps(
-            {
-                str(p): hashlib.sha256(p.read_bytes()).hexdigest()
-                for p in implementation
-            },
+            {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in implementation},
             indent=2,
         )
     )
@@ -622,10 +613,7 @@ def main():
                     ]
                     if raw["kind"] != want["reader_kind"]:
                         problems.append("reader kind")
-                    if (
-                        "topic" in want
-                        and want["topic"] not in " ".join(request.topics).lower()
-                    ):
+                    if "topic" in want and want["topic"] not in " ".join(request.topics).lower():
                         problems.append("guidance topic")
                     summary, evidence = "", []
                 else:
@@ -646,9 +634,7 @@ def main():
                     raw, held = step.get("request"), step.get("state", {})
                     problems = grade(result, raw, want, data)
                     budget, summary = result.budget, result.summary
-                    evidence = [
-                        e.model_dump(mode="json") for e in result.evidence.values()
-                    ]
+                    evidence = [e.model_dump(mode="json") for e in result.evidence.values()]
                 row = {
                     "conversation": number,
                     "question": question,
@@ -663,9 +649,7 @@ def main():
                 with (args.out / "answers.jsonl").open("a") as file:
                     file.write(json.dumps(row) + "\n")
                 if raw and raw.get("reader_error") == "LLMError":
-                    raise RuntimeError(
-                        "Request reader failed; stopped before further paid calls"
-                    )
+                    raise RuntimeError("Request reader failed; stopped before further paid calls")
                 history.append(Turn(question, summary, request_state=held, at=NOW))
             if (number + 1) % 5 == 0:
                 print(

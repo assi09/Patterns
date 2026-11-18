@@ -109,8 +109,6 @@ from app.agent.router import (
     decide,
 )
 from app.agent.sanitize import clean
-from app.agent.scope import note as scope_note
-from app.agent.scope import with_scope
 from app.agent.strategy import (
     BROAD_GUIDE,
     COACHING_OFFER,
@@ -587,19 +585,13 @@ def ask(
         and not _certain_talk(question)
         and not is_statement(question)
     ):
+        # Only without the request reader (a scripted model that has none): in the app every
+        # message is read by requests.interpret, which resolves references and dates itself.
         day = today.date() if isinstance(today, datetime) else today or date.today()
-        # Which days and metrics "those dates" or "and the median?" mean, by code (scope.py).
-        resolved = with_scope(question, history, day)
-        if resolved.ask:
-            fixed = resolved.ask
-        elif resolved.inherited:
-            first = frame.index.min().date() if len(frame.index) else None
-            question = f"{question} {scope_note(resolved, first, day)}"
-        else:
-            means = with_period(with_relative_day(question, history, day), history)
-            question, rewrite_cost = standalone(
-                llm, question, history, means if means != question else None
-            )
+        means = with_period(with_relative_day(question, history, day), history)
+        question, rewrite_cost = standalone(
+            llm, question, history, means if means != question else None
+        )
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)

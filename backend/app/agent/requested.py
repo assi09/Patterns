@@ -23,10 +23,33 @@ from app.analysis.tools import ADDITIVE, compare_windows, correlate, coverage, d
 COMPARISONS = {">": "above", ">=": "at_least", "<": "below", "<=": "at_most", "==": "exactly"}
 
 
-def _span(window: Window) -> str:
-    return (
-        str(window.start) if window.start == window.end else f"{window.start} through {window.end}"
-    )
+def _when(window: Window, today: date) -> str:
+    """ "on Sun, Nov 8" or "from Mon, Nov 2 to Sun, Nov 8", with the year when it is not this
+    one. Said in words, as a person reads it: the answer used to begin "2026-11-08 —"."""
+    form = "%a, %b %-d" if window.start.year == window.end.year == today.year else "%a, %b %-d %Y"
+    if window.start == window.end:
+        return f"on {window.start.strftime(form)}"
+    return f"from {window.start.strftime(form)} to {window.end.strftime(form)}"
+
+
+def _first_up(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
+def _days(n: int) -> str:
+    return f"{n} day" if n == 1 else f"{n} days"
+
+
+SAID = {">": "above", ">=": "at or above", "<": "below", "<=": "at or below", "==": "exactly"}
+STATISTIC = {
+    "sum": "Total",
+    "value": "",
+    "mean": "Daily average",
+    "describe": "Daily average",
+    "median": "Median",
+    "min": "Lowest",
+    "max": "Highest",
+}
 
 
 def execute(
@@ -43,6 +66,9 @@ def execute(
             )
         )
         statements.append(text)
+
+    def _span(window: Window) -> str:
+        return _when(window, today)
 
     first = frame.index.min().date() if not frame.empty else today
     last = frame.index.max().date() if not frame.empty else today
@@ -80,7 +106,11 @@ def execute(
                 window = Window(start=date(1970, 1, 1), end=today)
             record = food_entries(food_logs, window, zone, part.meal_type)
             stats = record.stats
-            text = f"{_span(window)}: {stats['meals_logged']} confirmed food entries."
+            entries = stats["meals_logged"]
+            text = (
+                f"{_first_up(_span(window))} you logged {entries} "
+                f"{'entry' if entries == 1 else 'entries'}."
+            )
             totals = stats["totals"]
             names = {
                 "energyKcal": ("energy consumed", "kcal"),
@@ -90,22 +120,21 @@ def execute(
             }
             for key, (name, unit) in names.items():
                 if totals[key] is not None:
-                    text += f" {name.capitalize()}: {totals[key]:g} {unit} in recorded entries."
-            text += " Unlogged food and missing nutrient values are not included."
+                    text += f" {name.capitalize()}: {totals[key]:,g} {unit}."
+            text += " Only what you logged is counted, and missing nutrient values aren't guessed."
             say(text, record, "food_logs")
             if stats["names"]:
-                statements.append("Recorded foods: " + ", ".join(stats["names"][:10]) + ".")
+                statements.append("Foods: " + ", ".join(stats["names"][:10]) + ".")
                 if len(stats["names"]) > 10:
-                    statements.append(
-                        "The first ten are listed here; the count includes all entries."
-                    )
+                    statements.append("Those are the first ten; the count includes them all.")
             continue
         if op == "correlate":
             try:
                 record = tested(index, part.metrics[-1])
             except ToolError:
                 statements.append(
-                    f"{_span(window)}: those two measurements are not both available."
+                    f"{_first_up(_span(window))}, those two aren't both in your data, so I "
+                    "can't compare them."
                 )
                 continue
             result.evidence[record.id] = record
@@ -113,34 +142,37 @@ def execute(
             names = " and ".join(label(m) for m in part.metrics)
             if not record.sufficient or stats["rho"] is None:
                 statements.append(
-                    f"{_span(window)}: insufficient paired data to establish a "
-                    f"relationship between {names}."
+                    f"{_first_up(_span(window))}, there aren't enough days with both {names} "
+                    "to say whether they go together."
                 )
             elif stats[RUN_ADJUSTED] < 0.05:
                 positive = stats["rho"] > 0
                 text = (
-                    f"{_span(window)}: {names} tended to move "
+                    f"{_first_up(_span(window))}, {names} tended to move "
                     f"{'together' if positive else 'in opposite directions'} "
-                    f"(Spearman rho {stats['rho']:g}, adjusted p {stats[RUN_ADJUSTED]:g})."
+                    f"(correlation {stats['rho']:g})."
                 )
                 say(text, record, part.metrics[-1], "association", "up" if positive else "down")
             else:
                 say(
-                    f"{_span(window)}: no clear association was detected between {names} "
-                    f"(Spearman rho {stats['rho']:g}, adjusted p {stats[RUN_ADJUSTED]:g}). "
-                    "That does not establish that no relationship exists.",
+                    f"{_first_up(_span(window))}, {names} showed no clear link "
+                    f"(correlation {stats['rho']:g}). That doesn't mean there is none, only "
+                    "that your data doesn't show one.",
                     record,
                     part.metrics[-1],
                     "no_change",
                 )
-            statements.append("These observational data cannot establish or rule out a cause.")
+            statements.append(
+                "This shows what goes together in your data; it can't establish or rule out "
+                "a cause."
+            )
             continue
         for metric in part.metrics:
-            prefix = f"{_span(window)} — {label(metric)}"
+            name, when = label(metric), _span(window)
             if metric not in frame:
                 statements.append(
-                    f"{prefix}: this measurement is not available; no other metric "
-                    "has been substituted."
+                    f"Your data doesn't include {name}, so I haven't used another measure in "
+                    "its place."
                 )
                 continue
             record = None
@@ -152,21 +184,25 @@ def execute(
                     s = record.stats
                     if not s["days_counted"]:
                         statements.append(
-                            f"{prefix}: no recorded days to count; missing is not zero."
+                            f"There's no {name} recorded {when}, so there's nothing to count "
+                            "(missing days aren't counted as zero)."
                         )
                         continue
                     # This is an observed count, not a population or change inference.
                     record = record.model_copy(update={"sufficient": True})
+                    level = format_level(metric, part.threshold)
                     text = (
-                        f"{prefix}: {s['days_met']} of {s['days_counted']} recorded days "
-                        f"{part.comparison} {format_level(metric, part.threshold)}; "
-                        f"{s['days_equal']} days exactly equal to the threshold."
+                        f"{_first_up(when)}, {s['days_met']} of {_days(s['days_counted'])} "
+                        f"with data had {name} {SAID[part.comparison]} {level}"
                     )
+                    if part.comparison != "==":
+                        text += f"; {_days(s['days_equal'])} exactly at {level}"
+                    text += "."
                 elif op == "coverage":
                     record = coverage(frame[[metric]], window)
                     text = (
-                        f"{prefix}: {record.stats['fraction_present'][metric]:.1%} of "
-                        "calendar days have recorded values."
+                        f"{_first_up(name)} was recorded on "
+                        f"{record.stats['fraction_present'][metric]:.0%} of days {when}."
                     )
                     say(text, record, metric, "data_quality")
                     continue
@@ -175,20 +211,22 @@ def execute(
                     s = record.stats
                     if not record.sufficient:
                         statements.append(
-                            f"{prefix} versus {_span(windows[1])}: too few "
-                            "observed days for a reliable change test."
+                            f"There are too few days with {name} {when} and "
+                            f"{_span(windows[1])} to tell whether it changed."
                         )
                         result.evidence[record.id] = record
                         continue
                     changed = s[RUN_ADJUSTED] < 0.05
                     direction = "up" if s["difference"] > 0 else "down"
                     text = (
-                        f"{prefix}: mean {format_level(metric, s['mean_recent'])}; "
-                        f"{_span(windows[1])}: mean {format_level(metric, s['mean_baseline'])}. "
+                        f"{_first_up(name)} averaged {format_level(metric, s['mean_recent'])} "
+                        f"{when}, against {format_level(metric, s['mean_baseline'])} "
+                        f"{_span(windows[1])}. "
                         + (
-                            f"A change {direction} was detected."
+                            f"That's a clear {'rise' if direction == 'up' else 'drop'}."
                             if changed
-                            else "No clear change was detected; this is not proof of stability."
+                            else "That's no clear change, though it doesn't prove it stayed "
+                            "the same."
                         )
                     )
                     say(
@@ -203,15 +241,17 @@ def execute(
                     record = tested(index, metric)
                     s = record.stats
                     if not record.sufficient:
-                        statements.append(f"{prefix}: too few observed days for a reliable trend.")
+                        statements.append(
+                            f"There are too few days with {name} {when} to see a trend."
+                        )
                         result.evidence[record.id] = record
                         continue
                     changed = s[RUN_ADJUSTED] < 0.05
                     direction = "up" if s["slope_per_day"] > 0 else "down"
-                    text = f"{prefix}: " + (
-                        f"a trend {direction} was detected."
+                    text = f"{_first_up(when)}, {name} " + (
+                        f"trended {'upward' if direction == 'up' else 'downward'}."
                         if changed
-                        else "no clear trend was detected."
+                        else "showed no clear trend."
                     )
                     say(
                         text,
@@ -224,42 +264,38 @@ def execute(
                 else:
                     if op == "sum" and metric not in ADDITIVE:
                         statements.append(
-                            f"{prefix}: a total is not meaningful for this metric; "
-                            "please choose a mean, median or individual day."
+                            f"A total doesn't make sense for {name}. I can give the daily "
+                            "average, the median or a single day instead."
                         )
                         continue
                     record = describe(frame, metric, window)
                     if not record.n:
                         result.evidence[record.id] = record
                         statements.append(
-                            f"{prefix}: no recorded values in this period. Missing "
-                            "values are not zero."
+                            f"There's no {name} recorded {when}. Missing days aren't counted "
+                            "as zero."
                         )
                         continue
                     record = record.model_copy(
                         update={"tool": "observed_summary", "sufficient": True}
                     )
                     key = {"sum": "total", "value": "mean", "describe": "mean"}.get(op, op)
-                    statistic = {
-                        "sum": "total",
-                        "value": "recorded",
-                        "mean": "daily average",
-                        "describe": "daily average",
-                    }.get(op, op)
-                    days = "day" if record.n == 1 else "days"
-                    text = (
-                        f"{prefix}: {statistic} {format_level(metric, record.stats[key])} "
-                        f"from {record.n} recorded {days}."
-                    )
-                    if record.n < window.days:
-                        text += " Missing days were excluded."
+                    statistic = STATISTIC.get(op, op.capitalize())
+                    if op == "value" and window.days > 1:  # one reading per day, over several
+                        statistic = "Daily average"
+                    value = format_level(metric, record.stats[key])
+                    what = f"{statistic} {name}" if statistic else _first_up(name)
+                    text = f"{what} {when}: {value}"
+                    if window.days > 1:
+                        text += f", from {_days(record.n)} with data"
+                    text += "."
+                    if record.n < window.days and window.days > 1:
+                        text += " Missing days were left out, not counted as zero."
                     if metric == "checkin_rating":
-                        text += " This is the morning rating, not the recovery score."
+                        text += " That's your morning check-in rating, not your recovery score."
                 say(text, record, metric)
             except ToolError:
-                statements.append(
-                    f"{prefix}: that computation cannot be performed for these inputs."
-                )
+                statements.append(f"I couldn't work out {name} {when} from your data.")
             finally:
                 if record is not None:
                     result.evidence[record.id] = record
@@ -269,9 +305,9 @@ def execute(
             result.evidence[record.id] = record
             if record.stats.get("low_wear_days"):
                 say(
-                    f"{_span(window)}: some days have low wear time. Recorded activity totals "
-                    "may understate movement; a lower total alone does not establish "
-                    "less activity.",
+                    f"Some days {_span(window)} had low wear time, so activity totals may "
+                    "undercount how much you moved; a lower total alone doesn't mean you "
+                    "moved less.",
                     record,
                     part.metrics[0],
                     "data_quality",
