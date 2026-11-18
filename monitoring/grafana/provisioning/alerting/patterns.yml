@@ -1,4 +1,5 @@
-# Patterns alert rules (docs/monitoring.md). Sent to $ALERT_EMAIL, set on the server only.
+# Patterns alert rules (docs/monitoring.md). Grafana posts them to the API, which emails the admins
+# through Resend's HTTPS API (Railway blocks email ports). ALERT_WEBHOOK_TOKEN is set on the server only.
 apiVersion: 1
 groups:
 - orgId: 1
@@ -375,10 +376,12 @@ contactPoints:
   name: owner-email
   receivers:
   - uid: owner-email
-    type: email
+    type: webhook
     settings:
-      addresses: $ALERT_EMAIL
-      singleEmail: true
+      url: https://api-production-eccff.up.railway.app/alerts/grafana
+      httpMethod: POST
+      authorization_scheme: Bearer
+      authorization_credentials: $ALERT_WEBHOOK_TOKEN
 policies:
 - orgId: 1
   receiver: owner-email
