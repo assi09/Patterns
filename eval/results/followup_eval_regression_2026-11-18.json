@@ -1,0 +1,11 @@
+{
+ "split": "regression",
+ "graded_turns": 19,
+ "passed": 19,
+ "rate": 1.0,
+ "wilson_95": [
+  0.832,
+  1.0
+ ],
+ "cost_usd": 0.0611
+}

@@ -119,6 +119,7 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-16 | PHIA benchmark checks before any batch (`eval/phia_bench.py`): the four systems live on two questions ($0.05) and four real-people questions ($0.09), three count questions after the counting-tool fix ($0.01) | about $0.15 |
 | 2026-11-16 | PHIA real people: batch 1 first 20 ($0.37), traces of two misses ($0.02), the rest of batch 1 ($3.96); the totals fix checked on 8 failures and 40 regressions ($0.15); the team agent's Monday run on made-up teams, eight runs ($0.08) | about $4.58 |
 | 2026-11-18 | PHIA mode A, batch 3 on PHIA's 4 users: first 20 ($0.22), then the rest ($2.95) | about $3.16 |
+| 2026-11-18 | Follow-ups after the audit fixes: the audit's conversations ($0.06), held out once ($0.08) | about $0.14 |
 | 2026-11-18 | Broad questions: a 10-answer trial ($0.06), one replay ($0.01), development before and after fixes ($0.35, $0.39), held out once ($0.47); PHIA regression, 50 questions ($0.14) | about $1.42 |
 | 2026-11-18 | PHIA mode A, batch 2 on PHIA's 4 users: first 20 ($0.24), then the rest ($2.88) | about $3.13 |
 | 2026-11-18 | Logging test at scale: 250 generated requests through the chat API | about $0.81 |
