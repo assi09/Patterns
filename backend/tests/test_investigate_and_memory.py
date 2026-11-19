@@ -276,3 +276,53 @@ def test_coaching_on_a_named_month_uses_that_month_and_no_latest_day(steps_fell)
         for e in personal
         for w in e.windows
     )
+
+
+# ---- the answer does what was asked: an option for coaching, the limits for a why ----
+
+
+def test_coaching_that_gives_no_option_gets_one_from_code_or_says_why_not(steps_fell):
+    from test_broad_questions import submit
+
+    from app.agent.ask import coaching_fallback
+
+    llm = reading_llm(
+        submit(),
+        kind="investigate",
+        focus="coaching",
+        parts=[{"metrics": ["sleep_minutes"], "operation": "describe", "periods": []}],
+    )
+    reply = ask(llm, Router("lookup"), steps_fell, "What could I try for my sleep?", today=END)
+    habits = [e for e in reply.result.evidence.values() if e.tool == "habit_options"]
+    assert coaching_fallback(habits) in reply.result.notes
+
+
+def test_a_why_with_no_tested_relationship_says_what_it_cannot_tell(steps_fell):
+    from test_broad_questions import submit
+
+    from app.agent.ask import WHY_LIMIT
+
+    llm = reading_llm(submit(), kind="investigate", focus="why", parts=[])
+    reply = ask(llm, Router("lookup"), steps_fell, "Why do I feel so drained?", today=END)
+    assert WHY_LIMIT in reply.result.notes
+
+
+def test_the_coaching_fallback_names_a_supported_habit_first():
+    from app.agent.ask import coaching_fallback
+    from app.analysis.evidence import Evidence, Window
+
+    record = Evidence(
+        tool="habit_options",
+        metrics=("sleep_minutes",),
+        windows=(Window(start=date(2026, 9, 1), end=date(2026, 10, 10)),),
+        n=40,
+        sufficient=True,
+        stats={
+            "levers": [
+                {"habit": "a later wake time", "supported": False},
+                {"habit": "an earlier bedtime", "supported": True},
+            ]
+        },
+    )
+    assert "an earlier bedtime" in coaching_fallback([record])
+    assert coaching_fallback([]).startswith("Your data over those days isn't enough")

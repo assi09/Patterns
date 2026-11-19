@@ -129,9 +129,16 @@ def is_explicit(message: str) -> bool:
 
 
 def worth_listening(message: str) -> bool:
-    """Whether a message may hold something about the person: a statement, not just a question."""
+    """Whether a message may hold something about the person to keep: a statement, not just a
+    question, and not one they asked not to have kept."""
+    return not NO_MEMORY.search(message) and about_them(message)
+
+
+def about_them(message: str) -> bool:
+    """Whether a message tells something about the person, kept or not: what they said in this
+    chat stays in it even when they asked not to have it kept (Codex's review of 84db5f5)."""
     text = message.strip()
-    if len(text) < MIN_CHARS or NO_MEMORY.search(text):
+    if len(text) < MIN_CHARS:
         return False
     # An attempt to change how the assistant behaves is never heard as something about them.
     if reads_like_instruction(text) or ABOUT_THE_ASSISTANT.search(text):

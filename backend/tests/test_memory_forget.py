@@ -137,7 +137,7 @@ def test_forget_in_the_chat_raises_a_card_and_the_tap_deletes(client, engine, ag
     parts = listening(agent)
     client.app.dependency_overrides[chat.get_agent] = lambda: parts
     reader_says_forget(agent.llm)
-    agent.llm.turns += [ScriptedLLM.say("none"), ScriptedLLM.call("pick_kept", item=1)]
+    agent.llm.turns += [ScriptedLLM.call("pick_kept", item=1)]  # no listening: nothing new said
     reply = ask(client, headers, "Please forget my old running goal.").json()[-1]
     assert "tap Forget" in reply["text"] and "Wants to run a 10k" in reply["text"]
     page = client.get("/memory", headers=headers).json()
@@ -156,7 +156,7 @@ def test_an_unclear_forget_lists_what_is_kept_and_deletes_nothing(client, engine
     parts = listening(agent)
     client.app.dependency_overrides[chat.get_agent] = lambda: parts
     reader_says_forget(agent.llm)
-    agent.llm.turns += [ScriptedLLM.say("none"), ScriptedLLM.call("pick_kept", item=0)]
+    agent.llm.turns += [ScriptedLLM.call("pick_kept", item=0)]
     reply = ask(client, headers, "Forget that thing.").json()[-1]
     assert reply["text"].startswith(chat.FORGET_WHICH) and "Wants to run a 10k" in reply["text"]
     page = client.get("/memory", headers=headers).json()
@@ -168,6 +168,31 @@ def test_forget_with_nothing_kept_says_so_without_a_model_call(client, engine, a
     parts = listening(agent)
     client.app.dependency_overrides[chat.get_agent] = lambda: parts
     reader_says_forget(agent.llm)
-    agent.llm.turns += [ScriptedLLM.say("none")]  # the listener only
     reply = ask(client, headers, "Please forget my old running goal.").json()[-1]
-    assert reply["text"] == chat.NOTHING_KEPT and not agent.llm.turns
+    assert reply["text"] == chat.NOTHING_KEPT
+    assert [r["tools"] for r in agent.llm.requests] == [["read_request"]]  # only the reader ran
+
+
+def test_a_polite_question_to_remember_raises_a_real_card(client, engine, agent):  # noqa: F811
+    """ "Would you remember that I choose swimming over running?" was read as remember, then the
+    API did not listen to a question (the v4 audit): no card."""
+    words = "Would you remember that I choose swimming over running for exercise?"
+    headers = signed_in(client, engine)
+    parts = listening(agent)
+    client.app.dependency_overrides[chat.get_agent] = lambda: parts
+    remember = {"type": "memory", "said": words, "action": "remember"}
+    agent.llm.request_turns = [
+        ScriptedLLM.call(
+            "read_request",
+            subject="self",
+            clauses=[remember],
+            store_nothing=False,
+            clarification="",
+        )
+    ]
+    heard = {"kind": "preference", "text": "Prefers swimming over running"}
+    agent.llm.turns += [ScriptedLLM.call("record_memories", memories=[heard])]
+    reply = ask(client, headers, words).json()[-1]
+    assert "Keep" in reply["text"]
+    [card] = client.get("/memory", headers=headers).json()["waiting"]
+    assert card["text"] == "Prefers swimming over running" and card["action"] == "keep"

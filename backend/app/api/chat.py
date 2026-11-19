@@ -328,11 +328,14 @@ def listen_to(
     text: str,
     today,
     now: datetime,
+    asked: bool = False,
 ) -> None:
     """Hears what the person's message says about them; nothing is kept without their tap
     (`app.db.memory.propose_fact`). Returns the status of what it recorded (empty when nothing
-    passed the rules), or None when listening failed."""
-    if not worth_listening(text):
+    passed the rules), or None when listening failed. `asked`: the request reader read an
+    explicit request to remember, however it was worded ("Would you remember that I choose
+    swimming?" is a question, and was not listened to, Codex's audit of 84db5f5)."""
+    if not asked and not worth_listening(text):
         return []
     statuses: list[str] = []
     try:
@@ -349,7 +352,7 @@ def listen_to(
             result, kept = again, fit_to_keep(again.heard, agent.guard)
         # Something they volunteer ("I'm a student, I had projects") is worth a card at once; a
         # fact tucked into a question ("as a vegetarian, how much protein?") waits to be said twice.
-        explicit = is_explicit(text) or is_statement(text)
+        explicit = asked or is_explicit(text) or is_statement(text)
         with sessions() as db:
             question = db.get(ChatMessage, question_id)
             for heard in kept if question is not None else ():
@@ -403,15 +406,6 @@ FORGET_CARD = (
 )
 FORGET_WHICH = "Which of these should I forget? You can also remove any of them in Settings."
 MAX_LISTED = 5
-
-
-def forgetting(result) -> bool:
-    """The request reader read the message as asking to forget something."""
-    return any(
-        step.get("type") == "request"
-        and (step.get("request") or {}).get("memory_action") == "forget"
-        for step in result.trace
-    )
 
 
 def forget_from(sessions: Sessions, agent: AgentParts, user_id, question_id, text, now) -> str:
@@ -533,15 +527,17 @@ def _answer(
             for i in message.action_ids or []
         ]
         waiting: list[HealthAction] = []
+        action_states: list[str] = []  # for "has it been saved?", read from the store
         if recent_ids:
             with sessions() as db:
-                waiting = [
+                rows = [
                     row
                     for i in recent_ids
                     if (row := db.get(HealthAction, uuid.UUID(i))) is not None
                     and row.user_id == user_id
-                    and row.status == "draft"
                 ]
+                waiting = [row for row in rows if row.status == "draft"]
+                action_states = [row.status for row in rows]
                 db.expunge_all()
         # "Nah, I meant 100 g of each": the agent prepares the corrected draft, and the one it
         # replaces is cancelled, rather than asking them to edit the card (2026-11-16).
@@ -661,25 +657,33 @@ def _answer(
                 made_a_draft=lambda: bool(prepared),
                 after_draft=bool(waiting) and not correcting,
                 request_bundle=request_bundle,
+                action_states=action_states,
             )
         except Exception:
             logger.exception("Answering failed")
             reply = None
         # "Remember that …" is heard now, not after: the reply says what actually happened.
         noted = reply is not None and reply.result.stop_reason == "noted"
-        if noted and not memory_denied:
+        action = typed.memory_action if typed is not None else None
+        if noted and action == "forget":
             # A change ("forget Mondays, it's Tuesdays now") is the listener's replacement card;
-            # a plain "forget my old goal" is a card to forget that kept fact.
-            outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
-            changed = bool(outcome and "proposed" in outcome)
-            if forgetting(reply.result) and not changed:
-                reply.result.summary = forget_from(
-                    sessions, agent, user_id, question_id, body.text, now
-                )
-            elif forgetting(reply.result):
-                reply.result.summary = FORGET_NOTE
-            else:
-                reply.result.summary = noted_reply(outcome)
+            # a plain "forget my old goal" is a card to forget that kept fact. "Don't save" stops
+            # only the new fact, never the forget.
+            changed = False
+            if typed.states_new_fact and not memory_denied:
+                outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
+                changed = bool(outcome and "proposed" in outcome)
+            reply.result.summary = (
+                FORGET_NOTE
+                if changed
+                else forget_from(sessions, agent, user_id, question_id, body.text, now)
+            )
+        elif noted and not memory_denied:
+            asked = action == "remember"
+            outcome = listen_to(
+                sessions, agent, user_id, question_id, body.text, today, now, asked=asked
+            )
+            reply.result.summary = noted_reply(outcome)
         # Something they told us in passing: heard now too, so the reply can point to its card.
         chatted = reply is not None and reply.result.stop_reason in CHATTED
         # "That seems wrong, I walked more" disputes a figure; it says nothing lasting about them.

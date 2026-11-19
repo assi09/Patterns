@@ -74,7 +74,7 @@ from app.agent.limits import (
     untracked,
     untracked_note,
 )
-from app.agent.listener import is_explicit, worth_listening
+from app.agent.listener import about_them, is_explicit
 from app.agent.llm import LLM, Budget
 from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
 from app.agent.periods import asks_over_days, with_dates
@@ -96,6 +96,7 @@ from app.agent.personal import (
     top_up,
     without_filler,
 )
+from app.agent.present import label
 from app.agent.requested import _when
 from app.agent.requested import execute as execute_request
 from app.agent.requests import interpret, previous_state
@@ -203,10 +204,16 @@ def _with_reading(result, context, route, typed, request_state, reading_budget) 
     ]
 
 
-def recalled(memory: Sequence[MemoryItem], chat: ChatState | None, history: Sequence[Turn]) -> str:
+def recalled(
+    memory: Sequence[MemoryItem],
+    chat: ChatState | None,
+    history: Sequence[Turn],
+    scope: str | None = None,
+) -> str:
     """What is known about them, from three places kept apart: what they approved, cards still
     waiting for their tap, and what they said in this chat only. A waiting card or something
-    said here is never presented as kept (the audit of 2026-11-19 asked for all three)."""
+    said here is never presented as kept (the audit of 2026-11-19 asked for all three). `scope`
+    answers only the one asked about ("kept", "waiting", "this_chat"); None or "all" gives all."""
     kept = [
         *(chat.kept if chat else ()),  # approved facts only: never "Often looks at", inferred
         *(m.text for m in memory if m.kind in ("fact", "preference")),
@@ -214,6 +221,17 @@ def recalled(memory: Sequence[MemoryItem], chat: ChatState | None, history: Sequ
     kept = list(dict.fromkeys(kept))[:MAX_RECALLED]
     waiting = list(chat.pending if chat else ())[:MAX_RECALLED]
     here = [t for t in told_here(history) if t not in kept][:MAX_RECALLED]
+    if scope in ("kept", "waiting", "this_chat"):
+        only = {"kept": kept, "waiting": waiting, "this_chat": here}[scope]
+        kept, waiting, here = (
+            only if scope == name else [] for name in ("kept", "waiting", "this_chat")
+        )
+        if not only:
+            return {
+                "kept": "Nothing is kept about you yet: nothing has been approved.",
+                "waiting": "No card is waiting for your tap.",
+                "this_chat": "You haven't told me anything about yourself in this chat yet.",
+            }[scope]
     parts = []
     if kept:
         parts.append("Kept (you approved these):\n" + "\n".join(f"- {t}" for t in kept))
@@ -407,7 +425,7 @@ def told_here(history: Sequence[Turn]) -> list[str]:
     said = []
     for turn in reversed(history[-TOLD_HERE_TURNS:]):
         text = clean(turn.question, 200)
-        if worth_listening(text) and text not in said:
+        if about_them(text) and text not in said:
             said.append(text)
     return said[:MAX_TOLD]
 
@@ -602,6 +620,68 @@ def _context_step(context: Context) -> dict:
     return {"type": "context", **context.included, "dropped": context.dropped}
 
 
+def _with_reads(result, typed, frame, day, food_logs, now) -> None:
+    """The precise reads asked beside another request, answered by code as a note: it stays when
+    the card's note replaces the reply ("repeat the step count and say whether it's saved")."""
+    if not typed.reads:
+        return
+    read = execute_request(
+        typed.model_copy(update={"kind": "data", "parts": typed.reads}),
+        frame,
+        day,
+        food_logs=food_logs,
+        zone=(now.tzinfo if now else None),
+    )
+    result.notes.append(read.summary)
+    result.evidence |= read.evidence
+
+
+WHY_LIMIT = (
+    "What this can't tell apart: these are changes seen over the same days, not a tested cause, "
+    "so your data alone can't say which of them, if any, explains it."
+)
+
+
+def coaching_fallback(habits: Sequence[Evidence]) -> str:
+    """One option the person's own days support, said by code, or why there is none."""
+    for record in habits:
+        for lever in record.stats.get("levers", []):
+            if lever.get("supported"):
+                return (
+                    f"One option your own days support, if you'd like to try it: "
+                    f"{lever['habit']}. On your days with it, your {label(record.metrics[0])} "
+                    "was better."
+                )
+    if habits:
+        names = ", ".join(label(r.metrics[0]) for r in habits)
+        return (
+            f"None of the everyday habits I tested on your own days went with better {names}, "
+            "so your data doesn't point to one to try yet."
+        )
+    return "Your data over those days isn't enough to point to one everyday habit to try yet."
+
+
+STATUS_WAITING = (
+    "Not yet. The entry is on a card waiting for your tap: nothing is written to your tracker "
+    "until you tap Log it."
+)
+STATUS_SAVED = "Yes: the entry was written to your tracker when you tapped Log it."
+STATUS_FAILED = "No: the entry couldn't be written to your tracker. You can try again on its card."
+STATUS_NONE = "Nothing from this chat has been written to your tracker, and no card is waiting."
+
+
+def status_reply(states: Sequence[str]) -> str:
+    """Whether an entry was saved, from the store: the latest entry of this chat decides."""
+    latest = states[-1] if states else None
+    if latest in ("draft", "executing"):
+        return STATUS_WAITING
+    if latest == "succeeded":
+        return STATUS_SAVED
+    if latest in ("failed", "unknown"):
+        return STATUS_FAILED
+    return STATUS_NONE
+
+
 def outside_data(typed, frame: pd.DataFrame, today: date) -> str | None:
     """An investigation of days their data never reaches is answered so by code: "what changed
     from Dec 1 to 14?" was answered with October (Codex's review, 2026-11-19)."""
@@ -643,6 +723,7 @@ def ask(
     guidance_mode: str = "picked",  # "none" and "all" exist to compare them (eval/advice_compare)
     after_draft: bool = False,  # the last answer prepared a logging draft
     request_bundle: tuple | None = None,  # the API may interpret before preparing action tools
+    action_states: Sequence[str] = (),  # this chat's recent entries' statuses, oldest first
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -678,16 +759,22 @@ def ask(
             fixed = "I can only see your own data, not another person's records."
         elif typed.clarification:
             fixed = typed.clarification
-        elif typed.kind == "memory" and typed.memory == "deny":
+        elif (
+            typed.kind == "memory"
+            and typed.memory == "deny"
+            and typed.memory_action in (None, "remember")
+        ):
             fixed = NOT_KEPT_ASKED  # "don't save this" wins over "remember", even beside it
         elif typed.kind == "memory" and typed.memory_action == "recall":
-            fixed = recalled(memory, chat, history)
+            fixed = recalled(memory, chat, history, typed.recall)
         elif typed.kind == "memory" and typed.memory_action is None:
             fixed = MEMORY_WHICH
         elif typed.kind == "investigate" and (
             gap := outside_data(typed, frame, _day(today or now))
         ):
             fixed = gap  # never another period's days in place of the ones named
+        elif typed.kind == "status":
+            fixed = status_reply(action_states)  # read from the store, never a write
         elif typed.kind == "confirmation":
             # Only a tap on the card logs anything: "Yes, go ahead and save that" was answered
             # "Saved." while the card stayed a draft (the audit of 2026-11-19).
@@ -739,26 +826,34 @@ def ask(
         )
     # "Remember that I prefer walking", "forget that I run on Mondays": the card the listener
     # raises is the answer, whatever the reader thought the rest of the message was about.
+    # "Don't save" stops a new fact, never a forget: "remove my fun-run goal" was read as both,
+    # and got "Okay, I won't keep that" while the goal stayed (Codex's audit of 84db5f5).
     remembering = (
         typed is not None
-        and typed.memory != "deny"
         and not fixed
         and (
-            (typed.kind == "memory" and typed.memory_action in ("remember", "forget"))
-            or (is_explicit(said) and "?" not in said)
+            (typed.kind == "memory" and typed.memory_action == "forget")
+            or (
+                typed.memory != "deny"
+                and (
+                    (typed.kind == "memory" and typed.memory_action == "remember")
+                    or (is_explicit(said) and "?" not in said)
+                )
+            )
         )
     )
     if remembering:
         context = build(history, stored_evidence or {}, attachment, memory=memory, now=now)
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="noted", summary=NOTED)
+        _with_reads(result, typed, frame, _day(today or now), food_logs, now)
         # The reader's call is paid for and traced here too (Codex's review, 2026-11-19).
         _with_reading(result, context, route, typed, request_state, reading_budget)
         return Answer(route, no_false_success(result, after_draft, logging_turn), context)
     if (
         typed is not None
         and (
-            typed.kind in ("data", "causality", "clarify", "guidance", "memory")
-            or (typed.kind == "investigate" and fixed)
+            typed.kind in ("data", "causality", "clarify", "guidance", "memory", "status")
+            or (typed.kind in ("investigate", "confirmation") and fixed)
         )
         and (
             urgent_free(said)
@@ -817,6 +912,8 @@ def ask(
                 food_logs=food_logs,
                 zone=(now.tzinfo if now else None),
             )
+        if typed.kind not in ("data", "causality"):
+            _with_reads(result, typed, frame, _day(today or now), food_logs, now)
         _with_reading(result, context, route, typed, request_state, reading_budget)
         return Answer(route, no_false_success(result, after_draft, logging_turn), context)
     # "Am I ok?" asks how their data looks, not for a diagnosis: answered, as an overall look.
@@ -1096,6 +1193,7 @@ def ask(
             broad = False
     if plan and not plan.coaching and (said_before := told_here(history)):
         block = "\n\n".join(part for part in (block, told_block(said_before)) if part)
+    tested_habits: list = []
     if plan:
         visible = sorted(_scope(route) or frame.columns)
         asked: tuple[str, ...] = ()
@@ -1103,6 +1201,7 @@ def ask(
             asked = tuple(dict.fromkeys(m for p in typed.parts for m in p.metrics))
             visible = [m for m in visible if m in asked] or visible
         found: list[tuple[list[Evidence], str]] = []
+        tested_habits = found  # read again after the answer: did coaching give an option?
         # The latest day is another day than the ones an investigation named.
         if plan.snapshot and not named and (lead_on_no_data or route.expert) != "nutrition":
             found.append(snapshot(frame, visible, asked_day(question, today, frame), question))
@@ -1334,6 +1433,20 @@ def ask(
         and not OFFERED.search(result.summary)
     ):
         result.notes.append(COACHING_OFFER)  # coaching ends with something to do
+    if investigating and not stopped_early:
+        # The answer must do what was asked: one option for coaching, the limits for a "why".
+        # A coaching answer gave only a recap, and an explanation was never tested (the v4 audit).
+        habits = [
+            e
+            for records, _ in (tested_habits if plan else [])
+            for e in records
+            if e.tool == "habit_options"
+        ]
+        if typed.focus == "coaching" and not any(c.kind == "suggestion" for c in result.claims):
+            result.notes.append(coaching_fallback(habits))
+        cited = {e.tool for e in result.cited_evidence.values()}
+        if typed.focus == "why" and "correlate" not in cited:
+            result.notes.append(WHY_LIMIT)
     if plan and plan.coaching and not stopped_early:
         result.budget.cost_usd += memory_cost.cost_usd
         result.trace.append(
@@ -1355,18 +1468,8 @@ def ask(
     # A lookup has already said where its answer comes from.
     if not stopped_early and not world and (note := source_note(result)):
         result.notes.append(note)
-    if typed is not None and typed.kind == "logging" and typed.parts and not stopped_early:
-        # The question asked beside the logging, answered by code: it stays when the card's note
-        # replaces the reply.
-        read = execute_request(
-            typed.model_copy(update={"kind": "data"}),
-            frame,
-            _day(today or now),
-            food_logs=food_logs,
-            zone=(now.tzinfo if now else None),
-        )
-        result.notes.append(read.summary)
-        result.evidence |= read.evidence
+    if typed is not None and not stopped_early:
+        _with_reads(result, typed, frame, _day(today or now), food_logs, now)
     result.budget.cost_usd += rewrite_cost
     result.budget.cost_usd += reading_budget.cost_usd
     result.budget.calls += reading_budget.calls
