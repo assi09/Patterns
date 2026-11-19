@@ -1,6 +1,6 @@
 # Project status
 
-The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-11-18.
+The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Agent reliability updated 2026-11-19.
 
 **Local agent changes, 2026-11-18:** structured request interpretation now separates metric,
 operation, threshold and dates from statistical computation, with persistent conversation scope,
@@ -49,7 +49,7 @@ as buffer. What is left, what still has to be tested and the order of work are i
 | Reminders and alarms | automatic sync every 3 hours, reminders set in the app or by asking the agent, delivery in the app and by email, smart alarms from the data with an expert's checked explanation | #100-#111 |
 | Smarter chat | a way of working per question type, seven new tools, coaching that stays non-medical, a premise check, goal progress, outside lookups (USDA, web) | #112-#129, #134-#139 |
 | Memory | a running summary per chat; long-term memory (episodes, facts, a profile, interests) from a listener after each answer, approved by one tap; memory screens | #115-#121 |
-| RAG | 1,083 public lifestyle passages, hybrid search (BM25 and embeddings), cited as evidence | #130-#133 |
+| RAG | 1,083 public lifestyle passages, cited as evidence. The evaluated default now ranks by embeddings, with word search available when embeddings are unavailable | #130-#133 |
 | Experts | after three comparisons, the **hybrid**: experts answer inside their own area, and "why" questions go to the general agent with the experts' notes | #144, #147, #149 |
 | Evaluation | real public data (PMData, LifeSnaps; 46 people), an independent oracle, a plain chatbot baseline, the PHIA benchmark, planted causes, decisions with rules set in advance | #141, #143, #147, #149, [evaluation.md](evaluation.md) |
 | Teams | a check across every area (`team_scan`), daily alerts when the team's aggregate changes, and the **team agent**: supervisor chat, team notes, proposals that wait for approval, all on the Team tab | #145, #146, #148, [teams.md](teams.md) |
@@ -67,10 +67,7 @@ as buffer. What is left, what still has to be tested and the order of work are i
 - Team alerts on made-up teams: a false alarm in 12% of 8-person teams a month; a 1.2 SD sleep drop
   found in 20 of 24 such teams, typically by day 8; 5-person teams rarely get one.
 
-**On hold or not built:** personal experiments (on hold since 2026-11-08 at Karim's request); the
-weekly team report written by the team agent; phone push notifications; a metrics page
-(AgentOps; each answer's trace and the person's thumbs are stored since #151); the Failure Matrix and threat model; email
-verification and password reset; the pilot.
+**Since this November 11 snapshot:** the weekly team briefing is scheduled, the pilot started November 17, and Settings → Operations and Prometheus/Grafana cover quality and service monitoring. Personal experiments remain on hold. See [pilot progress](progress-2026-11-17.md) and [monitoring](monitoring.md).
 
 ## Objective
 
@@ -92,12 +89,12 @@ priority**; the UI and data plumbing exist to serve them.
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split, and `compare_day`: one day against the middle half of the 28 days before); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline); our own **recovery score** (`app/analysis/day.py`) |
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic, request intent and a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers; questions about one day use `compare_day` with its own `day` claim kind; a consulted expert's verified claims are carried into the answer when the summary uses them; claims from the person's other conversations are memory items (kind `chat`). Reachable through `POST /chat` |
 | API | `/health`, `/data/status`, `/days/{date|latest}` (with the recovery score and its parts), `/days/{date}/workouts` and `/days/{date}/hourly` (read live from Google, kept 5 minutes), `/checkins/{day}`, `/metrics/{metric}`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: conversations (`GET`/`POST /conversations`, `PATCH` (rename, pin) and `DELETE /conversations/{id}`; editing or retrying a question with `replaces`), `GET /chat?conversation=`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps per person and in all, summed from a spending ledger that deleting a chat does not touch (#154)); **Google Health per person**: `POST /google/connect`, `GET /google/callback`, `POST /google/sync`, `POST /google/disconnect`, `GET /google/status` (tokens encrypted with `FA_TOKEN_KEY`, PKCE, first sync of the whole history newest first, later syncs reread the last 3 days) |
-| App | landing page; sign up / sign in (keychain, or localStorage on the web), waiting screen, Access requests for the owner; tabs **Today** (day switcher; Recovery, Sleep, Steps and, on wide screens, Resting heart rate in large figures against the usual range; morning check-in; sleep stages; steps by hour; the day's workouts with a page each; heart and body; what changed lately; a page per metric with 7/30/90 days and the usual band; two columns on wide screens), **Ask** (separate chats with a collapsible sidebar on the web, pin, rename, delete; copy, edit and retry on messages; attach a metric or finding; expert picker, quick/deep), **Reminders** (mock data) and **Settings** (account, appearance, Google Health, data coverage, logged entries); an evidence page per computation (question, answer, chart, figures, method); flat sections and rows in the "Track day" palette, light and dark; Expo SDK 58, Expo Go and web |
-| Engineering | protected `main`, PRs with both CI jobs required, about 1,080 backend test functions (more with parameters) and 143 mobile tests, 25 migrations |
+| App | landing page; sign up / sign in (keychain, or localStorage on the web), waiting screen, Access requests for the owner; tabs **Today** (day switcher; Recovery, Sleep, Steps and, on wide screens, Resting heart rate in large figures against the usual range; morning check-in; sleep stages; steps by hour; the day's workouts with a page each; heart and body; what changed lately; a page per metric with 7/30/90 days and the usual band; two columns on wide screens), **Ask** (separate chats with a collapsible sidebar on the web, pin, rename, delete; copy, edit and retry on messages; attach a metric or finding; expert picker, quick/deep), **Reminders** (now connected to the reminders API) and **Settings** (account, appearance, Google Health, data coverage, logged entries); an evidence page per computation (question, answer, chart, figures, method); flat sections and rows in the "Track day" palette, light and dark; Expo SDK 58, Expo Go and web |
+| Engineering | protected `main`, PRs with both CI jobs required, historical snapshot of about 1,080 backend test functions and 143 mobile tests; see the dated audit for the PR-specific test count |
 
 The table above dates from 2026-10-27; what was added since is in [Where we are](#where-we-are-2026-11-11).
 
-**Not built yet:** personal experiments (on hold); the metrics page; the
+**Not built yet:** personal experiments (on hold); the
 Failure Matrix and threat model; the daily run with the agent's note on Today (skipped at the
 user's request); phone push; email verification and reset; the journal with
 habit impact; fitness age; the weekly workout summary. Deployment (Railway and Vercel, see
@@ -136,7 +133,7 @@ Active Zone Minutes, and steps, distance or swim lengths where they apply), and 
 exercise the tracker already recorded then; see
 [agent-actions.md](agent-actions.md#what-the-tracker-recorded-is-added-to-a-workout).
 
-Still planned: food lookup and serving arithmetic, nutrition sync and
+Food lookup and gram-based serving arithmetic are built. Remaining work includes nutrition sync and
 provider deduplication, photo estimates (kept for the demo), and hydration. The optional
 [recorded routes/regions extra](product.md#recorded-routes-and-regions-optional-planned) needs GPS
 exercise data and separate location consent; daily step totals cannot reconstruct locations.
@@ -179,7 +176,7 @@ To let someone else sign in, add their Google account as a test user in the cons
 ## Decisions and findings
 
 - **Live API is the data source going forward**; Takeout stays as an offline import.
-- **Accounts are our own, and every sign-up waits for approval.** Email and password (scrypt
+- **Accounts are our own.** Invited pilot mailboxes are approved at sign-up. Other accounts wait for owner approval. Email and password (scrypt
   from the standard library, sessions as random tokens stored only as hashes, 5 failed log-ins
   lock an email for 15 minutes). The Google Health app is in Testing mode, so each approved person
   must also be added as a test user in the console by hand (Google has no API for it); approval
@@ -234,8 +231,7 @@ To let someone else sign in, add their Google account as a test user in the cons
 - **Jev is called with our own small `httpx2` client** rather than TypeSafe's SDK: a 2 s timeout
   with no retries so a slow call falls back to the keyword rule, error bodies (which may repeat the
   question) never kept, cost in our own accounting, tests on a fake transport; no new dependency.
-- **Nutrition waits for Sprint 2**: the expert exists but answers "no data yet" until the sync
-  maps nutrition columns (only the API has them; Takeout's are "N/A").
+- **Nutrition** can draft food entries and look up nutrients; PR #195 also reads confirmed food logs. Coverage of external daily nutrition history is a separate ingestion question. See [logging capabilities](agent-actions.md).
 - **Each person sees only their own data.** Live Google Health days from the database; only the
   owner falls back to the Takeout export, and only with no live data at all. New people get their
   whole history on the first sync (the API has no lookback limit; 90 or 14 days per request).
@@ -250,9 +246,7 @@ To let someone else sign in, add their Google account as a test user in the cons
 
 ## Next
 
-See [plan.md](plan.md#where-we-are-and-what-is-left-2026-11-11). In short: fix how "why" questions
-are investigated and retest them; evaluate the team agent; blind grading; the pilot report; a
-metrics page; the Failure Matrix, threat model and red team; then the report, poster and demo.
+See the [agent priorities](plan.md#agent-reliability-priorities-as-of-november-19) and [open issues](#open-issues). The remaining submission work includes blind grading, pilot usage results and the report and demo. The pilot-report tool, Operations page and team evaluation are available.
 
 Earlier: **the smarter chat was built** (2026-10-28 to 11-05, #112-#122): coaching that stays
 non-medical, seven new tools, a way of working per question type, a running summary per chat,
@@ -346,6 +340,26 @@ OpenAI ([costs.md](costs.md) has every run).
 
 ## Open issues
 
+### Agent reliability on PR #195 · November 19
+
+The last independently audited revision is `84db5f5`. All 34 metrics passed a dated lookup,
+a one-day shift and a new-range maximum (102/102). Three more complex requests silently used
+different days. A later diagnostic commit, `2be6a76`, records where interpretations fail.
+Its reader replay has no new end-to-end score.
+
+| Open issue | What a person experienced | Work still needed |
+|---|---|---|
+| Bind dates and operators to each part of the question | A four-day mean became the earliest day alone. In an offline probe, swapping the two metrics’ date ranges passed validation because every date still appeared somewhere. | Validate each metric with its own operator, window and prior result. Check both endpoints and which days the user included. |
+| Complete mixed requests and corrections | Asking for the step count and whether a walk was saved returned only the card instruction. A standalone workout could prompt a question about an earlier measurement. | Keep an ordered operation per clause. Read status from the store, answer the data clause independently and verify the actual corrected card. |
+| Carry memory intent through the API | A polite request to remember an exercise preference reached the memory path but produced no approval card. Requests to remove an existing fact could get a no-save acknowledgement. | Pass action, target and consent through to the store. Test same-chat recall, approved recall, replacement, cancel and confirmed deletion separately. |
+| Complete explanations and coaching | One request for a manageable habit was correctly classified as coaching but received only a statistical recap. | Require the final answer to deliver a supported option or explain the evidence limit. An explanation needs an appropriate test of the proposed relationship. |
+| Recover from a failed guidance answer | The push-up and Superman requests retrieved passages. The generated wording failed a safety check and the app reported it could not confirm the detail. | Retain the passage and requested detail, attempt a bounded safe rewrite, and check its support before showing it. |
+
+The release decision depends on fresh conversations, checked against the source rows, cited evidence,
+final reply and resulting state. The older numbered issues below retain their original IDs.
+See the [three-day record](experiments.md#agent-reliability-from-november-17-to-19) and
+[predeclared release criteria](acceptance-structured-requests.md).
+
 1. ~~Text can mention a metric no evidence covers.~~ Fixed in PR #30: the verifier rejects a claim
    or summary that names a metric its evidence does not cover (distinctive terms only, such as
    "HRV" or "time asleep", not "sleep").
@@ -364,9 +378,7 @@ OpenAI ([costs.md](costs.md) has every run).
    I sleep?" ended with the note instead of silently skipping exercise. Not yet seen: the repair
    actually adding the missing part (its wording was fixed after the first try, because it asked
    for a claim the ownership rule rejects; untested since).
-5. **Routing thresholds are hand-set**, and Jev's probabilities vary a little between calls for the
-   same question; the router evaluation needs a labeled question set (not the 16 used while
-   designing).
+5. **Router evaluation completed.** The labelled held-out evaluation and baseline comparison are recorded in [evaluation.md](evaluation.md#the-router-and-rag-on-held-out-sets-2026-11-16). The thresholds remain hand-set.
 6. **Evaluation scenarios must be detectable.** A planted 8 ms HRV drop came out as 3 ms in the
    data (not significant); each scenario's planted effect should be checked with the deterministic
    tools before it is used to grade the agent.
@@ -412,8 +424,7 @@ OpenAI ([costs.md](costs.md) has every run).
     unreachable from a phone. Deployment needs a public HTTPS address and a "Web application" OAuth
     client listing its `/google/callback`. Sign-ins in progress and running syncs are kept in
     memory, per server process.
-18. **On the web, `?google=` stays in the address** after Google sends the browser back, so a
-    reload shows the "connected" notice again.
+18. **Fixed in the Settings screen.** After reading the Google callback result, it clears the parameter with `router.setParams({ google: undefined })`.
 19. ~~No screen yet for facts the agent proposes.~~ Fixed in #121: memory cards in the chat and the
     inbox, and a memory page in Settings. Still open: Jev's routing and guard costs (about $0.00007
     a question) are not added to the stored cost of an answer.

@@ -3,11 +3,31 @@
 Run on 2026-11-10. Costs are in [costs.md](costs.md), the running history in
 [experiments.md](experiments.md). Every script is in `eval/`, every result in `eval/results/`.
 
-**Version note, 2026-11-18:** a new structured-request path is implemented locally. Its targeted
-synthetic checks and failures are recorded separately in [typed-requests.md](typed-requests.md).
-The benchmark results below remain results for their recorded earlier implementations. The new
-path has not received a fresh final evaluation on real-history conversations; successful regression
-turns must not be substituted for that measurement.
+**Version note, November 19.** The benchmark results below belong to their recorded revisions. The [PR #195 audit](experiments.md#agent-reliability-from-november-17-to-19) independently checked new synthetic conversations and a small PHIA regression sample on `84db5f5`. The later [reader replay](reader-replay-2026-11-19.md) measures interpretation on previously exposed questions.
+
+## Why PHIA and conversation audits are both needed
+
+The November 17 held-out PHIA **exact-answer** result (97.0% on 337 questions) measures an earlier
+implementation on wearable-data questions with independently defined answers. The November 19
+B1 sample (24/24) checks for a regression on PR #195. PHIA also has open questions, reported
+separately below. Neither of those two numeric scores measures a conversation with a pending
+workout card or an approved memory fact.
+
+For example, a benchmark question can ask for average steps over a specified period. Its answer
+key catches the wrong statistic or an off-by-one date. In the app, a user can then ask for the
+median *over those same days*, switch to a second metric, and ask whether the walk they just
+drafted has been saved. Grading that sequence requires the selected prior result, the source
+rows for its dates, the final reply and the actual draft status. In the November 19 audit a
+mixed follow-up correctly explained the pending card but omitted the requested count. A tool
+trace with the right number could not give that reply full credit.
+
+This is why the remaining tuning targets interpretation, routing and answer verification. Keep
+PHIA as an independent check that precise data access survives each redesign. Use exposed
+conversations for regression tests, then freeze fresh conversations with new wording, dates,
+evidence and card states before measuring generalization. Report full, partial and failed turns
+per area. A reader-only replay diagnoses interpretation and cannot establish a new answer score.
+See the [dated results](experiments.md#agent-reliability-from-november-17-to-19) and
+[remaining issues](status.md#open-issues).
 
 ## The systems compared
 

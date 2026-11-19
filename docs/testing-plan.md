@@ -9,6 +9,8 @@ The PHIA benchmark is one part of this plan. It defends the data answers end to 
 have a job of their own (the verifier, RAG, logging, the router, "why", memory, safety) are also
 tested on their own, and the pilot then tests everything on real users.
 
+The schedule below records the November 16 plan. Results for the real-person batches and PHIA-user batches A1–A3 are in the [test results](test-results.md). PR #195 has its own [release criteria](acceptance-structured-requests.md).
+
 ## What was done on 2026-11-16
 
 - **Tuning round merged** (#163, #164): the agent's failures were in the harness, not the model.

@@ -1,7 +1,7 @@
 # The last four weeks
 
 The working plan from 2026-10-27 to the end of the project. **Everything planned is built and
-evidenced by Sunday 2026-11-23**; the two weeks after (Nov 24 – Dec 7) are kept free for surprises,
+evidenced by Monday 2026-11-23**; the two weeks after (Nov 24 – Dec 7) are kept free for surprises,
 rehearsal and only small fixes. The poster pitch is done; this plan covers the final submission:
 live demo and presentation (with a final poster if the instructor asks for one), the repository with
 setup and reproducibility, the evaluation and its results, traces and operational metrics, failure
@@ -10,6 +10,17 @@ applicable bonus practice is in it.
 
 Each item is its own small PR, per [AGENTS.md](../AGENTS.md). Open issues are the numbered list in
 [status.md](status.md#open-issues); they are referred to here as "issue n".
+
+## Agent reliability priorities as of November 19
+
+Reader diagnostics and the capped replay are complete on `2be6a76`. The next implementation
+step is to bind each requested operation to its own data, dates or action. Preserve the working
+34-metric and PHIA paths while connecting memory, investigation and guidance to that representation.
+For each change, test a case where the same words require a different outcome because the prior
+turn, period, source passage or pending card differs. Once the revision is fixed, freeze fresh
+questions and expected results before running them. Report each area independently against the
+existing [acceptance criteria](acceptance-structured-requests.md). The [open issues](status.md#open-issues)
+describe the remaining behavior. The November 18 entry below records the earlier milestone.
 
 ## Agent reliability update (2026-11-18)
 
@@ -22,12 +33,22 @@ final regression as held-out accuracy. Actual Google writes still require separa
 
 ## Where we are and what is left (2026-11-11)
 
-**Presentations are on 2026-12-05.** The finish target stays Sunday 2026-11-23; Nov 24 to Dec 4 is
+**Presentations are on 2026-12-05.** The finish target stays Monday 2026-11-23; Nov 24 to Dec 4 is
 buffer and rehearsal. What was built since this plan was written is in
 [status.md](status.md#where-we-are-2026-11-11). The rest of this page is the original plan of
 2026-10-27, kept for the record; this section replaces its week-by-week part.
 
-### Each workstream now
+### Changes since the November 11 plan
+
+The pilot began November 17. The weekly team briefing and its Monday cron are implemented;
+the team screens were checked against the backend. Account deletion is available through the
+owner CLI. The router held-out evaluation, team evaluation and why retest have results.
+Settings → Operations, the pilot report and service monitoring are implemented. The already
+submitted semester-opening poster is complete. The report, demo rehearsal, pilot usage evidence
+and the fresh agent release decision remain relevant. See [pilot progress](progress-2026-11-17.md),
+[evaluation](evaluation.md) and [monitoring](monitoring.md).
+
+### Workstream snapshot recorded November 11
 
 | Workstream | State | Left |
 |---|---|---|

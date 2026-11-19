@@ -5,7 +5,7 @@ per test; the method behind each is in [evaluation-plan.md](evaluation-plan.md),
 [testing-plan.md](testing-plan.md), the full write-ups in [evaluation.md](evaluation.md) and
 [experiments.md](experiments.md), and the cost of each run in [costs.md](costs.md). Results files are
 in `eval/results/` (totals only; anything holding a real person's values stays in the git-ignored
-`data/eval/results`). Updated 2026-11-17. **Which results are final accuracy and which are
+`data/eval/results`). Updated 2026-11-19. **Which results are final accuracy and which are
 development, and what is left: [progress-2026-11-17.md](progress-2026-11-17.md).**
 
 ## At a glance
@@ -143,7 +143,11 @@ All responses were directly inspected as well as checked against the synthetic f
 evidence. Total reported API cost: **$0.254653954**. No real health values, Google writes, or
 paid judge were used. The earlier 369-turn real-history audit has not been replayed on this path.
 
-## To be filled in
+## Later PR #195 checks and outstanding results
 
-- Logging: each field's accuracy, and the requests that must not become a draft.
-- PHIA mode A; the judge against Karim's and Jad's blind grades; the pilot.
+The [November 19 audit](experiments.md#agent-reliability-from-november-17-to-19) covers 211 fresh turns at `84db5f5`,
+including 18 logging turns graded on both the reply and actual card state. The small B1
+regression gate passed 24/24. A subsequent [reader replay](reader-replay-2026-11-19.md) inspected
+58 exposed turns for diagnosis. Fresh end-to-end scores after the next implementation changes,
+the human blind-grading comparison and pilot usage results remain outstanding. The mode A
+benchmark and the 250-request logging development run are recorded in the table above.
