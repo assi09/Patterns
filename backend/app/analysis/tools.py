@@ -97,7 +97,10 @@ def coverage(frame: pd.DataFrame, window: Window) -> Evidence:
     summary: dict = {
         "days": window.days,
         "fraction_present": {m: _round(count / window.days, 3) for m, count in present.items()},
+        "days_present": present,
     }
+    if 1 < len(frame.columns) <= 4:  # a few metrics asked about together: the days with all
+        summary["days_all_present"] = int(rows.notna().all(axis=1).sum())
     if "wear_minutes" in frame.columns:
         low = rows.index[rows["wear_minutes"] < LOW_WEAR_MINUTES]
         summary["low_wear_days"] = [day.date().isoformat() for day in low]
@@ -235,6 +238,11 @@ def correlate(
         "p_value": None,
         "p_value_adjusted": None,
     }
+    # Why there may be no coefficient: no shared days, or one of them never changes. "Too few
+    # paired days" was said of 140 paired days with a constant driver (the audit of 2026-11-19).
+    same_day = pd.concat([frame[driver], frame[target]], axis=1).loc[rows].dropna()
+    summary["paired_days"] = len(same_day)
+    summary["both_vary"] = bool(len(same_day) and same_day.nunique().min() >= 2)
     n = 0
     if by_lag:
         best = max(by_lag, key=lambda lag: abs(by_lag[lag][0]))

@@ -293,6 +293,29 @@ ASSOCIATION_REPLY = (
 )
 
 
+NOTHING_WAITING = (
+    "There's nothing waiting to log right now. Tell me what you ate or did and I'll prepare a "
+    "card; it's only added when you tap Log it."
+)
+# The agent never logs or sends anything itself: a tap on the card does. So a reply saying it
+# did is never true ("Saved.", "I've logged it"), whatever led to it. Their own logging ("you
+# logged 3 entries") is not this.
+FALSE_SUCCESS = re.compile(
+    r"^\s*(?:saved|logged|done|added|sent)\b[.!]|"
+    r"\bI(?:'ve| have)? (?:now )?(?:saved|logged|added|sent|recorded|stored|submitted)\b|"
+    r"\b(?:it'?s|it has been|that'?s|has been) (?:now )?(?:saved|logged|added|sent)\b",
+    re.IGNORECASE,
+)
+
+
+def no_false_success(result: AgentResult, after_draft: bool) -> AgentResult:
+    """The reply with any claim of having logged something replaced by what is true."""
+    if result.summary and FALSE_SUCCESS.search(result.summary):
+        result.trace.append({"type": "false_success", "summary": result.summary[:200]})
+        result.summary = CONFIRM_ON_CARD if after_draft else NOTHING_WAITING
+    return result
+
+
 def plain_reply(said: str, frame: pd.DataFrame, today: date, after_draft: bool) -> str | None:
     """What is said without a model: another person's data, a correction to the draft just made
     (changed on its card), or days the data does not reach."""
@@ -567,6 +590,10 @@ def ask(
             fixed = "I can only see your own data, not another person's records."
         elif typed.clarification:
             fixed = typed.clarification
+        elif typed.kind == "confirmation":
+            # Only a tap on the card logs anything: "Yes, go ahead and save that" was answered
+            # "Saved." while the card stayed a draft (the audit of 2026-11-19).
+            fixed = CONFIRM_ON_CARD if after_draft else NOTHING_WAITING
         question = typed.question(question)
     if (
         typed is None
@@ -654,7 +681,7 @@ def ask(
                 "model_calls": reading_budget.calls,
             },
         ]
-        return Answer(route, result, context)
+        return Answer(route, no_false_success(result, after_draft), context)
     # "Am I ok?" asks how their data looks, not for a diagnosis: answered, as an overall look.
     if route.action == "refuse" and OVERALL.match(said) and not MEDICAL.search(said):
         overall = replace(route.classification, question_types={"lookup": 1.0})
@@ -1188,4 +1215,4 @@ def ask(
         result.trace[1]["continuing_log_expert"] = continuing_log
     if reminding:
         result.trace[1]["reminding"] = True
-    return Answer(route, result, context)
+    return Answer(route, no_false_success(result, after_draft), context)

@@ -14,7 +14,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.agent.context import Turn
 from app.agent.llm import LLM, Budget, LLMError
+from app.agent.periods import period_range
 from app.agent.present import METRICS, label
+from app.agent.strategy import ASKED_ABOUT
 from app.analysis.evidence import Window
 from app.analysis.tools import ADDITIVE
 
@@ -176,9 +178,38 @@ LAST_DAYS = re.compile(r"\b(?:last|past) (?:\d+|[a-z]+) days?\b", re.IGNORECASE)
 ENDING_YESTERDAY = re.compile(r"\bcomplete days?\b|\bending yesterday\b|\bup to yesterday\b", re.I)
 
 
-def anchored_by_code(reading: "Reading", question: str) -> "Reading":
-    """Code's own reading of the anchor: a period the question counts from today is anchored
-    to today, whatever the model said, unless the question points at the earlier request."""
+# Calendar periods code names itself, as periods.py does for the rest of the app: "this week"
+# and "last week" both became Nov 6-12 on Thursday Nov 19 (the audit of 2026-11-19).
+CALENDAR = re.compile(r"\b(this week|last week|this month|last month)\b", re.IGNORECASE)
+# Days an entry is put on, said from today: "put it on tomorrow".
+LOG_DAY_FROM_TODAY = re.compile(r"\b(?:today|tomorrow|yesterday|tonight|last night)\b", re.I)
+
+
+def anchored_by_code(reading: "Reading", question: str, today: date | None = None) -> "Reading":
+    """Code's own reading of the question, which wins where it disagrees with the model's:
+
+    - a period the question counts from today is anchored to today, unless it points at the
+      earlier request; "the last N days" ends today;
+    - "this week" or "last month" is the calendar period periods.py names;
+    - an entry's day is never "relative to the previous request": a correction that names no
+      day keeps the card's day ("make its duration 37 minutes" was asked "which earlier
+      date?"), and "tomorrow" counts from today;
+    - a question naming exactly one metric is about that metric ("stress score" was read as the
+      check-in rating, 2026-11-19)."""
+    reading = _log_day_by_code(reading, question)
+    reading = _metric_by_code(reading, question)
+    reading = _coverage_by_code(reading, question)
+    found = CALENDAR.findall(question) if today is not None else []
+    if len({f.lower() for f in found}) == 1 and (span := period_range(found[0], today)):
+        explicit = Period(kind="explicit", start=span[0], end=span[1])
+        return reading.model_copy(
+            update={
+                "parts": [
+                    p.model_copy(update={"periods": [explicit]}) if len(p.periods) == 1 else p
+                    for p in reading.parts
+                ]
+            }
+        )
     if not FROM_TODAY.search(question) or REFERS_TO_EARLIER.search(question):
         return reading
     ends_today = bool(LAST_DAYS.search(question)) and not ENDING_YESTERDAY.search(question)
@@ -194,6 +225,47 @@ def anchored_by_code(reading: "Reading", question: str) -> "Reading":
         for part in reading.parts
     ]
     return reading.model_copy(update={"parts": parts})
+
+
+# "How many HRV days were recorded?", "how many nights are missing?": a count of days with data,
+# not of days past a value. It was asked for a threshold on every profile (2026-11-19).
+ABOUT_RECORDING = re.compile(
+    r"\b(?:recorded|tracked|measured|logged|missing|no (?:data|reading)|have data|with data|"
+    r"available|wore|worn|captured)\b",
+    re.IGNORECASE,
+)
+
+
+def _coverage_by_code(reading: "Reading", question: str) -> "Reading":
+    if not ABOUT_RECORDING.search(question):
+        return reading
+    parts = [
+        p.model_copy(update={"operation": "coverage"})
+        if p.operation == "count" and p.comparison is None and p.threshold is None
+        else p
+        for p in reading.parts
+    ]
+    return reading.model_copy(update={"parts": parts})
+
+
+def _log_day_by_code(reading: "Reading", question: str) -> "Reading":
+    day = reading.log_day
+    if day is None or day.anchor != "previous":
+        return reading
+    if LOG_DAY_FROM_TODAY.search(question):
+        return reading.model_copy(update={"log_day": day.model_copy(update={"anchor": "today"})})
+    return reading.model_copy(update={"log_day": None})  # keeps the card's own day
+
+
+def _metric_by_code(reading: "Reading", question: str) -> "Reading":
+    named = [m for m, pattern in ASKED_ABOUT.items() if pattern.search(question)]
+    if len(named) != 1 or len(reading.parts) != 1:
+        return reading
+    part = reading.parts[0]
+    if len(part.metrics) == 1 and part.metrics[0] != named[0] and part.metrics[0] in METRICS:
+        part = part.model_copy(update={"metrics": named})
+        return reading.model_copy(update={"parts": [part]})
+    return reading
 
 
 def previous_state(history: Sequence[Turn]) -> dict:
@@ -490,7 +562,7 @@ def interpret(
                     "Could you specify the measurement and dates, or the topic you mean?"
                 )
             reading = anchored_by_code(
-                Reading.model_validate(completion.tool_calls[0].arguments), question
+                Reading.model_validate(completion.tool_calls[0].arguments), question, today
             )
             try:
                 if reading.kind == "confirmation" and not pending_draft:

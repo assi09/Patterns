@@ -140,7 +140,21 @@ def execute(
             result.evidence[record.id] = record
             stats = record.stats
             names = " and ".join(label(m) for m in part.metrics)
-            if not record.sufficient or stats["rho"] is None:
+            if stats["rho"] is None and stats.get("paired_days") == 0:
+                statements.append(
+                    f"{_first_up(_span(window))}, {names} were never recorded on the same "
+                    "days, so whether they go together can't be told."
+                )
+            elif (
+                stats["rho"] is None
+                and stats.get("paired_days", 0) >= 3
+                and not stats.get("both_vary", True)
+            ):
+                statements.append(
+                    f"{_first_up(_span(window))}, one of {names} didn't change at all, so "
+                    "whether they go together can't be told from these days."
+                )
+            elif not record.sufficient or stats["rho"] is None:
                 statements.append(
                     f"{_first_up(_span(window))}, there aren't enough days with both {names} "
                     "to say whether they go together."
@@ -162,11 +176,22 @@ def execute(
                     part.metrics[-1],
                     "no_change",
                 )
-            statements.append(
-                "This shows what goes together in your data; it can't establish or rule out "
-                "a cause."
-            )
+            if record.sufficient and stats["rho"] is not None:
+                statements.append(
+                    "Data like this shows what goes together; it can't establish or rule out "
+                    "a cause."
+                )
             continue
+        if op == "coverage" and len(part.metrics) > 1 and all(m in frame for m in part.metrics):
+            together = coverage(frame[list(part.metrics)], window)
+            names = " and ".join(label(m) for m in part.metrics)
+            say(
+                f"{_first_up(_span(window))}, {_days(together.stats['days_all_present'])} had "
+                f"both {names} recorded.",
+                together,
+                part.metrics[0],
+                "data_quality",
+            )
         for metric in part.metrics:
             name, when = label(metric), _span(window)
             if metric not in frame:
@@ -199,10 +224,12 @@ def execute(
                         text += f"; {_days(s['days_equal'])} exactly at {level}"
                     text += "."
                 elif op == "coverage":
+                    # Counted, not a share alone: "how many HRV days were recorded?"
                     record = coverage(frame[[metric]], window)
+                    have = record.stats["days_present"][metric]
                     text = (
-                        f"{_first_up(name)} was recorded on "
-                        f"{record.stats['fraction_present'][metric]:.0%} of days {when}."
+                        f"{_first_up(name)} was recorded on {have} of {_days(window.days)} "
+                        f"{when}; {_days(window.days - have)} have no reading."
                     )
                     say(text, record, metric, "data_quality")
                     continue

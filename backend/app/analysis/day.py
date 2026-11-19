@@ -253,18 +253,25 @@ def day_summary(frame: pd.DataFrame, day: date) -> list[DayMetric]:
     ]
 
 
+def _scored(frame: pd.DataFrame, metric: str) -> pd.DataFrame:
+    """The frame with its scores. A score already in it keeps its definition: rescoring the
+    columns one expert sees (without strain or sleep) gave a usual range from another formula
+    than the day's own score (the audit of 2026-11-19)."""
+    return with_scores(frame) if metric in SCORES and metric not in frame.columns else frame
+
+
 def series(
     frame: pd.DataFrame, metric: str, end: date, days: int
 ) -> list[tuple[date, float | None]]:
     """The metric's daily values for the `days` days ending on `end`; gaps stay as None."""
-    cleaned = without_low_wear(with_scores(frame) if metric in SCORES else frame)
+    cleaned = without_low_wear(_scored(frame, metric))
     index = pd.date_range(pd.Timestamp(end) - pd.Timedelta(days=days - 1), pd.Timestamp(end))
     values = cleaned[metric].reindex(index)
     return [(stamp.date(), _value(value)) for stamp, value in values.items()]
 
 
 def usual_before(frame: pd.DataFrame, metric: str, day: date) -> Usual | None:
-    cleaned = without_low_wear(with_scores(frame) if metric in SCORES else frame)
+    cleaned = without_low_wear(_scored(frame, metric))
     stamp = pd.Timestamp(day)
     return usual(
         cleaned[metric].loc[stamp - timedelta(days=USUAL_DAYS) : stamp - timedelta(days=1)]

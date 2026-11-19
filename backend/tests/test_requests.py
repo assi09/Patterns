@@ -392,11 +392,16 @@ def test_causality_follows_observed_association_state(mode):
         parts=[ResolvedPart(metrics=["steps", "hrv_ms"], operation="correlate", history=True)],
     )
     result = execute(request, frame, TODAY)
-    assert "can't establish or rule out a cause" in result.summary
     assert ("tended to move together" in result.summary) == (mode == "positive")
     assert ("opposite directions" in result.summary) == (mode == "negative")
-    if mode in ("missing", "constant"):
-        assert "aren't enough days with both" in result.summary
+    # The cause line follows a link that was tested, never a result that showed none (the
+    # audit of 2026-11-19); the reason no link could be tested is said as it is.
+    tested = mode in ("positive", "negative")
+    assert ("can't establish or rule out a cause" in result.summary) == tested
+    if mode == "constant":
+        assert "didn't change at all" in result.summary
+    if mode == "missing":
+        assert "never recorded on the same days" in result.summary
 
 
 @pytest.mark.parametrize(
