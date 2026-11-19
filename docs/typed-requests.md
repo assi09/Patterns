@@ -169,3 +169,40 @@ All of this is checked offline with scripted readers and made-up data: Codex's 1
 counterexamples and 7 fix-review counterexamples are in the suite and pass. **No paid run has
 tested it.** Whether the real reader produces these readings, and how often a check sends back
 a correct one, is for the fresh frozen audit the acceptance criteria describe.
+
+## Clauses (after the v4 audit and the reader replay, 2026-11-19)
+
+The replay ([reader-replay-2026-11-19.md](reader-replay-2026-11-19.md)) showed most misses came
+from the reading's form, not from misunderstanding. The reader now returns the message as an
+ordered list of **clauses** (`backend/app/agent/clauses.py`), each with only its own fields and
+the words it came from: data, investigate, guidance, log, correct, status, confirm, memory, other.
+
+- **A log has no data part**, so a workout draft can no longer become "which earlier
+  measurement?". A data clause with neither metrics nor an earlier result is sent back.
+- **Several requests in one message are each answered.** Precise reads beside a log, status,
+  confirmation, memory request, guidance or investigation are answered by code in a note that
+  survives the card's note. **Status** is read-only and answered from the chat's actual entries
+  (waiting, saved, failed, none).
+- **A period kind per meaning**: written dates, a calendar period, an earlier result's days, a shift
+  of them, N days ending today or on the earlier result's last day (with an offset), all history.
+  "The 5 complete days before today" and "that date and the three before it" have exact forms.
+  Code converts each into the internal period and does all the arithmetic, as before.
+- **Checks use each clause's own words**: dates and ranges written in a clause must be that clause's
+  first and last days (swapped dates between two metrics are sent back); "the last N days" is
+  checked for length and end; comparisons read negation ("no higher than" is at most). A reading
+  without clause words is checked against the whole question as before.
+- **Memory**: the action (remember, recall with its scope, forget) is separate from "store nothing",
+  which never stops a forget. An explicit remember reaches the listener however it is worded, and
+  a forget goes straight to the forget card unless it also states a new fact. What was said in
+  this chat stays recallable in this chat even when it was not to be kept.
+- **Investigations deliver what was asked**: coaching with no option gets one supported by their
+  own days, or a plain "none is supported"; a "why" with no tested relationship says what the data
+  cannot tell apart.
+- **Guidance**: a reply that fails its checks while the right passage was found gets one rewrite,
+  told what failed; "the prescribed number of repetitions" is exercise language, not medical; a
+  follow-up with a known topic is looked up under it instead of "which exercise or food?".
+
+Each reading's fate (stage, outcome, check codes, shape, no words or values) is kept in the
+private trace. Older scripted fixtures with a flat reading are still accepted; the real reader
+only gets the clause schema. Offline tests use correct clause readings written from the audit's
+frozen expected meaning, plus the replay's bad readings where they show a check working.
