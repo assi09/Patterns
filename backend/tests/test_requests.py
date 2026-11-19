@@ -601,7 +601,10 @@ def test_food_readback_cannot_attach_calories_burned_to_energy_consumed():
                 parts=[{"metrics": ["food_logs", "calories"], "operation": "food"}],
             ),
             ScriptedLLM.call(
-                "read_request", kind="data", parts=[{"metrics": ["food_logs"], "operation": "food"}]
+                "read_request",
+                kind="data",
+                # The question names breakfast, so a reading without that filter is sent back too.
+                parts=[{"metrics": ["food_logs"], "operation": "food", "meal_type": "BREAKFAST"}],
             ),
         ]
     )
@@ -664,21 +667,3 @@ def test_a_period_counted_from_today_is_anchored_to_today_by_code(question, anch
     )
     fixed = anchored_by_code(reading, question)
     assert fixed.parts[0].periods[0].anchor == anchor
-
-
-@pytest.mark.parametrize(
-    "question, offset",
-    [
-        ("What was my average steps last 7 days?", 0),
-        ("Total REM sleep over the past 14 days", 0),
-        ("Average steps over the 7 complete days ending yesterday", -1),
-    ],
-)
-def test_last_n_days_ends_today_as_everywhere_else_in_the_app(question, offset):
-    from app.agent.requests import Part, Period, Reading, anchored_by_code
-
-    period = Period(kind="rolling", anchor="today", offset_days=-1, days=7)
-    reading = Reading(
-        kind="data", parts=[Part(metrics=["steps"], operation="mean", periods=[period])]
-    )
-    assert anchored_by_code(reading, question).parts[0].periods[0].offset_days == offset

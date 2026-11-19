@@ -84,3 +84,121 @@ def test_a_failed_grounded_reply_cannot_fall_back_to_the_first_exercise_variant(
     result = answer_world(llm, "Where do my feet go in the bridge?", outside, topic="glute bridge")
     assert any(s.get("type") == "reply" and s.get("problems") for s in result.trace)
     assert result.stop_reason == "lookup_failed" and "couldn't confirm" in result.summary
+
+
+# ---- the same variant by meaning, and the passages already shown (the audit of 2026-11-19) ----
+
+
+def exercise(title, kind="exercise"):
+    return SimpleNamespace(passage=SimpleNamespace(title=title, kind=kind, id=title))
+
+
+def picker(*items):
+    from app.agent.world import PICK_VARIANT
+
+    return ScriptedLLM([ScriptedLLM.call(PICK_VARIANT, items=list(items))])
+
+
+def test_an_unweighted_squat_is_the_bodyweight_squat_by_meaning():
+    from app.agent.llm import Budget
+
+    weighted, bodyweight, barbell = map(
+        exercise, ["Weighted Squat", "Bodyweight Squat", "Olympic Squat"]
+    )
+    guideline = exercise("Muscle-strengthening activity", kind="guideline")
+    llm = picker(2)
+    kept = for_topic([weighted, bodyweight, barbell, guideline], "unweighted squat", llm, Budget())
+    assert kept == [bodyweight, guideline]
+    assert "Bodyweight Squat" in llm.requests[0]["messages"][1]["content"]
+
+
+def test_no_matching_variant_leaves_out_every_other_exercise():
+    from app.agent.llm import Budget
+
+    weighted, guideline = exercise("Weighted Squat"), exercise("Strength", kind="guideline")
+    assert for_topic([weighted, guideline], "unweighted squat", picker(), Budget()) == [guideline]
+
+
+def test_a_failed_pick_changes_nothing():
+    from app.agent.llm import Budget
+
+    weighted = exercise("Weighted Squat")
+    llm = ScriptedLLM([says("not a tool call")])
+    assert for_topic([weighted], "unweighted squat", llm, Budget()) == [weighted]
+
+
+def test_a_word_for_word_title_needs_no_model():
+    bodyweight, weighted = exercise("Bodyweight Squat"), exercise("Weighted Squat")
+    llm = ScriptedLLM([])
+    from app.agent.llm import Budget
+
+    assert for_topic([weighted, bodyweight], "bodyweight squat", llm, Budget()) == [bodyweight]
+    assert not llm.requests
+
+
+BRIDGE = "exercises-2c4ee5687a74"  # "Butt Lift (Bridge)", whose text covers breathing
+
+
+def test_a_follow_up_reads_the_passages_already_shown_first():
+    from app.agent.knowledge import KNOWLEDGE_LOOKUP
+
+    llm = ScriptedLLM(
+        [
+            ScriptedLLM.call(KNOWLEDGE_LOOKUP, query="bridge breathing"),
+            says("Breathe out as you lift your hips."),
+        ],
+        embeddings_fail=True,
+    )
+    outside = SimpleNamespace(web=lambda *args: {"error": "disabled"})
+    result = answer_world(llm, "And how do I breathe during it?", outside, active=[BRIDGE])
+    [used] = [s["passage_ids"] for s in result.trace if s.get("type") == "guidance_passages"]
+    assert used[0] == BRIDGE
+
+
+def guidance_turn(topic, passages):
+    state = {"guidance": [topic], "guidance_passages": passages}
+    return Turn(f"How do I do a {topic}?", "Lift your hips.", request_state=state)
+
+
+def asked_with(history, topic, reference):
+    from app.agent.knowledge import KNOWLEDGE_LOOKUP
+
+    llm = ScriptedLLM(
+        [ScriptedLLM.call(KNOWLEDGE_LOOKUP, query="breathing"), says("Breathe out as you lift.")],
+        request_turns=[
+            ScriptedLLM.call(
+                "read_request",
+                kind="guidance",
+                topics=[] if reference else [topic],
+                guidance_reference=reference,
+                guidance_question="How do I breathe during it?",
+            )
+        ]
+        * 2,
+        embeddings_fail=True,
+    )
+    outside = SimpleNamespace(web=lambda *args: {"error": "disabled"}, food=None)
+    answer = ask(
+        llm,
+        Router("world"),
+        planted(),
+        "How do I breathe?",
+        today=END,
+        history=history,
+        outside=outside,
+    )
+    ids = [s["passage_ids"] for s in answer.result.trace if s.get("type") == "guidance_passages"]
+    request = next(s for s in answer.result.trace if s.get("type") == "request")
+    return (ids[0] if ids else []), request["state"]
+
+
+def test_the_same_movement_keeps_its_passages_and_saves_them_again():
+    history = [guidance_turn("bridge", [BRIDGE])]
+    used, state = asked_with(history, "bridge", reference=True)
+    assert used[0] == BRIDGE and state["guidance_passages"][0] == BRIDGE
+
+
+def test_another_movement_does_not_get_the_earlier_passages():
+    history = [guidance_turn("bridge", [BRIDGE])]
+    used, _ = asked_with(history, "plank", reference=False)
+    assert BRIDGE not in used

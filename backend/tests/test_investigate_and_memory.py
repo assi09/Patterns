@@ -152,3 +152,127 @@ def test_a_polite_or_forget_request_reaches_its_action_not_a_question():
         llm = reading_llm(kind="memory", memory_action=action)
         reply = ask(llm, Router("chat"), planted(), said, today=END)
         assert reply.result.summary != MEMORY_WHICH and reply.result.stop_reason == "noted"
+
+
+# ---- an investigation keeps the scope it names or points at ----
+
+
+def earlier(*parts):
+    from app.agent.requests import ResolvedPart
+    from app.analysis.evidence import Window
+
+    return {
+        "data": [
+            ResolvedPart(
+                metrics=[metric], operation="mean", windows=[Window(start=start, end=end)]
+            ).model_dump(mode="json")
+            for metric, start, end in parts
+        ]
+    }
+
+
+def investigate(*parts, state=None, today=END):
+    from app.agent.requests import Part, resolve
+
+    reading = Reading(kind="investigate", focus="why", parts=[Part(**p) for p in parts])
+    return resolve(reading, state or {}, today)
+
+
+STEPS_OCT = ("steps", date(2026, 10, 1), date(2026, 10, 14))
+SLEEP_SEP = ("sleep_minutes", date(2026, 9, 1), date(2026, 9, 30))
+
+
+def test_why_did_that_happen_keeps_the_earlier_metric_and_days():
+    got = investigate({"periods": [{"kind": "inherit"}]}, state=earlier(STEPS_OCT))
+    assert got.parts[0].metrics == ["steps"]
+    assert (got.parts[0].windows[0].start, got.parts[0].windows[0].end) == STEPS_OCT[1:]
+
+
+def test_a_chosen_earlier_part_is_the_one_investigated():
+    got = investigate(
+        {"reference": 1, "periods": [{"kind": "inherit"}]}, state=earlier(STEPS_OCT, SLEEP_SEP)
+    )
+    assert got.parts[0].metrics == ["sleep_minutes"]
+
+
+def test_two_earlier_parts_and_no_choice_is_asked_about():
+    from app.agent.requests import Ambiguous
+
+    with pytest.raises(Ambiguous):
+        investigate({"periods": [{"kind": "inherit"}]}, state=earlier(STEPS_OCT, SLEEP_SEP))
+
+
+def test_every_metric_over_the_earlier_days_is_not_narrowed_to_one():
+    got = investigate(
+        {"periods": [{"kind": "inherit"}], "every_metric": True}, state=earlier(STEPS_OCT)
+    )
+    assert got.parts[0].metrics == [] and got.parts[0].windows[0].start == STEPS_OCT[1]
+
+
+def test_an_unknown_metric_beside_a_known_one_is_asked_about_not_dropped():
+    from app.agent.requests import Ambiguous
+
+    with pytest.raises(Ambiguous):
+        investigate({"metrics": ["steps", "made_up_metric"], "periods": []})
+
+
+def test_two_named_periods_are_both_kept():
+    sep = {"kind": "explicit", "start": "2026-09-01", "end": "2026-09-30"}
+    aug = {"kind": "explicit", "start": "2026-08-01", "end": "2026-08-31"}
+    got = investigate({"metrics": ["steps"], "periods": [sep, aug]})
+    assert [w.start.month for w in got.parts[0].windows] == [9, 8]
+
+
+# ---- the named days are the days answered ----
+
+
+def test_days_the_data_never_reaches_are_answered_so_by_code(steps_fell):
+    december = {"kind": "explicit", "start": "2026-12-01", "end": "2026-12-14"}
+    llm = reading_llm(
+        kind="investigate", focus="what_changed", parts=[{"metrics": [], "periods": [december]}]
+    )
+    reply = ask(llm, Router("lookup"), steps_fell, "What changed Dec 1 to 14?", today=END)
+    assert reply.result.summary.startswith("Your data has no days from")
+    assert len(llm.requests) == 1  # only the reader: no agent to wander off to October
+
+
+def test_a_short_named_period_is_described_on_exactly_its_days(steps_fell):
+    from app.agent.strategy import overview_evidence
+    from app.analysis.evidence import Window
+
+    days = Window(start=date(2026, 9, 1), end=date(2026, 9, 3))
+    records, text = overview_evidence(steps_fell, "What changed?", END, days)
+    assert records and all(e.tool == "describe" and e.windows == (days,) for e in records)
+    assert "Too few days" in text
+
+
+def test_a_second_named_period_is_the_baseline(steps_fell):
+    from app.agent.strategy import overview_evidence
+    from app.analysis.evidence import Window
+
+    sep = Window(start=date(2026, 9, 1), end=date(2026, 9, 30))
+    jul = Window(start=date(2026, 7, 1), end=date(2026, 7, 31))
+    records, _ = overview_evidence(
+        steps_fell, "How did September compare with July?", END, sep, jul
+    )
+    assert records and all(e.windows == (sep, jul) for e in records)
+
+
+def test_coaching_on_a_named_month_uses_that_month_and_no_latest_day(steps_fell):
+    from test_broad_questions import submit
+
+    september = {"kind": "explicit", "start": "2026-09-01", "end": "2026-09-30"}
+    llm = reading_llm(
+        submit(),
+        kind="investigate",
+        focus="coaching",
+        parts=[{"metrics": ["sleep_minutes"], "periods": [september]}],
+    )
+    question = "What could I try for my short sleep in September?"
+    reply = ask(llm, Router("lookup"), steps_fell, question, today=END)
+    personal = [e for e in reply.result.evidence.values() if e.tool != "public_guidance"]
+    assert personal and all(
+        w.start >= date(2026, 9, 1) and w.end <= date(2026, 9, 30)
+        for e in personal
+        for w in e.windows
+    )

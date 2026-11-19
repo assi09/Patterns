@@ -1,86 +1,167 @@
-"""A follow-up keeps or shifts the active query's days as the words say, read by code (the audit of
-2026-11-19: the state held the right days and the model's reading replaced them). Made-up data."""
+"""Code checks the reader against what the question's words fix, and never rewrites it.
+
+The audit of 2026-11-19 found follow-ups whose state held the right days while the reader's
+reading replaced them. Code then rewrote readings from phrases, and broke correct ones ("24 hours
+earlier than that day" lost its shift to "that day", Codex's live review). Now a contradiction
+goes back to the reader once, stating it, and if the reader keeps it the person is asked. A
+correct reading passes on the first call, however the reader expressed it. Made-up dates only.
+"""
 
 from datetime import date
 
 import pytest
 
-from app.agent.requests import Part, Period, Reading, anchored_by_code, resolve, shift_said
+from app.agent.checks import catalog_named, conflicts, shift_said
+from app.agent.context import Turn
+from app.agent.llm import ScriptedLLM
+from app.agent.requests import Part, Period, Reading, interpret, resolve
 
 TODAY = date(2026, 11, 19)
 
-AWAITING = pytest.mark.xfail(
-    reason="phrase overrides removed; awaiting validate-and-retry (Codex review, 2026-11-19)",
-    strict=True,
-)
 
-
-def state(start, end, operation="value", metric="resting_hr"):
+def held(start, end, operation="value", metric="resting_hr", **extra):
     window = {"start": start, "end": end}
-    return {"data": [{"metrics": [metric], "operation": operation, "windows": [window]}]}
+    part = {"metrics": [metric], "operation": operation, "windows": [window], **extra}
+    return [Turn("earlier question", "earlier answer", request_state={"data": [part]})]
 
 
-def read(question, period, operation="value", metrics=("resting_hr",), held=None):
-    reading = Reading(
-        kind="data",
-        parts=[Part(metrics=list(metrics), operation=operation, periods=[period])],
+def part(period, operation="value", metrics=("resting_hr",), **extra):
+    return {"metrics": list(metrics), "operation": operation, "periods": [period], **extra}
+
+
+def ask_reader(question, *parts_each_call, history=(), kind="data"):
+    """The reader returns each reading in turn; the result, its windows and the calls made."""
+    llm = ScriptedLLM(
+        request_turns=[
+            ScriptedLLM.call("read_request", kind=kind, parts=parts) for parts in parts_each_call
+        ]
     )
-    request = resolve(anchored_by_code(reading, question, TODAY), held or {}, TODAY)
-    window = request.parts[0].windows[0]
-    return window.start, window.end
+    request, _, budget = interpret(llm, question, list(history), TODAY)
+    windows = [(w.start, w.end) for p in request.parts for w in p.windows]
+    return request, windows, budget.calls
 
 
-WRONG = Period(kind="explicit", start=date(2026, 10, 19), end=date(2026, 10, 19))
+EXPLICIT = lambda day: {"kind": "explicit", "start": day, "end": day}  # noqa: E731
+INHERIT = {"kind": "inherit"}
 
 
-@AWAITING
+# ---- a wrong reading is sent back once, then put right ----
+
+
 def test_keep_that_same_date_keeps_the_latest_date_not_an_older_one():
     """Oct 19 and Oct 20 have the same value here: only the date shows the difference."""
-    held = state("2026-10-20", "2026-10-20")
     question = "Keep that same date, and say the date explicitly even if the value was unchanged."
-    assert read(question, WRONG, held=held) == (date(2026, 10, 20), date(2026, 10, 20))
+    history = held("2026-10-20", "2026-10-20")
+    wrong, right = [part(EXPLICIT("2026-10-19"))], [part(INHERIT)]
+    _, windows, calls = ask_reader(question, wrong, right, history=history)
+    assert windows == [(date(2026, 10, 20), date(2026, 10, 20))] and calls == 2
 
 
-@AWAITING
+def test_a_reader_that_keeps_the_wrong_date_gets_a_question_naming_the_right_one():
+    question = "Keep that same date, and say the date explicitly."
+    wrong = [part(EXPLICIT("2026-10-19"))]
+    history = held("2026-10-20", "2026-10-20")
+    request, _, calls = ask_reader(question, wrong, wrong, history=history)
+    assert request.kind == "clarify" and calls == 2
+    assert request.clarification == "Do you mean the same dates as before, Oct 20?"
+
+
 def test_two_days_forward_across_a_leap_day():
-    held = state("2024-02-28", "2024-02-28", metric="sleep_minutes")
-    wrong = Period(kind="explicit", start=date(2024, 3, 2), end=date(2024, 3, 2))
-    got = read(
-        "Move forward two days from the date you just answered.",
-        wrong,
-        metrics=("sleep_minutes",),
-        held=held,
-    )
-    # A written-out date is read as written; this question has none, so code shifts the state.
-    assert got == (date(2024, 3, 1), date(2024, 3, 1))
+    question = "Move forward two days from the date you just answered."
+    history = held("2024-02-28", "2024-02-28", metric="sleep_minutes")
+    wrong = [part(EXPLICIT("2024-03-02"), metrics=("sleep_minutes",))]
+    shifted = [
+        part(
+            {"kind": "relative", "anchor": "previous", "offset_days": 2}, metrics=("sleep_minutes",)
+        )
+    ]
+    _, windows, _ = ask_reader(question, wrong, shifted, history=history)
+    assert windows == [(date(2024, 3, 1), date(2024, 3, 1))]
+    request, _, _ = ask_reader(question, wrong, wrong, history=history)
+    assert request.clarification == "Do you mean Mar 1, 2024?"
 
 
-@AWAITING
 def test_for_that_interval_keeps_the_whole_interval():
-    held = state("2026-12-31", "2027-01-03", operation="mean", metric="steps")
-    wrong = Period(kind="explicit", start=date(2027, 1, 3), end=date(2027, 1, 3))
-    got = read(
-        "For that interval, what was the smallest daily count?",
-        wrong,
-        operation="min",
-        metrics=("steps",),
-        held=held,
-    )
-    assert got == (date(2026, 12, 31), date(2027, 1, 3))
+    question = "For that interval, what was the smallest daily count?"
+    history = held("2026-12-31", "2027-01-03", operation="mean", metric="steps")
+    wrong = [part(EXPLICIT("2027-01-03"), operation="min", metrics=("steps",))]
+    right = [part(INHERIT, operation="min", metrics=("steps",))]
+    _, windows, _ = ask_reader(question, wrong, right, history=history)
+    assert windows == [(date(2026, 12, 31), date(2027, 1, 3))]
 
 
-@AWAITING
 def test_moving_a_stretch_shifts_both_ends():
-    held = state("2026-11-09", "2026-11-16", operation="median", metric="recovery_score")
-    unchanged = Period(kind="inherit")
-    got = read(
-        "Move that entire stretch two days earlier and give its middle value again.",
-        unchanged,
-        operation="median",
-        metrics=("recovery_score",),
-        held=held,
-    )
-    assert got == (date(2026, 11, 7), date(2026, 11, 14))
+    question = "Move that entire stretch two days earlier and give its middle value again."
+    history = held("2026-11-09", "2026-11-16", operation="median", metric="recovery_score")
+    wrong = [part(INHERIT, operation="median", metrics=("recovery_score",))]
+    moved = {"kind": "relative", "anchor": "previous", "offset_days": -2}
+    right = [part(moved, operation="median", metrics=("recovery_score",))]
+    _, windows, _ = ask_reader(question, wrong, right, history=history)
+    assert windows == [(date(2026, 11, 7), date(2026, 11, 14))]
+
+
+# ---- a correct reading passes on the first call, however it is expressed ----
+
+
+def test_a_correct_shift_written_as_an_explicit_date_is_not_sent_back():
+    question = "Move forward two days from the date you just answered."
+    history = held("2024-02-28", "2024-02-28", metric="sleep_minutes")
+    right = [part(EXPLICIT("2024-03-01"), metrics=("sleep_minutes",))]
+    _, windows, calls = ask_reader(question, right, history=history)
+    assert windows == [(date(2024, 3, 1), date(2024, 3, 1))] and calls == 1
+
+
+def test_24_hours_earlier_than_that_day_keeps_its_shift():
+    question = "Same measure, 24 hours earlier than that day"
+    history = held("2026-10-20", "2026-10-20", metric="steps")
+    right = [
+        part({"kind": "relative", "anchor": "previous", "offset_days": -1}, metrics=("steps",))
+    ]
+    _, windows, calls = ask_reader(question, right, history=history)
+    assert windows == [(date(2026, 10, 19), date(2026, 10, 19))] and calls == 1
+
+
+def test_one_part_s_shift_leaves_another_part_s_yesterday_alone():
+    question = "Shift steps two days earlier, and give my resting heart rate yesterday."
+    history = held("2026-10-20", "2026-10-20", metric="steps")
+    right = [
+        part(
+            {"kind": "relative", "anchor": "previous", "offset_days": -2},
+            metrics=("steps",),
+            reference=0,
+        ),
+        part({"kind": "relative", "anchor": "today", "offset_days": -1}),
+    ]
+    _, windows, calls = ask_reader(question, right, history=history)
+    assert windows == [(date(2026, 10, 18),) * 2, (date(2026, 11, 18),) * 2] and calls == 1
+
+
+def test_two_days_before_today_is_not_a_shift_of_the_earlier_days():
+    question = "What were my steps two days before today?"
+    history = held("2026-10-20", "2026-10-20", metric="steps")
+    right = [part({"kind": "relative", "anchor": "today", "offset_days": -2}, metrics=("steps",))]
+    _, windows, calls = ask_reader(question, right, history=history)
+    assert windows == [(date(2026, 11, 17),) * 2] and calls == 1
+
+
+def test_a_written_date_is_read_as_written_and_checked():
+    question = "Same measure on 2026-10-05, that same metric."
+    history = held("2026-10-20", "2026-10-20")
+    right = [part(EXPLICIT("2026-10-05"))]
+    _, windows, calls = ask_reader(question, right, history=history)
+    assert windows == [(date(2026, 10, 5),) * 2] and calls == 1
+    _, windows, calls = ask_reader(question, [part(INHERIT)], right, history=history)
+    assert windows == [(date(2026, 10, 5),) * 2] and calls == 2
+
+
+def test_another_part_s_written_date_is_kept_beside_this_week():
+    question = "Average steps this week, and sleep duration on November 2, 2026?"
+    right = [
+        part({"kind": "calendar", "unit": "week"}, operation="mean", metrics=("steps",)),
+        part(EXPLICIT("2026-11-02"), metrics=("sleep_minutes",)),
+    ]
+    _, windows, calls = ask_reader(question, right)
+    assert windows == [(date(2026, 11, 16), TODAY), (date(2026, 11, 2),) * 2] and calls == 1
 
 
 @pytest.mark.parametrize(
@@ -91,28 +172,80 @@ def test_moving_a_stretch_shifts_both_ends():
         ("go back 3 days", -3),
         ("and one day later?", 1),
         ("What about last week?", None),
+        ("two days before today", None),
+        ("two days earlier and three days later", None),  # more than one: not code's to pick
     ],
 )
 def test_the_shift_is_read_from_the_words(question, days):
     assert shift_said(question) == days
 
 
-def test_a_written_date_is_never_overridden():
-    held = state("2026-10-20", "2026-10-20")
-    period = Period(kind="explicit", start=date(2026, 10, 5), end=date(2026, 10, 5))
-    got = read("Same measure on 2026-10-05, that same metric.", period, held=held)
-    assert got == (date(2026, 10, 5), date(2026, 10, 5))
+# ---- periods counted from today ----
 
 
-def test_a_meal_filter_stays_only_when_a_meal_is_named():
-    food = Part(
-        metrics=["food_logs"], operation="food", periods=[Period(kind="history")], meal_type="SNACK"
+def test_this_week_and_last_week_are_the_calendar_weeks():
+    """Both became Nov 6-12 on Thursday Nov 19 (the audit of 2026-11-19)."""
+    seven = {"kind": "rolling", "anchor": "today", "offset_days": -7, "days": 7}
+    last = {"kind": "calendar", "unit": "week", "offset_units": -1}
+    question = "My total steps last week?"
+    _, windows, calls = ask_reader(
+        question, [part(seven, "sum", ("steps",))], [part(last, "sum", ("steps",))]
     )
-    reading = Reading(kind="data", parts=[food])
-    total = anchored_by_code(reading, "What is my protein total for that same day now?")
-    assert total.parts[0].meal_type is None
-    snack = anchored_by_code(reading, "And just the snack?")
-    assert snack.parts[0].meal_type == "SNACK"
+    assert windows == [(date(2026, 11, 9), date(2026, 11, 15))] and calls == 2
+    _, windows, calls = ask_reader(question, [part(last, "sum", ("steps",))])
+    assert calls == 1
+
+
+def test_the_week_before_last_week_is_not_checked_against_last_week():
+    two_back = {"kind": "calendar", "unit": "week", "offset_units": -2}
+    question = "Average steps for the week before last week?"
+    _, windows, calls = ask_reader(question, [part(two_back, "mean", ("steps",))])
+    assert windows == [(date(2026, 11, 2), date(2026, 11, 8))] and calls == 1
+
+
+def test_yesterday_after_an_earlier_request_is_sent_back_when_anchored_to_it():
+    question = "What were my steps yesterday?"
+    history = held("2026-10-20", "2026-10-20", metric="steps")
+    wrong = [
+        part({"kind": "relative", "anchor": "previous", "offset_days": -1}, "value", ("steps",))
+    ]
+    right = [part({"kind": "relative", "anchor": "today", "offset_days": -1}, "value", ("steps",))]
+    _, windows, calls = ask_reader(question, wrong, right, history=history)
+    assert windows == [(date(2026, 11, 18),) * 2] and calls == 2
+
+
+@pytest.mark.parametrize(
+    "question, offset, calls",
+    [
+        ("What was my average steps last 7 days?", -1, 2),
+        ("What was my average steps last 7 days?", 0, 1),
+        ("Average steps over the 7 complete days ending yesterday", -1, 1),
+    ],
+)
+def test_last_n_days_ends_today_as_everywhere_else_in_the_app(question, offset, calls):
+    period = {"kind": "rolling", "anchor": "today", "offset_days": offset, "days": 7}
+    fixed = {"kind": "rolling", "anchor": "today", "offset_days": 0, "days": 7}
+    readings = [[part(period, "mean", ("steps",))], [part(fixed, "mean", ("steps",))]]
+    assert ask_reader(question, *readings[: 2 if calls == 2 else 1])[2] == calls
+
+
+# ---- meals, metric names and stated comparisons ----
+
+
+def food(meal=None, period=INHERIT):
+    return part(period, "food", ("food_logs",), meal_type=meal)
+
+
+def test_a_meal_filter_is_kept_only_when_a_meal_is_named():
+    history = held("2026-10-20", "2026-10-20", "food", "food_logs", meal_type="SNACK")
+    question = "What is my total protein for that same day across all meals?"
+    _, _, calls = ask_reader(question, [food("SNACK")], [food()], history=history)
+    request, _, calls_right = ask_reader(question, [food()], history=history)
+    assert calls == 2 and calls_right == 1 and request.parts[0].meal_type is None
+    request, _, calls = ask_reader("And just the snack?", [food("SNACK")], history=history)
+    assert calls == 1 and request.parts[0].meal_type == "SNACK"
+    request, _, calls = ask_reader("Same meal the day before?", [food("SNACK")], history=history)
+    assert calls == 1
 
 
 @pytest.mark.parametrize(
@@ -124,9 +257,34 @@ def test_a_meal_filter_stays_only_when_a_meal_is_named():
         ("And my average stress score?", "stress_score"),
     ],
 )
-def test_a_metric_called_by_its_catalog_name_is_that_metric(question, metric):
+def test_a_metric_called_by_its_catalog_name_is_checked(question, metric):
     reading = Reading(
         kind="data",
-        parts=[Part(metrics=["unknown_zone"], operation="value", periods=[Period(kind="history")])],
+        parts=[
+            Part(metrics=["checkin_rating"], operation="mean", periods=[Period(kind="history")])
+        ],
     )
-    assert anchored_by_code(reading, question).parts[0].metrics == [metric]
+    found = conflicts(reading, resolve(reading, {}, TODAY), question, {}, TODAY)
+    assert len(found) == 1 and metric in found[0].retry
+
+
+def test_a_negated_or_quoted_metric_name_is_not_asked_for():
+    assert catalog_named("Not my stress score, my morning check-in rating") == ["checkin_rating"]
+    assert catalog_named('What does "stress score" mean for my sleep score?') == ["sleep_score"]
+
+
+def test_above_is_checked_as_strictly_above():
+    question = "How many days did I walk above 8,000 steps last month?"
+    month = {"kind": "calendar", "unit": "month", "offset_units": -1}
+    wrong = [part(month, "count", ("steps",), comparison=">=", threshold=8000)]
+    right = [part(month, "count", ("steps",), comparison=">", threshold=8000)]
+    request, _, calls = ask_reader(question, wrong, right)
+    assert request.parts[0].comparison == ">" and calls == 2
+    assert ask_reader(question, right)[2] == 1
+
+
+def test_over_a_number_of_days_is_not_a_threshold():
+    question = "How many days were above 9000 steps over 10 days?"
+    period = {"kind": "rolling", "anchor": "today", "days": 10}
+    right = [part(period, "count", ("steps",), comparison=">", threshold=9000)]
+    assert ask_reader(question, right)[2] == 1

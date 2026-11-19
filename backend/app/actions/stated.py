@@ -241,3 +241,22 @@ def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime
             "not move it to an earlier day."
         )
     return None
+
+
+PAUSED = re.compile(
+    r"\b(?:paus(?:e|ed|es|ing)|breaks?|rested|stopp?ed for|interrupted|on and off)\b", re.I
+)
+
+
+def with_stated_interval(log: WorkoutLog, said: Sequence[str]) -> WorkoutLog:
+    """A workout ends its duration after it starts, worked out by code: a 34-minute run was carded
+    from 17:20 to 18:54, an hour nobody mentioned, and a check of the active time alone passed it
+    (the audit of 2026-11-19). Only both clock times said, or a pause said, leave the model's end,
+    which `mismatch` then checks against their words."""
+    text = "\n".join(said)
+    if len(clock_times(text)) >= 2 or PAUSED.search(text):
+        return log
+    end = log.start_time + timedelta(seconds=log.active_seconds)
+    if end == log.end_time:
+        return log
+    return WorkoutLog.model_validate(log.model_dump() | {"end_time": end})

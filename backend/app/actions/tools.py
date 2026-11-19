@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.actions import exercises, store
 from app.actions.measure import Measurer, with_measurement
 from app.actions.schemas import FoodLog, WorkoutLog
-from app.actions.stated import lacks_a_duration, latest_past, mismatch
+from app.actions.stated import lacks_a_duration, latest_past, mismatch, with_stated_interval
 from app.agent.agent import ExtraTool
 from app.api.errors import ApiError
 
@@ -127,6 +127,8 @@ def proposal_tools(
                 if said and local_now:
                     given = latest_past(given, checked_said, local_now)
                 log = model.model_validate(given)
+                if isinstance(log, WorkoutLog) and checked_said:
+                    log = with_stated_interval(log, checked_said)
                 if isinstance(log, WorkoutLog) and required_duration_seconds is not None:
                     seconds = (log.end_time - log.start_time).total_seconds()
                     if (

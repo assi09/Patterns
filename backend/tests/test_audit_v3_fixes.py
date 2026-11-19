@@ -76,17 +76,7 @@ def one_part(*periods, metrics=("steps",), operation="sum"):
     )
 
 
-@pytest.mark.parametrize(
-    "question, start, end",
-    [
-        ("My total steps this week?", date(2026, 11, 16), date(2026, 11, 19)),
-        ("My total steps last week?", date(2026, 11, 9), date(2026, 11, 15)),
-    ],
-)
-def test_this_week_and_last_week_are_the_calendar_weeks(question, start, end):
-    wrong = Period(kind="rolling", anchor="today", offset_days=-7, days=7)
-    fixed = anchored_by_code(one_part(wrong), question, THURSDAY).parts[0].periods[0]
-    assert (fixed.kind, fixed.start, fixed.end) == ("explicit", start, end)
+# "this week" and "last week" are checked, not rewritten: test_follow_up_scope.py.
 
 
 def test_a_correction_naming_no_day_keeps_the_card_s_day():
@@ -104,12 +94,6 @@ def test_tomorrow_on_a_correction_counts_from_today():
     )
     fixed = anchored_by_code(reading, "Actually put it on tomorrow instead.")
     assert fixed.log_day.anchor == "today" and fixed.log_day.offset_days == 1
-
-
-def test_a_question_naming_one_metric_is_about_that_metric():
-    reading = one_part(Period(kind="history"), metrics=("checkin_rating",), operation="mean")
-    fixed = anchored_by_code(reading, "What was my average stress score?")
-    assert fixed.parts[0].metrics == ["stress_score"]
 
 
 # ---- counted days with data ----
@@ -191,3 +175,31 @@ def test_metrics_never_on_the_same_days_are_said_so():
 def test_a_count_of_recorded_days_is_a_coverage_count(question, operation):
     reading = one_part(Period(kind="history"), metrics=("hrv_ms",), operation="count")
     assert anchored_by_code(reading, question).parts[0].operation == operation
+
+
+# ---- a message that logs something and asks about the data gets both ----
+
+
+def test_the_question_beside_a_logging_request_is_answered_by_code():
+    """The mixed probe prepared the walk and answered only that steps were usual."""
+    from test_broad_questions import submit
+
+    frame = planted()
+    day = frame.index[-1].date().isoformat()
+    steps_that_day = {"kind": "explicit", "start": day, "end": day}
+    llm = ScriptedLLM(
+        [submit()],
+        request_turns=[
+            ScriptedLLM.call(
+                "read_request",
+                kind="logging",
+                parts=[{"metrics": ["steps"], "operation": "value", "periods": [steps_that_day]}],
+            )
+        ]
+        * 2,
+    )
+    said = f"Log a 28 minute walk, and how many steps did I take on {day}?"
+    answer = ask(llm, Router("lookup"), frame, said, today=END)
+    count = f"{frame['steps'].iloc[-1]:,.0f}"
+    assert any(count in note for note in answer.result.notes)
+    assert any(e.tool != "public_guidance" for e in answer.result.evidence.values())

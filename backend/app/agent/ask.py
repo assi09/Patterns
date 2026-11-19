@@ -96,8 +96,9 @@ from app.agent.personal import (
     top_up,
     without_filler,
 )
+from app.agent.requested import _when
 from app.agent.requested import execute as execute_request
-from app.agent.requests import interpret
+from app.agent.requests import interpret, previous_state
 from app.agent.router import (
     OFF_TOPIC,
     FallbackRouter,
@@ -141,7 +142,7 @@ from app.agent.strategy_types import (
 )
 from app.agent.verifier import MEDICAL, STATISTIC_WORDS, Claim
 from app.agent.world import answer_world
-from app.analysis.evidence import Evidence
+from app.analysis.evidence import Evidence, Window
 from app.outside import Outside
 from app.reminders.tools import REMINDER_PROMPT
 
@@ -601,6 +602,20 @@ def _context_step(context: Context) -> dict:
     return {"type": "context", **context.included, "dropped": context.dropped}
 
 
+def outside_data(typed, frame: pd.DataFrame, today: date) -> str | None:
+    """An investigation of days their data never reaches is answered so by code: "what changed
+    from Dec 1 to 14?" was answered with October (Codex's review, 2026-11-19)."""
+    windows = [w for p in typed.parts for w in p.windows]
+    if not windows or frame.empty:
+        return None
+    first, last = frame.index.min().date(), frame.index.max().date()
+    if any(w.start <= last and w.end >= first for w in windows):
+        return None
+    asked = " and ".join(_when(w, today) for w in windows)
+    have = _when(Window(start=first, end=last), today)
+    return f"Your data has no days {asked}, so I can't say what happened then. It runs {have}."
+
+
 def ask(
     llm: LLM,
     router: Router,
@@ -669,6 +684,10 @@ def ask(
             fixed = recalled(memory, chat, history)
         elif typed.kind == "memory" and typed.memory_action is None:
             fixed = MEMORY_WHICH
+        elif typed.kind == "investigate" and (
+            gap := outside_data(typed, frame, _day(today or now))
+        ):
+            fixed = gap  # never another period's days in place of the ones named
         elif typed.kind == "confirmation":
             # Only a tap on the card logs anything: "Yes, go ahead and save that" was answered
             # "Saved." while the card stayed a draft (the audit of 2026-11-19).
@@ -737,7 +756,10 @@ def ask(
         return Answer(route, no_false_success(result, after_draft, logging_turn), context)
     if (
         typed is not None
-        and typed.kind in ("data", "causality", "clarify", "guidance", "memory")
+        and (
+            typed.kind in ("data", "causality", "clarify", "guidance", "memory")
+            or (typed.kind == "investigate" and fixed)
+        )
         and (
             urgent_free(said)
             and not MEDICAL.search(said)
@@ -764,15 +786,29 @@ def ask(
         if fixed:
             result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="limits", summary=fixed)
         elif typed.kind == "guidance":
+            # The passages the last answer used, when this one is about the same movement.
+            before = previous_state(history)
+            same_topic = typed.topics and before.get("guidance") == typed.topics
             result = answer_world(
                 llm,
                 question,
                 outside,
                 guard=guard,
                 topic=typed.topics[0] if len(typed.topics) == 1 else None,
+                active=before.get("guidance_passages", []) if same_topic else (),
             )
             known = {link["url"] for link in result.sources}
             result.sources += [s for s in cited_sources(result) if s["url"] not in known]
+            used = next(
+                (
+                    step["passage_ids"]
+                    for step in result.trace
+                    if step.get("type") == "guidance_passages" and step["passage_ids"]
+                ),
+                None,
+            )
+            if used and result.stop_reason == "looked_up":
+                request_state = {**request_state, "guidance_passages": used}
         else:
             result = execute_request(
                 typed,
@@ -1042,9 +1078,12 @@ def ask(
             )
         )
     )
+    # The days an investigation named, and a second period it compares them with.
+    named = [w for p in typed.parts for w in p.windows][:2] if investigating else []
     if broad:
-        named = next((w for p in typed.parts for w in p.windows), None) if investigating else None
-        records, text = overview_evidence(frame, question, _day(today or now), named)
+        records, text = overview_evidence(frame, question, _day(today or now), *named)
+        if not records and named:
+            block = "\n\n".join(part for part in (block, text) if part)  # what is missing, said
         if records:
             for record in records:
                 evidence[record.id] = record
@@ -1059,15 +1098,30 @@ def ask(
         block = "\n\n".join(part for part in (block, told_block(said_before)) if part)
     if plan:
         visible = sorted(_scope(route) or frame.columns)
+        asked: tuple[str, ...] = ()
+        if investigating:
+            asked = tuple(dict.fromkeys(m for p in typed.parts for m in p.metrics))
+            visible = [m for m in visible if m in asked] or visible
         found: list[tuple[list[Evidence], str]] = []
-        if plan.snapshot and (lead_on_no_data or route.expert) != "nutrition":
+        # The latest day is another day than the ones an investigation named.
+        if plan.snapshot and not named and (lead_on_no_data or route.expert) != "nutrition":
             found.append(snapshot(frame, visible, asked_day(question, today, frame), question))
         if plan.coaching:
             lead = lead_on_no_data or route.expert
             eating = lead == "nutrition"
             skip_levers = fit.levers | (NOT_ABOUT_EATING_LEVERS if eating else frozenset())
             skip_options = fit.options | (NOT_ABOUT_EATING_OPTIONS if eating else frozenset())
-            found.append(coaching_evidence(frame, lead, visible, skip_levers, skip_options))
+            found.append(
+                coaching_evidence(
+                    frame,
+                    lead,
+                    visible,
+                    skip_levers,
+                    skip_options,
+                    named[0] if named else None,
+                    asked,
+                )
+            )
             if food := food_log_summary(food_logs, _day(today or now), _zone(today)):
                 found.append(([food], _food_lines(food)))
             if lead == "nutrition":
@@ -1301,6 +1355,18 @@ def ask(
     # A lookup has already said where its answer comes from.
     if not stopped_early and not world and (note := source_note(result)):
         result.notes.append(note)
+    if typed is not None and typed.kind == "logging" and typed.parts and not stopped_early:
+        # The question asked beside the logging, answered by code: it stays when the card's note
+        # replaces the reply.
+        read = execute_request(
+            typed.model_copy(update={"kind": "data"}),
+            frame,
+            _day(today or now),
+            food_logs=food_logs,
+            zone=(now.tzinfo if now else None),
+        )
+        result.notes.append(read.summary)
+        result.evidence |= read.evidence
     result.budget.cost_usd += rewrite_cost
     result.budget.cost_usd += reading_budget.cost_usd
     result.budget.calls += reading_budget.calls

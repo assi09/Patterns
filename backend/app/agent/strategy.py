@@ -33,7 +33,7 @@ from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
 from app.analysis.habits import BETTER
 from app.analysis.screen import BASELINE_DAYS, NOT_SCREENED, screen_windows, without_low_wear
-from app.analysis.tools import change_point, compare_windows, correlate
+from app.analysis.tools import change_point, compare_windows, correlate, describe
 
 EXPAND = "expand_tools"
 YESTERDAY = re.compile(r"\byesterday\b", re.IGNORECASE)
@@ -333,15 +333,20 @@ def coaching_evidence(
     metrics: list[str],
     skip_levers: frozenset[str] = frozenset(),
     skip_options: frozenset[str] = frozenset(),
+    window: Window | None = None,
+    goals: tuple[str, ...] = (),
 ) -> tuple[list[Evidence], str]:
-    """habit_options and personal_options on the goal's metrics over the last 60 days, run before
-    the model starts."""
+    """habit_options and personal_options on the goal's metrics over the last 60 days, or over the
+    days the request named ("my short sleep in September" is September), run before the model
+    starts."""
     if frame.empty:
         return [], ""
-    end = frame.index.max().date()
-    window = Window(start=end - timedelta(days=COACHING_DAYS - 1), end=end)
+    if window is None:
+        end = frame.index.max().date()
+        window = Window(start=end - timedelta(days=COACHING_DAYS - 1), end=end)
     found, lines, stands_out = [], [], []
-    for metric in GOALS.get(expert, GOALS[None]):
+    # The metrics an investigation names are its goals, whichever area it was routed to.
+    for metric in goals or GOALS.get(expert, GOALS[None]):
         if metric not in metrics or metric not in frame.columns:
             continue
         try:
@@ -590,7 +595,11 @@ def size_of(delta: float) -> str:
 
 
 def overview_evidence(
-    frame: pd.DataFrame, question: str, today: date | None, window: Window | None = None
+    frame: pd.DataFrame,
+    question: str,
+    today: date | None,
+    window: Window | None = None,
+    baseline: Window | None = None,
 ) -> tuple[list[Evidence], str]:
     """Every metric compared over the period a broad question means (the last 14 days against the
     28 before when it names none), corrected for testing them all at once, the clear changes
@@ -600,9 +609,12 @@ def overview_evidence(
     if frame.empty:
         return [], ""
     cleaned = without_low_wear(frame)
-    # The days the request named (resolved by code), else the period phrase in the question.
-    asked = (window.start, window.end) if window else None
-    asked = asked or (asked_period(question, today) if today else None)
+    if window is not None:
+        # Days the request named, resolved by code, are the days answered: never swapped for the
+        # latest data (Sept 1-3 and Dec 1-14 were answered with October, Codex's review).
+        return _named_overview(cleaned, window, baseline)
+    # The period phrase in the question, if any.
+    asked = asked_period(question, today) if today else None
     last = min(asked[1], cleaned.index.max().date()) if asked else None
     # The period they named, if their data covers enough of it; otherwise their latest data (data
     # that stopped before the period would compare nothing).
@@ -612,6 +624,59 @@ def overview_evidence(
         baseline = Window(start=baseline_end - timedelta(days=BASELINE_DAYS - 1), end=baseline_end)
     else:
         recent, baseline = screen_windows(cleaned)
+    return _compared(cleaned, recent, baseline)
+
+
+def _named_overview(
+    frame: pd.DataFrame, window: Window, baseline: Window | None
+) -> tuple[list[Evidence], str]:
+    """Every metric over exactly the named days: compared with the days before them (or with the
+    second named period) when there are enough, else described; days with no data at all say so."""
+    if frame.empty:
+        return [], ""
+    first, last = frame.index.min().date(), frame.index.max().date()
+    start, end = max(window.start, first), min(window.end, last)
+    if start > end:
+        return [], (
+            f"The person asked about {window.start} to {window.end}; their data has no days "
+            f"in it (it runs from {first} to {last}). Say so plainly; describe no other days."
+        )
+    recent = Window(start=start, end=end)
+    if baseline is None and (end - start).days + 1 >= MIN_OVERVIEW_DAYS:
+        before = recent.start - timedelta(days=1)
+        baseline = Window(start=before - timedelta(days=BASELINE_DAYS - 1), end=before)
+    if baseline is not None:
+        records, text = _compared(frame, recent, baseline)
+        if records:
+            return records, text
+    described = []
+    for metric in frame.columns:
+        if metric in NOT_SCREENED:
+            continue
+        try:
+            record = describe(frame, metric, recent)
+        except ToolError:
+            continue
+        if record.n:
+            described.append(record)
+    if not described:
+        return [], (
+            f"The person asked about {window.start} to {window.end}; no metric has data on "
+            "those days. Say so plainly; describe no other days."
+        )
+    lines = [
+        f"- {label(e.metrics[0])} (evidence_id {e.id}): "
+        f"{evidence_payload(e)['display'].get('mean', '')} on average"
+        for e in described
+    ]
+    return described, (
+        f"Too few days ({recent.start} to {recent.end}) to test a change: what each metric was on "
+        "exactly those days (describe), nothing outside them:\n" + "\n".join(lines)
+    )
+
+
+def _compared(frame: pd.DataFrame, recent: Window, baseline: Window) -> tuple[list[Evidence], str]:
+    cleaned = frame
     tests = []
     for metric in cleaned.columns:
         if metric in NOT_SCREENED:
