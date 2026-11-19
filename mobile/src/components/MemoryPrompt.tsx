@@ -26,6 +26,7 @@ export function MemoryChoice({ fact }: { fact: MemoryFact }) {
         },
       },
     );
+  if (fact.action === 'forget') return <ForgetChoice fact={fact} />;
   return (
     <Card style={styles.card}>
       <View style={styles.head}>
@@ -52,6 +53,37 @@ export function MemoryChoice({ fact }: { fact: MemoryFact }) {
         )}
         <Button
           label="No thanks"
+          variant="secondary"
+          onPress={() => choose(false)}
+          disabled={decide.isPending}
+        />
+      </View>
+    </Card>
+  );
+}
+
+/** Something kept that the person asked to forget. Nothing is deleted without this tap. */
+function ForgetChoice({ fact }: { fact: MemoryFact }) {
+  const colors = useColors();
+  const decide = useDecideMemory();
+  const choose = (forget: boolean) =>
+    decide.mutate(
+      { id: fact.id, keep: forget },
+      { onSuccess: () => (forget ? success() : select()) },
+    );
+  return (
+    <Card style={styles.card}>
+      <View style={styles.head}>
+        <Ionicons name="trash-outline" size={16} color={colors.accent} />
+        <Text variant="caption" color="muted">
+          Forget this?
+        </Text>
+      </View>
+      <Text>{fact.text}</Text>
+      <View style={styles.buttons}>
+        <Button label="Forget" onPress={() => choose(true)} disabled={decide.isPending} />
+        <Button
+          label="Keep it"
           variant="secondary"
           onPress={() => choose(false)}
           disabled={decide.isPending}

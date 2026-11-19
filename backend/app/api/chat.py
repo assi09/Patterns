@@ -47,7 +47,14 @@ from app.agent.conversation import DRAFT_NOTE
 from app.agent.experts import EXPERTS, Depth, available
 from app.agent.guard import Guard
 from app.agent.intent import Intent
-from app.agent.listener import MAX_KNOWN, fit_to_keep, is_explicit, listen, worth_listening
+from app.agent.listener import (
+    MAX_KNOWN,
+    fit_to_keep,
+    is_explicit,
+    listen,
+    which_kept,
+    worth_listening,
+)
 from app.agent.llm import LLM, Budget, LLMError, OpenAILLM
 from app.agent.requests import Request, interpret
 from app.agent.router import Router
@@ -389,6 +396,47 @@ NOT_HEARD = "I couldn't note that just now. Could you tell me again in a moment?
 ALREADY_KEPT = "I already keep that in mind."
 
 
+NOTHING_KEPT = "I don't keep anything about you yet, so there's nothing to forget."
+FORGET_CARD = (
+    "I've put it on a card below: tap Forget and I'll stop using \u201c{text}\u201d. Nothing is "
+    "removed until you tap."
+)
+FORGET_WHICH = "Which of these should I forget? You can also remove any of them in Settings."
+MAX_LISTED = 5
+
+
+def forgetting(result) -> bool:
+    """The request reader read the message as asking to forget something."""
+    return any(
+        step.get("type") == "request"
+        and (step.get("request") or {}).get("memory_action") == "forget"
+        for step in result.trace
+    )
+
+
+def forget_from(sessions: Sessions, agent: AgentParts, user_id, question_id, text, now) -> str:
+    """ "Forget my old running goal": a card for the one kept fact it means, which their tap then
+    deletes, or the kept facts to choose from when it is not clear which. Never a deletion here."""
+    try:
+        with sessions() as db:
+            kept = [(fact.id, fact.text) for fact in memory.kept_facts(db, user_id)][:MAX_KNOWN]
+        if not kept:
+            return NOTHING_KEPT
+        index, cost = which_kept(agent.llm, text, [words for _, words in kept])
+        with sessions() as db:
+            question = db.get(ChatMessage, question_id)
+            if question is not None and question.conversation_id:
+                store.charge_answer(db, user_id, question.conversation_id, cost)
+            if index is None:
+                listed = "\n".join(f"- {words}" for _, words in kept[:MAX_LISTED])
+                return f"{FORGET_WHICH}\n{listed}"
+            memory.propose_forget(db, user_id, kept[index][0], message_id=question_id, now=now)
+        return FORGET_CARD.format(text=kept[index][1])
+    except Exception:
+        logger.exception("Preparing a forget card failed")
+        return NOT_HEARD
+
+
 def noted_reply(statuses: list[str] | None) -> str:
     """What to say to "remember that …", from what listening recorded: never a card that isn't
     there (the memory evaluation found one promised when listening had failed)."""
@@ -620,8 +668,18 @@ def _answer(
         # "Remember that …" is heard now, not after: the reply says what actually happened.
         noted = reply is not None and reply.result.stop_reason == "noted"
         if noted and not memory_denied:
+            # A change ("forget Mondays, it's Tuesdays now") is the listener's replacement card;
+            # a plain "forget my old goal" is a card to forget that kept fact.
             outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
-            reply.result.summary = noted_reply(outcome)
+            changed = bool(outcome and "proposed" in outcome)
+            if forgetting(reply.result) and not changed:
+                reply.result.summary = forget_from(
+                    sessions, agent, user_id, question_id, body.text, now
+                )
+            elif forgetting(reply.result):
+                reply.result.summary = FORGET_NOTE
+            else:
+                reply.result.summary = noted_reply(outcome)
         # Something they told us in passing: heard now too, so the reply can point to its card.
         chatted = reply is not None and reply.result.stop_reason in CHATTED
         # "That seems wrong, I walked more" disputes a figure; it says nothing lasting about them.

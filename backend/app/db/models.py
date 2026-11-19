@@ -397,6 +397,9 @@ class MemoryFact(Base):
     source_message_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)  # who said it
     # What this says is no longer true: removed when the person keeps this one.
     replaces_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
+    # A card asking to forget the kept fact with this id: that fact is deleted with the card when
+    # the person taps Forget, and stays when they keep it. Nothing else is kept on such a card.
+    forgets_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
     start_day: Mapped[date | None] = mapped_column(Date, default=None)  # an event's dates
     end_day: Mapped[date | None] = mapped_column(Date, default=None)
     seen: Mapped[int] = mapped_column(default=1, server_default="1")  # times heard

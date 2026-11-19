@@ -123,3 +123,49 @@ guidance completeness and arbitrary wording still need a new independent convers
 The existing PHIA results describe their recorded earlier revisions; they are not new results
 for this request path. Live Google writes remain outside these checks. Local implementation is
 ready for review; deployment and an external final evaluation are separate steps.
+
+## Redesign after the third audit (2026-11-19)
+
+Codex's live review showed that code rewriting the reader from phrases broke correct readings:
+"24 hours earlier than that day" lost its shift to "that day". The redesign follows one rule:
+**code checks the reader and never rewrites it**, except where only one reading is possible. The
+acceptance criteria were written first, in [acceptance-structured-requests.md](acceptance-structured-requests.md).
+
+- **Checks, not rewrites** (`backend/app/agent/checks.py`). Code reads the facts the words fix:
+  dates written out, a shift such as "two days earlier", "that same day", "this week" or "last
+  week", "the last N days", a metric called by its catalog name, a named meal, and "above 8,000".
+  It checks the **resolved** request against them, so a correct reading passes however it was
+  expressed: an explicit Mar 1 passes "two days after Feb 28" as well as a relative shift does. A
+  contradiction goes back to the reader once, stating it; if the reader keeps it, the person is
+  asked a concrete question ("Do you mean Mar 1, 2024?"). A check holds only where its phrase
+  belongs to one part: "shift steps two days earlier, and my heart rate yesterday" checks neither
+  part against the other's words. A negated or quoted metric name is not asked for. What code
+  still fills in itself has only one possible reading: "don't save" wins; a count with no
+  threshold that asks about recording counts days with data; with no earlier request, a period
+  "relative to the earlier request" can only mean today.
+- **Investigations keep their scope.** They resolve references as data questions do ("why did
+  that happen?" keeps that result's metric and days; a chosen earlier part is the one used;
+  `every_metric` looks across everything over those days). Named days are never swapped for
+  recent data: days the data never reaches get a reply by code saying so; a short period is
+  described on exactly its days; a second named period is the baseline. Coaching uses the named
+  period and metrics, and the latest-day snapshot is left out when days were named.
+- **Forgetting is a card.** "Forget my old running goal" has the small model pick the one kept
+  fact it means (or lists the kept facts when it is not clear). A "Forget this?" card then waits
+  for a tap: Forget deletes the fact, Keep it drops only the card. A change ("it's Tuesdays now")
+  stays the listener's replacement card. This adds `memory_facts.forgets_id` (migration 0031)
+  and `action`/`forgets` to `MemoryFact` in the app's contract.
+- **Workouts and mixed messages.** A workout's end is its start plus its duration, by code,
+  unless both clock times or a pause were said: a 34-minute run had been carded over 94 minutes.
+  A message that logs something and asks about the data is read as logging with the question in
+  `parts`; code answers the question in a fixed note that stays when the card's note replaces
+  the reply.
+- **Guidance follow-ups.** The passages a guidance answer used are kept in the request state; a
+  follow-up on the same movement reads them first, and another movement never gets them. When
+  no exercise title matches the topic word for word, the small model picks the same exercise and
+  variant by meaning ("unweighted squat" is the bodyweight squat, not a barbell one), and other
+  exercises are left out. The movement itself is searched as well as the reworded question.
+
+All of this is checked offline with scripted readers and made-up data: Codex's 13 live-review
+counterexamples and 7 fix-review counterexamples are in the suite and pass. **No paid run has
+tested it.** Whether the real reader produces these readings, and how often a check sends back
+a correct one, is for the fresh frozen audit the acceptance criteria describe.

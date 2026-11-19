@@ -540,6 +540,8 @@ let facts: MemoryFact[] = [
     kind: 'goal',
     text: 'Wants to be in bed earlier on weeknights',
     status: 'approved',
+    action: 'keep',
+    forgets: null,
     start: null,
     end: null,
     createdAt: new Date(Date.now() - 12 * 86_400_000).toISOString(),
@@ -549,6 +551,8 @@ let facts: MemoryFact[] = [
     kind: 'event',
     text: 'Exams',
     status: 'proposed',
+    action: 'keep',
+    forgets: null,
     start: isoDate(-3),
     end: isoDate(-8),
     createdAt: new Date(Date.now() - 3600_000).toISOString(),
@@ -558,9 +562,23 @@ let facts: MemoryFact[] = [
     kind: 'routine',
     text: 'Trains on Tuesdays',
     status: 'candidate',
+    action: 'keep',
+    forgets: null,
     start: null,
     end: null,
     createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+  },
+  {
+    // A card asking to forget the goal above: nothing goes until the person taps Forget.
+    id: 'f_forget_goal',
+    kind: 'goal',
+    text: 'Wants to be in bed earlier on weeknights',
+    status: 'proposed',
+    action: 'forget',
+    forgets: 'f_goal',
+    start: null,
+    end: null,
+    createdAt: new Date(Date.now() - 600_000).toISOString(),
   },
 ];
 let interests = [{ topic: 'bedtime_hour', label: 'bedtime' }];
@@ -1889,6 +1907,8 @@ export const mockClient: ApiClient = {
           kind: 'context',
           text: asked[1].slice(0, 120),
           status: 'proposed',
+          action: 'keep',
+          forgets: null,
           start: null,
           end: null,
           createdAt: new Date().toISOString(),
@@ -2021,6 +2041,11 @@ export const mockClient: ApiClient = {
       inbox = inbox.map((n) =>
         n.factId === id ? { ...n, readAt: n.readAt ?? new Date().toISOString() } : n,
       );
+      if (fact.action === 'forget') {
+        // Forget deletes the kept fact with its card; keeping it drops only the card.
+        facts = facts.filter((f) => f.id !== id && !(keep && f.id === fact.forgets));
+        return fact;
+      }
       facts = keep
         ? facts.map((f) => (f.id === id ? { ...f, status: 'approved' } : f))
         : facts.filter((f) => f.id !== id);

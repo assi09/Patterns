@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import Field
@@ -27,6 +27,9 @@ class FactOut(ApiModel):
     kind: str
     text: str
     status: str
+    # "forget": a card asking to forget a kept fact; tapping it (keep=true) deletes that fact.
+    action: Literal["keep", "forget"] = "keep"
+    forgets: str | None = None  # the kept fact a forget card is about
     start: date | None
     end: date | None
     created_at: datetime
@@ -69,6 +72,8 @@ def _out(row: MemoryFact) -> FactOut:
         kind=row.kind,
         text=row.text,
         status=row.status,
+        action="forget" if row.forgets_id else "keep",
+        forgets=str(row.forgets_id) if row.forgets_id else None,
         start=row.start_day,
         end=row.end_day,
         created_at=utc(row.created_at),
