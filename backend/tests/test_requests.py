@@ -398,6 +398,8 @@ def test_causality_follows_observed_association_state(mode):
     # audit of 2026-11-19); the reason no link could be tested is said as it is.
     tested = mode in ("positive", "negative")
     assert ("can't establish or rule out a cause" in result.summary) == tested
+    # A question about a cause is answered about the cause either way (Codex's review).
+    assert tested or "can't say whether one affects the other" in result.summary
     if mode == "constant":
         assert "didn't change at all" in result.summary
     if mode == "missing":

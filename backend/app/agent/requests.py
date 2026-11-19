@@ -181,6 +181,10 @@ ENDING_YESTERDAY = re.compile(r"\bcomplete days?\b|\bending yesterday\b|\bup to 
 # Calendar periods code names itself, as periods.py does for the rest of the app: "this week"
 # and "last week" both became Nov 6-12 on Thursday Nov 19 (the audit of 2026-11-19).
 CALENDAR = re.compile(r"\b(this week|last week|this month|last month)\b", re.IGNORECASE)
+# "The week before last week", "two weeks ago": a different period than the phrase inside it.
+CALENDAR_MODIFIED = re.compile(
+    r"\b(?:before|after|ago|prior to|earlier than|following)\b", re.IGNORECASE
+)
 # Days an entry is put on, said from today: "put it on tomorrow".
 LOG_DAY_FROM_TODAY = re.compile(r"\b(?:today|tomorrow|yesterday|tonight|last night)\b", re.I)
 
@@ -200,12 +204,15 @@ def anchored_by_code(reading: "Reading", question: str, today: date | None = Non
     reading = _metric_by_code(reading, question)
     reading = _coverage_by_code(reading, question)
     found = CALENDAR.findall(question) if today is not None else []
-    if len({f.lower() for f in found}) == 1 and (span := period_range(found[0], today)):
+    plain = len(found) == 1 and not CALENDAR_MODIFIED.search(question)
+    if plain and (span := period_range(found[0], today)):
         explicit = Period(kind="explicit", start=span[0], end=span[1])
         return reading.model_copy(
             update={
                 "parts": [
-                    p.model_copy(update={"periods": [explicit]}) if len(p.periods) == 1 else p
+                    p.model_copy(update={"periods": [explicit]})
+                    if len(p.periods) == 1 and p.periods[0].kind not in ("explicit", "history")
+                    else p
                     for p in reading.parts
                 ]
             }
@@ -250,10 +257,12 @@ def _coverage_by_code(reading: "Reading", question: str) -> "Reading":
 
 def _log_day_by_code(reading: "Reading", question: str) -> "Reading":
     day = reading.log_day
-    if day is None or day.anchor != "previous":
-        return reading
+    if day is None or day.anchor != "previous" or day.kind == "explicit":
+        return reading  # an explicit date wins, whatever its anchor field says
     if LOG_DAY_FROM_TODAY.search(question):
         return reading.model_copy(update={"log_day": day.model_copy(update={"anchor": "today"})})
+    if day.kind == "relative" and day.offset_days:
+        return reading  # "one day earlier than that": resolved against the card, or asked
     return reading.model_copy(update={"log_day": None})  # keeps the card's own day
 
 

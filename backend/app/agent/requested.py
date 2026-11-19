@@ -181,13 +181,22 @@ def execute(
                     "Data like this shows what goes together; it can't establish or rule out "
                     "a cause."
                 )
+            elif request.kind == "causality":  # they asked about a cause: answer that too
+                statements.append(
+                    "Without a link to look at, your data can't say whether one affects the other."
+                )
             continue
         if op == "coverage" and len(part.metrics) > 1 and all(m in frame for m in part.metrics):
             together = coverage(frame[list(part.metrics)], window)
-            names = " and ".join(label(m) for m in part.metrics)
+            labels = [label(m) for m in part.metrics]
+            names = (
+                f"both {labels[0]} and {labels[1]}"
+                if len(labels) == 2
+                else f"all of {', '.join(labels[:-1])} and {labels[-1]}"
+            )
             say(
                 f"{_first_up(_span(window))}, {_days(together.stats['days_all_present'])} had "
-                f"both {names} recorded.",
+                f"{names} recorded.",
                 together,
                 part.metrics[0],
                 "data_quality",

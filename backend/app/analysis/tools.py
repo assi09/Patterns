@@ -99,7 +99,7 @@ def coverage(frame: pd.DataFrame, window: Window) -> Evidence:
         "fraction_present": {m: _round(count / window.days, 3) for m, count in present.items()},
         "days_present": present,
     }
-    if 1 < len(frame.columns) <= 4:  # a few metrics asked about together: the days with all
+    if len(frame.columns) > 1:  # several metrics asked about together: the days with all
         summary["days_all_present"] = int(rows.notna().all(axis=1).sum())
     if "wear_minutes" in frame.columns:
         low = rows.index[rows["wear_minutes"] < LOW_WEAR_MINUTES]

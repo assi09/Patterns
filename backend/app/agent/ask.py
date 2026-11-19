@@ -297,20 +297,37 @@ NOTHING_WAITING = (
     "There's nothing waiting to log right now. Tell me what you ate or did and I'll prepare a "
     "card; it's only added when you tap Log it."
 )
-# The agent never logs or sends anything itself: a tap on the card does. So a reply saying it
-# did is never true ("Saved.", "I've logged it"), whatever led to it. Their own logging ("you
-# logged 3 entries") is not this.
+# The agent never logs or sends anything itself: a tap on the card does. So in a logging turn a
+# reply saying it did is never true ("Saved.", "I've logged it"). Checked only in logging turns,
+# only for a logging object, and not when it describes what happens later ("when it's saved").
+_DONE = r"(?:saved|logged|added|sent|recorded|stored|submitted)"
+_ENTRY = (
+    r"(?:it|that|this|them|your (?:\w+ ){0,2}(?:walk|run|ride|swim|workout|meal|food|snack|"
+    r"breakfast|lunch|dinner|entry|log|session|exercise)|the (?:\w+ )?(?:entry|card|log|walk|"
+    r"run|workout|meal))"
+)
 FALSE_SUCCESS = re.compile(
-    r"^\s*(?:saved|logged|done|added|sent)\b[.!]|"
-    r"\bI(?:'ve| have)? (?:now )?(?:saved|logged|added|sent|recorded|stored|submitted)\b|"
-    r"\b(?:it'?s|it has been|that'?s|has been) (?:now )?(?:saved|logged|added|sent)\b",
+    rf"^\s*(?:saved|logged|done|added|all set)\s*[.!]|"
+    rf"\bI(?:'ve| have)? (?:now |just |already )?{_DONE} {_ENTRY}|"
+    rf"\b{_ENTRY} (?:is|was|has been|'s) (?:now |already )?{_DONE}\b|"
+    rf"\b(?:it|that)'s (?:now |already )?{_DONE}\b",
     re.IGNORECASE,
 )
+CONDITIONAL = re.compile(r"\b(?:when|once|after|if|until|unless|before)\b", re.IGNORECASE)
 
 
-def no_false_success(result: AgentResult, after_draft: bool) -> AgentResult:
-    """The reply with any claim of having logged something replaced by what is true."""
-    if result.summary and FALSE_SUCCESS.search(result.summary):
+def claims_false_success(summary: str) -> bool:
+    plain = summary.replace("\u2019", "'").replace("\u2018", "'")
+    for sentence in re.split(r"(?<=[.!?])\s+", plain):
+        found = FALSE_SUCCESS.search(sentence)
+        if found and not CONDITIONAL.search(sentence[: found.start() + 1]):
+            return True
+    return False
+
+
+def no_false_success(result: AgentResult, after_draft: bool, logging: bool = True) -> AgentResult:
+    """In a logging turn, a reply claiming it logged something is replaced by what is true."""
+    if logging and result.summary and claims_false_success(result.summary):
         result.trace.append({"type": "false_success", "summary": result.summary[:200]})
         result.summary = CONFIRM_ON_CARD if after_draft else NOTHING_WAITING
     return result
@@ -578,6 +595,10 @@ def ask(
     if offer:
         question = said = as_request(offer)
     fixed = plain_reply(said, frame, _day(today or now), after_draft)
+    # A turn about logging: a card waiting, or a message read as logging, a correction or a yes.
+    logging_turn = after_draft or (
+        typed is not None and typed.kind in ("logging", "correction", "confirmation")
+    )
     if typed is not None:
         # Wearable bounds do not bound confirmed food or public guidance. Precise requests
         # determine availability per source/part, including mixed food and wearable questions.
@@ -681,7 +702,7 @@ def ask(
                 "model_calls": reading_budget.calls,
             },
         ]
-        return Answer(route, no_false_success(result, after_draft), context)
+        return Answer(route, no_false_success(result, after_draft, logging_turn), context)
     # "Am I ok?" asks how their data looks, not for a diagnosis: answered, as an overall look.
     if route.action == "refuse" and OVERALL.match(said) and not MEDICAL.search(said):
         overall = replace(route.classification, question_types={"lookup": 1.0})
@@ -1215,4 +1236,4 @@ def ask(
         result.trace[1]["continuing_log_expert"] = continuing_log
     if reminding:
         result.trace[1]["reminding"] = True
-    return Answer(route, no_false_success(result, after_draft), context)
+    return Answer(route, no_false_success(result, after_draft, logging_turn), context)

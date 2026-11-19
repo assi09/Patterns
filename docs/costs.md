@@ -140,3 +140,23 @@ Including the earlier independently requested audits (about $0.4588 and $1.33002
 $3 request is at about $2.04. See [methods, failures and limits](typed-requests.md). All new data
 is made up; provider-reported usage is logged and raw runs remain under ignored `data/eval/`.
 
+
+## Independent candidate audit — November 19, 2026
+
+Karim authorized a new, separate **$2 maximum** for testing Claude's latest PR #195 head
+(`fa15f4a`), including direct review and a local Markdown handoff.
+
+| Date | Run | Metered upper estimate |
+|---|---|---:|
+| 2026-11-19 | Independent candidate audit v3 on Claude’s PHIA-fixed `fa15f4a`: 463 turns in 183 conversations, 347 fresh / 116 exposed regressions, all 34 metrics and four public histories; every answer directly reviewed | $0.855184784 |
+| 2026-11-19 | Additional coverage diagnostics, frozen separately before execution: 25 turns; null/positive/constant/disjoint associations, same-night references, two windows, hour/minute thresholds, mixed read/log and source boundaries | $0.055229928 |
+
+Combined recorded estimate **$0.909444218** (OpenAI **$0.866389430**, Jev **$0.043054788**),
+plus **$0.000970494** held for uncertain failed-call charges: conservative upper total
+**$0.910414712**, leaving **$1.089585288** of this allowance. The supplement ran only after
+the main process finished and was capped at the unused portion including main uncertainty.
+The initial usage-limit approval-review block did not execute the command and cost $0.
+No paid model judge or Google traffic/writes. Scripted offline preflights cost $0 and are
+excluded from accuracy. All 488 actual replies were reviewed; all raw artifacts remain under
+ignored `data/eval/`. See [the completed local handoff](independent-audit-v3-handoff.md) for
+cohort scores, independent recalculations, grading corrections and limitations.
