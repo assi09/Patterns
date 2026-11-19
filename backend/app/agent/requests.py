@@ -74,6 +74,8 @@ class Reading(Fields):
         "logging",
         "correction",
         "confirmation",
+        "investigate",
+        "memory",
         "other",
         "clarify",
     ]
@@ -95,6 +97,8 @@ class Reading(Fields):
     guidance_reference: bool = False
     clarification: str = Field(default="", max_length=300)
     memory: Literal["deny", "unspecified"] = "unspecified"
+    memory_action: Literal["remember", "recall", "forget"] | None = None
+    focus: Literal["what_changed", "why", "overview", "coaching"] | None = None
     duration_minutes: float | None = Field(default=None, gt=0, le=1440, allow_inf_nan=False)
     log_day: Period | None = None
 
@@ -118,6 +122,8 @@ class Request(Fields):
     guidance_question: str = ""
     clarification: str = ""
     memory: str = "unspecified"
+    memory_action: str | None = None
+    focus: str | None = None
     duration_minutes: float | None = None
     log_day: date | None = None
     reader_error: str | None = None
@@ -126,7 +132,9 @@ class Request(Fields):
     def question(self, original: str) -> str:
         if self.kind == "guidance":
             return self.guidance_question or original
-        if self.kind not in ("data", "causality"):
+        if self.kind == "investigate" and not self.parts:
+            return original
+        if self.kind not in ("data", "causality", "investigate"):
             return original
         lines = []
         for part in self.parts:
@@ -200,6 +208,8 @@ def anchored_by_code(reading: "Reading", question: str, today: date | None = Non
       date?"), and "tomorrow" counts from today;
     - a question naming exactly one metric is about that metric ("stress score" was read as the
       check-in rating, 2026-11-19)."""
+    reading = _memory_by_code(reading, question)
+    reading = _meal_by_code(reading, question)
     reading = _log_day_by_code(reading, question)
     reading = _metric_by_code(reading, question)
     reading = _coverage_by_code(reading, question)
@@ -255,6 +265,104 @@ def _coverage_by_code(reading: "Reading", question: str) -> "Reading":
     return reading.model_copy(update={"parts": parts})
 
 
+# Code's reading of a follow-up's days: "keep that same date", "for that interval" reuse the
+# active query's days; "move it two days earlier" shifts them by the number said. The state
+# held the right days each time, and the model's own reading replaced them (Oct 19 for "that
+# same date" after Oct 20; Mar 2 for two days after Feb 28, 2024; one day for "that interval";
+# "two days earlier" ignored; the audit of 2026-11-19).
+SAME_DAYS = re.compile(
+    r"\b(?:that|those)(?: same| identical| whole| entire)? (?:date|day|night|interval|stretch|"
+    r"period|range|window|span|dates|days|nights|week|month)\b|"
+    r"\b(?:the )?(?:same|identical) (?:date|day|night|dates|days|period|interval|stretch|range|"
+    r"window|span)\b",
+    re.IGNORECASE,
+)
+COUNT = r"(\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|fourteen|thirty)"
+SHIFT = re.compile(
+    rf"\b{COUNT} (?:calendar |whole |full )?(?:days?|nights?) (earlier|later|back|forward|"
+    rf"before|after|ahead|sooner)\b|"
+    rf"\b(back|forward|ahead|earlier|later)(?: by)? {COUNT} (?:calendar |whole |full )?"
+    rf"(?:days?|nights?)\b",
+    re.IGNORECASE,
+)
+WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "fourteen": 14,
+    "thirty": 30,
+}
+EARLIER = ("earlier", "back", "before", "sooner")
+WRITTEN_DATE = re.compile(
+    r"\d{4}-\d{2}-\d{2}|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}\b",
+    re.IGNORECASE,
+)
+
+
+def shift_said(question: str) -> int | None:
+    """The days a follow-up shifts by: -2 for "two days earlier", +3 for "forward 3 days"."""
+    found = SHIFT.search(question)
+    if not found:
+        return None
+    count, way = (
+        (found.group(1), found.group(2)) if found.group(1) else (found.group(4), found.group(3))
+    )
+    number = WORDS.get(count.lower()) or int(count)
+    return -number if way.lower() in EARLIER else number
+
+
+def _scope_by_code(reading: "Reading", question: str) -> "Reading":
+    if WRITTEN_DATE.search(question) or reading.kind not in ("data", "causality", "investigate"):
+        return reading  # dates written out are read as they are
+    shift = shift_said(question)
+    if shift is not None:
+        period = Period(kind="relative", anchor="previous", offset_days=shift)
+    elif SAME_DAYS.search(question) and not FROM_TODAY.search(question):
+        period = Period(kind="inherit")
+    else:
+        return reading
+    parts = [
+        p.model_copy(update={"periods": [period]}) if len(p.periods) <= 1 else p
+        for p in reading.parts
+    ]
+    return reading.model_copy(update={"parts": parts})
+
+
+MEALS = re.compile(r"\b(?:breakfast|brunch|lunch|dinner|supper|snacks?)\b", re.IGNORECASE)
+
+
+def _meal_by_code(reading: "Reading", question: str) -> "Reading":
+    """A meal filter only when the question names a meal: "my protein total for that day" was read
+    as snacks only, carried from the snack drafted just before (2026-11-19)."""
+    if MEALS.search(question):
+        return reading
+    parts = [p.model_copy(update={"meal_type": None}) if p.meal_type else p for p in reading.parts]
+    return reading.model_copy(update={"parts": parts})
+
+
+def _memory_by_code(reading: "Reading", question: str) -> "Reading":
+    """An explicit "don't save" always wins, even beside "remember"; an explicit "remember that"
+    is never read as a refusal ("remember that I prefer walking" came out memory=deny, and no
+    card was made, the audit of 2026-11-19)."""
+    from app.agent.listener import EXPLICIT, NO_MEMORY
+
+    if NO_MEMORY.search(question):
+        return reading.model_copy(update={"memory": "deny"})
+    if EXPLICIT.search(question) and reading.memory == "deny":
+        update: dict = {"memory": "unspecified"}
+        if reading.kind == "memory" and reading.memory_action is None:
+            update["memory_action"] = "remember"
+        return reading.model_copy(update=update)
+    return reading
+
+
 def _log_day_by_code(reading: "Reading", question: str) -> "Reading":
     day = reading.log_day
     if day is None or day.anchor != "previous" or day.kind == "explicit":
@@ -266,12 +374,31 @@ def _log_day_by_code(reading: "Reading", question: str) -> "Reading":
     return reading.model_copy(update={"log_day": None})  # keeps the card's own day
 
 
+def _catalog_named(question: str) -> list[str]:
+    """Metrics the question calls by their catalog name ("time in the cardio heart-rate zone"),
+    longest names first so a shorter one inside it does not count too."""
+    lowered = question.lower().replace("heart rate", "heart-rate")
+    found, taken = [], []
+    for key, info in sorted(METRICS.items(), key=lambda item: -len(item[1].label)):
+        name = info.label.lower().replace("heart rate", "heart-rate")
+        at = lowered.find(name)
+        if at >= 0 and not any(start <= at < end for start, end in taken):
+            found.append(key)
+            taken.append((at, at + len(name)))
+    return found
+
+
 def _metric_by_code(reading: "Reading", question: str) -> "Reading":
-    named = [m for m, pattern in ASKED_ABOUT.items() if pattern.search(question)]
+    named = list(
+        dict.fromkeys(
+            [*_catalog_named(question)]
+            or [m for m, pattern in ASKED_ABOUT.items() if pattern.search(question)]
+        )
+    )
     if len(named) != 1 or len(reading.parts) != 1:
         return reading
     part = reading.parts[0]
-    if len(part.metrics) == 1 and part.metrics[0] != named[0] and part.metrics[0] in METRICS:
+    if len(part.metrics) <= 1 and part.metrics != named and part.metrics != ["food_logs"]:
         part = part.model_copy(update={"metrics": named})
         return reading.model_copy(update={"parts": [part]})
     return reading
@@ -320,6 +447,33 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
     return [Window(start=start, end=min(end, today) if period.offset_units == 0 else end)]
 
 
+def _investigation(request: Request, reading: Reading, state: dict, today: date) -> Request:
+    """A "why" or "what changed" keeps what it names: its metrics, its days, or the active
+    query's when it points back. Nothing named means every metric over the recent default."""
+    previous = [ResolvedPart.model_validate(p) for p in state.get("data", [])]
+    parts = []
+    for part in reading.parts:
+        prior = previous[0] if previous and len(previous) == 1 else None
+        if any(p.kind == "inherit" or p.anchor == "previous" for p in part.periods) and not prior:
+            raise Ambiguous("Which dates should I look into?")
+        windows = [w for p in part.periods for w in period_window(p, prior, today)]
+        metrics = [m for m in part.metrics if m in METRICS]
+        if part.metrics and not metrics:
+            raise Ambiguous("That measurement is not available. Which recorded metric do you mean?")
+        if not metrics and not windows:
+            continue
+        parts.append(
+            ResolvedPart(
+                metrics=metrics or [],
+                operation="describe",
+                windows=windows[:2],
+                history=any(p.kind == "history" for p in part.periods),
+            )
+        )
+    request.parts = parts
+    return request
+
+
 def resolve(reading: Reading, state: dict, today: date) -> Request:
     request = Request(
         kind=reading.kind,
@@ -327,6 +481,8 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
         topics=reading.topics,
         guidance_question=reading.guidance_question,
         memory=reading.memory,
+        memory_action=reading.memory_action,
+        focus=reading.focus,
         clarification=(
             "Which measurement, dates or guidance topic do you mean?"
             if reading.kind == "clarify"
@@ -352,6 +508,8 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
             # Retrieval must still receive the concrete movement, including after other turns.
             request.guidance_question = f"About {request.topics[0]}: {reading.guidance_question}"
         return request
+    if reading.kind == "investigate":
+        return _investigation(request, reading, state, today)
     if reading.kind not in ("data", "causality"):
         return request
     previous = [ResolvedPart.model_validate(p) for p in state.get("data", [])]
@@ -447,8 +605,9 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
                 comparison=comparison,
                 threshold=threshold,
                 max_lag=part.max_lag,
-                meal_type=part.meal_type
-                or (prior.meal_type if prior and operation == "food" else None),
+                # Never carried over: "my protein total for that day" after a snack question is
+                # every meal (Codex's review, 2026-11-19). A meal is named again to keep it.
+                meal_type=part.meal_type,
             )
         )
     return request
@@ -462,9 +621,10 @@ Requests to read confirmed food use operation food and metric food_logs. Set mea
 person asks about a particular meal (breakfast/lunch/dinner/snack); otherwise leave it null.
 Split requests with different operations into separate parts; keep every requested metric.
 Data includes lookup, counts, comparisons and associations. General sourced how-to is guidance;
-personal advice/explanations without a precise statistical request are other. Logging and draft
-corrections are not data queries. Subject other means asking to access another person's records,
-not merely mentioning another person in a question about one's own records or general guidance.
+personal "why", "what changed" and advice without a precise statistic are investigate.
+Logging and draft corrections are not data queries. Subject other means asking to access another
+person's records, not merely mentioning another person in a question about one's own records or
+general guidance.
 operation value is a single day's value; mean/median/sum/min/max are distinct. Never invent a
 comparison threshold. Above=>, at least=>=, under=<, at most=<=, exactly===. Inherit operation only
 when the user asks to repeat the previous computation; standalone new questions do not inherit.
@@ -486,8 +646,15 @@ one clear previous topic in guidance_question; set guidance_reference true and t
 using prior guidance. Multiple plausible topics require clarification. Keep the user's specific
 form question in guidance_question. Causality follow-ups use kind causality, not an unconditional
 association statement. Do not use the assistant's numeric prose to determine dates or metrics.
-No-save/no-remember requests have memory deny. Ambiguous or untracked requests: clarify; do not
-substitute a related metric. Output exactly one read_request function call.
+investigate: a question about why something in their own data happened, what changed, how they
+have been overall, or what they could do (coaching); set focus (what_changed, why, overview,
+coaching) and put any metrics or period it names in parts (an empty parts list means every
+metric). It is not guidance (public how-to) and not data (a precise statistic). memory: asking to
+remember something about them (memory_action remember), what is remembered (recall) or to forget
+or change something (forget). "Remember that I prefer walking" is memory remember, never memory
+deny. No-save/no-remember requests have memory deny.
+Ambiguous or untracked requests: clarify; do not substitute a related metric. Output exactly
+one read_request function call.
 For logging or corrections only: log_day describes a day the user explicitly names (tomorrow is
 relative today +1, not today); leave null when absent. duration_minutes is the NEW duration only
 when explicitly supplied in a correction, including 'duration 48 not 42' after a minutes draft.

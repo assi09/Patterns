@@ -178,6 +178,58 @@ URGENT_MIND_REPLY = (
     "local crisis line, or your local emergency number if you might act on these thoughts."
 )
 NOTED = "Got it. Tap Keep on the card and I'll bear that in mind from now on."
+NOT_KEPT_ASKED = "Okay, I won't keep that."
+MEMORY_WHICH = (
+    "Do you want me to remember something about you, tell you what I've kept, or forget something?"
+)
+MAX_RECALLED = 5
+
+
+def _with_reading(result, context, route, typed, request_state, reading_budget) -> None:
+    """Every early return carries the request reader's cost, calls and reading in its trace."""
+    result.budget.calls += reading_budget.calls
+    result.budget.cost_usd += reading_budget.cost_usd
+    result.trace[:0] = [
+        _context_step(context),
+        _route_step(route),
+        {
+            "type": "request",
+            "request": typed.model_dump(mode="json"),
+            "state": request_state,
+            "cost_usd": reading_budget.cost_usd,
+            "model_calls": reading_budget.calls,
+        },
+    ]
+
+
+def recalled(memory: Sequence[MemoryItem], chat: ChatState | None, history: Sequence[Turn]) -> str:
+    """What is known about them, from three places kept apart: what they approved, cards still
+    waiting for their tap, and what they said in this chat only. A waiting card or something
+    said here is never presented as kept (the audit of 2026-11-19 asked for all three)."""
+    kept = [
+        *(chat.kept if chat else ()),  # approved facts only: never "Often looks at", inferred
+        *(m.text for m in memory if m.kind in ("fact", "preference")),
+    ]
+    kept = list(dict.fromkeys(kept))[:MAX_RECALLED]
+    waiting = list(chat.pending if chat else ())[:MAX_RECALLED]
+    here = [t for t in told_here(history) if t not in kept][:MAX_RECALLED]
+    parts = []
+    if kept:
+        parts.append("Kept (you approved these):\n" + "\n".join(f"- {t}" for t in kept))
+    if waiting:
+        parts.append(
+            "Waiting for your tap on a card, not kept yet:\n" + "\n".join(f"- {t}" for t in waiting)
+        )
+    if here:
+        parts.append("You mentioned in this chat, not kept:\n" + "\n".join(f"- {t}" for t in here))
+    if not parts:
+        return "I haven't kept anything about you yet, and nothing is waiting for your approval."
+    return (
+        "\n\n".join(parts)
+        + "\n\nYou can remove anything kept in Settings, under What Patterns knows."
+    )
+
+
 # Said kindly, with something it can do instead: one fixed sentence for everything read as cold.
 MEDICAL_REFUSAL = (
     "That one's a medical question, so it isn't something I can answer. What I can do is show "
@@ -611,6 +663,12 @@ def ask(
             fixed = "I can only see your own data, not another person's records."
         elif typed.clarification:
             fixed = typed.clarification
+        elif typed.kind == "memory" and typed.memory == "deny":
+            fixed = NOT_KEPT_ASKED  # "don't save this" wins over "remember", even beside it
+        elif typed.kind == "memory" and typed.memory_action == "recall":
+            fixed = recalled(memory, chat, history)
+        elif typed.kind == "memory" and typed.memory_action is None:
+            fixed = MEMORY_WHICH
         elif typed.kind == "confirmation":
             # Only a tap on the card logs anything: "Yes, go ahead and save that" was answered
             # "Saved." while the card stayed a draft (the audit of 2026-11-19).
@@ -643,9 +701,43 @@ def ask(
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)
+    investigating = typed is not None and typed.kind == "investigate" and not fixed
+    if investigating:
+        # "Why am I tired?", "investigate my sleep last month": the agent's own loop, with the
+        # metrics and days the question named, not a web lookup or a clarification (5 of 16
+        # passed in the audit of 2026-11-19, as the reader had no such kind).
+        kind = {"coaching": "coaching", "why": "why"}.get(typed.focus or "", "change")
+        route = Route(
+            "general",
+            None,
+            (),
+            route.routed,
+            replace(
+                route.classification,
+                question_types={kind: 1.0},
+                intent_probabilities={str(i): float(i == Intent.READ) for i in Intent},
+            ),
+        )
+    # "Remember that I prefer walking", "forget that I run on Mondays": the card the listener
+    # raises is the answer, whatever the reader thought the rest of the message was about.
+    remembering = (
+        typed is not None
+        and typed.memory != "deny"
+        and not fixed
+        and (
+            (typed.kind == "memory" and typed.memory_action in ("remember", "forget"))
+            or (is_explicit(said) and "?" not in said)
+        )
+    )
+    if remembering:
+        context = build(history, stored_evidence or {}, attachment, memory=memory, now=now)
+        result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="noted", summary=NOTED)
+        # The reader's call is paid for and traced here too (Codex's review, 2026-11-19).
+        _with_reading(result, context, route, typed, request_state, reading_budget)
+        return Answer(route, no_false_success(result, after_draft, logging_turn), context)
     if (
         typed is not None
-        and typed.kind in ("data", "causality", "clarify", "guidance")
+        and typed.kind in ("data", "causality", "clarify", "guidance", "memory")
         and (
             urgent_free(said)
             and not MEDICAL.search(said)
@@ -689,19 +781,7 @@ def ask(
                 food_logs=food_logs,
                 zone=(now.tzinfo if now else None),
             )
-        result.budget.calls += reading_budget.calls
-        result.budget.cost_usd += reading_budget.cost_usd
-        result.trace[:0] = [
-            _context_step(context),
-            _route_step(route),
-            {
-                "type": "request",
-                "request": typed.model_dump(mode="json"),
-                "state": request_state,
-                "cost_usd": reading_budget.cost_usd,
-                "model_calls": reading_budget.calls,
-            },
-        ]
+        _with_reading(result, context, route, typed, request_state, reading_budget)
         return Answer(route, no_false_success(result, after_draft, logging_turn), context)
     # "Am I ok?" asks how their data looks, not for a diagnosis: answered, as an overall look.
     if route.action == "refuse" and OVERALL.match(said) and not MEDICAL.search(said):
@@ -949,6 +1029,8 @@ def ask(
         )
         and (
             OVERALL.match(said)
+            # An investigation naming no metric looks at every metric, over the days it named.
+            or (investigating and not any(p.metrics for p in typed.parts))
             or (
                 route.classification.question_type in BROAD_TYPES
                 and not asked_metrics(question, list(frame.columns))
@@ -961,7 +1043,8 @@ def ask(
         )
     )
     if broad:
-        records, text = overview_evidence(frame, question, _day(today or now))
+        named = next((w for p in typed.parts for w in p.windows), None) if investigating else None
+        records, text = overview_evidence(frame, question, _day(today or now), named)
         if records:
             for record in records:
                 evidence[record.id] = record

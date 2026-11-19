@@ -590,7 +590,7 @@ def size_of(delta: float) -> str:
 
 
 def overview_evidence(
-    frame: pd.DataFrame, question: str, today: date | None
+    frame: pd.DataFrame, question: str, today: date | None, window: Window | None = None
 ) -> tuple[list[Evidence], str]:
     """Every metric compared over the period a broad question means (the last 14 days against the
     28 before when it names none), corrected for testing them all at once, the clear changes
@@ -600,7 +600,9 @@ def overview_evidence(
     if frame.empty:
         return [], ""
     cleaned = without_low_wear(frame)
-    asked = asked_period(question, today) if today else None
+    # The days the request named (resolved by code), else the period phrase in the question.
+    asked = (window.start, window.end) if window else None
+    asked = asked or (asked_period(question, today) if today else None)
     last = min(asked[1], cleaned.index.max().date()) if asked else None
     # The period they named, if their data covers enough of it; otherwise their latest data (data
     # that stopped before the period would compare nothing).

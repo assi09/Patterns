@@ -101,6 +101,8 @@ class ChatState:
     until: datetime | None = None  # the last answer the summary reaches
     waiting: tuple[str, ...] = ()  # drafts and reminders not yet confirmed
     profile: tuple[str, ...] = ()  # the person's, the same in every chat
+    pending: tuple[str, ...] = ()  # memory cards waiting for their tap, not yet kept
+    kept: tuple[str, ...] = ()  # facts they approved; the profile also has inferred interests
     interests: dict[str, float] = field(default_factory=dict)  # metric -> score
 
     @property

@@ -371,6 +371,7 @@ def listen_to(
 
 
 CHATTED = ("chatted", "chat_fallback")
+MAX_PENDING = 5
 CARD_NOTE = "I've put that on a card below: tap Keep and I'll bear it in mind from now on."
 FORGETS = re.compile(
     r"^\s*(?:please\s+)?(?:forget|don'?t remember|stop remembering|ignore what i said)\b",
@@ -452,6 +453,12 @@ def _answer(
                 until=own.summary_until if own else None,
                 waiting=tuple(store.waiting_cards(db, user_id, earlier)),
                 profile=person.lines,
+                kept=person.lines[: len(person.fact_ids)],  # one line per approved fact, first
+                pending=tuple(
+                    fact.text
+                    for fact in memory.held_facts(db, user_id)
+                    if fact.status == "proposed"
+                )[:MAX_PENDING],
                 interests=memory.interests(db, user_id, now),
             )
             food_logs = [
