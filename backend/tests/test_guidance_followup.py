@@ -202,3 +202,49 @@ def test_another_movement_does_not_get_the_earlier_passages():
     history = [guidance_turn("bridge", [BRIDGE])]
     used, _ = asked_with(history, "plank", reference=False)
     assert BRIDGE not in used
+
+
+# ---- a found passage is answered, not refused for its wording (the v4 audit) ----
+
+PUSHUP = "exercises-45d94106bd20"
+
+
+def lookup(query):
+    from app.agent.knowledge import KNOWLEDGE_LOOKUP
+
+    return ScriptedLLM.call(KNOWLEDGE_LOOKUP, query=query)
+
+
+def test_a_reply_failing_its_check_is_rewritten_once_from_the_passages():
+    llm = ScriptedLLM(
+        [
+            lookup("push-up"),
+            says("Do 99999 push-ups every morning."),  # fails: a number in no passage
+            says("Keep your body straight and lower your chest to the floor."),
+        ],
+        embeddings_fail=True,
+    )
+    outside = SimpleNamespace(web=lambda *args: {"error": "disabled"})
+    result = answer_world(llm, "How do I do a push-up?", outside, active=[PUSHUP])
+    assert result.stop_reason == "looked_up" and result.summary.startswith("Keep your body")
+    assert "Your draft had these problems" in llm.requests[-1]["messages"][-1]["content"]
+
+
+def test_the_prescribed_number_of_repetitions_is_not_a_medical_word():
+    from app.agent.world import reply_problems
+
+    reply = "Repeat for the prescribed number of repetitions."
+    assert reply_problems(reply, {}) == []
+    assert reply_problems("Take the prescribed medication.", {}) == ["uses medical words"]
+
+
+def test_a_known_topic_is_looked_up_instead_of_asking_which():
+    llm = ScriptedLLM(
+        [says("Which routine do you mean?"), says("A book and dim lights can be part of it.")],
+        embeddings_fail=True,
+    )
+    outside = SimpleNamespace(web=lambda *args: {"error": "disabled"})
+    result = answer_world(
+        llm, "Could that routine include a book and dimmer lighting?", outside, topic="wind-down"
+    )
+    assert result.summary != WHICH and result.stop_reason != "lookup_unclear"

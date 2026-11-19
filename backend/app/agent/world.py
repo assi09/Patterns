@@ -17,7 +17,7 @@ from app.agent.agent import AgentResult, ExtraTool
 from app.agent.conversation import _guarded, _numbers, _quoted
 from app.agent.guard import Guard
 from app.agent.knowledge import KNOWLEDGE_LOOKUP, passage_evidence
-from app.agent.llm import LLM, Budget, LLMError
+from app.agent.llm import LLM, Budget, LLMError, ToolCall
 from app.agent.retrieval import Found, load_index, search
 from app.agent.sanitize import clean, reads_like_instruction, stems
 from app.agent.verifier import MEDICAL, Claim
@@ -32,7 +32,7 @@ SENTENCE = re.compile(r"(?<=[.!?])\s+")
 LINK = re.compile(r"\(?\[([^\]]*)\]\([^)]*\)\)?")
 BARE_URL = re.compile(r"\(?https?://\S+\)?")
 COULD_NOT = "I couldn't look that up just now, so I'd rather not guess."
-WHICH = "Which exercise or food do you mean? Name it and I'll look it up."
+WHICH = "Which exercise, food or routine do you mean? Name it and I'll look it up."
 NOT_THIS = (
     "That's one I can't look up: I stick to food values, how your tracker works, and everyday "
     "exercise, sleep and eating guidance, and nothing "
@@ -239,13 +239,31 @@ def _without_links(text: str) -> str:
     return re.sub(r"\s+([.,)])", r"\1", BARE_URL.sub("", text)).replace("()", "").strip()
 
 
+def _written(llm, messages, found, budget, guard, result) -> tuple[str, list[str]]:
+    try:
+        written = llm.complete(messages, budget=budget)
+        reply = _without_links((written.text or "").strip())
+        problems = reply_problems(reply, found)
+    except LLMError as exc:
+        reply, problems = "", [str(exc)]
+    problems = _guarded(reply, problems, guard, result)
+    result.trace.append({"type": "reply", "problems": problems})
+    return reply, problems
+
+
+# Exercise instructions say "the prescribed number of repetitions": the program's, not a doctor's.
+PRESCRIBED_REPS = re.compile(
+    r"\bprescribed (?:amount|number) of (?:repetitions|reps|sets|times|seconds)\b", re.IGNORECASE
+)
+
+
 def reply_problems(reply: str, found: dict) -> list[str]:
     if not reply.strip():
         return ["the reply is empty"]
     problems = []
     if new := sorted(_numbers(reply) - _numbers(json.dumps(found))):
         problems.append("quotes numbers that are not in the lookup: " + ", ".join(new))
-    if MEDICAL.search(reply):
+    if MEDICAL.search(PRESCRIBED_REPS.sub("", reply)):
         problems.append("uses medical words")
     if reads_like_instruction(reply):
         problems.append("reads like an instruction")
@@ -267,8 +285,8 @@ def answer_world(
     audit of 2026-11-18 got hip-circle instructions without it. `active` holds the passages the
     last answer on this same topic used: a follow-up reads them first ("and how do I breathe?"
     after basic bridge instructions got the single-leg bridge, the audit of 2026-11-19)."""
-    # Choose, the same-variant pick, write; searching is charged without a model round.
-    budget = Budget(max_calls=4, max_tool_calls=2, max_cost_usd=0.06)
+    # Choose, the same-variant pick, write, one rewrite; searching costs no model round.
+    budget = Budget(max_calls=5, max_tool_calls=2, max_cost_usd=0.06)
     result = AgentResult(
         run_id=uuid.uuid4().hex[:12], stop_reason="looked_up", expert="general", budget=budget
     )
@@ -289,7 +307,12 @@ def answer_world(
         result.stop_reason, result.summary = "lookup_failed", COULD_NOT
         return result
     call = next(iter(choice.tool_calls), None)
-    if call is None and (choice.text or "").strip().lower().startswith("which"):
+    unclear = call is None and (choice.text or "").strip().lower().startswith("which")
+    if unclear and topic:
+        # The topic is already known ("could that routine include a book?" after wind-down
+        # passages was asked "which exercise or food?", the v4 audit): look it up under it.
+        call = ToolCall("topic", KNOWLEDGE_LOOKUP, {"query": f"{topic}: {question}"})
+    elif unclear:
         result.stop_reason, result.summary = "lookup_unclear", WHICH
         return result
     if call is None or call.name not in (FOOD_LOOKUP, WEB_LOOKUP, KNOWLEDGE_LOOKUP):
@@ -343,20 +366,22 @@ def answer_world(
         result.stop_reason, result.summary = "lookup_failed", COULD_NOT
         return result
     task = f"{quoted}\nThe lookup result, as quoted data:\n<result>\n{_quoted(found)}\n</result>"
-    try:
-        written = llm.complete(
-            [
-                {"role": "system", "content": GUIDE_PROMPT if records else REPLY_PROMPT},
-                {"role": "user", "content": task},
-            ],
-            budget=budget,
-        )
-        reply = _without_links((written.text or "").strip())
-        problems = reply_problems(reply, found)
-    except LLMError as exc:
-        reply, problems = "", [str(exc)]
-    problems = _guarded(reply, problems, guard, result)
-    result.trace.append({"type": "reply", "problems": problems})
+    messages = [
+        {"role": "system", "content": GUIDE_PROMPT if records else REPLY_PROMPT},
+        {"role": "user", "content": task},
+    ]
+    reply, problems = _written(llm, messages, found, budget, guard, result)
+    if problems and records:
+        # The right passage was found and only the wording failed: one rewrite, told what failed,
+        # before giving up ("couldn't confirm" was the answer to an ordinary push-up, v4 audit).
+        again = f"Your draft had these problems: {'; '.join(problems)}. Write it again from the "
+        again += "passages only, without them."
+        retry = [
+            *messages,
+            {"role": "assistant", "content": reply},
+            {"role": "user", "content": again},
+        ]
+        reply, problems = _written(llm, retry, found, budget, guard, result)
     if problems:
         # The search's own words, when the rewording is what failed: already paid for.
         direct = _without_links(found.get("answer", ""))
