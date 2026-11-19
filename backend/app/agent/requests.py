@@ -132,6 +132,9 @@ class Request(Fields):
     log_day: date | None = None
     reader_error: str | None = None
     reader_fields: list[str] = Field(default_factory=list)
+    # Each reading's fate, without values or the person's words: what failed, where and why
+    # (Codex's review, 2026-11-19: a final "clarify" alone could not be diagnosed).
+    attempts: list[dict] = Field(default_factory=list)
 
     def question(self, original: str) -> str:
         if self.kind == "guidance":
@@ -484,9 +487,11 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
 class Contradicted(RetryReading):
     """The resolved request contradicts something the question fixes (checks.py)."""
 
-    def __init__(self, found: list[Conflict]):
+    def __init__(self, found: list[Conflict], unresolved: str = ""):
         super().__init__(" ".join(c.retry for c in found))
         self.ask = found[0].ask
+        self.codes = [c.code for c in found]
+        self.unresolved = unresolved  # why resolving failed first, if it did
 
 
 def checked(reading: Reading, question: str, state: dict, today: date) -> Request:
@@ -499,7 +504,7 @@ def checked(reading: Reading, question: str, state: dict, today: date) -> Reques
     except Ambiguous as unresolved:
         empty = Request(kind=reading.kind, subject=reading.subject)
         if found := conflicts(reading, empty, question, state, today):
-            raise Contradicted(found) from unresolved
+            raise Contradicted(found, str(unresolved)) from unresolved
         raise
     if found := conflicts(reading, request, question, state, today):
         raise Contradicted(found)
@@ -585,10 +590,39 @@ def strict_schema(schema: dict) -> dict:
     return result
 
 
+def outline(reading: "Reading") -> dict:
+    """What a reading was, without values or the person's words: for the private trace."""
+    return {
+        "kind": reading.kind,
+        "memory": reading.memory,
+        "memory_action": reading.memory_action,
+        "focus": reading.focus,
+        "log_day": reading.log_day.kind if reading.log_day else None,
+        "parts": [
+            {
+                "metrics": len(p.metrics),
+                "operation": p.operation,
+                "periods": [f"{q.kind}/{q.anchor}" for q in p.periods],
+                "reference": p.reference,
+                "comparison": p.comparison,
+                "meal": p.meal_type is not None,
+            }
+            for p in reading.parts
+        ],
+    }
+
+
 def interpret(
-    llm: LLM, question: str, history: Sequence[Turn], today: date, *, pending_draft: bool = False
+    llm: LLM,
+    question: str,
+    history: Sequence[Turn],
+    today: date,
+    *,
+    pending_draft: bool = False,
+    keep_readings: bool = False,
 ) -> tuple[Request | None, dict, Budget]:
-    """Return (request, state, budget); scripted callers can provide a separate reader queue."""
+    """Return (request, state, budget); scripted callers can provide a separate reader queue.
+    `keep_readings` keeps each full reading in `attempts`: only for replays on synthetic data."""
     reader = getattr(llm, "read_request", None)
     if reader is None:
         return None, {}, Budget()
@@ -625,6 +659,7 @@ def interpret(
         },
     }
     asked = ""  # the question for the person if the reader keeps a contradiction
+    attempts: list[dict] = []
     try:
         for attempt in range(2):
             completion = reader(messages, tools=[tool], budget=budget)
@@ -636,9 +671,16 @@ def interpret(
                 raise Ambiguous(
                     "Could you specify the measurement and dates, or the topic you mean?"
                 )
-            reading = anchored_by_code(
-                Reading.model_validate(completion.tool_calls[0].arguments), question, today, state
-            )
+            step: dict = {"attempt": attempt + 1}
+            attempts.append(step)
+            arguments = completion.tool_calls[0].arguments
+            if keep_readings:
+                step["reading"] = arguments
+            as_read = Reading.model_validate(arguments)
+            reading = anchored_by_code(as_read, question, today, state)
+            step["read"] = outline(as_read)
+            if reading != as_read:
+                step["filled_by_code"] = outline(reading)
             try:
                 if reading.kind == "confirmation" and not pending_draft:
                     raise RetryReading(
@@ -647,7 +689,15 @@ def interpret(
                         "invent a pending draft or turn readback into a write."
                     )
                 request = checked(reading, question, state, today)
+                step["outcome"] = "resolved"
             except RetryReading as error:
+                step["outcome"] = "sent_back"
+                step["stage"] = "check" if isinstance(error, Contradicted) else "resolve"
+                step["codes"] = getattr(error, "codes", [type(error).__name__])
+                if unresolved := getattr(error, "unresolved", ""):
+                    step["unresolved"] = unresolved[:200]
+                if keep_readings:
+                    step["reason"] = str(error)[:500]
                 if attempt:
                     raise Ambiguous(
                         getattr(error, "ask", "")
@@ -680,12 +730,18 @@ def interpret(
                 "or the topic you mean."
             )
         )
+        if attempts and "outcome" not in attempts[-1]:
+            stage = "schema" if isinstance(error, ValidationError) else "resolve"
+            attempts[-1].update(outcome="clarify", stage=stage, codes=[type(error).__name__])
+            if isinstance(error, Ambiguous):
+                attempts[-1]["unresolved"] = str(error)[:200]
         request = Request(kind="clarify", clarification=clarification)
         request.reader_error = type(error).__name__
         if isinstance(error, ValidationError):
             request.reader_fields = [
                 ".".join(map(str, e["loc"])) for e in error.errors(include_input=False)
             ]
+    request.attempts = attempts
     next_state = dict(state)
     if request.parts and request.subject == "self":
         next_state["data"] = [p.model_dump(mode="json") for p in request.parts]

@@ -288,3 +288,41 @@ def test_over_a_number_of_days_is_not_a_threshold():
     period = {"kind": "rolling", "anchor": "today", "days": 10}
     right = [part(period, "count", ("steps",), comparison=">", threshold=9000)]
     assert ask_reader(question, right)[2] == 1
+
+
+# ---- what happened to each reading is kept, without the person's words ----
+
+
+def test_each_reading_s_fate_is_recorded_without_words_or_values():
+    question = "Keep that same date, and say the date explicitly."
+    history = held("2026-10-20", "2026-10-20")
+    request, _, _ = ask_reader(
+        question, [part(EXPLICIT("2026-10-19"))], [part(INHERIT)], history=history
+    )
+    first, second = request.attempts
+    assert (first["outcome"], first["stage"], first["codes"]) == (
+        "sent_back",
+        "check",
+        ["same_days"],
+    )
+    assert second["outcome"] == "resolved" and second["read"]["parts"][0]["periods"] == [
+        "inherit/today"
+    ]
+    kept = str(request.attempts)
+    assert "same date" not in kept and "2026-10-19" not in kept and "resting_hr" not in kept
+
+
+def test_a_reading_that_cannot_resolve_says_why():
+    llm = ScriptedLLM(
+        request_turns=[
+            ScriptedLLM.call(
+                "read_request",
+                kind="data",
+                parts=[{"operation": "value", "periods": [{"kind": "inherit"}]}],
+            )
+        ]
+    )
+    request, _, _ = interpret(llm, "And that one?", [], TODAY)
+    [only] = request.attempts
+    assert only["outcome"] == "clarify" and only["stage"] == "resolve"
+    assert only["codes"] == ["Ambiguous"] and "earlier" in only["unresolved"]

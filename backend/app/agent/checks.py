@@ -21,6 +21,7 @@ DATA_KINDS = ("data", "causality", "investigate")
 
 @dataclass(frozen=True)
 class Conflict:
+    code: str  # which check, for the private trace: "written_date", "shift", ...
     retry: str  # told to the reader: the fact its reading contradicts
     ask: str  # asked of the person when the reader keeps it
 
@@ -81,6 +82,7 @@ def _written(request, question: str) -> list[Conflict]:
     said = ", ".join(missing)
     return [
         Conflict(
+            "written_date",
             f"The user wrote the date(s) {said}. Each written date must be the start or end of "
             "the period it belongs to, exactly as written; do not move it or inherit old dates.",
             f"I want to be sure of the dates: should I use {said}?",
@@ -157,6 +159,7 @@ def _earlier_days(request, question: str, state: dict, today: date) -> list[Conf
         way = "earlier" if shift < 0 else "later"
         return [
             Conflict(
+                "shift",
                 f"The user moves the earlier request's days {abs(shift)} day(s) {way}: shift "
                 "both ends of that period by exactly that, using a relative period anchored "
                 "to previous, and leave other parts as they are.",
@@ -171,6 +174,7 @@ def _earlier_days(request, question: str, state: dict, today: date) -> list[Conf
         target = previous[0] if len(previous) == 1 else None
         return [
             Conflict(
+                "same_days",
                 "The user keeps the earlier request's dates exactly ('that same day/interval'): "
                 "use a period of kind inherit (with reference if several), not new dates.",
                 f"Do you mean the same dates as before, {_span(*_ends(target), today)}?"
@@ -234,6 +238,7 @@ def _counted_from_today(reading, request, question: str, today: date) -> list[Co
     if only_today and any(p.anchor == "previous" for part in reading.parts for p in part.periods):
         found.append(
             Conflict(
+                "anchor_today",
                 "The question counts its days from today ('yesterday', 'last 7 days', "
                 "'this week'): anchor every such period to today, not to the earlier request.",
                 "Do you mean counted back from today?",
@@ -248,6 +253,7 @@ def _counted_from_today(reading, request, question: str, today: date) -> list[Co
     if ends_yesterday and LAST_DAYS.search(question) and not ENDING_YESTERDAY.search(question):
         found.append(
             Conflict(
+                "last_days_end",
                 "'The last N days' ends today in this app (offset_days 0); only 'N complete "
                 "days' or 'ending yesterday' ends yesterday.",
                 "Should the period include today?",
@@ -266,6 +272,7 @@ def _counted_from_today(reading, request, question: str, today: date) -> list[Co
         if span and request.parts and not ({span, calendar} & ends):
             found.append(
                 Conflict(
+                    "calendar",
                     f"'{phrase}' is the calendar period {span[0]} to {span[1]} (weeks start on "
                     "Monday): use a calendar period for the part it belongs to.",
                     f"Do you mean {phrase}, {_span(span[0], span[1], today)}?",
@@ -311,6 +318,7 @@ def _metric(reading, question: str) -> list[Conflict]:
         return []
     return [
         Conflict(
+            "metric",
             f"The user names '{label(named[0])}', registry id {named[0]}; the reading has "
             f"{', '.join(metrics)}. Use the metric the user named.",
             f"Do you mean your {label(named[0])}?",
@@ -343,6 +351,7 @@ def _meal(reading, question: str) -> list[Conflict]:
         if part.meal_type and part.meal_type not in named and not SAME_MEAL.search(question):
             found.append(
                 Conflict(
+                    "meal_unnamed",
                     "No meal is named in this question: leave meal_type null (every meal) "
                     "unless the user names a meal or says 'the same meal'.",
                     f"Should I look at {part.meal_type.lower()} only, or every meal?",
@@ -357,6 +366,7 @@ def _meal(reading, question: str) -> list[Conflict]:
             meal = next(iter(named))
             found.append(
                 Conflict(
+                    "meal_named",
                     f"The user names a meal: set meal_type {meal}.",
                     f"Should I look at {meal.lower()} only?",
                 )
@@ -404,6 +414,7 @@ def _comparison(reading, question: str) -> list[Conflict]:
         return []
     return [
         Conflict(
+            "comparison",
             f"The user said '{words} {number}': comparison {sign}, threshold {value:g} (in the "
             "unit the user said). 'Above' never includes the value itself; 'at least' does.",
             f"Should I count the days {SAID[sign]} {value:g}?",

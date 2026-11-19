@@ -160,3 +160,35 @@ No paid model judge or Google traffic/writes. Scripted offline preflights cost $
 excluded from accuracy. All 488 actual replies were reviewed; all raw artifacts remain under
 ignored `data/eval/`. See [the completed local handoff](independent-audit-v3-handoff.md) for
 cohort scores, independent recalculations, grading corrections and limitations.
+
+
+## Independent post-redesign audit — November 19, 2026
+
+Within the unused portion of Karim's separate $2 allowance, tested PR #195 head `84db5f5`.
+
+| Run | OpenAI | Jev | Total estimate |
+|---|---:|---:|---:|
+| Fresh frozen synthetic API conversations, 211 turns / 78 conversations; direct answer, independent row/evidence and state review | $0.386967800 | $0.019739496 | $0.406707296 |
+| Frozen 24-item PHIA B1 regression gate, including four conservative-reservation blocks and their later completion; no completed answer repeated, no paid judge | $0.048681150 | $0.002340660 | $0.051021810 |
+
+New total **$0.457729106**, no uncertain reservations outstanding. Together with the earlier
+$0.910414712 conservative upper estimate: **$1.368143818 of $2**, leaving **$0.631856182**.
+The user explicitly approved the PHIA public-health-derived data transfer after automatic review
+initially blocked it; the rejected command made no paid calls. Shared-budget reallocation and all
+original blocked outputs are retained. Offline tests, preflight and memory API diagnostics cost $0.
+No Google traffic/writes, merge, deploy or full PHIA batches. See
+[independent-audit-v4-handoff.md](independent-audit-v4-handoff.md) for per-area grades, failures,
+methods and limitations; raw inputs/outputs remain under ignored `data/eval/`.
+
+### 2026-11-19: request-reader replay of the v4 audit's misses
+
+Within the same $2 allowance, approved with a hard $0.07 cap. Only the request reader (`gpt-5.4-mini`),
+on the 47 failed/partial turns of the v4 audit and 11 passing controls, with each turn's original
+question, profile date, earlier turns, saved request state and waiting-card flag
+(`eval/reader_replay.py`). Readings kept under ignored `data/eval/reader_replay_2026-11-19/`.
+
+| Run | OpenAI | Total |
+|---|---:|---:|
+| 58 reader-only turns (the 59th stopped at the cap) | $0.0675 | **$0.0675** |
+
+Allowance: $1.368143818 + $0.0675 = **$1.4356 of $2**, leaving **about $0.564**.
