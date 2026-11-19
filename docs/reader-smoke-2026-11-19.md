@@ -32,3 +32,22 @@ after one retry, or not clean.
 most one retry). **Stop before the full audit** if the schema is rejected, or any turn swaps a
 period between clauses, drops a clause, or turns a read into a write; that failure is inspected
 first.
+
+## Results (added after the run)
+
+**The schema was accepted on every call.** 17 of 20 turns were clean on the first attempt: both
+standalone controls, the pure and paused workout drafts, the count beside a save-status question,
+the status question alone, two metrics with their own ranges, five complete days, forget beside
+"don't save", the polite remember, "no higher than", "the first result only", the explanation, the
+habit suggestion and the three passing turns. Every clean clause copied its words exactly.
+
+Three were not, and two met a stop rule:
+
+| Turn | What the reader did | Stop rule | Fix |
+|---|---|---|---|
+| `calendar_rollover-02/t3` | "That date and the three dates before it" as the same day only: one day answered silently | swapped period | A check for "that date and the N days before/after it": N+1 days ending (or starting) on that date. **Rechecked live: sent back once, then Dec 29 – Jan 1.** |
+| `privacy_memory-01/t2` | "What have I told you about riding?" read as remembering the *previous* message, its words copied into `said` | read turned into a write | A clause whose words are not from the current message (under 60% of its words) is sent back; every clean clause had copied its words exactly. Checked offline only: the cap was reached. |
+| `calendar_rollover-01/t3` | The same phrase as the same day plus a three-day shift, two periods for one mean, which code turned into a question to the person | none (asked, not answered wrongly) | Two periods for one average are now the reading's error and sent back, not asked. Checked offline only. |
+
+The three real readings are in `backend/tests/test_clauses.py` as regression tests, each followed by
+the correct reading. Cost: $0.0299 of the $0.03 cap.

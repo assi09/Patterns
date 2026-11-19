@@ -192,3 +192,16 @@ question, profile date, earlier turns, saved request state and waiting-card flag
 | 58 reader-only turns (the 59th stopped at the cap) | $0.0675 | **$0.0675** |
 
 Allowance: $1.368143818 + $0.0675 = **$1.4356 of $2**, leaving **about $0.564**.
+
+### 2026-11-19: smoke run of the clause reader
+
+Approved with a hard $0.03 cap. Request reader only, 20 turns ([reader-smoke-2026-11-19.md](reader-smoke-2026-11-19.md)),
+then a recheck of one stop-rule turn after its fix.
+
+| Run | OpenAI | Total |
+|---|---:|---:|
+| 20 reader-only turns, one call each | $0.0249 | $0.0249 |
+| Recheck of `calendar_rollover-02/t3` (sent back once, then right) | $0.0050 | $0.0050 |
+| **Smoke total** | | **$0.0299** |
+
+Allowance: $1.4356 + $0.0299 = **$1.4655 of $2**, leaving **about $0.534**.

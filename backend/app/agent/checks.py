@@ -286,6 +286,40 @@ def _same_days(text, part, resolved, state, today) -> Conflict | None:
     )
 
 
+# "That date and the three dates immediately before it": an earlier day widened, not kept as it is.
+AROUND = re.compile(
+    rf"\b(?:that|this|the same) (?:date|day)\b.*?\band the {COUNT} (?:dates|days) "
+    r"(?:immediately |just |right )?(before|preceding|prior to|after|following) (?:it|that)\b",
+    re.IGNORECASE,
+)
+
+
+def _around_earlier(text, part, resolved, state, today) -> Conflict | None:
+    found, previous = AROUND.search(text), _previous(state)
+    if not found or not previous or len(resolved.windows) != 1:
+        return None
+    index = part.reference if part.reference is not None else 0
+    if index >= len(previous) or (part.reference is None and len(previous) != 1):
+        return None
+    earlier = previous[index][-1]
+    days = _number(found.group(1))
+    before = found.group(2).lower() in ("before", "preceding", "prior to")
+    start, end = (
+        (earlier.end - timedelta(days=days), earlier.end)
+        if before
+        else (earlier.start, earlier.start + timedelta(days=days))
+    )
+    window = resolved.windows[0]
+    if (window.start, window.end) == (start, end):
+        return None
+    return Conflict(
+        "around_earlier",
+        f"'{text}' is {days + 1} days, {start} to {end}: the earlier date with the {days} days "
+        f"{'before' if before else 'after'} it, as one days_ending period.",
+        f"Do you mean {_span(start, end, today)}?",
+    )
+
+
 # ---- periods counted from today ----
 
 FROM_TODAY = re.compile(
@@ -508,6 +542,7 @@ CHECKS: tuple[Check, ...] = (
     _written,
     _shift,
     _same_days,
+    _around_earlier,
     _anchored_today,
     _last_n_days,
     _calendar,

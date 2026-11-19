@@ -12,6 +12,7 @@ say if it's saved" squeezed into one kind, losing the count. A period had fields
 dates, references and statistics are still worked out by the same code.
 """
 
+import re
 from datetime import date
 from typing import Annotated, Literal
 
@@ -40,7 +41,8 @@ class CalendarPeriod(Fields):
 
 
 class SameAsEarlier(Fields):
-    """Exactly the days of an earlier result ('that same day', 'for that interval')."""
+    """Exactly the days of an earlier result, nothing added ('that same day', 'for that
+    interval'). 'That date and the three before it' is days_ending, not this."""
 
     kind: Literal["same_as_earlier"]
 
@@ -287,10 +289,31 @@ def _day(clause: LogClause | CorrectClause) -> Period | None:
     return None
 
 
-def reading_from(said: Said) -> Reading:
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", text.casefold())
+
+
+def from_this_message(clause, question: str) -> bool:
+    """Whether a clause's words come from the current message. The reader once copied the
+    previous message into a "remember" clause, answering "what have I told you?" with a new
+    fact to keep (the smoke run of 2026-11-19); every clean clause had copied its words exactly."""
+    said, asked = _words(clause.said), set(_words(question))
+    return not said or not asked or sum(w in asked for w in said) / len(said) >= MIN_OWN_WORDS
+
+
+MIN_OWN_WORDS = 0.6
+
+
+def reading_from(said: Said, question: str = "") -> Reading:
     """The internal reading: the primary clause's kind, every data clause's part in order (read
     beside a log, a confirmation, a status or a memory request as well), and its own fields."""
     clauses = list(said.clauses)
+    if question and (strays := [c for c in clauses if not from_this_message(c, question)]):
+        raise RetryReading(
+            f"A {strays[0].type} clause has words from an earlier message. Earlier messages are "
+            "context only: make clauses only for what the current message asks, with said "
+            "copied from it."
+        )
     types = [c.type for c in clauses]
     primary = next((t for t in PRIMARY if t in types), None)
     fields: dict = {

@@ -292,3 +292,57 @@ def test_every_metric_s_value_and_previous_day_resolve_through_clauses(metric):
         history=[earlier("2026-11-11", "2026-11-11", metric)],
     )
     assert windows(request) == [(date(2026, 11, 10), date(2026, 11, 10))]
+
+
+# ---- the smoke run's three misreadings (real readings, 2026-11-19) ----
+
+AROUND = "Use the mean over that date and the three dates immediately before it."
+FOUR = {"kind": "days_ending", "length": 4, "ending": "earlier_end", "offset": 0}
+
+
+def around(*periods):
+    return said(data(AROUND, ["steps"], "mean", *periods, earlier_result=0))
+
+
+def test_the_same_day_plus_a_shift_for_one_mean_is_sent_back_not_asked():
+    wrong = around({"kind": "same_as_earlier"}, {"kind": "shift_earlier", "days": -3})
+    request, calls = read(
+        AROUND,
+        wrong,
+        around(FOUR),
+        history=[earlier("2028-02-29", "2028-02-29")],
+        today=date(2028, 3, 4),
+    )
+    assert windows(request) == [(date(2028, 2, 26), date(2028, 2, 29))] and calls == 2
+    assert request.attempts[0]["stage"] == "resolve"
+
+
+def test_the_same_day_alone_for_that_date_and_three_before_is_sent_back():
+    """It answered one day, silently: the stop rule of the smoke run."""
+    request, calls = read(
+        AROUND,
+        around({"kind": "same_as_earlier"}),
+        around(FOUR),
+        history=[earlier("2027-01-01", "2027-01-01")],
+        today=date(2027, 1, 8),
+    )
+    assert windows(request) == [(date(2026, 12, 29), date(2027, 1, 1))] and calls == 2
+    assert request.attempts[0]["codes"] == ["around_earlier"]
+
+
+def test_a_clause_copied_from_an_earlier_message_is_sent_back():
+    """ "What have I told you about riding?" came back as remembering the previous message."""
+    question = "What have I told you in this conversation about riding?"
+    before = "Keep this only in our conversation, without storing it: I favour evening bike rides."
+    stray = said(
+        {"type": "memory", "said": before, "action": "remember"},
+        {"type": "other", "said": question},
+    )
+    right = said({"type": "memory", "said": question, "action": "recall", "recall": "this_chat"})
+    request, calls = read(question, stray, right, history=[Turn(before, "Got it.")])
+    assert (request.kind, request.memory_action, request.recall) == (
+        "memory",
+        "recall",
+        "this_chat",
+    )
+    assert calls == 2

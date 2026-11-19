@@ -488,7 +488,14 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
         if operation == "correlate" and len(metrics) != 2:
             raise Ambiguous("Which two measurements should I check for a relationship?")
         if operation not in ("compare",) and len(windows) > 1:
-            raise Ambiguous("Which of those periods should I use?")
+            # Two periods for one average is the reading's mistake, not the person's question:
+            # "that date and the three before it" came back as the same day plus a shift.
+            raise RetryReading(
+                f"Operation {operation} takes one period. Days added before or after an earlier "
+                "date ('that date and the three dates before it') are one days_ending period "
+                "ending on that date, not the same days plus a shift. Two periods are only for "
+                "compare."
+            )
         request.parts.append(
             ResolvedPart(
                 metrics=metrics,
@@ -572,14 +579,16 @@ Clause types:
   approved; waiting: cards not yet tapped; this_chat: what they said in this conversation; all);
   forget (remove something kept; states_new_fact when they also say what is true now).
 - other: small talk, thanks, or nothing the app does.
-One message can have several clauses: "repeat the step count and say whether it's saved" is a
-data clause and a status clause. Only what this message asks: "the first result only" is one
-clause, never a repeat of the others.
+Earlier messages are context only: every clause comes from the current message, and its said is
+copied from the current message. One message can have several clauses: "repeat the step count
+and say whether it's saved" is a data clause and a status clause. Only what this message
+asks: "the first result only" is one clause, never a repeat of the others.
 
 Periods, for data and investigate clauses; pick the kind that means what was said:
 - dates: dates written out; one day has start = end.
 - calendar: this week (week, 0), last month (month, -1), the week before last (week, -2).
-- same_as_earlier: exactly an earlier result's days ("that same day", "for that interval").
+- same_as_earlier: exactly an earlier result's days, nothing added ("that same day", "for that
+  interval"). Days added before or after an earlier date are days_ending, never same_as_earlier.
 - shift_earlier: an earlier result's whole period moved ("two days earlier" is -2).
 - days_ending: length days ending on a day. yesterday: 1, today, -1. two days before today: 1,
   today, -2. the last 7 days (today included): 7, today, 0. the 5 complete days before today: 5,
@@ -632,13 +641,13 @@ def said_schema() -> dict:
     return Said.model_json_schema()
 
 
-def parsed(arguments) -> "Reading":
+def parsed(arguments, question: str = "") -> "Reading":
     """The reader's clauses as the internal reading. A flat reading (older scripted fixtures,
     which describe the stage after the reader) is taken as it is."""
     if isinstance(arguments, dict) and "clauses" in arguments:
         from app.agent.clauses import Said, reading_from
 
-        return reading_from(Said.model_validate(arguments))
+        return reading_from(Said.model_validate(arguments), question)
     return Reading.model_validate(arguments)
 
 
@@ -731,7 +740,7 @@ def interpret(
             if keep_readings:
                 step["reading"] = arguments
             try:
-                as_read = parsed(arguments)
+                as_read = parsed(arguments, question)
                 reading = anchored_by_code(as_read, question, today, state)
                 step["read"] = outline(as_read)
                 if reading != as_read:
