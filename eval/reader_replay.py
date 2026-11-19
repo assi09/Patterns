@@ -18,7 +18,7 @@ they can reproduce a failure, not recover the readings the original run discarde
 import argparse
 import json
 import pickle
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from app.agent.context import Turn
@@ -48,32 +48,34 @@ def chosen(conversations: list[dict], grades: dict) -> list[tuple[str, str]]:
     return missed + controls[:CONTROLS]
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--audit", type=Path, required=True)
-    parser.add_argument("--bundle", type=Path, required=True)
-    parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--cap", type=float, default=0.067)
-    args = parser.parse_args()
-
-    conversations = json.loads((args.bundle / "conversations.json").read_text())
-    profiles = pickle.loads((args.bundle / "profiles.pkl").read_bytes())
-    grades = json.loads((args.audit / "adjudications.json").read_text())
-    rows = {
-        (r["conversation"], r["turn"]): r
-        for r in map(
-            json.loads, (args.audit / "answers.jsonl").read_text().splitlines()
-        )
-    }
+def jobs(args, conversations, profiles, grades, rows) -> list[dict]:
+    """Each turn to read with the context it had: the audit's misses and controls, or exactly the
+    turns an expectations file lists (standalone questions there have no context)."""
     by_id = {c["id"]: c for c in conversations}
-    ledger = SpendLedger(cap_usd=args.cap)
-    llm = OpenAILLM.from_settings(settings, ledger)
-    args.out.mkdir(parents=True, exist_ok=True)
-    out = (args.out / "readings.jsonl").open("w")
-    done = 0
-    for conversation, turn in chosen(conversations, grades):
+    if args.only:
+        listed = json.loads(args.only.read_text())["turns"]
+        keys = [tuple(t["id"].split("/")) for t in listed]
+        standalone = {tuple(t["id"].split("/")): t for t in listed if "question" in t}
+    else:
+        keys, standalone = chosen(conversations, grades), {}
+    found = []
+    for conversation, turn in keys:
+        if (conversation, turn) in standalone:
+            item = standalone[(conversation, turn)]
+            found.append(
+                {
+                    "conversation": conversation,
+                    "turn": turn,
+                    "family": "standalone",
+                    "graded": "control",
+                    "question": item["question"],
+                    "today": date.fromisoformat(item["today"]),
+                    "history": [],
+                    "waiting": False,
+                }
+            )
+            continue
         conv = by_id[conversation]
-        today = datetime.fromisoformat(profiles[conv["profile"]]["clock"]).date()
         history = []
         for earlier in conv["turns"]:
             if earlier["id"] == turn:
@@ -91,17 +93,61 @@ def main() -> None:
                 Turn(row["question"], row["reply"]["text"], request_state=state)
             )
         row = rows[(conversation, turn)]
-        waiting = any(a["status"] == "draft" for a in row["before"].get("actions", []))
+        found.append(
+            {
+                "conversation": conversation,
+                "turn": turn,
+                "family": conv["family"],
+                "graded": grades[f"{conversation}/{turn}"]["status"],
+                "question": row["question"],
+                "today": datetime.fromisoformat(
+                    profiles[conv["profile"]]["clock"]
+                ).date(),
+                "history": history,
+                "waiting": any(
+                    a["status"] == "draft" for a in row["before"].get("actions", [])
+                ),
+            }
+        )
+    return found
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--audit", type=Path, required=True)
+    parser.add_argument("--bundle", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--cap", type=float, default=0.067)
+    parser.add_argument(
+        "--only", type=Path, help="an expectations file listing the turns to read"
+    )
+    args = parser.parse_args()
+
+    conversations = json.loads((args.bundle / "conversations.json").read_text())
+    profiles = pickle.loads((args.bundle / "profiles.pkl").read_bytes())
+    grades = json.loads((args.audit / "adjudications.json").read_text())
+    rows = {
+        (r["conversation"], r["turn"]): r
+        for r in map(
+            json.loads, (args.audit / "answers.jsonl").read_text().splitlines()
+        )
+    }
+    ledger = SpendLedger(cap_usd=args.cap)
+    llm = OpenAILLM.from_settings(settings, ledger)
+    args.out.mkdir(parents=True, exist_ok=True)
+    out = (args.out / "readings.jsonl").open("w")
+    done = 0
+    for job in jobs(args, conversations, profiles, grades, rows):
         if ledger.spent_usd >= args.cap:
             print(f"Stopped at the cap after {done} turns.")
             break
         # The reader turns a refused call into a clarification, so the cap shows up there.
         request, _, budget = interpret(
             llm,
-            row["question"],
-            history,
-            today,
-            pending_draft=waiting,
+            job["question"],
+            job["history"],
+            job["today"],
+            pending_draft=job["waiting"],
             keep_readings=True,
         )
         if request is not None and request.reader_error == BudgetExceeded.__name__:
@@ -111,13 +157,13 @@ def main() -> None:
         out.write(
             json.dumps(
                 {
-                    "conversation": conversation,
-                    "turn": turn,
-                    "family": conv["family"],
-                    "graded": grades[f"{conversation}/{turn}"]["status"],
-                    "question": row["question"],
-                    "today": today.isoformat(),
-                    "pending_draft": waiting,
+                    "conversation": job["conversation"],
+                    "turn": job["turn"],
+                    "family": job["family"],
+                    "graded": job["graded"],
+                    "question": job["question"],
+                    "today": job["today"].isoformat(),
+                    "pending_draft": job["waiting"],
                     "reconstructed": [
                         "earlier answers from recorded replies",
                         "pending_draft",
