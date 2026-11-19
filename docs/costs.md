@@ -205,3 +205,13 @@ then a recheck of one stop-rule turn after its fix.
 | **Smoke total** | | **$0.0299** |
 
 Allowance: $1.4356 + $0.0299 = **$1.4655 of $2**, leaving **about $0.534**.
+
+### 2026-11-19: live re-check of the two smoke fixes
+
+Approved with a hard $0.007 cap. Request reader only, two turns, each run once.
+
+| Run | OpenAI | Total |
+|---|---:|---:|
+| `privacy_memory-01/t2` and `calendar_rollover-01/t3`, two calls each (one retry) | $0.0062 | **$0.0062** |
+
+Allowance: $1.4655 + $0.0062 = **$1.4717 of $2**, leaving **about $0.528**.

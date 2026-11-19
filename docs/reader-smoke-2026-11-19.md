@@ -51,3 +51,16 @@ Three were not, and two met a stop rule:
 
 The three real readings are in `backend/tests/test_clauses.py` as regression tests, each followed by
 the correct reading. Cost: $0.0299 of the $0.03 cap.
+
+## Live re-check of the two offline fixes (approved, $0.007 cap; spent $0.0062)
+
+Pass conditions were set before running: the memory question must end as recall of this chat with
+no remember, replace or forget operation; the date question must end as one four-day window ending
+on the referenced date, with first attempt and retry recorded.
+
+| Turn | First attempt | Final | Verdict |
+|---|---|---|---|
+| `privacy_memory-01/t2` | recall **and** a remember copied from the previous message; sent back by the own-words check | recall, this chat only; no remember, replace or forget | **pass**, after one retry |
+| `calendar_rollover-01/t3` | the same day as before; sent back by the around-an-earlier-date check | one window, Feb 26 – Feb 29, 2028 | **pass**, after one retry |
+
+The reader still makes both first mistakes; code catches them before anything is answered or kept.
