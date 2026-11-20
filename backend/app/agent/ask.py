@@ -46,6 +46,7 @@ from app.agent.experts import (
     specialist_notes,
     visible_metrics,
 )
+from app.agent.findings import cite_findings
 from app.agent.followup import standalone, with_period, with_relative_day
 from app.agent.guard import Guard, GuardError, JevGuard
 from app.agent.intent import Intent
@@ -1383,8 +1384,10 @@ def ask(
     )
     # The days an investigation named, and a second period it compares them with.
     named = [w for p in typed.parts for w in p.windows][:2] if investigating else []
+    overview_records: list[Evidence] = []  # every finding the answer states is cited from these
     if broad:
         records, text = overview_evidence(frame, question, _day(today or now), *named)
+        overview_records = list(records)
         if not records and named:
             block = "\n\n".join(part for part in (block, text) if part)  # what is missing, said
         if records:
@@ -1625,6 +1628,8 @@ def ask(
         "chat_fallback",
         "limits",
     )
+    if broad and overview_records and not stopped_early and result.summary not in (NO_ANSWER, ""):
+        cite_findings(result, overview_records)
     if plan and plan.coaching:
         result.summary = without_filler(result.summary)
         if wanted and not stopped_early:

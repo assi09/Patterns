@@ -457,10 +457,16 @@ def forget_from(sessions: Sessions, agent: AgentParts, user_id, question_id, tex
 
 
 def _on_day(moment: datetime, day, zone) -> datetime:
-    """The same local clock time on another local day, in the account's named zone: adding days
-    to a fixed offset moved a noon walk to 11:00 across a daylight-saving change."""
+    """The same local clock time on another local day, in the account's named zone, as a UTC
+    instant: adding days to a fixed offset moved a noon walk to 11:00 across a daylight-saving
+    change. Durations are then added to the instant, never to the wall clock: 00:30 plus two
+    hours on the night clocks go back is 01:30 local, two hours later, not 02:30."""
     local = moment.astimezone(zone)
-    return datetime.combine(day, local.time().replace(tzinfo=None), tzinfo=zone)
+    return datetime.combine(day, local.time().replace(tzinfo=None), tzinfo=zone).astimezone(UTC)
+
+
+def _local(moment: datetime, zone) -> str:
+    return moment.astimezone(zone).isoformat()
 
 
 def corrected_payload(prior: dict, minutes: float | None, day, zone) -> dict | None:
@@ -474,21 +480,22 @@ def corrected_payload(prior: dict, minutes: float | None, day, zone) -> dict | N
         k: v for k, v in prior.items() if k not in ("measured", "provenance", "estimateSource")
     }
     if prior.get("kind") == "workout":
-        start = datetime.fromisoformat(prior["startTime"])
-        end = datetime.fromisoformat(prior["endTime"])
+        start = datetime.fromisoformat(prior["startTime"]).astimezone(UTC)
+        end = datetime.fromisoformat(prior["endTime"]).astimezone(UTC)
+        elapsed = end - start  # real time, as instants: a pause stays inside it
         if minutes is not None:
-            if abs((end - start).total_seconds() - prior["activeSeconds"]) > 1:
+            if abs(elapsed.total_seconds() - prior["activeSeconds"]) > 1:
                 return None
-            end = start + timedelta(minutes=minutes)
+            elapsed = timedelta(minutes=minutes)
             payload["activeSeconds"] = round(minutes * 60)
         if day is not None:
-            moved = _on_day(start, day, zone)
-            start, end = moved, moved + (end - start)
-        return payload | {"startTime": start.isoformat(), "endTime": end.isoformat()}
+            start = _on_day(start, day, zone)
+        end = start + elapsed  # UTC arithmetic: the same elapsed time across a clock change
+        return payload | {"startTime": _local(start, zone), "endTime": _local(end, zone)}
     if minutes is not None:
         return None  # a meal has no duration: the model's to read
     eaten = _on_day(datetime.fromisoformat(prior["consumedAt"]), day, zone)
-    return payload | {"consumedAt": eaten.isoformat()}
+    return payload | {"consumedAt": _local(eaten, zone)}
 
 
 def noted_reply(statuses: list[str] | None) -> str:

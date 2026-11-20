@@ -944,3 +944,151 @@ def test_a_new_duration_keeps_the_start_instant():
     moved = chat.corrected_payload(walk(start, 30), 8, None, ZoneInfo(BEIRUT))
     assert datetime.fromisoformat(moved["startTime"]) == start
     assert datetime.fromisoformat(moved["endTime"]) == start + timedelta(minutes=8)
+
+
+# ---- a workout that itself spans a clock change keeps its real elapsed time ----
+
+NEW_YORK = "America/New_York"
+
+
+@pytest.mark.parametrize(
+    "day, clock, label_",
+    [
+        (date(2026, 11, 1), (0, 30), "fall back: 01:00-02:00 happens twice"),
+        (date(2026, 3, 8), (1, 30), "spring forward: 02:00-03:00 never happens"),
+    ],
+)
+@pytest.mark.parametrize("active_minutes", [120, 90])  # 90: a paused workout
+def test_a_workout_moved_onto_a_clock_change_keeps_its_elapsed_and_active_time(
+    day, clock, label_, active_minutes
+):
+    """Review of d7692d5: a two-hour workout moved to 00:30 on Nov 1 in New York became three
+    elapsed hours while two stayed active. The start keeps its local clock time on the new day;
+    the end is that instant plus the real elapsed time."""
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo(NEW_YORK)
+    before = datetime(2026, 10, 20, *clock, tzinfo=zone).astimezone(UTC)
+    prior = walk(before, 120, active=active_minutes)
+    moved = chat.corrected_payload(prior, None, day, zone)
+    start = datetime.fromisoformat(moved["startTime"])
+    end = datetime.fromisoformat(moved["endTime"])
+    assert end - start == timedelta(hours=2), label_
+    assert start.astimezone(zone).replace(tzinfo=None) == datetime(
+        day.year, day.month, day.day, *clock
+    )
+    assert moved["activeSeconds"] == active_minutes * 60
+    assert start.utcoffset() != end.utcoffset()  # the card shows both local offsets
+
+
+def test_a_new_duration_on_a_clock_change_day_is_real_minutes():
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo(NEW_YORK)
+    start = datetime(2026, 11, 1, 0, 30, tzinfo=zone).astimezone(UTC)
+    moved = chat.corrected_payload(walk(start, 30), 120, None, zone)
+    elapsed = datetime.fromisoformat(moved["endTime"]) - datetime.fromisoformat(moved["startTime"])
+    assert elapsed == timedelta(hours=2) and moved["activeSeconds"] == 7200
+
+
+# ---- every overview finding is cited, after the chat is reopened ----
+
+
+@pytest.fixture(scope="module")
+def two_changes():
+    from test_broad_questions import ON
+
+    from app.synthetic import Step
+
+    return planted(Step("steps", ON, -5000.0), Step("sleep_minutes", ON, -90.0))
+
+
+def overview(frame):
+    from app.agent.strategy import overview_evidence
+
+    records, _ = overview_evidence(frame, "How have I been?", END)
+    return {r.metrics[0]: r for r in records}
+
+
+def test_each_named_finding_gets_its_own_evidence(two_changes):
+    from app.agent.findings import cite_findings
+
+    records = overview(two_changes)
+    result = AgentResult(
+        run_id="x",
+        stop_reason="submitted",
+        summary="Your steps dropped and your time asleep fell. "
+        "Your resting heart rate held steady.",
+    )
+    cite_findings(result, list(records.values()))
+    cited = {c.metric: c.evidence_ids for c in result.claims}
+    assert cited["steps"] == [records["steps"].id]
+    assert cited["sleep_minutes"] == [records["sleep_minutes"].id]
+    assert cited["resting_hr"] == [records["resting_hr"].id]
+    assert all(i in result.evidence for ids in cited.values() for i in ids)
+
+
+def test_a_finding_its_evidence_contradicts_is_left_out(two_changes):
+    from app.agent.findings import cite_findings
+
+    records = overview(two_changes)
+    result = AgentResult(
+        run_id="x",
+        stop_reason="submitted",
+        summary="Your steps dropped. Your resting heart rate shot up and climbed higher.",
+    )
+    cite_findings(result, list(records.values()))
+    assert result.summary == "Your steps dropped."
+    assert [c.metric for c in result.claims] == ["steps"]
+
+
+def test_with_nothing_supported_the_overview_speaks_for_itself(two_changes):
+    from app.agent.findings import cite_findings
+
+    records = overview(two_changes)
+    result = AgentResult(run_id="x", stop_reason="submitted", summary="Your steps went up a lot.")
+    cite_findings(result, list(records.values()))
+    assert result.summary.startswith("The clear changes:") and "Steps went down" in result.summary
+    assert {c.metric for c in result.claims} >= {"steps", "sleep_minutes"}
+    assert all(c.evidence_ids[0] in result.evidence for c in result.claims)
+
+
+def test_an_overview_s_findings_are_inspectable_after_reopening(setup, two_changes):  # noqa: F811
+    """broad-01/t1: findings shown without their evidence. Two findings, each its own record."""
+    from app.api.store import analyze, get_data
+    from app.ingest.takeout import DailyData
+
+    client, _, agent = setup
+    headers = sign_in(setup)
+    client.app.dependency_overrides[get_data] = lambda: analyze(
+        DailyData(frame=two_changes), datetime.now(UTC)
+    )
+    words = "Give me the big picture across my tracked measures. Which shifts are supported?"
+    agent.llm.request_turns = [
+        reader_said(
+            {
+                "type": "investigate",
+                "said": words,
+                "focus": "overview",
+                "metrics": [],
+                "periods": [],
+                "earlier_result": None,
+                "every_metric": True,
+            }
+        )
+    ]
+    agent.llm.turns = [
+        submit("Your steps dropped clearly, and your time asleep fell too.", claims=[])
+    ] * 3
+    reply = client.post("/chat", headers=headers, json={"text": words}).json()[-1]
+    assert "steps" in reply["text"].lower() and "time asleep" in reply["text"].lower()
+    reopened = client.get("/chat", headers=headers).json()[-1]
+    assert reopened["evidenceIds"] == reply["evidenceIds"]
+    shown = {}
+    for evidence_id in reopened["evidenceIds"]:
+        found = client.get(f"/evidence/{evidence_id}", headers=headers)
+        assert found.status_code == 200
+        shown.setdefault(found.json()["metrics"][0], []).append(found.json())
+    for metric in ("steps", "sleep_minutes"):
+        (record,) = [r for r in shown[metric] if r["tool"] == "compare_windows"]
+        assert record["stats"]["difference"] < 0  # the evidence says what the text says
