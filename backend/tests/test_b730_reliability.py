@@ -32,10 +32,10 @@ TODAY = date(2026, 11, 19)
 
 def beside(counted_from, offset, new_period, length):
     return {
-        "kind": "beside_earlier",
-        "counted_from": counted_from,
+        "kind": "from_earlier",
+        "landmark": counted_from,
         "offset": offset,
-        "new_period": new_period,
+        "boundary": new_period,
         "length": length,
     }
 
@@ -145,7 +145,13 @@ def test_a_breakfast_follow_up_reads_the_food_log_on_the_day_under_discussion():
         BREAKFAST,
         ["calories"],
         "food",
-        {"kind": "same_as_earlier"},
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 1,
+        },
         earlier_result=0,
         meal_type="BREAKFAST",
     )

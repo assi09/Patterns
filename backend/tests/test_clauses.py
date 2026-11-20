@@ -142,7 +142,15 @@ def test_the_count_and_the_status_are_both_answered():
     question = "Before I tap anything, repeat the step count for that date and say whether the "
     question += "workout has been saved."
     count = data("repeat the step count for that date", ["steps"], "value")
-    count["periods"] = [{"kind": "same_as_earlier"}]
+    count["periods"] = [
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 1,
+        }
+    ]
     count["earlier_result"] = 0
     llm = reader(said(count, {"type": "status", "said": "say whether the workout has been saved"}))
     answer = ask(
@@ -193,10 +201,10 @@ def test_a_reading_that_misplaces_the_5_days_is_sent_back():
 def test_that_date_and_the_three_before_it_are_four_days(day, today, start):
     question = "Use the mean over that date and the three dates immediately before it."
     four = {
-        "kind": "beside_earlier",
-        "counted_from": "its_last_day",
+        "kind": "from_earlier",
+        "landmark": "its_last_day",
         "offset": 0,
-        "new_period": "ends_there",
+        "boundary": "ends_there",
         "length": 4,
     }
     clause = data(question, ["steps"], "mean", four, earlier_result=0)
@@ -268,7 +276,19 @@ def test_a_correct_comparison_passes_however_it_is_worded(words, sign):
 
 def test_the_first_result_only_is_one_clause():
     question = "For the first result only, use the median instead; keep its dates."
-    clause = data(question, ["steps"], "median", {"kind": "same_as_earlier"}, earlier_result=0)
+    clause = data(
+        question,
+        ["steps"],
+        "median",
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 6,
+        },
+        earlier_result=0,
+    )
     request, _ = read(question, said(clause), history=[earlier("2026-11-01", "2026-11-06")])
     assert len(request.parts) == 1 and request.parts[0].operation == "median"
 
@@ -310,10 +330,10 @@ def test_every_metric_s_value_and_previous_day_resolve_through_clauses(metric):
     assert request.parts[0].metrics == [metric]
     assert windows(request) == [(date(2026, 11, 11), date(2026, 11, 11))]
     before = {
-        "kind": "beside_earlier",
-        "counted_from": "its_last_day",
+        "kind": "from_earlier",
+        "landmark": "its_last_day",
         "offset": -1,
-        "new_period": "ends_there",
+        "boundary": "ends_there",
         "length": 1,
     }
     back = data("Back up by a single calendar day", [metric], "value", before, earlier_result=0)
@@ -329,10 +349,10 @@ def test_every_metric_s_value_and_previous_day_resolve_through_clauses(metric):
 
 AROUND = "Use the mean over that date and the three dates immediately before it."
 FOUR = {
-    "kind": "beside_earlier",
-    "counted_from": "its_last_day",
+    "kind": "from_earlier",
+    "landmark": "its_last_day",
     "offset": 0,
-    "new_period": "ends_there",
+    "boundary": "ends_there",
     "length": 4,
 }
 
@@ -342,7 +362,22 @@ def around(*periods):
 
 
 def test_the_same_day_plus_a_shift_for_one_mean_is_sent_back_not_asked():
-    wrong = around({"kind": "same_as_earlier"}, {"kind": "shift_earlier", "days": -3})
+    wrong = around(
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 1,
+        },
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": -3,
+            "boundary": "starts_there",
+            "length": 1,
+        },
+    )
     request, calls = read(
         AROUND,
         wrong,
@@ -358,7 +393,15 @@ def test_the_same_day_alone_for_that_date_and_three_before_is_sent_back():
     """It answered one day, silently: the stop rule of the smoke run."""
     request, calls = read(
         AROUND,
-        around({"kind": "same_as_earlier"}),
+        around(
+            {
+                "kind": "from_earlier",
+                "landmark": "its_first_day",
+                "offset": 0,
+                "boundary": "starts_there",
+                "length": 1,
+            }
+        ),
         around(FOUR),
         history=[earlier("2027-01-01", "2027-01-01")],
         today=date(2027, 1, 8),

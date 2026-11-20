@@ -728,9 +728,16 @@ def coaching_outcome(habits: Sequence[Evidence]) -> tuple[str, Claim | None]:
     option, none among those tested, or too little data (no claim then: nothing was tested)."""
     text = _outcome_text(habits)
     for record in habits:
-        if any(lever.get("supported") for lever in record.stats.get("levers", [])):
+        supported = [lv for lv in record.stats.get("levers", []) if lv.get("supported")]
+        if supported:
             metric = record.metrics[0] if record.metrics else None
-            claim = Claim(text=text, kind="suggestion", evidence_ids=[record.id], metric=metric)
+            claim = Claim(
+                text=text,
+                kind="suggestion",
+                evidence_ids=[record.id],
+                metric=metric,
+                option=supported[0].get("lever"),
+            )
             return text, claim
     if habits:
         metric = habits[0].metrics[0] if habits[0].metrics else None
@@ -750,6 +757,12 @@ def option_sentence(record: Evidence, key: str) -> str:
     stats = record.stats
     if record.tool == "habit_options":
         lever = next(lv for lv in stats["levers"] if lv["lever"] == key)
+        if lever.get("permits") == "watch":  # a pattern seen, not a routine tested
+            return (
+                f"One thing your own days point to, if you'd like: keeping an eye on "
+                f"{lever['habit']}. On your {lever['group']}, your {label(record.metrics[0])} "
+                "was better; that describes your days, it does not test a routine."
+            )
         return (
             f"One option your own days support, if you'd like to try it: {lever['habit']}. On "
             f"your {lever['group']}, your {label(record.metrics[0])} was better."
@@ -857,6 +870,8 @@ def one_coaching_conclusion(result: AgentResult, habits: Sequence[Evidence]) -> 
 def _outcome_text(habits: Sequence[Evidence]) -> str:
     for record in habits:
         for lever in record.stats.get("levers", []):
+            if lever.get("supported") and "lever" in lever:
+                return option_sentence(record, lever["lever"])
             if lever.get("supported"):
                 return (
                     f"One option your own days support, if you'd like to try it: "
@@ -1017,6 +1032,7 @@ def ask(
     made_a_draft: Callable[[], bool] | None = None,
     guidance_mode: str = "picked",  # "none" and "all" exist to compare them (eval/advice_compare)
     after_draft: bool = False,  # the last answer prepared a logging draft
+    fixed_reply: str | None = None,  # said by code already (a card edit code applied)
     request_bundle: tuple | None = None,  # the API may interpret before preparing action tools
     action_states: Sequence[str] = (),  # this chat's recent entries' statuses, oldest first
 ) -> Answer:
@@ -1077,6 +1093,8 @@ def ask(
             # "Saved." while the card stayed a draft (the audit of 2026-11-19).
             fixed = CONFIRM_ON_CARD if after_draft else NOTHING_WAITING
         question = typed.question(question)
+    if fixed_reply:
+        fixed = fixed_reply
     if (
         typed is None
         and not fixed

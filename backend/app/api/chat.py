@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as WaitTimeout
 from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from functools import lru_cache
 from time import monotonic
 from typing import Annotated, Literal
@@ -469,6 +469,43 @@ def _local(moment: datetime, zone) -> str:
     return moment.astimezone(zone).isoformat()
 
 
+def card_fields(payload: dict, zone) -> dict:
+    """The waiting card as the reader sees it: what a correction can be said against."""
+    if payload.get("kind") == "workout":
+        start = datetime.fromisoformat(payload["startTime"])
+        end = datetime.fromisoformat(payload["endTime"])
+        elapsed = (end.astimezone(UTC) - start.astimezone(UTC)).total_seconds() / 60
+        active = payload["activeSeconds"] / 60
+        local = start.astimezone(zone)
+        return {
+            "kind": "workout",
+            "exercise": payload.get("exerciseType"),
+            "day": f"{local.date().isoformat()} ({local:%a})",
+            "start": f"{local:%H:%M}",
+            "active_minutes": round(active, 1),
+            "elapsed_minutes": round(elapsed, 1),
+            "paused_minutes": round(elapsed - active, 1),
+        }
+    eaten = datetime.fromisoformat(payload["consumedAt"]).astimezone(zone)
+    return {"kind": "food", "day": f"{eaten.date().isoformat()} ({eaten:%a})"}
+
+
+def card_edit(prior: dict, typed: Request, zone) -> tuple[float | None, date | None]:
+    """What a correction changes on the card, worked out against the card: a day said against
+    it counts from its own local day, never from today ("a day later" became the day after the
+    clock, the a196 audit); a duration the card already has is no change (a date-only edit
+    came back with the elapsed 50 minutes, which turned a 12-minute pause into active time)."""
+    fields = card_fields(prior, zone)
+    day = typed.log_day
+    if day is None and typed.card_day_offset is not None:
+        day = date.fromisoformat(fields["day"][:10]) + timedelta(days=typed.card_day_offset)
+    minutes = typed.duration_minutes
+    held = ("active_minutes", "elapsed_minutes") if fields["kind"] == "workout" else ()
+    if minutes is not None and any(abs(minutes - fields[k]) < 0.5 for k in held):
+        minutes = None
+    return minutes, day
+
+
 def corrected_payload(prior: dict, minutes: float | None, day, zone) -> dict | None:
     """The waiting card with only what the correction states changed: a new duration keeps the
     start and ends that long after it; a new day keeps the local clock times and the elapsed
@@ -611,7 +648,14 @@ def _answer(
         # Interpret once, before preparing tools: corrections need the server's actual draft.
         started = monotonic()
         request_bundle = (
-            interpret(agent.llm, body.text, turns, today, pending_draft=bool(waiting))
+            interpret(
+                agent.llm,
+                body.text,
+                turns,
+                today,
+                pending_draft=bool(waiting),
+                draft=card_fields(waiting[-1].payload, zone) if len(waiting) == 1 else None,
+            )
             if urgent_free(body.text)
             else (None, {}, Budget())
         )
@@ -633,6 +677,11 @@ def _answer(
                 continuing_log = last.pending_log_expert
         if correcting:
             continuing_log = "nutrition" if waiting[-1].kind == "food" else "activity"
+        edit_minutes, edit_day = (
+            card_edit(waiting[-1].payload, typed, zone)
+            if correcting and typed is not None
+            else (None, None)
+        )
         # With the app's own scores as daily metrics, and the morning check-ins (rating and tags),
         # so they can be asked about and cited.
         frame = with_checkins(with_scores(data.daily.frame), checkins, CHECKIN_TAGS)
@@ -680,12 +729,8 @@ def _answer(
             said=[*thread, body.text],
             local_now=local_now,
             described=described,
-            required_duration_seconds=(
-                typed.duration_minutes * 60
-                if typed and typed.duration_minutes is not None and correcting
-                else None
-            ),
-            required_day=typed.log_day if typed else None,
+            required_duration_seconds=edit_minutes * 60 if edit_minutes is not None else None,
+            required_day=edit_day if correcting else (typed.log_day if typed else None),
             prior_draft=waiting[-1].payload if correcting else None,
         )
         if outside.food_data:
@@ -698,6 +743,16 @@ def _answer(
         reminding_tools = reminder_tools(
             sessions, user_id, now, reminders, said=[*thread, body.text], listed=listed
         )
+        # A correction the reading fully states is applied to the stored card by code first,
+        # through the same tool and checks, so no drafting model can touch the card after it
+        # (both a196 date-only edits went wrong in the model's draft; given the intended edit,
+        # the card's own values were kept).
+        by_code = None
+        if correcting and (edit_minutes is not None or edit_day is not None):
+            payload = corrected_payload(waiting[-1].payload, edit_minutes, edit_day, zone)
+            tools = draft_tools.get("activity" if waiting[-1].kind == "workout" else "nutrition")
+            if payload is not None and tools:
+                _, by_code = tools[0].run(payload)
         try:
             reply = ask(
                 agent.llm,
@@ -725,7 +780,10 @@ def _answer(
                 after_draft=bool(waiting) and not correcting,
                 request_bundle=request_bundle,
                 action_states=action_states,
+                fixed_reply=(" ".join(described) or DRAFT_NOTE) if prepared else None,
             )
+            if by_code is not None:
+                reply.result.trace.append({"type": "correction_by_code", **by_code})
         except Exception:
             logger.exception("Answering failed")
             reply = None
@@ -734,11 +792,9 @@ def _answer(
         # too, the old card stays and the reply says so (a run's correction got "ask it another
         # way" and kept its old duration, the v5 audit).
         if reply is not None and correcting and not prepared and typed is not None:
-            payload = corrected_payload(
-                waiting[-1].payload, typed.duration_minutes, typed.log_day, zone
-            )
+            payload = corrected_payload(waiting[-1].payload, edit_minutes, edit_day, zone)
             tools = draft_tools.get("activity" if waiting[-1].kind == "workout" else "nutrition")
-            if payload is not None and tools:
+            if payload is not None and tools and by_code is None:
                 _, step = tools[0].run(payload)
                 reply.result.trace.append({"type": "correction_by_code", **step})
             if prepared:

@@ -114,10 +114,10 @@ def test_after_a_comparison_the_block_after_asks_which_period(order):
         ["steps"],
         "mean",
         {
-            "kind": "beside_earlier",
-            "counted_from": "its_last_day",
+            "kind": "from_earlier",
+            "landmark": "its_last_day",
             "offset": 1,
-            "new_period": "starts_there",
+            "boundary": "starts_there",
             "length": 3,
         },
     )
@@ -132,13 +132,19 @@ BLOCK = earlier("2026-10-13", "2026-10-18", "cardio_load", "max")
 @pytest.mark.parametrize(
     "moved",
     [
-        {"kind": "shift_earlier", "days": 1},
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 1,
+            "boundary": "starts_there",
+            "length": 6,
+        },
         # the form the v5 audit's reading took: six days ending the day after the block
         {
-            "kind": "beside_earlier",
-            "counted_from": "its_last_day",
+            "kind": "from_earlier",
+            "landmark": "its_last_day",
             "offset": 1,
-            "new_period": "ends_there",
+            "boundary": "ends_there",
             "length": 6,
         },
     ],
@@ -150,10 +156,10 @@ def test_the_six_days_following_a_block_are_the_next_block_not_the_block_moved_a
         ["cardio_load"],
         "max",
         {
-            "kind": "beside_earlier",
-            "counted_from": "its_last_day",
+            "kind": "from_earlier",
+            "landmark": "its_last_day",
             "offset": 1,
-            "new_period": "starts_there",
+            "boundary": "starts_there",
             "length": 6,
         },
     )
@@ -171,7 +177,18 @@ def test_the_six_days_following_a_block_are_the_next_block_not_the_block_moved_a
 )
 def test_moving_the_range_a_day_is_a_shift_and_passes_first_time(words):
     """The minimal pair: these do mean the old block moved by one day."""
-    shift = data(words, ["cardio_load"], "max", {"kind": "shift_earlier", "days": 1})
+    shift = data(
+        words,
+        ["cardio_load"],
+        "max",
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 1,
+            "boundary": "starts_there",
+            "length": 6,
+        },
+    )
     request, calls = read(words, said(shift), history=[BLOCK])
     assert windows(request) == [(date(2026, 10, 14), date(2026, 10, 19))] and calls == 1
 
@@ -186,10 +203,10 @@ def test_a_next_block_said_any_way_passes_first_time(words):
         ["cardio_load"],
         "max",
         {
-            "kind": "beside_earlier",
-            "counted_from": "its_last_day",
+            "kind": "from_earlier",
+            "landmark": "its_last_day",
             "offset": 1,
-            "new_period": "starts_there",
+            "boundary": "starts_there",
             "length": 6,
         },
     )
@@ -204,10 +221,10 @@ def test_the_block_before_an_earlier_one_ends_the_day_before_it():
         ["cardio_load"],
         "max",
         {
-            "kind": "beside_earlier",
-            "counted_from": "its_first_day",
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
             "offset": -1,
-            "new_period": "ends_there",
+            "boundary": "ends_there",
             "length": 5,
         },
     )
@@ -230,10 +247,10 @@ def test_that_day_as_the_last_of_five_keeps_five_days_across_a_leap_day():
         ["steps"],
         "mean",
         {
-            "kind": "beside_earlier",
-            "counted_from": "its_last_day",
+            "kind": "from_earlier",
+            "landmark": "its_last_day",
             "offset": 0,
-            "new_period": "ends_there",
+            "boundary": "ends_there",
             "length": 5,
         },
         earlier_result=0,
@@ -243,16 +260,28 @@ def test_that_day_as_the_last_of_five_keeps_five_days_across_a_leap_day():
 
 
 def test_that_day_alone_for_the_last_of_five_is_sent_back_for_its_length():
-    one_day = data(LAST_OF_FIVE, ["steps"], "mean", {"kind": "same_as_earlier"}, earlier_result=0)
+    one_day = data(
+        LAST_OF_FIVE,
+        ["steps"],
+        "mean",
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 1,
+        },
+        earlier_result=0,
+    )
     five = data(
         LAST_OF_FIVE,
         ["steps"],
         "mean",
         {
-            "kind": "beside_earlier",
-            "counted_from": "its_last_day",
+            "kind": "from_earlier",
+            "landmark": "its_last_day",
             "offset": 0,
-            "new_period": "ends_there",
+            "boundary": "ends_there",
             "length": 5,
         },
         earlier_result=0,
@@ -266,7 +295,19 @@ def test_that_day_alone_for_the_last_of_five_is_sent_back_for_its_length():
 
 def test_that_same_day_still_keeps_the_day():
     words = "What was my resting heart rate on that same day?"
-    clause = data(words, ["resting_hr"], "value", {"kind": "same_as_earlier"}, earlier_result=0)
+    clause = data(
+        words,
+        ["resting_hr"],
+        "value",
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 1,
+        },
+        earlier_result=0,
+    )
     request, calls = read(words, said(clause), history=[LEAP], today=date(2028, 3, 5))
     assert windows(request) == [(date(2028, 3, 2), date(2028, 3, 2))] and calls == 1
 
@@ -302,7 +343,18 @@ def test_excluding_the_boundary_makes_the_comparison_strict_and_keeps_the_dates(
         earlier_result=0,
     )
     strict = data(
-        EXCLUDE, ["steps"], "count", {"kind": "same_as_earlier"}, comparison="<", earlier_result=0
+        EXCLUDE,
+        ["steps"],
+        "count",
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 9,
+        },
+        comparison="<",
+        earlier_result=0,
     )
     request, _ = read(EXCLUDE, said(trimmed), said(strict), history=[COUNTED])
     (counted,) = request.parts
@@ -317,7 +369,13 @@ def test_a_new_threshold_on_the_same_days_passes():
         words,
         ["steps"],
         "count",
-        {"kind": "same_as_earlier"},
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 9,
+        },
         comparison=">=",
         threshold=9000,
         earlier_result=0,
@@ -514,7 +572,13 @@ def test_a_named_nutrient_reads_the_confirmed_meal_and_its_follow_up_keeps_the_d
         PROTEIN,
         ["protein"],
         "sum",
-        {"kind": "same_as_earlier"},
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 1,
+        },
         earlier_result=0,
         source="food_log",
     )
@@ -970,7 +1034,34 @@ TRAINING = "I'm training for a 10k."
         (
             f"{TRAINING} {STEPS_DAY}",
             [
-                {"type": "other", "said": TRAINING},
+                {"type": "other", "said": TRAINING, "about_them": True},
+                data(STEPS_DAY, ["steps"], "value", dates(DAY.isoformat())),
+            ],
+            "self",
+            True,
+        ),
+        # The a196 audit: how to answer now is no statement about them, even beside a read.
+        (
+            f"Give me three options here and label any general tips. {STEPS_DAY}",
+            [
+                {
+                    "type": "other",
+                    "said": "Give me three options here and label any general tips.",
+                    "about_them": False,
+                },
+                data(STEPS_DAY, ["steps"], "value", dates(DAY.isoformat())),
+            ],
+            "self",
+            False,
+        ),
+        (
+            f"I generally prefer three options. {STEPS_DAY}",
+            [
+                {
+                    "type": "other",
+                    "said": "I generally prefer three options.",
+                    "about_them": True,
+                },
                 data(STEPS_DAY, ["steps"], "value", dates(DAY.isoformat())),
             ],
             "self",

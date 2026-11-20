@@ -53,6 +53,12 @@ class _Test:
     other_group: str
     better: pd.Series
     other: pd.Series
+    # What the comparison may be said as. "action": the days differ in the habit itself
+    # (bedtime, activity, a late meal), so doing more of it is the option. "watch": the days
+    # differ in something else (a stress tag, a hard day before), which tests no routine: it can
+    # be described and watched, never offered as a tested habit (a stress-tag split was offered
+    # as "a wind-down routine", the a196 audit).
+    permits: str = "action"
 
 
 def _split(values: pd.Series, mask: pd.Series) -> tuple[pd.Series, pd.Series]:
@@ -99,11 +105,12 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
         tests.append(
             _Test(
                 "rest_after_hard_day",
-                "an easier day after your hardest training days",
+                "how your mornings go after your hardest training days",
                 "mornings after an ordinary day",
                 "mornings after a hard day",
                 rest,
                 hard,
+                permits="watch",
             )
         )
     if "active_zone_minutes" in frame.columns and metric in SLEEP:
@@ -120,9 +127,9 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
                     quiet,
                 )
             )
-    for tag, lever, label in (
-        ("late_meal", "earlier_dinner", "an earlier dinner"),
-        ("stress", "wind_down", "a wind-down routine on stressful days"),
+    for tag, lever, label, permits in (
+        ("late_meal", "earlier_dinner", "an earlier dinner", "action"),
+        ("stress", "wind_down", "how your stressful days line up with your sleep", "watch"),
     ):
         column = f"{TAG_PREFIX}{tag}"
         if column in frame.columns and metric in SLEEP + MORNING:
@@ -136,6 +143,7 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
                     "days with it",
                     without,
                     with_tag,
+                    permits=permits,
                 )
             )
     return tests, split_at
@@ -158,6 +166,7 @@ def habit_options(frame: pd.DataFrame, metric: str, window: Window) -> Evidence:
             {
                 "lever": test.lever,
                 "habit": test.label,
+                "permits": test.permits,
                 "supported": bool(q < ALPHA and helpful),
                 "q_value": _round(q, 4),
                 "group": test.better_group,

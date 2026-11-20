@@ -100,16 +100,28 @@ def test_the_reading_is_described_with_its_source_statistic_and_dates():
 
 NEXT_TWO = "What does the same statistic come out to on the next two dates after the interval ends?"
 BLOCK = earlier("2026-08-03", "2026-08-07", "steps", "min")
-OLD_DAYS = data(NEXT_TWO, ["steps"], "min", {"kind": "same_as_earlier"}, earlier_result=0)
+OLD_DAYS = data(
+    NEXT_TWO,
+    ["steps"],
+    "min",
+    {
+        "kind": "from_earlier",
+        "landmark": "its_first_day",
+        "offset": 0,
+        "boundary": "starts_there",
+        "length": 5,
+    },
+    earlier_result=0,
+)
 NEXT = data(
     NEXT_TWO,
     ["steps"],
     "min",
     {
-        "kind": "beside_earlier",
-        "counted_from": "its_last_day",
+        "kind": "from_earlier",
+        "landmark": "its_last_day",
         "offset": 1,
-        "new_period": "starts_there",
+        "boundary": "starts_there",
         "length": 2,
     },
     earlier_result=0,
@@ -186,10 +198,10 @@ def investigate(words, *periods, **extra):
 def test_a_baseline_relative_to_the_clause_counts_from_its_first_period():
     """Every v7 investigation asked "which earlier measurement?" on a first message."""
     before = {
-        "kind": "beside_earlier",
-        "counted_from": "its_first_day",
+        "kind": "from_earlier",
+        "landmark": "its_first_day",
         "offset": -1,
-        "new_period": "ends_there",
+        "boundary": "ends_there",
         "length": 28,
         "relative_to": "this_clause",
     }
@@ -202,18 +214,18 @@ def test_a_baseline_relative_to_the_clause_counts_from_its_first_period():
 
 def test_relative_to_an_earlier_result_with_none_is_sent_back_not_asked():
     wrong = {
-        "kind": "beside_earlier",
-        "counted_from": "its_first_day",
+        "kind": "from_earlier",
+        "landmark": "its_first_day",
         "offset": -1,
-        "new_period": "ends_there",
+        "boundary": "ends_there",
         "length": 28,
         "relative_to": "earlier_result",
     }
     right = {
-        "kind": "beside_earlier",
-        "counted_from": "its_first_day",
+        "kind": "from_earlier",
+        "landmark": "its_first_day",
         "offset": -1,
-        "new_period": "ends_there",
+        "boundary": "ends_there",
         "length": 28,
         "relative_to": "this_clause",
     }
@@ -229,10 +241,10 @@ def test_relative_to_an_earlier_result_with_none_is_sent_back_not_asked():
 def test_a_block_relative_to_an_earlier_result_still_uses_it():
     words = "And the 28 days before that?"
     before = {
-        "kind": "beside_earlier",
-        "counted_from": "its_first_day",
+        "kind": "from_earlier",
+        "landmark": "its_first_day",
         "offset": -1,
-        "new_period": "ends_there",
+        "boundary": "ends_there",
         "length": 28,
         "relative_to": "earlier_result",
     }
@@ -269,7 +281,13 @@ MEAL_DAY = Turn(
                 "calories burned?",
                 ["calories"],
                 "value",
-                {"kind": "same_as_earlier"},
+                {
+                    "kind": "from_earlier",
+                    "landmark": "its_first_day",
+                    "offset": 0,
+                    "boundary": "starts_there",
+                    "length": 1,
+                },
                 earlier_result=0,
                 source="tracker",
             ),
@@ -280,7 +298,13 @@ MEAL_DAY = Turn(
                 "just dinner",
                 [],
                 "sum",
-                {"kind": "same_as_earlier"},
+                {
+                    "kind": "from_earlier",
+                    "landmark": "its_first_day",
+                    "offset": 0,
+                    "boundary": "starts_there",
+                    "length": 1,
+                },
                 earlier_result=0,
                 source="food_log",
                 meal_type="DINNER",
@@ -292,7 +316,13 @@ MEAL_DAY = Turn(
                 "and protein?",
                 ["protein"],
                 "sum",
-                {"kind": "same_as_earlier"},
+                {
+                    "kind": "from_earlier",
+                    "landmark": "its_first_day",
+                    "offset": 0,
+                    "boundary": "starts_there",
+                    "length": 1,
+                },
                 earlier_result=0,
                 source="food_log",
             ),
@@ -308,7 +338,18 @@ def test_the_source_is_what_the_reader_says(clause, metrics):
 def test_food_logs_named_under_the_tracker_can_only_mean_the_food_log():
     words = "the meals"
     reading = data(
-        words, ["food_logs"], "sum", {"kind": "same_as_earlier"}, earlier_result=0, source="tracker"
+        words,
+        ["food_logs"],
+        "sum",
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 1,
+        },
+        earlier_result=0,
+        source="tracker",
     )
     request, _ = read(words, said(reading), history=[MEAL_DAY])
     assert request.parts[0].metrics == ["food_logs"]
@@ -317,7 +358,17 @@ def test_food_logs_named_under_the_tracker_can_only_mean_the_food_log():
 def test_a_tracker_metric_beside_food_eaten_is_sent_back_to_be_split():
     words = "steps and the meals"
     mixed = data(
-        words, ["food_logs", "steps"], "food", {"kind": "same_as_earlier"}, earlier_result=0
+        words,
+        ["food_logs", "steps"],
+        "food",
+        {
+            "kind": "from_earlier",
+            "landmark": "its_first_day",
+            "offset": 0,
+            "boundary": "starts_there",
+            "length": 1,
+        },
+        earlier_result=0,
     )
     request, _ = read(words, said(mixed), history=[MEAL_DAY])
     assert request.attempts[0]["outcome"] == "sent_back"
@@ -522,7 +573,7 @@ def test_a_pure_question_leaves_no_candidate_in_the_store(setup, monkeypatch, to
         )
     ]
     if told:
-        clauses.insert(0, {"type": "other", "said": statement})
+        clauses.insert(0, {"type": "other", "said": statement, "about_them": True})
     agent.llm.request_turns = [reader_said(*clauses)]
     agent.llm.turns = [
         ScriptedLLM.call(

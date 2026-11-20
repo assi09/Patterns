@@ -66,6 +66,17 @@ REFUSED_NOTE = (
 )
 
 
+def _untouched_changed(log: WorkoutLog, prior: dict) -> str | None:
+    """Which duration a replacement changed that the correction did not: active or elapsed."""
+    start = datetime.fromisoformat(prior["startTime"])
+    elapsed = (datetime.fromisoformat(prior["endTime"]) - start).total_seconds()
+    if abs(log.active_seconds - prior["activeSeconds"]) > 1:
+        return "active time"
+    if abs((log.end_time - log.start_time).total_seconds() - elapsed) > 1:
+        return "elapsed time"
+    return None
+
+
 def proposal_tools(
     sessions: Callable[[], AbstractContextManager[Session]],
     user_id: uuid.UUID,
@@ -127,8 +138,24 @@ def proposal_tools(
                 if said and local_now:
                     given = latest_past(given, checked_said, local_now)
                 log = model.model_validate(given)
-                if isinstance(log, WorkoutLog) and checked_said:
+                # Editing a card with no new duration keeps the card's interval: its words name no
+                # pause, so rebuilding the end from them turned a 12-minute pause into active
+                # time (the a196 audit).
+                keeps_card = prior_draft is not None and required_duration_seconds is None
+                if isinstance(log, WorkoutLog) and checked_said and not keeps_card:
                     log = with_stated_interval(log, checked_said)
+                if (
+                    isinstance(log, WorkoutLog)
+                    and keeps_card
+                    and prior_draft["kind"] == "workout"
+                    and (changed := _untouched_changed(log, prior_draft))
+                ):
+                    return json.dumps(
+                        {
+                            "error": f"Keep the card's {changed}: the person did not change it. "
+                            "Change only what they said."
+                        }
+                    ), {"error": "untouched_field", "field": changed}
                 if isinstance(log, WorkoutLog) and required_duration_seconds is not None:
                     seconds = (log.end_time - log.start_time).total_seconds()
                     if (

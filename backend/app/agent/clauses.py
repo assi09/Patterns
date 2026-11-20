@@ -41,30 +41,11 @@ class CalendarPeriod(Fields):
     offset: int = Field(ge=-100, le=0)
 
 
-class SameAsEarlier(Fields):
-    """Exactly the days of an earlier result, nothing added ('that same day', 'for that
-    interval'). 'That date and the three before it' is beside_earlier, not this."""
-
-    kind: Literal["same_as_earlier"]
-
-
-class ShiftEarlier(Fields):
-    """An earlier result's whole period moved: 'two days earlier' is -2, 'a day later' is +1."""
-
-    kind: Literal["shift_earlier"]
-    days: int = Field(ge=-3660, le=3660)
-    relative_to: Literal["earlier_result", "this_clause"] = Field(
-        default="earlier_result",
-        description="earlier_result: a result computed before this message. this_clause: the "
-        "period named first in this same clause ('Oct 9-31 compared with the 4 weeks before').",
-    )
-
-
 class DaysEnding(Fields):
     """`length` consecutive days ending on a day counted from today, plus `offset`. 'yesterday':
     1, -1. 'two days before today': 1, -2. 'the last 7 days' (today included): 7, 0. 'the 5
     complete days before today': 5, -1. Days placed against an earlier result are
-    beside_earlier."""
+    from_earlier."""
 
     kind: Literal["days_ending"]
     length: int = Field(ge=1, le=3660)
@@ -72,23 +53,31 @@ class DaysEnding(Fields):
     offset: int = Field(ge=-3660, le=366)
 
 
-class BesideEarlier(Fields):
-    """`length` days placed against one day of an earlier period, with each edge said: from the
-    earlier period's first or last day (`counted_from`), move `offset` days (+1 the day after, -1
-    the day before, 0 that day itself); the new period starts there or ends there
-    (`new_period`), as the words say.
-    'the next three days', 'start at the next date and cover three days': its_last_day, +1,
-    starts_there, 3. 'the 3 days leading into it', 'the three days just prior': its_first_day, -1,
-    ends_there, 3. 'that date and the three dates before it': its_last_day, 0, ends_there, 4.
-    'the five days ending the day after it': its_last_day, +1, ends_there, 5. 'the day before
-    that': its_first_day, -1, ends_there, 1. 'a week starting two days after it ended':
-    its_last_day, +2, starts_there, 7. The whole period moved by some days is shift_earlier."""
+class FromEarlier(Fields):
+    """Days placed against an earlier period, every part of the edit said, and one computation
+    for all of them: from the earlier period's first or last day (`landmark`), move `offset`
+    days (+1 the day after, -1 the day before, 0 that day); the new period starts there or ends
+    there (`boundary`); it is `length` days long: the number said, or the earlier period's own
+    number of days when none is said.
+    After a five-day period: the same days again: its_first_day, 0, starts_there, 5. The whole
+    period two days earlier: its_first_day, -2, starts_there, 5. The next four days:
+    its_last_day, +1, starts_there, 4. Four days ending the day before it began: its_first_day,
+    -1, ends_there, 4. Its last three days: its_last_day, 0, ends_there, 3. Four days starting on
+    its second day: its_first_day, +1, starts_there, 4."""
 
-    kind: Literal["beside_earlier"]
-    counted_from: Literal["its_first_day", "its_last_day"]
+    kind: Literal["from_earlier"]
+    landmark: Literal["its_first_day", "its_last_day"]
     offset: int = Field(ge=-3660, le=3660)
-    new_period: Literal["starts_there", "ends_there"]
-    length: int = Field(ge=1, le=3660)
+    boundary: Literal["starts_there", "ends_there"]
+    # Required: left optional, "three calendar days" and "four days up to the day before" came
+    # back with no length, so the earlier length was kept or the four went into the offset (the
+    # matched comparison on the b730 and a196 inputs, 2026-11-21).
+    length: int = Field(
+        ge=1,
+        le=3660,
+        description="Days in the new period: the number of days said, or the earlier period's own "
+        "number of days (earlier_results) when no number is said.",
+    )
     relative_to: Literal["earlier_result", "this_clause"] = Field(
         default="earlier_result",
         description="earlier_result: a result computed before this message. this_clause: the "
@@ -111,14 +100,7 @@ class AllHistory(Fields):
 
 
 Span = Annotated[
-    Dates
-    | CalendarPeriod
-    | Month
-    | SameAsEarlier
-    | ShiftEarlier
-    | BesideEarlier
-    | DaysEnding
-    | AllHistory,
+    Dates | CalendarPeriod | Month | FromEarlier | DaysEnding | AllHistory,
     Field(discriminator="kind"),
 ]
 
@@ -129,17 +111,12 @@ def period_of(span: Span) -> Period:
         return Period(kind="explicit", start=span.start, end=span.end)
     if isinstance(span, CalendarPeriod):
         return Period(kind="calendar", unit=span.unit, offset_units=span.offset)
-    if isinstance(span, SameAsEarlier):
-        return Period(kind="inherit")
-    if isinstance(span, ShiftEarlier):
-        anchor = "own" if span.relative_to == "this_clause" else "previous"
-        return Period(kind="relative", anchor=anchor, offset_days=span.days)
-    if isinstance(span, BesideEarlier):
+    if isinstance(span, FromEarlier):
         return Period(
             kind="beside",
             anchor="own" if span.relative_to == "this_clause" else "previous",
-            edge="first" if span.counted_from == "its_first_day" else "last",
-            starts=span.new_period == "starts_there",
+            edge="first" if span.landmark == "its_first_day" else "last",
+            starts=span.boundary == "starts_there",
             offset_days=span.offset,
             days=span.length,
         )
@@ -252,6 +229,12 @@ class CorrectClause(Fields):
     duration_minutes: float | None = Field(default=None, gt=0, le=1440, allow_inf_nan=False)
     on_date: date | None = None
     days_from_today: int | None = Field(default=None, ge=-366, le=7)
+    days_from_card: int | None = Field(
+        default=None,
+        ge=-366,
+        le=366,
+        description="A day said against the card's own day: 'a day later' is 1.",
+    )
 
 
 class StatusClause(Fields):
@@ -291,10 +274,19 @@ class MemoryClause(Fields):
 
 
 class OtherClause(Fields):
-    """Small talk, thanks, or something outside what the app does."""
+    """Small talk, thanks, an instruction for this answer, something they tell about
+    themselves, or something outside what the app does."""
 
     type: Literal["other"]
     said: str = SAID
+    # Only something they tell about themselves may become a memory: "give me three options and
+    # label the general tips" is how to answer now, and made two memory cards (the a196 audit).
+    about_them: bool = Field(
+        default=False,
+        description="They tell something about themselves or their life ('I'm training for a "
+        "10k', 'I generally prefer three options'). False for thanks, small talk and "
+        "instructions for this answer ('give me three options here').",
+    )
 
 
 Clause = Annotated[
@@ -443,7 +435,7 @@ def reading_from(said: Said, question: str = "") -> Reading:
     }
     if said.clarification or primary is None:
         kind = "clarify" if said.clarification or not clauses else "other"
-        told = any(isinstance(c, OtherClause) for c in clauses)
+        told = any(isinstance(c, OtherClause) and c.about_them for c in clauses)
         return Reading(kind=kind, clause_count=len(clauses), told=told, **fields)
     data = [c for c in clauses if isinstance(c, DataClause)]
     kind = KIND[primary]
@@ -472,6 +464,8 @@ def reading_from(said: Said, question: str = "") -> Reading:
     entry = next((c for c in clauses if isinstance(c, LogClause | CorrectClause)), None)
     if entry is not None:
         fields |= {"duration_minutes": entry.duration_minutes, "log_day": _day(entry)}
+        if isinstance(entry, CorrectClause) and entry.on_date is None:
+            fields["card_day_offset"] = entry.days_from_card
         if isinstance(entry, LogClause):
             fields["entry"] = entry.entry
     memory = next((c for c in clauses if isinstance(c, MemoryClause)), None)
@@ -484,7 +478,7 @@ def reading_from(said: Said, question: str = "") -> Reading:
     fields["status"] = "status" in types
     fields["clause_count"] = len(clauses)
     fields["told"] = any(
-        isinstance(c, OtherClause)
+        (isinstance(c, OtherClause) and c.about_them)
         or (isinstance(c, MemoryClause) and c.action == "remember")
         or isinstance(c, LogClause | CorrectClause)
         for c in clauses

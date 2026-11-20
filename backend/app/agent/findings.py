@@ -62,6 +62,12 @@ def _when(window: Window, today: date) -> str:
 def render_overview(records: Sequence[Evidence], today: date) -> tuple[str, list[Claim]]:
     """The overview as code says it, and its claims; ("", []) with nothing to say."""
     tested = [r for r in records if r.metrics and "difference" in r.stats and len(r.windows) == 2]
+    # One measure is one finding however many records test it: an earlier run's record and its
+    # version re-adjusted in this run made "39 measures" of 32 metrics (the a196 audit). The
+    # latest record of each metric over each pair of periods speaks for it; the statistical
+    # family that adjusted them is not changed here.
+    latest = {(r.metrics[0], tuple(r.windows)): r for r in tested}
+    tested = list(latest.values())
     described = [r for r in records if r.metrics and "difference" not in r.stats]
     if tested:
         focal, baseline = tested[0].windows[0], tested[0].windows[1]

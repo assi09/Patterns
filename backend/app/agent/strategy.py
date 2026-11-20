@@ -356,7 +356,13 @@ def coaching_evidence(
         except ToolError:
             continue
         found.append(evidence)
-        supported = [lever["habit"] for lever in evidence.stats["levers"] if lever["supported"]]
+        # A "watch" lever is a pattern seen on their days, not a habit tested: named as one.
+        watch = " (a pattern to watch, not a tested habit)"
+        supported = [
+            lever["habit"] + (watch if lever.get("permits") == "watch" else "")
+            for lever in evidence.stats["levers"]
+            if lever["supported"]
+        ]
         lines.append(
             f"- {label(metric)} (evidence_id {evidence.id}): "
             + (f"supported: {'; '.join(supported)}" if supported else "no habit clearly supported")
