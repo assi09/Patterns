@@ -179,12 +179,32 @@ URGENT_MIND_REPLY = (
     "for this, but you shouldn't carry it alone. Please reach out now to someone you trust, a "
     "local crisis line, or your local emergency number if you might act on these thoughts."
 )
+# Asking to be diagnosed, or told what illness it is: the boundary reply, before any data is read.
+# "Diagnose me from that number" became an investigation of steps (the v5 audit). Words that only
+# sound medical ("what changed?") stay with the router.
+ASKS_DIAGNOSIS = re.compile(
+    r"\bdiagnos\w*|\bwhat(?:'s| is) wrong with me\b|\bam i (?:sick|ill|unwell)\b|"
+    r"\bdo i have (?:an? )?(?:\w+ )?(?:disease|disorder|condition|illness|syndrome|apnea|"
+    r"insomnia|infection|arrhythmia|depression)\b|"
+    r"\bwhat (?:illness|disease|condition|disorder) (?:do i|could i|might i|is (?:it|this|that))\b",
+    re.IGNORECASE,
+)
+# A "has it been saved?" about what the app keeps, not a tracker entry.
+KEPT_THINGS = re.compile(
+    r"\b(?:preferences?|goals?|facts?|profile|remember\w*|memory|kept|approved)\b", re.I
+)
+TRACKER_THINGS = re.compile(
+    r"\b(?:workout|walk|run|ride|swim|meal|food|breakfast|lunch|dinner|snack|entry|card|draft|"
+    r"tracker|fitbit|google|log(?:ged)?)\b",
+    re.IGNORECASE,
+)
 NOTED = "Got it. Tap Keep on the card and I'll bear that in mind from now on."
 NOT_KEPT_ASKED = "Okay, I won't keep that."
 MEMORY_WHICH = (
     "Do you want me to remember something about you, tell you what I've kept, or forget something?"
 )
 MAX_RECALLED = 5
+LOG_EXPERT = {"workout": "activity", "food": "nutrition"}
 
 
 def _with_reading(result, context, route, typed, request_state, reading_budget) -> None:
@@ -620,6 +640,35 @@ def _context_step(context: Context) -> dict:
     return {"type": "context", **context.included, "dropped": context.dropped}
 
 
+def described_days(result, typed, frame, day, food_logs, now) -> None:
+    """When an investigation's own run gives no verified answer, its named metrics over its named
+    days are described by code, rather than "ask it another way" ("what stands out about my sleep
+    strictly on September 9 and 10?" got that, the v5 audit). Nothing is inferred from them."""
+    parts = []
+    for part in typed.parts:
+        metrics = [m for m in part.metrics if m in frame.columns][:8]
+        if not metrics or not part.windows:
+            continue
+        parts += [
+            part.model_copy(update={"metrics": metrics, "operation": "mean", "windows": [w]})
+            for w in part.windows
+        ]
+    if not parts:
+        return
+    read = execute_request(
+        typed.model_copy(update={"kind": "data", "parts": parts}),
+        frame,
+        day,
+        food_logs=food_logs,
+        zone=(now.tzinfo if now else None),
+    )
+    if not read.summary:
+        return
+    result.summary, result.claims = read.summary, list(read.claims)
+    result.evidence |= read.evidence
+    result.trace.append({"type": "described_days", "parts": len(parts)})
+
+
 def _with_reads(result, typed, frame, day, food_logs, now) -> None:
     """The precise reads asked beside another request, answered by code as a note: it stays when
     the card's note replaces the reply ("repeat the step count and say whether it's saved")."""
@@ -632,8 +681,10 @@ def _with_reads(result, typed, frame, day, food_logs, now) -> None:
         food_logs=food_logs,
         zone=(now.tzinfo if now else None),
     )
-    result.notes.append(read.summary)
+    if read.summary and read.summary not in result.notes:
+        result.notes.append(read.summary)
     result.evidence |= read.evidence
+    result.side_claims += read.claims  # what makes the side read's numbers inspectable
 
 
 WHY_LIMIT = (
@@ -644,6 +695,61 @@ WHY_LIMIT = (
 
 def coaching_fallback(habits: Sequence[Evidence]) -> str:
     """One option the person's own days support, said by code, or why there is none."""
+    return coaching_outcome(habits)[0]
+
+
+def coaching_outcome(habits: Sequence[Evidence]) -> tuple[str, Claim | None]:
+    """The one coaching conclusion the tested habits support, with the claim citing them: an
+    option, none among those tested, or too little data (no claim then: nothing was tested)."""
+    text = _outcome_text(habits)
+    for record in habits:
+        if any(lever.get("supported") for lever in record.stats.get("levers", [])):
+            metric = record.metrics[0] if record.metrics else None
+            claim = Claim(text=text, kind="suggestion", evidence_ids=[record.id], metric=metric)
+            return text, claim
+    if habits:
+        metric = habits[0].metrics[0] if habits[0].metrics else None
+        claim = Claim(
+            text=text, kind="no_change", evidence_ids=[r.id for r in habits], metric=metric
+        )
+        return text, claim
+    return text, None
+
+
+# Prose that recommends something, or says nothing can be recommended: either contradicts a
+# conclusion code reached from the tested habits (the v5 audit had both, in opposite directions).
+ADVISES = re.compile(
+    r"\b(?:you could|you can try|try(?:ing)?|consider|adjust\w*|aim (?:for|to)|suggest\w*|"
+    r"recommend\w*|might help|could help|should|worth (?:trying|testing))\b",
+    re.IGNORECASE,
+)
+ADVISES_NONE = re.compile(
+    r"\b(?:don'?t see anything|nothing specific|no (?:habit|option|adjustment|change) "
+    r"(?:to|stands|is)|none of|doesn'?t (?:suggest|point))\b",
+    re.IGNORECASE,
+)
+OBSERVATIONS = ("change", "no_change", "value", "day", "data_quality", "association")
+
+
+def one_coaching_conclusion(result: AgentResult, habits: Sequence[Evidence]) -> None:
+    """A coaching answer with no supported suggestion of its own ends on code's conclusion, once.
+    Prose that advises or rules advice out is replaced by the verified observations, so the
+    message cannot say both "try this" and "nothing is supported"."""
+    text, claim = coaching_outcome(habits)
+    if ADVISES.search(result.summary) or ADVISES_NONE.search(result.summary):
+        seen = [c.text for c in result.claims if c.kind in OBSERVATIONS]
+        result.summary = " ".join(dict.fromkeys([*seen, text]))
+        result.claims = [c for c in result.claims if c.kind in OBSERVATIONS]
+        result.trace.append({"type": "coaching_conclusion", "replaced_prose": True})
+    elif text not in result.notes:
+        result.notes.append(text)
+    if claim is not None:
+        result.claims.append(claim)
+    for record in habits:
+        result.evidence.setdefault(record.id, record)
+
+
+def _outcome_text(habits: Sequence[Evidence]) -> str:
     for record in habits:
         for lever in record.stats.get("levers", []):
             if lever.get("supported"):
@@ -682,18 +788,69 @@ def status_reply(states: Sequence[str]) -> str:
     return STATUS_NONE
 
 
+def _days_with(frame: pd.DataFrame, metrics: Sequence[str], window: Window) -> int:
+    """Days in the window with any of these metrics recorded."""
+    present = [m for m in metrics if m in frame.columns] if metrics else list(frame.columns)
+    if not present:
+        return 0
+    rows = frame.loc[pd.Timestamp(window.start) : pd.Timestamp(window.end), present]
+    return int(rows.notna().any(axis=1).sum())
+
+
+def _names(metrics: Sequence[str]) -> str:
+    return " or ".join(label(m) for m in metrics) if metrics else "records"
+
+
 def outside_data(typed, frame: pd.DataFrame, today: date) -> str | None:
-    """An investigation of days their data never reaches is answered so by code: "what changed
-    from Dec 1 to 14?" was answered with October (Codex's review, 2026-11-19)."""
-    windows = [w for p in typed.parts for w in p.windows]
-    if not windows or frame.empty:
+    """An investigation whose named days have none of what it asks about is answered so by code:
+    "what changed from Dec 1 to 14?" was answered with October (Codex's review, 2026-11-19), and
+    January 2027 with November (the v5 audit). Checked per metric and per period: the frame
+    reaching other days, or other metrics, is no answer for these."""
+    parts = [p for p in typed.parts if p.windows]
+    if not parts or frame.empty:
         return None
+    have = _when(Window(start=frame.index.min().date(), end=frame.index.max().date()), today)
     first, last = frame.index.min().date(), frame.index.max().date()
-    if any(w.start <= last and w.end >= first for w in windows):
-        return None
-    asked = " and ".join(_when(w, today) for w in windows)
-    have = _when(Window(start=first, end=last), today)
-    return f"Your data has no days {asked}, so I can't say what happened then. It runs {have}."
+    for part in parts:
+        focal = part.windows[0]
+        if _days_with(frame, part.metrics, focal):
+            continue
+        missing = [m for m in part.metrics if m not in frame.columns]
+        if missing and len(missing) == len(part.metrics):
+            return f"Your data doesn't include {_names(missing)}, so I can't look into it."
+        when = _when(focal, today)
+        if focal.start > last or focal.end < first:
+            future = " Those days haven't happened yet." if focal.start > today else ""
+            return (
+                f"Your data has no days {when}, so I can't say what happened then.{future} "
+                f"It runs {have}."
+            )
+        return (
+            f"Your data has no {_names(part.metrics)} {when}, so I can't say what happened "
+            f"then. It runs {have}."
+        )
+    return None
+
+
+def coverage_notes(typed, frame: pd.DataFrame, today: date) -> list[str]:
+    """What an investigation's named days are missing, said rather than filled: a baseline with
+    no data, part of a period not reached yet or not recorded."""
+    notes = []
+    for part in (p for p in typed.parts if p.windows):
+        for index, window in enumerate(part.windows):
+            days = _days_with(frame, part.metrics, window)
+            when = _when(window, today)
+            if index and not days:
+                notes.append(
+                    f"There's no {_names(part.metrics)} {when} to compare with, so that side of "
+                    "the comparison is missing."
+                )
+            elif 0 < days < window.days:
+                notes.append(
+                    f"Your data has {_names(part.metrics)} on {days} of the {window.days} days "
+                    f"{when}; the other days are left out, not filled in."
+                )
+    return list(dict.fromkeys(notes))
 
 
 def ask(
@@ -757,6 +914,8 @@ def ask(
             fixed = None
         if typed.subject == "other" and typed.kind != "guidance":
             fixed = "I can only see your own data, not another person's records."
+        elif ASKS_DIAGNOSIS.search(said):
+            fixed = MEDICAL_REFUSAL  # whatever the reader made of it: no data is read for this
         elif typed.clarification:
             fixed = typed.clarification
         elif (
@@ -773,6 +932,10 @@ def ask(
             gap := outside_data(typed, frame, _day(today or now))
         ):
             fixed = gap  # never another period's days in place of the ones named
+        elif (
+            typed.kind == "status" and KEPT_THINGS.search(said) and not TRACKER_THINGS.search(said)
+        ):
+            fixed = recalled(memory, chat, history, "kept")  # what is kept, not the tracker
         elif typed.kind == "status":
             fixed = status_reply(action_states)  # read from the store, never a write
         elif typed.kind == "confirmation":
@@ -807,7 +970,10 @@ def ask(
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)
-    investigating = typed is not None and typed.kind == "investigate" and not fixed
+    # Medical words keep the router's say: an investigation never overrides its refusal.
+    investigating = (
+        typed is not None and typed.kind == "investigate" and not fixed and not MEDICAL.search(said)
+    )
     if investigating:
         # "Why am I tired?", "investigate my sleep last month": the agent's own loop, with the
         # metrics and days the question named, not a web lookup or a clarification (5 of 16
@@ -897,7 +1063,7 @@ def ask(
             used = next(
                 (
                     step["passage_ids"]
-                    for step in result.trace
+                    for step in reversed(result.trace)  # the last: those the reply cites
                     if step.get("type") == "guidance_passages" and step["passage_ids"]
                 ),
                 None,
@@ -932,6 +1098,27 @@ def ask(
     # and, measured, changed nothing. Questions linking areas (why, change, pattern) keep them.
     if route.classification.question_type in NO_CONSULT and route.consult:
         route = replace(route, consult=())
+    # A validated log clause is prepared on a card, whatever the router made of the rest: "read
+    # my Nov 15 steps and draft a 12-minute walk" was routed as a question and no card was made
+    # (the v5 audit). Its side read is answered by code, below.
+    logging_clause = (
+        typed is not None
+        and typed.kind == "logging"
+        and not fixed
+        and typed.entry in LOG_EXPERT
+        and LOG_EXPERT[typed.entry] in (action_tools or {})
+    )
+    if logging_clause:
+        route = Route(
+            "expert",
+            LOG_EXPERT[typed.entry],
+            (),
+            choice == "auto",
+            replace(
+                route.classification,
+                intent_probabilities={str(i): float(i == Intent.LOG) for i in Intent},
+            ),
+        )
     correcting_draft = typed is not None and typed.kind == "correction" and continuing_log
     if correcting_draft:
         route = Route(
@@ -1307,6 +1494,9 @@ def ask(
     if urgent:  # before anything else, and no model: this reply must not be able to go wrong
         route = replace(route, action="refuse")
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="urgent", summary=urgent)
+    elif fixed == MEDICAL_REFUSAL:  # an explicit request for a diagnosis: a refusal
+        route = replace(route, action="refuse")
+        result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=fixed)
     elif fixed:
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="limits", summary=fixed)
     elif route.action == "refuse":
@@ -1442,8 +1632,13 @@ def ask(
             for e in records
             if e.tool == "habit_options"
         ]
+        if result.summary in (NO_ANSWER, ""):
+            described_days(result, typed, frame, _day(today or now), food_logs, now)
         if typed.focus == "coaching" and not any(c.kind == "suggestion" for c in result.claims):
-            result.notes.append(coaching_fallback(habits))
+            one_coaching_conclusion(result, habits)
+        result.notes += [
+            n for n in coverage_notes(typed, frame, _day(today or now)) if n not in result.notes
+        ]
         cited = {e.tool for e in result.cited_evidence.values()}
         if typed.focus == "why" and "correlate" not in cited:
             result.notes.append(WHY_LIMIT)

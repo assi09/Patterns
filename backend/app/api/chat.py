@@ -36,8 +36,10 @@ from app.agent.agent import NO_ANSWER
 from app.agent.ask import (
     CORRECTS,
     NOTED,
+    NOTHING_WAITING,
     REMINDERS,
     ask,
+    claims_false_success,
     default_guard,
     default_router,
     urgent_free,
@@ -97,6 +99,21 @@ HISTORY_USED = 20  # messages the agent sees as context; the context builder tri
 HISTORY_FOLDED = 40  # messages looked at for the running summary
 DRAFT_WITHOUT_ONE = re.compile(r"\bdraft\b", re.IGNORECASE)
 NO_DRAFT_REPLY = "I couldn't get that entry ready. Could you send it once more?"
+# Prose saying a card exists: "I've got that walk drafted", "the draft is ready below". True only
+# when the store has one; "Okay, submit that one" was told a walk was drafted that never was.
+CLAIMS_A_DRAFT = re.compile(
+    r"\bdrafted\b|\b(?:draft|card) (?:is |'s )?(?:now )?(?:ready|waiting|below|above|prepared|"
+    r"set up)\b|\b(?:put|added|placed) (?:it|that|this|them) on (?:a|the) card\b|"
+    r"\bready to log\b",
+    re.IGNORECASE,
+)
+# Fixed replies from code, which already say what the store holds.
+FROM_CODE = ("requested", "limits", "refused", "urgent", "noted", "looked_up")
+STILL_WAITING = "Until then, the earlier draft is still waiting on its card, unchanged."
+CORRECTION_FAILED = (
+    "I couldn't change the card, so the earlier draft is still waiting as it was: nothing was "
+    "replaced or sent. You can tap Edit on it to change it yourself."
+)
 WAITING_ANSWERS = 4  # recent answers whose waiting drafts a "log it" or a correction refers to
 MAX_THREAD = 6  # the person's messages kept from one logging request still being asked about
 QUIET_INTENTS = (Intent.LOG, Intent.REMIND)  # one-off requests: nothing to listen for
@@ -400,6 +417,14 @@ ALREADY_KEPT = "I already keep that in mind."
 
 
 NOTHING_KEPT = "I don't keep anything about you yet, so there's nothing to forget."
+NOT_KEPT_HERE = (
+    "Okay, I won't keep anything from this message, and nothing else about you is kept. I can "
+    "still use what you said here, in this chat."
+)
+NOT_KEPT_HERE_ASK = (
+    "Okay, I won't keep anything from this message. If you also want something already kept "
+    "removed, which one?"
+)
 FORGET_CARD = (
     "I've put it on a card below: tap Forget and I'll stop using \u201c{text}\u201d. Nothing is "
     "removed until you tap."
@@ -429,6 +454,34 @@ def forget_from(sessions: Sessions, agent: AgentParts, user_id, question_id, tex
     except Exception:
         logger.exception("Preparing a forget card failed")
         return NOT_HEARD
+
+
+def corrected_payload(prior: dict, minutes: float | None, day, zone) -> dict | None:
+    """The waiting card with only what the correction states changed: a new duration keeps the
+    start and ends that long after it; a new day keeps the clock times. None when it states
+    neither, or when a paused workout makes "the duration" unclear (active time or elapsed)."""
+    if minutes is None and day is None:
+        return None
+    payload = {
+        k: v for k, v in prior.items() if k not in ("measured", "provenance", "estimateSource")
+    }
+    if prior.get("kind") == "workout":
+        start = datetime.fromisoformat(prior["startTime"])
+        end = datetime.fromisoformat(prior["endTime"])
+        if minutes is not None:
+            if abs((end - start).total_seconds() - prior["activeSeconds"]) > 1:
+                return None
+            end = start + timedelta(minutes=minutes)
+            payload["activeSeconds"] = round(minutes * 60)
+        if day is not None:
+            shift = timedelta(days=(day - start.astimezone(zone).date()).days)
+            start, end = start + shift, end + shift
+        return payload | {"startTime": start.isoformat(), "endTime": end.isoformat()}
+    if minutes is not None:
+        return None  # a meal has no duration: the model's to read
+    eaten = datetime.fromisoformat(prior["consumedAt"])
+    shift = timedelta(days=(day - eaten.astimezone(zone).date()).days)
+    return payload | {"consumedAt": (eaten + shift).isoformat()}
 
 
 def noted_reply(statuses: list[str] | None) -> str:
@@ -662,6 +715,42 @@ def _answer(
         except Exception:
             logger.exception("Answering failed")
             reply = None
+        # A correction the model did not turn into a card: code makes it from the card's own
+        # values and the new duration or day, through the same tool and checks. If that fails
+        # too, the old card stays and the reply says so (a run's correction got "ask it another
+        # way" and kept its old duration, the v5 audit).
+        if reply is not None and correcting and not prepared and typed is not None:
+            payload = corrected_payload(
+                waiting[-1].payload, typed.duration_minutes, typed.log_day, zone
+            )
+            tools = draft_tools.get("activity" if waiting[-1].kind == "workout" else "nutrition")
+            if payload is not None and tools:
+                _, step = tools[0].run(payload)
+                reply.result.trace.append({"type": "correction_by_code", **step})
+            if prepared:
+                reply.result.summary = " ".join(described) or DRAFT_NOTE
+            elif "?" in reply.result.summary and reply.result.summary != NO_ANSWER:
+                reply.result.notes.append(STILL_WAITING)  # its question stands; the card too
+            else:
+                reply.result.summary, reply.result.claims = CORRECTION_FAILED, []
+        # Any turn: the model's words may not claim a card or a write the store does not hold.
+        # Checked before code adds its own notes ("I've put that on a card below" is a memory
+        # card that is there).
+        if (
+            reply is not None
+            and not prepared
+            and reply.result.stop_reason not in FROM_CODE
+            and (
+                (not waiting and CLAIMS_A_DRAFT.search(reply.result.summary))
+                or (
+                    "succeeded" not in action_states
+                    and (typed is None or typed.kind not in ("data", "causality", "investigate"))
+                    and claims_false_success(reply.result.summary)
+                )
+            )
+        ):
+            reply.result.trace.append({"type": "unbacked_action_claim"})
+            reply.result.summary, reply.result.claims = NOTHING_WAITING, []
         # "Remember that …" is heard now, not after: the reply says what actually happened.
         noted = reply is not None and reply.result.stop_reason == "noted"
         action = typed.memory_action if typed is not None else None
@@ -673,17 +762,40 @@ def _answer(
             if typed.states_new_fact and not memory_denied:
                 outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
                 changed = bool(outcome and "proposed" in outcome)
-            reply.result.summary = (
+            said = (
                 FORGET_NOTE
                 if changed
                 else forget_from(sessions, agent, user_id, question_id, body.text, now)
             )
+            if memory_denied and (said == NOTHING_KEPT or said.startswith(FORGET_WHICH)):
+                # "Just here in this chat, I like kayaking. Keep that out of my profile": a
+                # statement not to keep, with nothing kept that it removes (the v5 audit said
+                # "nothing to forget").
+                said = (
+                    NOT_KEPT_HERE
+                    if said == NOTHING_KEPT
+                    else f"{NOT_KEPT_HERE_ASK}\n{said.split(chr(10), 1)[-1]}"
+                )
+            reply.result.summary = said
         elif noted and not memory_denied:
             asked = action == "remember"
             outcome = listen_to(
                 sessions, agent, user_id, question_id, body.text, today, now, asked=asked
             )
             reply.result.summary = noted_reply(outcome)
+        # A read-only request ("remind me what I said", "is it saved?") gives no permission to
+        # propose a fact from its own words: a readback became a preference card (the v5 audit).
+        read_only = reply is not None and (
+            reply.route.action == "conversation"
+            or reply.result.stop_reason == "recalled"
+            or (
+                typed is not None
+                and (
+                    typed.kind in ("status", "confirmation", "correction", "clarify")
+                    or (typed.kind == "memory" and typed.memory_action in ("recall", "forget"))
+                )
+            )
+        )
         # Something they told us in passing: heard now too, so the reply can point to its card.
         chatted = reply is not None and reply.result.stop_reason in CHATTED
         # "That seems wrong, I walked more" disputes a figure; it says nothing lasting about them.
@@ -692,6 +804,7 @@ def _answer(
         if (
             chatted
             and not memory_denied
+            and not read_only
             and is_statement(body.text)
             and not certain_talk(body.text)
         ):
@@ -739,10 +852,12 @@ def _answer(
             elif (
                 reply.route.classification.intent == Intent.LOG
                 and result.stop_reason != "limits"  # a fixed reply ("tap Log it on the card")
+                and result.summary != CORRECTION_FAILED  # code's, and already true
                 and DRAFT_WITHOUT_ONE.search(result.summary)
                 and "?" not in result.summary
             ):  # it says a card is waiting, and there is none
                 result.summary = NO_DRAFT_REPLY
+
             reminding = any(step.get("reminding") for step in result.trace)
             if listed and result.summary == NO_ANSWER:  # the listing is code's, and so is this
                 result.summary, result.claims = listing_reply(listed), []
@@ -761,6 +876,7 @@ def _answer(
             # "Remember my goal is 8,000 steps" can read as a reminder; it is still worth hearing.
             heard = (
                 not memory_denied
+                and not read_only
                 and not noted
                 and not chatted
                 and not refused
@@ -782,7 +898,7 @@ def _answer(
                 db,
                 user_id,
                 answer_text(result.summary, [c.text for c in result.claims], result.notes),
-                claims=[c.model_dump(mode="json") for c in result.claims],
+                claims=[c.model_dump(mode="json") for c in result.all_claims],
                 evidence=result.evidence.values(),
                 answered_by=None if refused else result.expert,
                 routed=None if refused else body.expert == "auto",

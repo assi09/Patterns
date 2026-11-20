@@ -25,7 +25,12 @@ class Fields(BaseModel):
 
 
 class Period(Fields):
-    kind: Literal["history", "explicit", "relative", "rolling", "calendar", "inherit"]
+    # after/before: the `days` days right after an earlier result's last day, or right before
+    # its first: "the six days immediately following that block" (the v5 audit moved the old
+    # block one day forward instead).
+    kind: Literal[
+        "history", "explicit", "relative", "rolling", "calendar", "inherit", "after", "before"
+    ]
     start: date | None = None
     end: date | None = None
     anchor: Literal["today", "previous"] = "today"
@@ -107,6 +112,7 @@ class Reading(Fields):
     focus: Literal["what_changed", "why", "overview", "coaching"] | None = None
     duration_minutes: float | None = Field(default=None, gt=0, le=1440, allow_inf_nan=False)
     log_day: Period | None = None
+    entry: Literal["workout", "food"] | None = None  # what a log or correction is for
     status: bool = False  # asks whether an entry was saved: read-only
     recall: Literal["kept", "waiting", "this_chat", "all"] | None = None
     states_new_fact: bool = False  # a forget that also says what is true now
@@ -136,6 +142,7 @@ class Request(Fields):
     focus: str | None = None
     duration_minutes: float | None = None
     log_day: date | None = None
+    entry: str | None = None
     status: bool = False
     recall: str | None = None
     states_new_fact: bool = False
@@ -268,6 +275,29 @@ def _log_day_by_code(reading: "Reading", question: str) -> "Reading":
     return reading.model_copy(update={"log_day": None})  # keeps the card's own day
 
 
+# "No equipment", "with a band", "beginner": how the movement is done, not a second movement. As a
+# second topic it made "how do I lower myself in that version?" ask which movement (the v5 audit).
+QUALIFIER = re.compile(
+    r"^(?:no|without|with|using|w/o|for beginners|at home|indoors|outdoors)\b|"
+    r"^(?:\w+ )?(?:equipment|weights?|version|variation|form|technique|setup|tips?)$",
+    re.IGNORECASE,
+)
+
+
+def subjects(topics: Sequence[str]) -> list[str]:
+    """The guidance subjects, each qualifier folded into the one subject it describes: ["basic
+    floor pushup", "no equipment"] is one, "basic floor pushup (no equipment)"; two movements
+    stay two."""
+    named = [t for t in topics if t.strip()]
+    main = [t for t in named if not QUALIFIER.search(t.strip())]
+    extra = [t for t in named if QUALIFIER.search(t.strip())]
+    if len(main) == 1 and extra:
+        return [f"{main[0]} ({', '.join(extra)})"]
+    if not main:
+        return [", ".join(named)] if named else []
+    return main
+
+
 def previous_state(history: Sequence[Turn]) -> dict:
     return next((t.request_state for t in reversed(history) if t.request_state), {})
 
@@ -283,6 +313,17 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
         if period.start is None or period.end is None:
             raise Ambiguous("What are the start and end dates?")
         return [Window(start=period.start, end=period.end)]
+    if period.kind in ("after", "before"):
+        # One earlier period only, as for a shift: after a comparison of two periods, "the next
+        # three days after that block" must not take whichever was stored last.
+        if previous is None or len(previous.windows) != 1:
+            raise Ambiguous("Which of the earlier periods should I count from?")
+        length = timedelta(days=period.days)
+        if period.kind == "after":
+            end = previous.windows[-1].end
+            return [Window(start=end + timedelta(days=1), end=end + length)]
+        start = previous.windows[0].start
+        return [Window(start=start - length, end=start - timedelta(days=1))]
     anchor = today
     if period.anchor == "previous":
         if previous is None or len(previous.windows) != 1:
@@ -377,6 +418,7 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
             else ""
         ),
         duration_minutes=reading.duration_minutes,
+        entry=reading.entry,
         status=reading.status,
         recall=reading.recall,
         states_new_fact=reading.states_new_fact,
@@ -400,11 +442,14 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
         return request
     if reading.kind == "guidance":
         if reading.guidance_reference and not reading.topics:
-            request.topics = state.get("guidance", [])
-            if len(request.topics) != 1:
+            request.topics = subjects(state.get("guidance", []))
+            if len(request.topics) > 1:
+                raise Ambiguous(f"Do you mean {' or '.join(request.topics)}?")
+            if not request.topics:
                 raise Ambiguous("Which movement or topic do you mean?")
             request.guidance_question = f"About {request.topics[0]}: {reading.guidance_question}"
-        elif len(request.topics) == 1:
+        elif len(subjects(request.topics)) == 1:
+            request.topics = subjects(request.topics)
             # The reader may name the resolved topic but leave a pronoun in its rewrite.
             # Retrieval must still receive the concrete movement, including after other turns.
             request.guidance_question = f"About {request.topics[0]}: {reading.guidance_question}"
@@ -430,9 +475,10 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
         )
         prior = _prior(part, previous, inherited)
         metrics = part.metrics or (prior.metrics if prior else [])
+        operation = part.operation if part.operation != "inherit" else prior.operation
+        metrics, operation = _food_source(metrics, operation, prior)
         if not metrics or any(m not in METRICS and m != "food_logs" for m in metrics):
             raise Ambiguous("That measurement is not available. Which recorded metric do you mean?")
-        operation = part.operation if part.operation != "inherit" else prior.operation
         if (operation == "food" and metrics != ["food_logs"]) or (
             "food_logs" in metrics and operation != "food"
         ):
@@ -462,9 +508,13 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
                 raise Ambiguous("Which units should I use for this threshold?")
             if part.threshold_unit == "hours":
                 threshold *= 60
-        if operation == "count" and prior and part.operation == "inherit":
+        if operation == "count" and prior and prior.operation == "count":
+            # "Count again above 9,000" keeps the comparison; "exclude the days on the boundary"
+            # keeps the threshold: a follow-up count changes only what it names.
             comparison = comparison or prior.comparison
             threshold = threshold if threshold is not None else prior.threshold
+        if operation == "count" and comparison is None and threshold is None:
+            _predicate_or_value(part, windows)
         if operation == "count" and (comparison is None or threshold is None):
             raise Ambiguous("What threshold and comparison should I count days against?")
         if operation != "count" and (comparison is not None or threshold is not None):
@@ -513,6 +563,88 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
     return request
 
 
+# Confirmed food is one source: whatever nutrient the words name ("breakfast energy in kcal",
+# "protein"), the readback reports every recorded nutrient of those entries. The reader named the
+# nutrient as a metric and the food read stopped at "not available" (the v5 audit).
+NUTRIENTS = {
+    "food",
+    "food_log",
+    "food_logs",
+    "nutrition",
+    "meal",
+    "meals",
+    "energy",
+    "energy_kcal",
+    "energykcal",
+    "kcal",
+    "calories_consumed",
+    "calories_eaten",
+    "protein",
+    "protein_g",
+    "proteing",
+    "carbs",
+    "carbohydrate",
+    "carbohydrates",
+    "carbohydrate_g",
+    "fat",
+    "fat_g",
+    "fats",
+}
+FOOD_OPERATIONS = ("food", "sum", "value", "inherit", "describe")
+
+
+def _food_source(
+    metrics: list[str], operation: str, prior: "ResolvedPart | None"
+) -> tuple[list[str], str]:
+    """The one reading of a food request that names a nutrient, or asks for a total over food
+    already being read. Every metric must belong to the food source: one wearable metric beside
+    a nutrient ("total steps and protein") is two requests, sent back to be split, never one
+    with the steps dropped."""
+    names = [m.casefold() for m in metrics]
+    about_food = operation == "food" or (
+        prior is not None and prior.operation == "food" and operation in FOOD_OPERATIONS
+    )
+
+    def food(name: str) -> bool:
+        # "calories" is energy burned, unless it is all a food read names ("breakfast calories");
+        # beside food_logs it is energy burned attached to food, and sent back.
+        return name in NUTRIENTS or (name == "calories" and about_food and names == ["calories"])
+
+    eaten = [n for n in names if food(n)]
+    worn = [n for n in names if not food(n) and n in METRICS]
+    if eaten and worn:
+        raise RetryReading(
+            "One clause mixes confirmed food (food_logs, operation food) with wearable metrics. "
+            "Split it: one food clause, and one data clause for the wearable metrics with the "
+            "operation they asked for. Keep every metric and the dates."
+        )
+    if about_food and not metrics:
+        return ["food_logs"], "food"
+    if eaten and len(eaten) == len(names) and (about_food or operation in FOOD_OPERATIONS):
+        return ["food_logs"], "food"
+    return metrics, operation
+
+
+# "What is the count?", "my step count on Nov 5": the metric's value, not a count of days past a
+# threshold. A threshold is asked for only when the words count days that meet something.
+COUNTS_DAYS = re.compile(
+    r"\bhow many (?:of (?:the|those|these) )?(?:days|nights|times|weeks|mornings)\b|"
+    r"\b(?:days|nights) (?:with|where|when|that|on which)\b|\bthreshold\b|\bcutoff\b|"
+    r"\b(?:above|below|over|under|at least|at most|more than|less than|fewer than)\b",
+    re.IGNORECASE,
+)
+
+
+def _predicate_or_value(part: Part, windows: list[Window]) -> None:
+    single_day = len(windows) == 1 and windows[0].start == windows[0].end
+    if single_day or (part.said and not COUNTS_DAYS.search(part.said)):
+        raise RetryReading(
+            "count counts the days that pass a threshold, and needs one. A 'step count' or "
+            "'the count' of one day or period is that metric's value (value for one day; sum or "
+            "mean over several). Re-read the operation; keep the metric and the dates."
+        )
+
+
 class Contradicted(RetryReading):
     """The resolved request contradicts something the question fixes (checks.py)."""
 
@@ -555,7 +687,8 @@ Clause types:
   needs comparison and threshold (above/over/more than >, at least >=, under/below <, at most/no
   more than/no higher than <=, exactly/equal to ==); coverage counts days recorded. Never invent
   a threshold: keep their number, with threshold_unit hours when they give hours for a minutes
-  metric. compare lists the focal period first, the baseline second. correlate lists driver then
+  metric. "My step count on Nov 5" or "what is the count?" is the value, not count. compare
+  lists the focal period first, the baseline second. correlate lists driver then
   target, max_lag only if asked; asks_cause when they ask whether one causes the other. operation
   inherit only to repeat the earlier computation.
 - investigate: why something in their data happened, what changed, how they have been, or what
@@ -572,12 +705,15 @@ Clause types:
   written date; days_from_today 1 for tomorrow, -1 for yesterday. A log has no data clause.
 - correct: change the card waiting for their tap (pending_draft true). duration_minutes is the new
   duration only when they give one.
-- status: asks whether something was saved or written to the tracker. Read-only, never confirm.
+- status: asks whether a workout or food entry was saved or written to the tracker. Read-only,
+  never confirm. Whether a preference, goal or fact is still kept is memory recall kept.
 - confirm: asks to save the waiting card ("go ahead", "log it"); only with pending_draft true.
   Reading entries already saved is a data clause.
 - memory: remember (keep something about them, however politely asked); recall (kept: what they
   approved; waiting: cards not yet tapped; this_chat: what they said in this conversation; all);
-  forget (remove something kept; states_new_fact when they also say what is true now).
+  forget (remove something already kept; states_new_fact when they also say what is true now).
+  "Keep this out of my profile" about something said now is store_nothing, not forget.
+- confirm or correct only act on a card: with no pending_draft, "submit that one" is other.
 - other: small talk, thanks, or nothing the app does.
 Earlier messages are context only: every clause comes from the current message, and its said is
 copied from the current message. One message can have several clauses: "repeat the step count
@@ -587,14 +723,24 @@ asks: "the first result only" is one clause, never a repeat of the others.
 Periods, for data and investigate clauses; pick the kind that means what was said:
 - dates: dates written out; one day has start = end.
 - calendar: this week (week, 0), last month (month, -1), the week before last (week, -2).
+- month: a month named with its year, past or future ("January 2027"); a month named alone is
+  its latest occurrence up to today.
 - same_as_earlier: exactly an earlier result's days, nothing added ("that same day", "for that
-  interval"). Days added before or after an earlier date are days_ending, never same_as_earlier.
-- shift_earlier: an earlier result's whole period moved ("two days earlier" is -2).
+  interval", "count again"). Days added before or after an earlier date are days_ending, never
+  same_as_earlier; "that day as the last of five days" is days_ending 5, earlier_end, 0.
+- shift_earlier: an earlier result's whole period moved ("two days earlier" is -2, "move that
+  range forward one day" is +1).
+- after_earlier / before_earlier: a new block of length days right after the earlier result's
+  last day ("the six days immediately following that block": after_earlier 6) or right before
+  its first day ("the 5 days before those": before_earlier 5).
 - days_ending: length days ending on a day. yesterday: 1, today, -1. two days before today: 1,
   today, -2. the last 7 days (today included): 7, today, 0. the 5 complete days before today: 5,
   today, -1. that date and the three dates before it: 4, earlier_end, 0. the day before that: 1,
   earlier_end, -1.
 - all_history: a new question that names no period.
+A follow-up that changes only the threshold or comparison ("exclude the days exactly on the
+boundary") keeps the earlier days and threshold: same_as_earlier, with only the comparison
+changed (at or below becomes below).
 "yesterday", "last 7 days" and "this week" count from today; earlier_end and the earlier kinds
 only when the words point at an earlier result's dates. earlier_result is that result's
 zero-based index, only when clearly identified. Code does all the date arithmetic.

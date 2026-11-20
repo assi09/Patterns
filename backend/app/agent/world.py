@@ -296,22 +296,32 @@ def answer_world(
             "\nThe question just before, as quoted data, for what it refers to: "
             f"{_quoted(clean(earlier, MAX_QUESTION_CHARS))}"
         )
-    try:
-        choice = llm.complete(
-            [{"role": "system", "content": CHOOSE_PROMPT}, {"role": "user", "content": quoted}],
-            tools=_tools(),
-            budget=budget,
-        )
-    except LLMError as exc:
-        result.trace.append({"type": "lookup", "error": str(exc)})
-        result.stop_reason, result.summary = "lookup_failed", COULD_NOT
-        return result
-    call = next(iter(choice.tool_calls), None)
-    unclear = call is None and (choice.text or "").strip().lower().startswith("which")
-    if unclear and topic:
+    on_topic = ToolCall("topic", KNOWLEDGE_LOOKUP, {"query": f"{topic}: {question}"})
+    if topic and active:
+        # A follow-up on the movement the last answer's vetted passages were about: those are
+        # read first, before any choice of source ("what does the source say I should lift?"
+        # after the Superman went to the web and was refused, the v5 audit).
+        choice, call = None, on_topic
+        result.trace.append({"type": "lookup_choice", "active_topic": True})
+    else:
+        try:
+            choice = llm.complete(
+                [{"role": "system", "content": CHOOSE_PROMPT}, {"role": "user", "content": quoted}],
+                tools=_tools(),
+                budget=budget,
+            )
+        except LLMError as exc:
+            result.trace.append({"type": "lookup", "error": str(exc)})
+            result.stop_reason, result.summary = "lookup_failed", COULD_NOT
+            return result
+        call = next(iter(choice.tool_calls), None)
+    said = (choice.text or "").strip().lower() if choice is not None else ""
+    unclear = call is None and said.startswith("which")
+    if call is None and topic and not said.startswith("no"):
         # The topic is already known ("could that routine include a book?" after wind-down
         # passages was asked "which exercise or food?", the v4 audit): look it up under it.
-        call = ToolCall("topic", KNOWLEDGE_LOOKUP, {"query": f"{topic}: {question}"})
+        # A "no" (medical, or not about the app's subjects) still stands.
+        call = on_topic
     elif unclear:
         result.stop_reason, result.summary = "lookup_unclear", WHICH
         return result
@@ -332,16 +342,12 @@ def answer_world(
                 candidates += search(topic, llm=llm, budget=budget).found
             selected = for_topic(_unique(candidates), topic, llm, budget)[:MAX_PASSAGES]
             records = [passage_evidence(f.passage) for f in selected]
-            result.trace.append(
-                {"type": "guidance_passages", "passage_ids": [f.passage.id for f in selected]}
-            )
+            # Narrowed to the passages behind the reply once it is written (`supporting`).
+            chosen = {"type": "guidance_passages", "passage_ids": [f.passage.id for f in selected]}
+            result.trace.append(chosen)
             if topic:
                 result.trace.append(
-                    {
-                        "type": "guidance_topic",
-                        "topic": topic,
-                        "passage_ids": [f.passage.id for f in selected],
-                    }
+                    {"type": "guidance_topic", "topic": topic, "passage_ids": chosen["passage_ids"]}
                 )
             found = _from_passages(records) if records else outside.web(llm, query, budget)
         elif call.name == WEB_LOOKUP:
@@ -402,6 +408,8 @@ def answer_world(
             return result
     result.summary = reply
     if records:  # shown as sources, and kept for the follow-up that asks about them
+        records = supporting(reply, records)
+        chosen["passage_ids"][:] = [r.stats["passage_id"] for r in records]
         result.evidence |= {record.id: record for record in records}
         result.claims = [
             Claim(text=reply[:600], kind="guidance", evidence_ids=[r.id for r in records])
@@ -419,6 +427,23 @@ def answer_world(
 
 
 MAX_PASSAGES = 5
+SUPPORT_SHARE = 0.5  # of the best passage's overlap with the reply
+
+
+def supporting(reply: str, records: list[Evidence]) -> list[Evidence]:
+    """The passages the reply is drawn from: those sharing at least half as many of its words as
+    the one sharing most. Cited and kept for a follow-up, they are the ones behind it, not every
+    variant searched (a basic push-up answer cited two other push-ups, the v5 audit)."""
+    said = stems(reply)
+    if not said or len(records) < 2:
+        return records
+    shared = [len(said & stems(str(r.stats.get("text", "")))) for r in records]
+    best = max(shared)
+    if not best:
+        return records
+    return [r for r, n in zip(records, shared, strict=True) if n >= SUPPORT_SHARE * best]
+
+
 PICK_VARIANT = "same_exercise"
 VARIANT_PROMPT = f"""A person asks about one exercise. Call {PICK_VARIANT} with the numbers of the \
 exercise titles below that are that same exercise and variant, judged by meaning: an unweighted or \

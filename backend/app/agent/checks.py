@@ -188,7 +188,10 @@ def _written(text, part, resolved, state, today) -> Conflict | None:
 
 # ---- earlier days kept, or shifted by a number of days ----
 
-COUNT = r"(\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|fourteen|thirty)"
+COUNT = (
+    r"(\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fourteen|fifteen|"
+    r"twenty|twenty-one|twenty-eight|thirty)"
+)
 NOT_FROM_TODAY = r"(?! (?:today|now|yesterday|tomorrow|this\b))"
 SHIFT = re.compile(
     rf"\b{COUNT} (?:calendar |whole |full )?(?:days?|nights?) (earlier|later|back|forward|"
@@ -208,7 +211,13 @@ WORDS = {
     "eight": 8,
     "nine": 9,
     "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
     "fourteen": 14,
+    "fifteen": 15,
+    "twenty": 20,
+    "twenty-one": 21,
+    "twenty-eight": 28,
     "thirty": 30,
 }
 EARLIER = ("earlier", "back", "before", "sooner")
@@ -221,12 +230,64 @@ def _number(word: str) -> int:
 def shift_said(text: str) -> int | None:
     """The days a follow-up moves by: -2 for "two days earlier", +3 for "forward 3 days". None
     for none, for more than one, or for a shift counted from today ("two days before today")."""
+    if adjacent_said(text) is not None:
+        return None  # "the 5 days before that block" is a block next to it, not a shift
     found = SHIFT.findall(text)
     if len(found) != 1:
         return None
     a, way_a, way_b, b = found[0]
     count, way = (a, way_a) if a else (b, way_b)
     return -_number(count) if way.lower() in EARLIER else _number(count)
+
+
+# "The six days immediately following that block", "the next 7 days after that", "the 5 days
+# before those": a block of days next to an earlier one, starting the day after its last day or
+# ending the day before its first. Not a shift: "move that range forward one day" is a shift.
+_NIGHTS = r"(?:calendar |whole |full |complete |consecutive )?(?:days|nights)"
+_RIGHT = r"(?:immediately |right |just |directly )"
+ADJACENT_AFTER = re.compile(
+    rf"\b(?:next|following|subsequent|succeeding) {COUNT} {_NIGHTS}\b|"
+    rf"\bthe {COUNT} {_NIGHTS} {_RIGHT}?(?:after|following)\b|"
+    rf"\b{COUNT} {_NIGHTS} {_RIGHT}(?:after|following)\b",
+    re.IGNORECASE,
+)
+ADJACENT_BEFORE = re.compile(
+    rf"\b(?:previous|preceding|prior) {COUNT} {_NIGHTS}\b|"
+    rf"\bthe {COUNT} {_NIGHTS} {_RIGHT}?(?:before|preceding|prior to|leading up to)\b|"
+    rf"\b{COUNT} {_NIGHTS} {_RIGHT}(?:before|preceding|prior to|leading up to)\b",
+    re.IGNORECASE,
+)
+
+
+def adjacent_said(text: str) -> tuple[str, int] | None:
+    """("after", 6) for "the six days immediately following that block", ("before", 5) for "the
+    5 days before those"; None for none, for both, or for a block counted from today ("the
+    previous 7 days" alone is the last 7 days: `from_today` and `LAST_N` read that)."""
+    after, before = _counts(ADJACENT_AFTER, text), _counts(ADJACENT_BEFORE, text)
+    if len(after) + len(before) != 1 or not REFERS_TO_EARLIER.search(text):
+        return None
+    return ("after", after[0]) if after else ("before", before[0])
+
+
+def _counts(pattern: re.Pattern, text: str) -> list[int]:
+    """The number in each match, whichever alternative of the pattern matched."""
+    return [_number(next(g for g in m.groups() if g)) for m in pattern.finditer(text)]
+
+
+# "Five consecutive days", "the 3 days": a stated length. "2 days ago" and "two days earlier"
+# are a point and a shift, not a length.
+LENGTH = re.compile(
+    rf"\b{COUNT} {_NIGHTS}\b(?! (?:ago|earlier|later|back|forward|sooner|ahead|from today|"
+    r"before today|after today))",
+    re.IGNORECASE,
+)
+
+
+def length_said(text: str) -> int | None:
+    found = _counts(LENGTH, text)
+    if len(found) != 1 or shift_said(text) is not None:
+        return None
+    return found[0]
 
 
 SAME_DAYS = re.compile(
@@ -272,6 +333,10 @@ def _same_days(text, part, resolved, state, today) -> Conflict | None:
     if not previous or written(text) != ([], []) or shift_said(text) is not None:
         return None
     if not SAME_DAYS.search(text) or MOVED.search(text) or from_today(text):
+        return None
+    # "Take that day as the last of five consecutive days": "that day" is an endpoint here, not
+    # the interval to reuse (the v5 audit sent the right five-day reading back and got one day).
+    if length_said(text) is not None or adjacent_said(text) is not None:
         return None
     if list(resolved.windows) in previous:
         return None
@@ -537,12 +602,242 @@ def _comparison(text, part, resolved, state, today) -> Conflict | None:
     )
 
 
+# ---- relations to an earlier result, and lengths ----
+
+
+def _earlier(part, state: dict) -> list | None:
+    """The earlier result's windows this part refers to: the one it names, else the only one."""
+    previous = _previous(state)
+    if part.reference is not None:
+        return previous[part.reference] if part.reference < len(previous) else None
+    return previous[0] if len(previous) == 1 else None
+
+
+def _adjacent(text, part, resolved, state, today) -> Conflict | None:
+    said = adjacent_said(text)
+    earlier = _earlier(part, state)
+    if said is None or earlier is None or len(earlier) != 1 or written(text) != ([], []):
+        return None  # two earlier periods: resolving asks which one
+    way, days = said
+    if way == "after":
+        start = earlier[-1].end + timedelta(days=1)
+        end = earlier[-1].end + timedelta(days=days)
+    else:
+        start = earlier[0].start - timedelta(days=days)
+        end = earlier[0].start - timedelta(days=1)
+    if [(w.start, w.end) for w in resolved.windows] == [(start, end)]:
+        return None
+    kind = "after_earlier" if way == "after" else "before_earlier"
+    return Conflict(
+        "adjacent",
+        f"'{text}' is the {days} days right {way} the earlier result's days: {start} to {end} "
+        f"(a {kind} period of length {days}), not that period moved by a day.",
+        f"Do you mean {_span(start, end, today)}?",
+    )
+
+
+def _length(text, part, resolved, state, today) -> Conflict | None:
+    days = length_said(text)
+    if days is None or part.operation == "compare" or len(resolved.windows) != 1:
+        return None
+    if LAST_N.search(text) or adjacent_said(text) is not None:
+        return None  # their own checks say where the days end, too
+    window = resolved.windows[0]
+    if window.days == days:
+        return None
+    return Conflict(
+        "length",
+        f"'{text}' asks about {days} days: the period must be exactly {days} days long, first "
+        "and last included, ending or starting where the words say (days_ending with length "
+        f"{days} when they end on an earlier day).",
+        f"Do you mean a period of {days} days?",
+    )
+
+
+# Words that name or move a period. A follow-up with none of them keeps the earlier days: "exclude
+# the days right on the boundary and count again" got new dates (the v5 audit).
+PERIOD_WORDS = re.compile(
+    r"\b(?:jan(?:uary)?|feb(?:ruary)?|march|apr(?:il)?|may|june?|july?|aug(?:ust)?|"
+    r"sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|monday|tuesday|wednesday|"
+    r"thursday|friday|saturday|sunday|weekends?|weekdays?|week|month|year|fortnight|today|"
+    r"yesterday|tomorrow|tonight|night|morning|evening|since|until|till|ago|history|ever|"
+    r"all[- ]time|overall|recent(?:ly)?|lately|date|dates|period|range|window|span|stretch|"
+    r"block|interval|first|last|previous|next|following|before|after|earlier|later|peak\w*|"
+    r"best|worst|highest day|lowest day|day|calendar|back|forward|ahead|shift\w*|mov\w*|"
+    r"push\w*|slid\w*|sooner|prior|preceding|start\w*|end\w*|through|from)\b|\d",
+    re.IGNORECASE,
+)
+AGAIN = re.compile(
+    r"\b(?:again|that|those|same|it|instead|too|also|recalculate|redo|repeat|recount|rerun|"
+    r"re-?do|re-?count)\b",
+    re.IGNORECASE,
+)
+
+
+def _unnamed_period(text, part, resolved, state, today) -> Conflict | None:
+    previous = _previous(state)
+    if not previous or not resolved.windows:
+        return None
+    follows = part.reference is not None or part.operation == "inherit" or AGAIN.search(text)
+    if not follows or PERIOD_WORDS.search(COMPARED.sub(" ", text)):
+        return None
+    if list(resolved.windows) in previous:
+        return None
+    target = _earlier(part, state)
+    return Conflict(
+        "kept_days",
+        f"'{text}' names no dates and moves none: it keeps the earlier result's days exactly "
+        "(same_as_earlier), with only what the words change.",
+        f"Do you mean the same dates as before, {_span(*_ends(target), today)}?"
+        if target
+        else "Which dates do you mean?",
+    )
+
+
+# "Exclude the days right on the boundary", "not counting the ones exactly at it": the same count
+# with the threshold made strict. The dates, metric and threshold stay (the v5 audit moved the
+# dates and kept "at or below").
+EXCLUDE_EQUAL = re.compile(
+    r"\b(?:exclud\w*|without|not count\w*|leav\w* out|drop\w*|minus|remov\w*|ignor\w*|skip\w*|"
+    r"not including|other than)\b[\w\s,'-]{0,40}?\b(?:boundary|threshold|cut-?off|line|limit|"
+    r"exactly|equal\w*|tie[sd]?|right at|on the (?:mark|number))\b|"
+    r"\bstrictly (?:above|below|over|under|more|less|greater|fewer|higher|lower)\b",
+    re.IGNORECASE,
+)
+STRICT = {"<=": "<", ">=": ">", "<": "<", ">": ">"}
+
+
+def _strictness(text, part, resolved, state, today) -> Conflict | None:
+    if not EXCLUDE_EQUAL.search(text) or COMPARED.search(text):
+        return None
+    index = part.reference if part.reference is not None else 0
+    earlier = state.get("data", [])
+    if index >= len(earlier) or (part.reference is None and len(earlier) != 1):
+        return None
+    before = earlier[index]
+    if before.get("operation") != "count" or before.get("comparison") not in STRICT:
+        return None
+    sign, windows = STRICT[before["comparison"]], _windows(before)
+    if (
+        resolved.operation == "count"
+        and resolved.comparison == sign
+        and resolved.threshold == before.get("threshold")
+        and list(resolved.windows) == windows
+    ):
+        return None
+    return Conflict(
+        "strict",
+        f"'{text}' repeats the earlier count leaving out the days exactly at its threshold: "
+        f"keep its metric, its dates and threshold {before.get('threshold'):g}, and change the "
+        f"comparison {before['comparison']} to {sign}. 'The boundary' here is the threshold, not "
+        "the first and last day.",
+        f"Should I count the same days again, {SAID[sign]} {before.get('threshold'):g}?",
+    )
+
+
+# "In January 2027", "during March": a named month is that whole month, never recent days (the v5
+# audit answered January 2027 with November).
+MONTH_NAMED = re.compile(
+    r"(?<!\bof )(?<!\d )\b(january|february|march|april|june|july|august|september|october|"
+    r"november|december|may(?=,? \d{4})|(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)"
+    r"(?=\.?,? \d{4}))\.?(?:,? (\d{4}))?\b(?! ?\d{1,2}\b)",
+    re.IGNORECASE,
+)
+
+
+MONTH_TO = re.compile(r"\s*(?:–|—|-|to|through|thru|until|till|and)\s*$", re.IGNORECASE)
+
+
+def months_named(text: str) -> list[tuple[tuple[int | None, int], tuple[int | None, int]]]:
+    """Each span of whole months the words name, as (first month, last month), each (year or
+    None, month): "January 2027" is one month, "from January through March 2026" one span of
+    three, "compare January with March" two. Dates and "the first week of November" are left out.
+    """
+    plain = text
+    ranges, singles = written(text)
+    for words in [w for *_, w in ranges] + [w for _, w in singles]:
+        plain = plain.replace(words, " " * len(words))
+    if INSIDE.search(plain):
+        return []
+    found = list(MONTH_NAMED.finditer(plain))
+    spans, at = [], 0
+    while at < len(found):
+        first = found[at]
+        start = (_year(first.group(2)), _month(first.group(1)))
+        if at + 1 < len(found):
+            second = found[at + 1]
+            between = plain[first.end() : second.start()]
+            joined = MONTH_TO.match(between) and (
+                "and" not in between.lower() or BETWEEN_WORD.search(plain[: first.start()])
+            )
+            if joined:
+                end = (_year(second.group(2)), _month(second.group(1)))
+                if start[0] is None and end[0] is not None:  # "January through March 2026"
+                    start = (end[0] - (start[1] > end[1]), start[1])
+                spans.append((start, end))
+                at += 2
+                continue
+        spans.append((start, start))
+        at += 1
+    return spans
+
+
+BETWEEN_WORD = re.compile(r"\bbetween\s*$", re.IGNORECASE)
+
+
+def _whole_month(year: int, month: int) -> tuple[date, date]:
+    return date(year, month, 1), date(year + month // 12, month % 12 + 1, 1) - timedelta(days=1)
+
+
+def _month_windows(year: int, month: int, today: date) -> list[tuple[date, date]]:
+    """The whole month, and for the current one also up to today (as "this month" is)."""
+    start, end = _whole_month(year, month)
+    return [(start, end), (start, today)] if start <= today < end else [(start, end)]
+
+
+def _named_month(text, part, resolved, state, today) -> Conflict | None:
+    named = months_named(text)
+    if not named or len(named) > 2:
+        return None
+    ends = [(w.start, w.end) for w in resolved.windows]
+    wrong = []
+    for (first_year, first), (last_year, last) in named:
+        years = [last_year] if last_year else [today.year, today.year - 1]
+        fits = []
+        for year in years:
+            start_year = first_year or year - (first > last)
+            start = _whole_month(start_year, first)[0]
+            fits += [(start, end) for _, end in _month_windows(year, last, today)]
+        if not any(fit in ends for fit in fits):
+            past = [f for f in fits if f[0] <= today]
+            wrong.append(past[0] if past else fits[0])
+    if not wrong:
+        return None
+    start, end = wrong[0]
+    whole = (
+        f"{start:%B %Y}"
+        if (start.year, start.month) == (end.year, end.month)
+        else (f"{start:%B %Y} through {end:%B %Y}")
+    )
+    return Conflict(
+        "named_month",
+        f"'{text}' names {whole}: its period is those whole months, {start} to {end}, as one "
+        "period (dates, or a month period with its year), past or future, never other days.",
+        f"Do you mean {whole}?",
+    )
+
+
 Check = Callable[..., Conflict | None]
 CHECKS: tuple[Check, ...] = (
     _written,
     _shift,
     _same_days,
     _around_earlier,
+    _adjacent,
+    _length,
+    _unnamed_period,
+    _strictness,
+    _named_month,
     _anchored_today,
     _last_n_days,
     _calendar,

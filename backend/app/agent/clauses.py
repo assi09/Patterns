@@ -12,6 +12,7 @@ say if it's saved" squeezed into one kind, losing the count. A period had fields
 dates, references and statistics are still worked out by the same code.
 """
 
+import calendar
 import re
 from datetime import date
 from typing import Annotated, Literal
@@ -66,6 +67,31 @@ class DaysEnding(Fields):
     offset: int = Field(ge=-3660, le=366)
 
 
+class AfterEarlier(Fields):
+    """The `length` days right after an earlier result's last day: 'the six days immediately
+    following that block', 'the next 7 days after that'. A shift moves the whole range instead
+    ('move that range forward one day' is shift_earlier +1)."""
+
+    kind: Literal["after_earlier"]
+    length: int = Field(ge=1, le=3660)
+
+
+class BeforeEarlier(Fields):
+    """The `length` days right before an earlier result's first day: 'the 5 days before that
+    block', 'the preceding week' (7)."""
+
+    kind: Literal["before_earlier"]
+    length: int = Field(ge=1, le=3660)
+
+
+class Month(Fields):
+    """A month named with its year, past or future: 'January 2027', 'in March 2026'."""
+
+    kind: Literal["month"]
+    year: int = Field(ge=1970, le=2100)
+    month: int = Field(ge=1, le=12)
+
+
 class AllHistory(Fields):
     """No period named in a new question: all of their data."""
 
@@ -73,7 +99,15 @@ class AllHistory(Fields):
 
 
 Span = Annotated[
-    Dates | CalendarPeriod | SameAsEarlier | ShiftEarlier | DaysEnding | AllHistory,
+    Dates
+    | CalendarPeriod
+    | Month
+    | SameAsEarlier
+    | ShiftEarlier
+    | AfterEarlier
+    | BeforeEarlier
+    | DaysEnding
+    | AllHistory,
     Field(discriminator="kind"),
 ]
 
@@ -88,6 +122,17 @@ def period_of(span: Span) -> Period:
         return Period(kind="inherit")
     if isinstance(span, ShiftEarlier):
         return Period(kind="relative", anchor="previous", offset_days=span.days)
+    if isinstance(span, AfterEarlier):
+        return Period(kind="after", anchor="previous", days=span.length)
+    if isinstance(span, BeforeEarlier):
+        return Period(kind="before", anchor="previous", days=span.length)
+    if isinstance(span, Month):
+        last = calendar.monthrange(span.year, span.month)[1]
+        return Period(
+            kind="explicit",
+            start=date(span.year, span.month, 1),
+            end=date(span.year, span.month, last),
+        )
     if isinstance(span, DaysEnding):
         anchor = "previous" if span.ending == "earlier_end" else "today"
         return Period(kind="rolling", anchor=anchor, offset_days=span.offset, days=span.length)
@@ -177,10 +222,15 @@ class CorrectClause(Fields):
 
 
 class StatusClause(Fields):
-    """Asks whether an entry has been saved or written to the tracker. Read-only."""
+    """Asks whether something has been saved. Read-only."""
 
     type: Literal["status"]
     said: str = SAID
+    about: Literal["entry", "memory"] = Field(
+        default="entry",
+        description="entry: a workout or food entry on the tracker; memory: a preference, goal "
+        "or fact the app keeps about them.",
+    )
 
 
 class ConfirmClause(Fields):
@@ -314,6 +364,14 @@ def reading_from(said: Said, question: str = "") -> Reading:
             "context only: make clauses only for what the current message asks, with said "
             "copied from it."
         )
+    # "What outdoor preference is still saved?" asks what is kept, not about a tracker entry (the
+    # v5 audit answered it about the tracker).
+    clauses = [
+        MemoryClause(type="memory", said=c.said, action="recall", recall="kept")
+        if isinstance(c, StatusClause) and c.about == "memory"
+        else c
+        for c in clauses
+    ]
     types = [c.type for c in clauses]
     primary = next((t for t in PRIMARY if t in types), None)
     fields: dict = {
@@ -351,6 +409,8 @@ def reading_from(said: Said, question: str = "") -> Reading:
     entry = next((c for c in clauses if isinstance(c, LogClause | CorrectClause)), None)
     if entry is not None:
         fields |= {"duration_minutes": entry.duration_minutes, "log_day": _day(entry)}
+        if isinstance(entry, LogClause):
+            fields["entry"] = entry.entry
     memory = next((c for c in clauses if isinstance(c, MemoryClause)), None)
     if memory is not None:
         fields |= {

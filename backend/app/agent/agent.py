@@ -217,13 +217,25 @@ class AgentResult:
     trace: list[dict] = field(default_factory=list)
     uncovered: list[str] = field(default_factory=list)  # parts of the question left unanswered
     notes: list[str] = field(default_factory=list)  # fixed sentences shown with the answer
+    # The claims behind precise reads answered beside another request ("is the draft saved, and
+    # my steps that day?"): kept apart, so a card's note replacing the reply keeps their evidence.
+    side_claims: list[Claim] = field(default_factory=list)
     budget: Budget = field(default_factory=Budget)
     error: str | None = None
 
     @property
     def cited_evidence(self) -> dict[str, Evidence]:
-        ids = {i for claim in self.claims for i in claim.evidence_ids}
+        ids = {i for claim in self.all_claims for i in claim.evidence_ids}
         return {i: e for i, e in self.evidence.items() if i in ids}
+
+    @property
+    def all_claims(self) -> list[Claim]:
+        """What the answer stores and links: its own claims, then the side reads' (once each)."""
+        seen = {(c.text, tuple(c.evidence_ids)) for c in self.claims}
+        return [
+            *self.claims,
+            *(c for c in self.side_claims if (c.text, tuple(c.evidence_ids)) not in seen),
+        ]
 
 
 def _control_tools() -> list[dict]:
