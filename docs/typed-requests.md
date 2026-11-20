@@ -329,3 +329,49 @@ caffeine answer from the web instead of the vetted passage. 4,154 checked numeri
 matched the source rows. The harness's frozen clock had given every message the same time, so
 history in chats of three or more turns had no order; v8 fixes that in the harness, and v6 and v7
 three-turn results may include failures from it.
+
+## After the independent audit of `b730fda` (2026-11-20)
+
+Codex's audit of the frozen head ([handoff](independent-audit-b730fda-handoff.md)): 90/110 fresh
+turns fully correct, both wordings 37/55. Direct lookups 24/24, mixed requests 8/8, memory 16/16
+and the PHIA B1 gate 24/24 held. Adjacent-period follow-ups 15/24, investigations 5/12, guidance
+2/4. Each failure family was traced to its code path and fixed at that point, not per wording:
+
+- **A follow-up's new days state both edges.** "Start at the next date and cover three days"
+  after Sep 2-5 was read as three days *ending* the day after (Sep 4-6), on 9 of 12 metrics; the
+  schema offered two kinds that could say the same thing differently (`days_ending` from an
+  earlier end, and `after_earlier`). Those kinds and `before_earlier` are replaced by one,
+  `beside_earlier`: which day of the earlier period it counts from (`its_first_day` or
+  `its_last_day`), how many days from there, whether the new period starts or ends on the day
+  reached, and its length. `days_ending` now counts only from today. Tests cover every edge,
+  offsets from -2 to +2, lengths 1-31 and four anchors (leap day, year end), and the audit's pair
+  with a trailing-window control that must give different days.
+- **A food follow-up keeps its day.** "Switch back to meals, breakfast only. How many calories?"
+  was sent back as a mix of sources; the retry dropped the day and read back to 1970. A named
+  meal exists only in the food log, so it reads the food log; and every retry now tells the
+  reader to change only what the error is about and keep the rest, periods and metrics included
+  (the same retry turned an overview of every metric into eight named ones). The regression
+  fixture has two confirmed breakfasts on different days, so a lost day changes the number.
+- **Evidence reopens as it was used.** A test cited again with its p-value adjusted for another
+  run's family kept its id, and storage kept only the first version: 7 of 237 reopened citations
+  showed another run's p-values. A stored record now never changes; one cited again with other
+  contents is stored as a version (`<id>~<digest>`), and that answer, finding or alarm cites it.
+- **A suggestion stands on a tested habit.** "Keep activity spread across the week" was accepted
+  because higher average steps was a significant test. A change in a measure no longer grounds a
+  suggestion; an association, a weekday split, a supported habit option, what personal_options
+  found, memory or the food log does. Without one, the code-said coaching outcome answers.
+- **Nothing changed, nothing to explain.** Explaining a look across measures where none changed
+  clearly is said by code (nothing changed clearly, cited, so no change to explain), without the
+  "changes seen over the same days" limit line. Prompts no longer tell the model to say measures
+  "held steady"; a test that finds no change does not show none.
+- **Every measure, however typed.** A data clause can say `every_metric`; it becomes the
+  overview across every metric over its days, so "contrast my full set of measurements" is a
+  comparison, not eight metrics' averages.
+- **A paused workout.** Elapsed, active and paused time are separate facts; a stated pause
+  ("15:00 until 15:40, 10 minutes paused") no longer refuses a right draft, and a refusal names
+  what the draft has against what was said.
+- **Guidance variants.** The variant pick treats grip, hand and foot positions (close, wide,
+  narrow, sumo) as variants, so the standard push-up is the plain passage.
+
+These change model behaviour (the reader's schema and prompt, the verifier); no live run was made
+after them. The next independent run should reuse fresh paired wordings for these families.

@@ -232,3 +232,7 @@ read-back, stopped after 34 turns when it rejected correct readings: $0.093391. 
 v8 deck on `0d858a0` with the read-back off (94 turns): $0.256848. Total **$0.732203**. Cumulative
 spend is approximately **$3.0397 of $4**, leaving **$0.9603**. Results are in
 [typed-requests.md](typed-requests.md#explicit-anchors-instead-of-word-checks-2026-11-20).
+
+### November 20, 2026 — independent audit of the frozen redesigned reader
+
+On `b730fda`, 110 fresh synthetic conversation turns cost $0.325881382. The separate 24-question B1 gate cost $0.034121418. Total **$0.360002800** against the predeclared $0.935 ceiling. Cumulative spend is approximately **$3.3997 of $4**, leaving **$0.6003**. See the [independent audit handoff](independent-audit-b730fda-handoff.md).
