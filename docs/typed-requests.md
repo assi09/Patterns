@@ -206,3 +206,50 @@ Each reading's fate (stage, outcome, check codes, shape, no words or values) is 
 private trace. Older scripted fixtures with a flat reading are still accepted; the real reader
 only gets the clause schema. Offline tests use correct clause readings written from the audit's
 frozen expected meaning, plus the replay's bad readings where they show a check working.
+
+## After the v5 audit (2026-11-20)
+
+The [v5 audit](independent-audit-v5-handoff.md) found the reader usually right and later code
+losing or contradicting its decision. The [plan](pr-195-v5-reliability-plan.md) fixes the places
+where that happens, by rule rather than by wording. Nothing here was checked with a paid run.
+
+- **Date relations.** New period kinds: `after_earlier` / `before_earlier` (the N days right
+  after an earlier result's last day, or right before its first) and `month` (a named month and
+  year, past or future). A block next to a comparison's two periods asks which one. Checks now
+  tell an endpoint from an interval: "that day as the last of five consecutive days" is checked
+  for its length (five), not sent back as "the same days"; "the six days following that block"
+  must start the day after it; "move that range forward one day" is still a shift. A follow-up
+  that names and moves no period keeps the earlier days; "exclude the days on the boundary" keeps
+  dates and threshold and makes the comparison strict; a named month must be that whole month,
+  and "January through March" is one period while "compare January with March" is two.
+- **Operations against what they count.** `count` with no threshold on one day, or with no
+  words that count days, goes back to the reader as a value. A nutrient named as a metric reads
+  confirmed food; a clause mixing a nutrient with a wearable metric is sent back to be split.
+- **Each clause is executed.** A validated log clause reaches the logging expert whatever the
+  router said. Side reads keep their claims apart (`AgentResult.side_claims`), so a card's note
+  replacing the reply keeps their evidence IDs, which the API stores and reopens. Prose may not
+  claim a draft or a write the store does not hold, on any turn. A correction the model did not
+  make is made by code from the card's own values through the same tool and checks; if it cannot
+  be (a paused workout), the old card stays and the reply says so.
+- **Memory resources.** Whether a preference is "still saved" is recall, not tracker status. A
+  "keep this out of my profile" read as a forget with nothing to forget says nothing is kept.
+  Read-only turns (recall, status, confirmation, correction, conversation readbacks) are never
+  listened to for new facts.
+- **Investigations.** An explicit diagnosis request gets the fixed boundary reply before any
+  data is read, and medical words never let an investigation override the router's refusal.
+  Coverage is checked per metric and per period (a future month, a metric missing on those days,
+  a missing baseline, partial coverage). A run with no verified answer describes its named
+  metrics over its named days. Coaching ends on one conclusion from the tested habits: prose
+  that advises, or rules advice out, is replaced by the verified observations plus that
+  conclusion, cited. Parts of a whole (time in bed and time asleep, stages, efficiency, distance
+  and steps) cannot be correlated as explanations.
+- **Guidance.** A qualifier topic ("no equipment") folds into its movement instead of becoming a
+  second subject; a follow-up on two movements asks which by name. With a known topic and its
+  vetted passages, the passages are read before any source is chosen; a chooser with no tool
+  call no longer bypasses them (its "no" still stands). Cited and saved passages are those that
+  share the reply's words.
+
+Tests: `backend/tests/test_v5_reliability.py` (103), each failure beside a control and a minimal
+pair with a different answer, including the two date regressions and the mixed-source loss found
+in review of these edits. Not done: separate claim IDs per overview finding, and a fresh frozen
+evaluation; paired-phrasing consistency is for that run.
