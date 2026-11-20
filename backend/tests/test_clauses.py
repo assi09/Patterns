@@ -51,7 +51,9 @@ def with_last_accepted(llm, readings):
 
 def read(question, *readings, history=(), today=TODAY, pending=False):
     llm = reader(*readings)
-    request, state, budget = interpret(llm, question, list(history), today, pending_draft=pending)
+    request, state, budget = interpret(
+        llm, question, list(history), today, pending_draft=pending, read_back=True
+    )
     return request, sum(r["tools"] == ["read_request"] for r in llm.requests)
 
 

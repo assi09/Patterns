@@ -810,12 +810,17 @@ def interpret(
     *,
     pending_draft: bool = False,
     keep_readings: bool = False,
+    read_back: bool | None = None,
 ) -> tuple[Request | None, dict, Budget]:
     """Return (request, state, budget); scripted callers can provide a separate reader queue.
     `keep_readings` keeps each full reading in `attempts`: only for replays on synthetic data."""
     reader = getattr(llm, "read_request", None)
     if reader is None:
         return None, {}, Budget()
+    if read_back is None:
+        from app.config import settings
+
+        read_back = settings.read_back_enabled
     state = previous_state(history)
     # Two readings and a read-back of each.
     budget = Budget(max_calls=4, max_cost_usd=0.02)
@@ -881,7 +886,9 @@ def interpret(
                         "invent a pending draft or turn readback into a write."
                     )
                 request = checked(reading, question, state, today)
-                if wrong := readback.check(llm, question, request, state, today, budget):
+                if read_back and (
+                    wrong := readback.check(llm, question, request, state, today, budget)
+                ):
                     raise ReadBack(wrong.problem, wrong.question)
                 step["outcome"] = "resolved"
             except RetryReading as error:

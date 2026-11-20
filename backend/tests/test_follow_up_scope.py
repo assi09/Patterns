@@ -37,7 +37,7 @@ def ask_reader(question, *parts_each_call, history=(), kind="data"):
         ]
     )
     with_last_accepted(llm, len(parts_each_call))
-    request, _, budget = interpret(llm, question, list(history), TODAY)
+    request, _, budget = interpret(llm, question, list(history), TODAY, read_back=True)
     windows = [(w.start, w.end) for p in request.parts for w in p.windows]
     return request, windows, sum(r["tools"] == ["read_request"] for r in llm.requests)
 

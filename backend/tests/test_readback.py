@@ -40,7 +40,7 @@ def read(question, *readings, checks=(), history=(), today=TODAY):
         request_turns=[ScriptedLLM.call("read_request", **r) for r in readings],
         check_turns=list(checks) or None,
     )
-    request, _, budget = interpret(llm, question, list(history), today)
+    request, _, budget = interpret(llm, question, list(history), today, read_back=True)
     return request, llm
 
 
