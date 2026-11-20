@@ -116,6 +116,8 @@ def save_findings(
             if isinstance(v, int | float)
         ]
         metric = claim["metric"]
+        stored_as = store_evidence(session, user_id, run_id, cited, set(ids))
+        ids = [stored_as.get(i, i) for i in ids]
         session.execute(
             update(Finding)
             .where(
@@ -141,7 +143,6 @@ def save_findings(
         )
         session.add(finding)
         saved.append(finding)
-        store_evidence(session, user_id, run_id, cited, set(ids))
     session.flush()
     return saved
 
