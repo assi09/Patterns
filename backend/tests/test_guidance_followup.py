@@ -127,13 +127,11 @@ def test_a_failed_pick_changes_nothing():
     assert for_topic([weighted], "unweighted squat", llm, Budget()) == [weighted]
 
 
-def test_a_word_for_word_title_needs_no_model():
+def test_a_word_for_word_title_is_the_fallback_without_a_model():
+    """The pick is the model's whenever one is there (a word-for-word match once kept a variant
+    the person did not ask for, v7); without one, titles matching the topic still decide."""
     bodyweight, weighted = exercise("Bodyweight Squat"), exercise("Weighted Squat")
-    llm = ScriptedLLM([])
-    from app.agent.llm import Budget
-
-    assert for_topic([weighted, bodyweight], "bodyweight squat", llm, Budget()) == [bodyweight]
-    assert not llm.requests
+    assert for_topic([weighted, bodyweight], "bodyweight squat") == [bodyweight]
 
 
 BRIDGE = "exercises-2c4ee5687a74"  # "Butt Lift (Bridge)", whose text covers breathing

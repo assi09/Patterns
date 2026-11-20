@@ -4,7 +4,6 @@ control, and beside nearly identical words that need a different answer, so a fi
 cannot pass by overreaching. Made-up dates, rows and entries only; no model is called.
 """
 
-import uuid
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
@@ -30,18 +29,14 @@ from app.agent.context import ChatState, Turn
 from app.agent.llm import ScriptedLLM
 from app.agent.requested import execute
 from app.agent.requests import (
-    Ambiguous,
     Period,
-    Reading,
     Request,
     ResolvedPart,
     period_window,
-    resolve,
-    subjects,
 )
 from app.agent.tools import TOOLS
 from app.agent.verifier import Claim
-from app.agent.world import answer_world, supporting
+from app.agent.world import answer_world
 from app.analysis.evidence import Evidence, ToolError, Window
 from app.api import chat
 
@@ -118,7 +113,7 @@ def test_the_six_days_following_a_block_are_the_next_block_not_the_block_moved_a
     next_block = data(FOLLOWING, ["cardio_load"], "max", {"kind": "after_earlier", "length": 6})
     request, calls = read(FOLLOWING, said(moved_a_day), said(next_block), history=[BLOCK])
     assert windows(request) == [(date(2026, 10, 19), date(2026, 10, 24))]
-    assert "adjacent" in codes(request) and calls == 2
+    assert "read_back" in codes(request) and calls == 2
 
 
 @pytest.mark.parametrize(
@@ -186,7 +181,7 @@ def test_that_day_alone_for_the_last_of_five_is_sent_back_for_its_length():
         LAST_OF_FIVE, said(one_day), said(five), history=[LEAP], today=date(2028, 3, 5)
     )
     assert windows(request) == [(date(2028, 2, 27), date(2028, 3, 2))]
-    assert "length" in codes(request)
+    assert "read_back" in codes(request)
 
 
 def test_that_same_day_still_keeps_the_day():
@@ -233,7 +228,7 @@ def test_excluding_the_boundary_makes_the_comparison_strict_and_keeps_the_dates(
     (counted,) = request.parts
     assert windows(request) == [(date(2026, 11, 11), date(2026, 11, 19))]
     assert (counted.comparison, counted.threshold) == ("<", 7100)
-    assert {"strict", "kept_days"} & set(codes(request))
+    assert "read_back" in codes(request)
 
 
 def test_a_new_threshold_on_the_same_days_passes():
@@ -272,7 +267,7 @@ def test_a_named_future_month_is_that_month_not_this_one():
     january = investigate(JANUARY, {"kind": "month", "year": 2027, "month": 1})
     request, _ = read(JANUARY, said(this_month), said(january), history=[LEAP])
     assert windows(request) == [(date(2027, 1, 1), date(2027, 1, 31))]
-    assert "named_month" in codes(request)
+    assert "read_back" in codes(request)
 
 
 @pytest.mark.parametrize(
@@ -304,13 +299,6 @@ def test_a_month_range_and_two_months_are_checked_differently(words, periods, op
     (review of the local edits: the range was asked "Do you mean January 2026?")."""
     request, calls = read(words, said(data(words, ["steps"], operation, *periods)))
     assert request.kind == "data" and calls == 1
-
-
-def test_compare_two_months_read_as_one_range_is_sent_back():
-    words = "Compare January with March 2026 for steps."
-    one = data(words, ["steps"], "mean", dates("2026-01-01", "2026-03-31"))
-    request, _ = read(words, said(one), said(one))
-    assert request.kind == "clarify" and "named_month" in codes(request)
 
 
 # ---- what an investigation's days have, said per metric and period ----
@@ -409,7 +397,7 @@ def test_the_count_of_one_day_is_its_value_not_a_threshold_question():
 def test_counting_days_without_a_threshold_still_asks_for_one():
     words = "How many days last week did I hit my steps?"
     count = data(words, ["steps"], "count", {"kind": "calendar", "unit": "week", "offset": -1})
-    request, _ = read(words, said(count))
+    request, _ = read(words, said(count), said(count))  # sent back once, then asked
     assert request.kind == "clarify" and "threshold" in request.clarification
 
 
@@ -442,7 +430,14 @@ def test_a_named_nutrient_reads_the_confirmed_meal_and_its_follow_up_keeps_the_d
     first, calls = read(BREAKFAST, said(energy))
     assert first.parts[0].metrics == ["food_logs"] and calls == 1
     state = {"data": [p.model_dump(mode="json") for p in first.parts]}
-    protein = data(PROTEIN, ["protein"], "sum", {"kind": "same_as_earlier"}, earlier_result=0)
+    protein = data(
+        PROTEIN,
+        ["protein"],
+        "sum",
+        {"kind": "same_as_earlier"},
+        earlier_result=0,
+        source="food_log",
+    )
     second, _ = read(PROTEIN, said(protein), history=[Turn(BREAKFAST, "", request_state=state)])
     (food,) = second.parts
     assert (food.metrics, food.operation, food.meal_type) == (["food_logs"], "food", None)
@@ -454,12 +449,11 @@ def test_a_named_nutrient_reads_the_confirmed_meal_and_its_follow_up_keeps_the_d
 def test_steps_and_protein_in_one_clause_are_split_and_both_answered():
     """The steps were silently dropped when one clause named both (review of the local edits)."""
     words = "What were my total steps and protein on Nov 17?"
-    both = data(words, ["steps", "protein"], "sum", dates("2026-11-17"))
     split = said(
         data("my total steps", ["steps"], "sum", dates("2026-11-17")),
-        data("protein on Nov 17", ["food_logs"], "food", dates("2026-11-17")),
+        data("protein on Nov 17", [], "sum", dates("2026-11-17"), source="food_log"),
     )
-    request, _ = read(words, said(both), split)
+    request, _ = read(words, split)
     assert [p.metrics for p in request.parts] == [["steps"], ["food_logs"]]
     text = execute(request, frame_until(TODAY), TODAY, food_logs=FOOD).summary
     assert "Total steps" in text and "Protein: 57 g" in text
@@ -475,7 +469,7 @@ def test_calories_alone_stay_energy_burned():
 
 
 def test_an_explicit_diagnosis_request_gets_the_boundary_and_no_data():
-    llm = reading_llm(submit(), kind="investigate", focus="why", parts=[])
+    llm = reading_llm(submit(), kind="investigate", focus="why", parts=[], medical=True)
     reply = ask(llm, Router("why"), planted(), "Diagnose me from that number.", today=END)
     assert reply.result.summary == MEDICAL_REFUSAL and reply.route.action == "refuse"
     assert not reply.result.evidence
@@ -493,7 +487,7 @@ def test_whether_a_preference_is_still_saved_is_answered_from_memory():
     request, _ = read(words, said(status))
     assert (request.kind, request.memory_action, request.recall) == ("memory", "recall", "kept")
     chat_state = ChatState(kept=("Likes hiking",))
-    llm = reading_llm(kind="status", status=True)
+    llm = reading_llm(kind="memory", memory_action="recall", recall="kept")
     reply = ask(llm, Router("lookup"), planted(), words, today=END, chat=chat_state)
     assert "Likes hiking" in reply.result.summary
 
@@ -591,29 +585,6 @@ def test_a_part_of_a_whole_cannot_explain_the_whole():
 # ---- guidance keeps its movement ----
 
 
-def test_a_qualifier_is_part_of_the_movement_and_its_follow_up_resolves():
-    asked = Reading(
-        kind="guidance",
-        topics=["basic floor pushup", "no equipment"],
-        guidance_question="How do I set up?",
-    )
-    first = resolve(asked, {}, TODAY)
-    assert first.topics == ["basic floor pushup (no equipment)"]
-    follow = Reading(
-        kind="guidance",
-        guidance_reference=True,
-        guidance_question="How do I lower myself in that version?",
-    )
-    second = resolve(follow, {"guidance": first.topics}, TODAY)
-    assert second.topics == first.topics and "basic floor pushup" in second.guidance_question
-
-
-def test_two_movements_are_asked_about_by_name():
-    follow = Reading(kind="guidance", guidance_reference=True, guidance_question="And lowering?")
-    with pytest.raises(Ambiguous, match="plank or pushup"):
-        resolve(follow, {"guidance": subjects(["plank", "pushup"])}, TODAY)
-
-
 SUPERMAN = "exercises-27d5233ddd89"
 
 
@@ -626,13 +597,18 @@ def says(text):
 def test_a_known_topic_with_its_passages_reads_them_before_choosing_a_source():
     """The Superman follow-up went to the web and was refused, its passage never read."""
     llm = ScriptedLLM(
-        [says("Lift your arms and legs off the floor together.")], embeddings_fail=True
+        [
+            ScriptedLLM.call("same_exercise", items=[1]),  # the variant pick: Superman itself
+            says("Lift your arms and legs off the floor together.\nSources: 1"),
+        ],
+        embeddings_fail=True,
     )
     outside = SimpleNamespace(web=lambda *args: pytest.fail("the web was asked"))
     result = answer_world(
         llm, "What does the source say I should lift?", outside, topic="Superman", active=[SUPERMAN]
     )
-    assert result.stop_reason == "looked_up" and len(llm.requests) == 1
+    assert result.stop_reason == "looked_up"
+    assert [r["tools"] for r in llm.requests][0] == ["same_exercise"]  # no source was chosen
     assert any(s.get("active_topic") for s in result.trace)
 
 
@@ -640,23 +616,6 @@ def test_without_earlier_passages_the_source_is_still_chosen():
     llm = ScriptedLLM([says("no")], embeddings_fail=True)
     result = answer_world(llm, "Which supplement should I take?", None, topic="Superman")
     assert result.stop_reason == "lookup_declined"
-
-
-def test_only_passages_behind_the_reply_are_cited():
-    def passage(text):
-        return Evidence(
-            tool="knowledge",
-            metrics=[],
-            windows=[],
-            n=1,
-            sufficient=True,
-            stats={"text": text, "passage_id": uuid.uuid4().hex},
-        )
-
-    basic = passage("Lie face down, hands under your shoulders, lower your chest to the floor.")
-    other = passage("Place your feet on a bench and hold dumbbells overhead.")
-    reply = "Lie face down with your hands under your shoulders, then lower your chest."
-    assert supporting(reply, [basic, other]) == [basic]
 
 
 # ---- every requested outcome reaches the reply, the store and the reopened chat ----
@@ -1047,49 +1006,6 @@ def overview(frame):
 
     records, _ = overview_evidence(frame, "How have I been?", END)
     return {r.metrics[0]: r for r in records}
-
-
-def test_each_named_finding_gets_its_own_evidence(two_changes):
-    from app.agent.findings import cite_findings
-
-    records = overview(two_changes)
-    result = AgentResult(
-        run_id="x",
-        stop_reason="submitted",
-        summary="Your steps dropped and your time asleep fell. "
-        "Your resting heart rate held steady.",
-    )
-    cite_findings(result, list(records.values()))
-    cited = {c.metric: c.evidence_ids for c in result.claims}
-    assert cited["steps"] == [records["steps"].id]
-    assert cited["sleep_minutes"] == [records["sleep_minutes"].id]
-    assert cited["resting_hr"] == [records["resting_hr"].id]
-    assert all(i in result.evidence for ids in cited.values() for i in ids)
-
-
-def test_a_finding_its_evidence_contradicts_is_left_out(two_changes):
-    from app.agent.findings import cite_findings
-
-    records = overview(two_changes)
-    result = AgentResult(
-        run_id="x",
-        stop_reason="submitted",
-        summary="Your steps dropped. Your resting heart rate shot up and climbed higher.",
-    )
-    cite_findings(result, list(records.values()))
-    assert result.summary == "Your steps dropped."
-    assert [c.metric for c in result.claims] == ["steps"]
-
-
-def test_with_nothing_supported_the_overview_speaks_for_itself(two_changes):
-    from app.agent.findings import cite_findings
-
-    records = overview(two_changes)
-    result = AgentResult(run_id="x", stop_reason="submitted", summary="Your steps went up a lot.")
-    cite_findings(result, list(records.values()))
-    assert result.summary.startswith("The clear changes:") and "Steps went down" in result.summary
-    assert {c.metric for c in result.claims} >= {"steps", "sleep_minutes"}
-    assert all(c.evidence_ids[0] in result.evidence for c in result.claims)
 
 
 def test_an_overview_s_findings_are_inspectable_after_reopening(setup, two_changes):  # noqa: F811

@@ -165,6 +165,7 @@ def test_typed_request_survives_a_new_agent_instance_and_stays_account_scoped(
                 "read_request", kind="data", parts=[{"periods": [{"kind": "inherit"}]}]
             )
         ]
+        * 2  # sent back once (nothing earlier in this account), then asked
     )
     client.app.dependency_overrides[chat.get_agent] = lambda: AgentParts(
         other_reader, agent.router, None

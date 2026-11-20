@@ -28,14 +28,31 @@ def said(*clauses, store_nothing=False, subject="self"):
 
 
 def reader(*readings):
-    return ScriptedLLM(request_turns=[ScriptedLLM.call("read_request", **r) for r in readings])
+    """The reader's scripted readings, read back by a scripted check that accepts only the last
+    one: a scenario's earlier readings are the wrong ones (the read-back's judgment itself is
+    measured live, not offline)."""
+    llm = ScriptedLLM(request_turns=[ScriptedLLM.call("read_request", **r) for r in readings])
+    return with_last_accepted(llm, len(readings))
+
+
+def with_last_accepted(llm, readings):
+    def judge(messages):
+        made = sum(r["tools"] == ["read_request"] for r in llm.requests)
+        return ScriptedLLM.call(
+            "verdict",
+            matches=made >= readings,
+            problem="" if made >= readings else "The reading does not match the message.",
+            question="",
+        )
+
+    llm.check_turns = [judge] * (2 * readings) if readings > 1 else None
+    return llm
 
 
 def read(question, *readings, history=(), today=TODAY, pending=False):
-    request, state, budget = interpret(
-        reader(*readings), question, list(history), today, pending_draft=pending
-    )
-    return request, budget.calls
+    llm = reader(*readings)
+    request, state, budget = interpret(llm, question, list(history), today, pending_draft=pending)
+    return request, sum(r["tools"] == ["read_request"] for r in llm.requests)
 
 
 def data(words, metrics, operation, *periods, **extra):
@@ -161,7 +178,7 @@ def test_a_reading_that_misplaces_the_5_days_is_sent_back():
         said(data(question, ["sleep_minutes"], "mean", right)),
     )
     assert windows(request) == [(date(2026, 11, 14), date(2026, 11, 18))] and calls == 2
-    assert request.attempts[0]["codes"] == ["last_days"]
+    assert request.attempts[0]["codes"] == ["read_back"]
 
 
 @pytest.mark.parametrize(
@@ -207,7 +224,7 @@ def test_each_metric_keeps_its_own_dates():
 def test_dates_swapped_between_two_metrics_are_sent_back():
     """Every date appeared somewhere in the request, so the old check passed it (Codex)."""
     request, calls = read(TWO, two_parts(OCT_20, OCT_6), two_parts(OCT_6, OCT_20))
-    assert calls == 2 and request.attempts[0]["codes"] == ["written_date", "written_date"]
+    assert calls == 2 and request.attempts[0]["codes"] == ["read_back"]
     assert windows(request)[0] == (date(2026, 10, 6), date(2026, 10, 12))
 
 
@@ -327,7 +344,7 @@ def test_the_same_day_alone_for_that_date_and_three_before_is_sent_back():
         today=date(2027, 1, 8),
     )
     assert windows(request) == [(date(2026, 12, 29), date(2027, 1, 1))] and calls == 2
-    assert request.attempts[0]["codes"] == ["around_earlier"]
+    assert request.attempts[0]["codes"] == ["read_back"]
 
 
 def test_a_clause_copied_from_an_earlier_message_is_sent_back():

@@ -153,10 +153,13 @@ def test_guidance_and_data_context_survive_intervening_turns():
     assert "wrong numbers" not in json.dumps(quoted)
 
 
-def test_two_guidance_topics_need_clarification_but_a_new_topic_wins():
+def test_an_earlier_guidance_subject_is_followed_up_but_a_new_topic_wins():
+    """One earlier answer has one subject, even when an older state split it in parts."""
     held = {"guidance": ["plank", "lunge"]}
+    follow = resolve(Reading(kind="guidance", guidance_reference=True), held, TODAY)
+    assert follow.topics == ["plank, lunge"]
     with pytest.raises(Ambiguous):
-        resolve(Reading(kind="guidance", guidance_reference=True), held, TODAY)
+        resolve(Reading(kind="guidance", guidance_reference=True), {}, TODAY)
     request = resolve(
         Reading(kind="guidance", topics=["squat"], guidance_question="Squat depth?"), held, TODAY
     )
@@ -461,13 +464,6 @@ def test_threshold_unit_conversion_uses_code_and_rejects_incompatible_units():
             {},
             TODAY,
         )
-
-
-def test_current_explicit_dates_cannot_be_replaced_by_old_valid_dates():
-    held = [Turn("old question", "old answer", request_state=state(previous()))]
-    llm = reader(kind="data", parts=[{"operation": "median", "periods": [{"kind": "inherit"}]}])
-    request, _, _ = interpret(llm, "Use 2026-11-14 through 2026-11-16 instead", held, TODAY)
-    assert request.kind == "clarify" and "dates" in request.clarification
 
 
 def test_multiple_requested_tests_share_the_same_adjustment_family():

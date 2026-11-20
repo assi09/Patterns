@@ -53,6 +53,11 @@ class ShiftEarlier(Fields):
 
     kind: Literal["shift_earlier"]
     days: int = Field(ge=-3660, le=3660)
+    relative_to: Literal["earlier_result", "this_clause"] = Field(
+        default="earlier_result",
+        description="earlier_result: a result computed before this message. this_clause: the "
+        "period named first in this same clause ('Oct 9-31 compared with the 4 weeks before').",
+    )
 
 
 class DaysEnding(Fields):
@@ -74,6 +79,11 @@ class AfterEarlier(Fields):
 
     kind: Literal["after_earlier"]
     length: int = Field(ge=1, le=3660)
+    relative_to: Literal["earlier_result", "this_clause"] = Field(
+        default="earlier_result",
+        description="earlier_result: a result computed before this message. this_clause: the "
+        "period named first in this same clause ('Oct 9-31 compared with the 4 weeks before').",
+    )
 
 
 class BeforeEarlier(Fields):
@@ -82,6 +92,11 @@ class BeforeEarlier(Fields):
 
     kind: Literal["before_earlier"]
     length: int = Field(ge=1, le=3660)
+    relative_to: Literal["earlier_result", "this_clause"] = Field(
+        default="earlier_result",
+        description="earlier_result: a result computed before this message. this_clause: the "
+        "period named first in this same clause ('Oct 9-31 compared with the 4 weeks before').",
+    )
 
 
 class Month(Fields):
@@ -120,12 +135,12 @@ def period_of(span: Span) -> Period:
         return Period(kind="calendar", unit=span.unit, offset_units=span.offset)
     if isinstance(span, SameAsEarlier):
         return Period(kind="inherit")
-    if isinstance(span, ShiftEarlier):
-        return Period(kind="relative", anchor="previous", offset_days=span.days)
-    if isinstance(span, AfterEarlier):
-        return Period(kind="after", anchor="previous", days=span.length)
-    if isinstance(span, BeforeEarlier):
-        return Period(kind="before", anchor="previous", days=span.length)
+    if isinstance(span, ShiftEarlier | AfterEarlier | BeforeEarlier):
+        anchor = "own" if span.relative_to == "this_clause" else "previous"
+        if isinstance(span, ShiftEarlier):
+            return Period(kind="relative", anchor=anchor, offset_days=span.days)
+        kind = "after" if isinstance(span, AfterEarlier) else "before"
+        return Period(kind=kind, anchor=anchor, days=span.length)
     if isinstance(span, Month):
         last = calendar.monthrange(span.year, span.month)[1]
         return Period(
@@ -167,6 +182,11 @@ class DataClause(Fields):
     threshold_unit: Literal["native", "hours", "minutes"] = "native"
     max_lag: int = Field(default=0, ge=0, le=14)
     meal_type: Literal["BREAKFAST", "LUNCH", "DINNER", "SNACK"] | None = None
+    source: Literal["tracker", "food_log"] = Field(
+        default="tracker",
+        description="food_log: the meals they logged (energy and nutrients eaten; metrics then "
+        "empty). tracker: what the wearable records, calories burned included.",
+    )
     asks_cause: bool = Field(
         default=False, description="Asks whether one thing causes another, not just goes with it."
     )
@@ -194,9 +214,13 @@ class GuidanceClause(Fields):
     said: str = SAID
     topics: list[str] = Field(
         default_factory=list,
-        max_length=4,
-        description="The concrete movement, exercise variant or routine; empty when the clause is "
-        "about the previous guidance topic.",
+        max_length=1,
+        description="The one movement, variant or routine asked about, its qualifiers in the same "
+        "phrase ('basic floor push-up, no equipment'); empty when it refers back or names none.",
+    )
+    refers_back: bool = Field(
+        default=False,
+        description="It is about the previous guidance answer's subject ('that version', 'it').",
     )
     question: str = Field(max_length=1000, description="The standalone question, details kept.")
 
@@ -291,6 +315,11 @@ class Said(Fields):
     store_nothing: bool = Field(
         description='They ask that nothing from this message be kept ("don\'t save this").'
     )
+    medical: bool = Field(
+        default=False,
+        description="They ask for a diagnosis, whether they have an illness or condition, or for "
+        "treatment or medication.",
+    )
     clarification: str = Field(
         default="",
         max_length=300,
@@ -330,6 +359,7 @@ def _part(clause: DataClause | InvestigateClause) -> Part:
         threshold_unit=clause.threshold_unit,
         max_lag=clause.max_lag,
         meal_type=clause.meal_type,
+        source=clause.source,
         **common,
     )
 
@@ -378,6 +408,7 @@ def reading_from(said: Said, question: str = "") -> Reading:
     types = [c.type for c in clauses]
     primary = next((t for t in PRIMARY if t in types), None)
     fields: dict = {
+        "medical": said.medical,
         "subject": said.subject,
         "memory": "deny" if said.store_nothing else "unspecified",
         "clarification": said.clarification,
@@ -408,7 +439,7 @@ def reading_from(said: Said, question: str = "") -> Reading:
         fields |= {
             "topics": guidance.topics,
             "guidance_question": guidance.question,
-            "guidance_reference": not guidance.topics,
+            "guidance_reference": guidance.refers_back and not guidance.topics,
         }
     entry = next((c for c in clauses if isinstance(c, LogClause | CorrectClause)), None)
     if entry is not None:

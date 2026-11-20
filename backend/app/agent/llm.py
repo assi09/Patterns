@@ -22,6 +22,7 @@ class Role(StrEnum):
     SMALL = "small"  # routine runs: rewrites, the listener, short replies
     LARGE = "large"  # final write-ups and hard cross-domain questions
     AGENT = "agent"  # the data agent's tool loop: its own model and settings, tunable apart
+    CHECK = "check"  # reading a resolved request back against the message: the cheapest model
 
 
 @dataclass(frozen=True)
@@ -227,6 +228,9 @@ class OpenAILLM:
     def read_request(self, messages: list[dict], *, tools: list[dict], budget: Budget):
         return self.complete(messages, role=Role.SMALL, tools=tools, budget=budget)
 
+    def check_reading(self, messages: list[dict], *, tools: list[dict], budget: Budget):
+        return self.complete(messages, role=Role.CHECK, tools=tools, budget=budget)
+
     def embed(self, texts: Sequence[str], *, budget: Budget | None = None) -> Embedded:
         """Vectors for `texts`; charged like any other call, with no model round counted."""
         if budget:
@@ -257,7 +261,7 @@ class OpenAILLM:
         if unknown:
             raise LLMError(f"No price is known for {', '.join(unknown)}; add it to PRICES.")
         self._client = client
-        self._models = {Role.AGENT: models[Role.SMALL], **models}
+        self._models = {Role.AGENT: models[Role.SMALL], Role.CHECK: models[Role.SMALL], **models}
         self._options = options or {}  # per role: reasoning_effort, temperature
         self._ledger = ledger
         self._clock = clock
@@ -273,6 +277,7 @@ class OpenAILLM:
             Role.SMALL: settings.openai_small_model,
             Role.LARGE: settings.openai_large_model,
             Role.AGENT: settings.openai_agent_model or settings.openai_small_model,
+            Role.CHECK: settings.openai_check_model,
         }
         agent = {
             key: value
@@ -375,6 +380,19 @@ class ScriptedLLM:
     embeddings_fail: bool = False
     # Separate stage: old fixtures describe the downstream agent, new fixtures can exercise both.
     request_turns: list[Completion] | None = None
+    # The read-back check's verdicts; None (or run out) means every reading is accepted, so a
+    # fixture written for the reader alone tests the reader alone.
+    check_turns: list[Completion | Callable[[list[dict]], Completion]] | None = None
+
+    def check_reading(self, messages: list[dict], *, tools: list[dict], budget: Budget):
+        if not self.check_turns:
+            return None
+        budget.check()
+        self.requests.append({"messages": messages, "role": Role.CHECK, "tools": ["read_back"]})
+        turn = self.check_turns.pop(0)
+        completion = turn(messages) if callable(turn) else turn
+        budget.charge(completion)
+        return completion
 
     def read_request(self, messages: list[dict], *, tools: list[dict], budget: Budget):
         if self.request_turns is None:

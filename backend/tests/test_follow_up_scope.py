@@ -10,11 +10,11 @@ correct reading passes on the first call, however the reader expressed it. Made-
 from datetime import date
 
 import pytest
+from test_clauses import with_last_accepted
 
-from app.agent.checks import catalog_named, conflicts, shift_said
 from app.agent.context import Turn
 from app.agent.llm import ScriptedLLM
-from app.agent.requests import Part, Period, Reading, interpret, resolve
+from app.agent.requests import interpret
 
 TODAY = date(2026, 11, 19)
 
@@ -36,9 +36,10 @@ def ask_reader(question, *parts_each_call, history=(), kind="data"):
             ScriptedLLM.call("read_request", kind=kind, parts=parts) for parts in parts_each_call
         ]
     )
+    with_last_accepted(llm, len(parts_each_call))
     request, _, budget = interpret(llm, question, list(history), TODAY)
     windows = [(w.start, w.end) for p in request.parts for w in p.windows]
-    return request, windows, budget.calls
+    return request, windows, sum(r["tools"] == ["read_request"] for r in llm.requests)
 
 
 EXPLICIT = lambda day: {"kind": "explicit", "start": day, "end": day}  # noqa: E731
@@ -57,15 +58,6 @@ def test_keep_that_same_date_keeps_the_latest_date_not_an_older_one():
     assert windows == [(date(2026, 10, 20), date(2026, 10, 20))] and calls == 2
 
 
-def test_a_reader_that_keeps_the_wrong_date_gets_a_question_naming_the_right_one():
-    question = "Keep that same date, and say the date explicitly."
-    wrong = [part(EXPLICIT("2026-10-19"))]
-    history = held("2026-10-20", "2026-10-20")
-    request, _, calls = ask_reader(question, wrong, wrong, history=history)
-    assert request.kind == "clarify" and calls == 2
-    assert request.clarification == "Do you mean the same dates as before, Oct 20?"
-
-
 def test_two_days_forward_across_a_leap_day():
     question = "Move forward two days from the date you just answered."
     history = held("2024-02-28", "2024-02-28", metric="sleep_minutes")
@@ -77,8 +69,6 @@ def test_two_days_forward_across_a_leap_day():
     ]
     _, windows, _ = ask_reader(question, wrong, shifted, history=history)
     assert windows == [(date(2024, 3, 1), date(2024, 3, 1))]
-    request, _, _ = ask_reader(question, wrong, wrong, history=history)
-    assert request.clarification == "Do you mean Mar 1, 2024?"
 
 
 def test_for_that_interval_keeps_the_whole_interval():
@@ -164,22 +154,6 @@ def test_another_part_s_written_date_is_kept_beside_this_week():
     assert windows == [(date(2026, 11, 16), TODAY), (date(2026, 11, 2),) * 2] and calls == 1
 
 
-@pytest.mark.parametrize(
-    "question, days",
-    [
-        ("Move that entire stretch two days earlier", -2),
-        ("Move forward two days from the date you just answered", 2),
-        ("go back 3 days", -3),
-        ("and one day later?", 1),
-        ("What about last week?", None),
-        ("two days before today", None),
-        ("two days earlier and three days later", None),  # more than one: not code's to pick
-    ],
-)
-def test_the_shift_is_read_from_the_words(question, days):
-    assert shift_said(question) == days
-
-
 # ---- periods counted from today ----
 
 
@@ -248,31 +222,6 @@ def test_a_meal_filter_is_kept_only_when_a_meal_is_named():
     assert calls == 1
 
 
-@pytest.mark.parametrize(
-    "question, metric",
-    [
-        ("What was my time in the cardio heart-rate zone yesterday?", "hr_zone_vigorous_minutes"),
-        ("What was my time in the light heart-rate zone yesterday?", "hr_zone_light_minutes"),
-        ("My time still while awake yesterday?", "still_minutes"),
-        ("And my average stress score?", "stress_score"),
-    ],
-)
-def test_a_metric_called_by_its_catalog_name_is_checked(question, metric):
-    reading = Reading(
-        kind="data",
-        parts=[
-            Part(metrics=["checkin_rating"], operation="mean", periods=[Period(kind="history")])
-        ],
-    )
-    found = conflicts(reading, resolve(reading, {}, TODAY), question, {}, TODAY)
-    assert len(found) == 1 and metric in found[0].retry
-
-
-def test_a_negated_or_quoted_metric_name_is_not_asked_for():
-    assert catalog_named("Not my stress score, my morning check-in rating") == ["checkin_rating"]
-    assert catalog_named('What does "stress score" mean for my sleep score?') == ["sleep_score"]
-
-
 def test_above_is_checked_as_strictly_above():
     question = "How many days did I walk above 8,000 steps last month?"
     month = {"kind": "calendar", "unit": "month", "offset_units": -1}
@@ -303,7 +252,7 @@ def test_each_reading_s_fate_is_recorded_without_words_or_values():
     assert (first["outcome"], first["stage"], first["codes"]) == (
         "sent_back",
         "check",
-        ["same_days"],
+        ["read_back"],
     )
     assert second["outcome"] == "resolved" and second["read"]["parts"][0]["periods"] == [
         "inherit/today"
@@ -323,6 +272,8 @@ def test_a_reading_that_cannot_resolve_says_why():
         ]
     )
     request, _, _ = interpret(llm, "And that one?", [], TODAY)
+    # Nothing was computed earlier, so the reading itself is wrong in form: it goes back to the
+    # reader, saying so, before anyone is asked.
     [only] = request.attempts
-    assert only["outcome"] == "clarify" and only["stage"] == "resolve"
-    assert only["codes"] == ["Ambiguous"] and "earlier" in only["unresolved"]
+    assert only["outcome"] == "sent_back" and only["stage"] == "resolve"
+    assert only["codes"] == ["RetryReading"]

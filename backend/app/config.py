@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_small_model: str = "gpt-5.4-mini"
     openai_large_model: str = "gpt-5.5"
+    # Reads each resolved request back against the message (app.agent.readback).
+    openai_check_model: str = "gpt-5.4-nano"
     # The data agent's tool loop, tuned apart from the small jobs (C4: configuration per role).
     # None keeps the small model and the API's defaults (no reasoning, temperature 1).
     openai_agent_model: str | None = None

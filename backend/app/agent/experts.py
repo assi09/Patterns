@@ -196,6 +196,13 @@ def owner(metric: str) -> Expert | None:
     return next((e for e in EXPERTS.values() if metric in e.owns), None)
 
 
+# Said when meals are logged but the question named no day or meal to read: "you haven't logged
+# any food" was said beside two confirmed entries (v7).
+FOOD_LOGGED_ASK = (
+    "I can read back the meals you've logged. Which day, and which meal, should I look at?"
+)
+
+
 def available(expert: Expert, frame: pd.DataFrame) -> bool:
     """An expert can answer only when at least one of its metrics has data."""
     return any(m in frame.columns and frame[m].notna().any() for m in expert.owns)
@@ -436,6 +443,7 @@ def ask_expert(
     guide: str | None = None,
     widen=None,
     answer_check: Callable[[list[Claim], str], list[str]] | None = None,
+    food_logged: bool = False,
 ) -> AgentResult:
     """Has one expert answer a question about the person's data, with verified claims.
 
@@ -453,8 +461,10 @@ def ask_expert(
             stop_reason="unavailable",
             expert=name,
             summary=(
-                "You haven't logged any food yet, so there's nothing for me to look at. Tell me "
-                "what you ate and I'll set it up for you."
+                FOOD_LOGGED_ASK
+                if name == "nutrition" and food_logged
+                else "You haven't logged any food yet, so there's nothing for me to look at. "
+                "Tell me what you ate and I'll set it up for you."
                 if name == "nutrition"
                 else f"I don't have any {name} data for you yet."
             ),

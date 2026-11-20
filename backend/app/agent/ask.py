@@ -46,7 +46,7 @@ from app.agent.experts import (
     specialist_notes,
     visible_metrics,
 )
-from app.agent.findings import cite_findings
+from app.agent.findings import render_overview
 from app.agent.followup import standalone, with_period, with_relative_day
 from app.agent.guard import Guard, GuardError, JevGuard
 from app.agent.intent import Intent
@@ -179,25 +179,6 @@ URGENT_MIND_REPLY = (
     "I'm really sorry you're feeling this way, and I'm glad you said it. I'm not the right help "
     "for this, but you shouldn't carry it alone. Please reach out now to someone you trust, a "
     "local crisis line, or your local emergency number if you might act on these thoughts."
-)
-# Asking to be diagnosed, or told what illness it is: the boundary reply, before any data is read.
-# "Diagnose me from that number" became an investigation of steps (the v5 audit). Words that only
-# sound medical ("what changed?") stay with the router.
-ASKS_DIAGNOSIS = re.compile(
-    r"\bdiagnos\w*|\bwhat(?:'s| is) wrong with me\b|\bam i (?:sick|ill|unwell)\b|"
-    r"\bdo i have (?:an? )?(?:\w+ )?(?:disease|disorder|condition|illness|syndrome|apnea|"
-    r"insomnia|infection|arrhythmia|depression)\b|"
-    r"\bwhat (?:illness|disease|condition|disorder) (?:do i|could i|might i|is (?:it|this|that))\b",
-    re.IGNORECASE,
-)
-# A "has it been saved?" about what the app keeps, not a tracker entry.
-KEPT_THINGS = re.compile(
-    r"\b(?:preferences?|goals?|facts?|profile|remember\w*|memory|kept|approved)\b", re.I
-)
-TRACKER_THINGS = re.compile(
-    r"\b(?:workout|walk|run|ride|swim|meal|food|breakfast|lunch|dinner|snack|entry|card|draft|"
-    r"tracker|fitbit|google|log(?:ged)?)\b",
-    re.IGNORECASE,
 )
 NOTED = "Got it. Tap Keep on the card and I'll bear that in mind from now on."
 NOT_KEPT_ASKED = "Okay, I won't keep that."
@@ -934,8 +915,8 @@ def ask(
             fixed = None
         if typed.subject == "other" and typed.kind != "guidance":
             fixed = "I can only see your own data, not another person's records."
-        elif ASKS_DIAGNOSIS.search(said):
-            fixed = MEDICAL_REFUSAL  # whatever the reader made of it: no data is read for this
+        elif typed.medical:
+            fixed = MEDICAL_REFUSAL  # a diagnosis or a condition asked about: no data is read
         elif typed.clarification:
             fixed = typed.clarification
         elif (
@@ -952,10 +933,6 @@ def ask(
             gap := outside_data(typed, frame, _day(today or now))
         ):
             fixed = gap  # never another period's days in place of the ones named
-        elif (
-            typed.kind == "status" and KEPT_THINGS.search(said) and not TRACKER_THINGS.search(said)
-        ):
-            fixed = recalled(memory, chat, history, "kept")  # what is kept, not the tracker
         elif typed.kind == "status":
             fixed = status_reply(action_states)  # read from the store, never a write
         elif typed.kind == "confirmation":
@@ -1044,6 +1021,7 @@ def ask(
         and (
             urgent_free(said)
             and not MEDICAL.search(said)
+            and not typed.medical  # answered as a refusal below, not as a fixed note
             and (typed.kind != "guidance" or outside is not None)
         )
     ):
@@ -1618,6 +1596,7 @@ def ask(
             allow_logging=bool(logging_tools),
             action_prompt=REMINDER_PROMPT if reminding else "",
             answer_check=check,
+            food_logged=bool(food_logs),
         )
         result.notes += _notes(frame, route, result)
     stopped_early = result.stop_reason in (
@@ -1628,8 +1607,16 @@ def ask(
         "chat_fallback",
         "limits",
     )
-    if broad and overview_records and not stopped_early and result.summary not in (NO_ANSWER, ""):
-        cite_findings(result, overview_records)
+    # An overview is its tested results: said by code, each cited, whatever the model wrote. An
+    # explanation or a coaching answer stays the model's, checked as before.
+    explaining = investigating and typed.focus in ("why", "coaching")
+    # Not for something the data doesn't track ("my menstrual cycle"): that answer is the limit.
+    if broad and overview_records and not stopped_early and not explaining and not missing:
+        text, claims = render_overview(overview_records, _day(today or now))
+        if text:
+            result.summary, result.claims = text, claims
+            result.evidence |= {r.id: r for r in overview_records}
+            result.trace.append({"type": "overview_by_code", "claims": len(claims)})
     if plan and plan.coaching:
         result.summary = without_filler(result.summary)
         if wanted and not stopped_early:
