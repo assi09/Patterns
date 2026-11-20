@@ -222,10 +222,19 @@ def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime
             return "The person did not say how long it lasted. Ask them; never make up a duration."
         if log.exercise_type in GENERIC_TYPES and not _names_an_activity(text):
             return "The person did not say what kind of workout it was. Ask them."
-        lengths = (log.active_seconds, (log.end_time - log.start_time).total_seconds())
-        if stated and not any(abs(s - t) <= TOLERANCE_S for s in stated for t in lengths):
+        # Elapsed time, active time and a pause are separate facts, and a stated duration may be
+        # any of them: "15:00 until 15:40, 10 minutes paused" stated the pause, which matched
+        # neither of the other two and refused a right draft (the b730 audit).
+        elapsed = (log.end_time - log.start_time).total_seconds()
+        lengths = {"active time": log.active_seconds, "elapsed time": elapsed}
+        if elapsed - log.active_seconds > TOLERANCE_S:
+            lengths["paused time"] = elapsed - log.active_seconds
+        if stated and not any(abs(s - t) <= TOLERANCE_S for s in stated for t in lengths.values()):
+            has = ", ".join(f"{name} {t / 60:g} min" for name, t in lengths.items())
+            said_minutes = ", ".join(f"{s / 60:g} min" for s in sorted(stated))
             return (
-                "The duration does not match what the person said. Use the duration in their "
+                f"The duration does not match what the person said ({said_minutes}); the draft "
+                f"has {has}. Set the active time, the elapsed time and any pause from their "
                 "words, unchanged."
             )
     # With an offset of their own ("12:00, UTC+3") the time is theirs to place, not ours to check.

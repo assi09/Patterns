@@ -197,6 +197,7 @@ NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])-?\d+(?
 
 
 TEST_TOOLS = ("compare_windows", "change_point", "trend", "correlate", "weekday_split")
+CHANGE_TOOLS = ("compare_windows", "change_point", "trend")  # whether a measure moved
 RUN_ADJUSTED = "p_value_run_adjusted"
 
 
@@ -605,11 +606,13 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
             reasons.append("claims no change, but the cited evidence shows a significant one")
     if claim.kind == "suggestion":
         # An everyday habit to try, grounded in this person's own data: some cited evidence about
-        # it must show a real pattern (a significant test, or a lever habit_options supports).
+        # it must show a real pattern about the habit (a significant association or weekday
+        # split, or a lever habit_options supports). That a measure changed tests no habit: "keep
+        # activity spread across the week" stood on higher average steps (the b730 audit).
         grounded = [
             e
             for e in about
-            if _significant(e)
+            if (_significant(e) and e.tool not in CHANGE_TOOLS)
             or (e.tool == "habit_options" and e.stats.get("supported"))
             or (e.tool == "personal_options" and e.stats.get("options"))
             or e.tool == "memory"  # what they told the app, in words
@@ -617,9 +620,11 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
         ]
         if not grounded:
             reasons.append(
-                "a suggestion must cite evidence specific to this person (a significant test, a "
-                "supported habit option, or something personal_options found); without one, say "
-                "nothing specific stands out yet and ask what is going on"
+                "a suggestion must cite evidence specific to this person about the habit (a "
+                "significant association, a supported habit option, or something "
+                "personal_options found); a "
+                "measure that changed is not a tested habit. Without one, say nothing specific "
+                "stands out yet and ask what is going on"
             )
         if not OPTION_WORDS.search(claim.text):
             reasons.append("word a suggestion as an option the person may try (could, might, try)")

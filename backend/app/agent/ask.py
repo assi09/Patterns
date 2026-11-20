@@ -142,7 +142,7 @@ from app.agent.strategy_types import (
     is_statement,
     offer_in,
 )
-from app.agent.verifier import MEDICAL, STATISTIC_WORDS, Claim
+from app.agent.verifier import MEDICAL, STATISTIC_WORDS, Claim, _significant
 from app.agent.world import answer_world
 from app.analysis.evidence import Evidence, Window
 from app.outside import Outside
@@ -673,6 +673,37 @@ WHY_LIMIT = (
     "What this can't tell apart: these are changes seen over the same days, not a tested cause, "
     "so your data alone can't say which of them, if any, explains it."
 )
+
+
+NO_CHANGE_TO_EXPLAIN = "So there is no change here to explain."
+
+
+def nothing_to_explain(result: AgentResult, typed, today: date) -> bool:
+    """An explanation of a look across measures where none changed clearly is said by code: that
+    nothing changed clearly, cited, and so nothing to explain. The model's prose said the
+    measures "held steady", with the limit line about "changes seen over the same days" below it
+    (the b730 audit, both flat-profile explanations)."""
+    if any(p.metrics for p in typed.parts):
+        return False  # about named measures: the model's answer about them stands
+    if any(c.kind in ("change", "association") for c in result.claims):
+        return False
+    tests = {
+        e.id: e
+        for e in [*result.cited_evidence.values(), *result.evidence.values()]
+        if e.tool == "compare_windows"
+        and (e.id in result.cited_evidence or e.stats.get("overview"))
+    }
+    if not tests or any(_significant(e) for e in tests.values()):
+        return False
+    scope = next(iter(tests.values())).windows
+    tests = {i: e for i, e in tests.items() if e.windows == scope}
+    text, claims = render_overview(list(tests.values()), today)
+    if not text:
+        return False
+    result.summary, result.claims = f"{text} {NO_CHANGE_TO_EXPLAIN}", claims
+    result.evidence |= tests
+    result.trace.append({"type": "nothing_to_explain", "tests": len(tests)})
+    return True
 
 
 def coaching_fallback(habits: Sequence[Evidence]) -> str:
@@ -1651,7 +1682,10 @@ def ask(
             n for n in coverage_notes(typed, frame, _day(today or now)) if n not in result.notes
         ]
         cited = {e.tool for e in result.cited_evidence.values()}
-        if typed.focus == "why" and "correlate" not in cited:
+        explained = typed.focus == "why" and not nothing_to_explain(
+            result, typed, _day(today or now)
+        )
+        if explained and "correlate" not in cited:
             result.notes.append(WHY_LIMIT)
     if plan and plan.coaching and not stopped_early:
         result.budget.cost_usd += memory_cost.cost_usd

@@ -576,7 +576,8 @@ BROAD_GUIDE = (
     "corrected for testing them all at once, and ranks the clear changes by size. Answer from it "
     "and cite its evidence_ids. Lead with the clear changes in that order, across areas, not only "
     "one area; call a change the biggest, the main or the most only if it is first in the list. "
-    "Say in one sentence which areas held steady, backing it with a no_change claim on one of that "
+    "Say in one sentence which areas showed no clear change (not that they held steady: no clear "
+    "change does not show they stayed the same), backing it with a no_change claim on one of that "
     "area's listed metrics. If nothing changed clearly, open with that ('Nothing has changed "
     "clearly over Oct 5 to Oct 18') and only then, if at all, a possible change with a hedge in "
     "the same sentence. Never write about the method (how many metrics or comparisons were "
@@ -765,7 +766,7 @@ def _compared(frame: pd.DataFrame, recent: Window, baseline: Window) -> tuple[li
         )
     if steady:
         parts.append(
-            "No clear change (cite one of these to say an area held steady): "
+            "No clear change (cite one of these to say an area showed no clear change): "
             + "; ".join(f"{area}: {', '.join(names)}" for area, names in sorted(steady.items()))
             + "."
         )
