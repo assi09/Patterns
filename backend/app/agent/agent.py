@@ -152,7 +152,10 @@ Coaching, when the person asks how to improve (sleep better, recover faster, tra
   It tests a fixed list of everyday habits against this person's own days. Skip the change tests
   unless the person asks what changed.
 - Suggest one or two things, or as many as they ask for up to five, each different, each as a
-  claim of kind suggestion citing its evidence and metric.
+  claim of kind suggestion citing its evidence and metric, with option set to the key of what it
+  offers as the evidence names it (a habit_options lever such as regular_bedtime, a
+  personal_options option key such as weekend_shift, or the first metric of a significant
+  correlation). Offer only the habit that evidence tested: bedtime evidence backs no walking tip.
   First what habit_options marks supported: "on nights you were in bed by 23:30, your sleep
   efficiency was higher, so you could try that on weeknights". An association you found with
   another tool may back one too, if it is significant. Otherwise what personal_options found in

@@ -356,10 +356,22 @@ and the PHIA B1 gate 24/24 held. Adjacent-period follow-ups 15/24, investigation
   run's family kept its id, and storage kept only the first version: 7 of 237 reopened citations
   showed another run's p-values. A stored record now never changes; one cited again with other
   contents is stored as a version (`<id>~<digest>`), and that answer, finding or alarm cites it.
-- **A suggestion stands on a tested habit.** "Keep activity spread across the week" was accepted
-  because higher average steps was a significant test. A change in a measure no longer grounds a
-  suggestion; an association, a weekday split, a supported habit option, what personal_options
-  found, memory or the food log does. Without one, the code-said coaching outcome answers.
+- **What the person reads is only what a record tested.** "Keep activity spread across the
+  week" was accepted because higher average steps was a significant test; Codex's reviews then
+  showed bedtime-and-sleep evidence, and a single breakfast entry, each accepting "spreading walks
+  across more days". The rule is now one for every coaching path. A suggestion names in `option`
+  the key of what it offers, and the verifier accepts only an option a cited record tested: a
+  supported habit_options lever (timing, regularity, rest, activity, dinner, wind-down), a
+  personal_options option, or the habit side of a significant association or weekday split. A
+  change in a measure, a meal logged or a saved fact tests no action, so alone it backs none.
+  Every coaching answer, in an investigation or not, is then said by code: each bound option in
+  its record's words, up to the number asked for, else the outcome of the tested habits (an
+  option, none among those tested, or too little data). An association or weekday split is said
+  as something to keep an eye on together, never as a change to make. Observations are said from
+  their tests, and the model's prose and its other advice claims are dropped, so neither can bring
+  advice back. A saved fact cited beside a bound option is quoted to say how it fits. The only
+  other advice a coaching reply can show is the top-up of general passages when more points are
+  asked for than were tested, marked as general guidance from the sources.
 - **Nothing changed, nothing to explain.** Explaining a look across measures where none changed
   clearly is said by code (nothing changed clearly, cited, so no change to explain), without the
   "changes seen over the same days" limit line. Prompts no longer tell the model to say measures

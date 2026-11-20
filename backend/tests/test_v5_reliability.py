@@ -38,7 +38,9 @@ from app.agent.tools import TOOLS
 from app.agent.verifier import Claim
 from app.agent.world import answer_world
 from app.analysis.evidence import Evidence, ToolError, Window
+from app.analysis.tools import compare_windows
 from app.api import chat
+from app.synthetic import Step, generate
 
 TODAY = date(2026, 11, 19)
 
@@ -598,9 +600,29 @@ def habits(supported: bool) -> Evidence:
     )
 
 
-def observation() -> Claim:
+@pytest.fixture(scope="module")
+def observed() -> Evidence:
+    """A clear drop in time asleep: an observation code can say from its test."""
+    effects = (Step("sleep_minutes", date(2026, 10, 1), -60),)
+    frame = generate(date(2026, 9, 1), 60, effects, seed=5).frame
+    record = compare_windows(
+        frame,
+        "sleep_minutes",
+        Window(start=date(2026, 10, 1), end=date(2026, 10, 30)),
+        Window(start=date(2026, 9, 1), end=date(2026, 9, 30)),
+    )
+    assert record.stats["p_value"] < 0.001
+    return record
+
+
+def observation(record: Evidence) -> Claim:
+    # The model's words, with advice in them: code says the observation from its record.
     return Claim(
-        text="Time asleep fell.", kind="change", evidence_ids=["e1"], metric="sleep_minutes"
+        text="Time asleep fell, so you could try walking more.",
+        kind="change",
+        evidence_ids=[record.id],
+        metric="sleep_minutes",
+        direction="down",
     )
 
 
@@ -615,17 +637,21 @@ def observation() -> Claim:
     ],
 )
 @pytest.mark.parametrize("supported", [True, False, None])
-def test_coaching_says_one_thing_whatever_the_prose_said(summary, supported):
+def test_coaching_says_one_thing_whatever_the_prose_said(summary, supported, observed):
     """The v5 audit: a bedtime suggestion then "none was supported", and "I don't see anything"
     then a supported bedtime. With no suggestion claim of its own, the prose goes, however it is
     worded; the reply as the API assembles it is the observations and code's one conclusion."""
     result = AgentResult(
-        run_id="x", stop_reason="submitted", summary=summary, claims=[observation()]
+        run_id="x",
+        stop_reason="submitted",
+        summary=summary,
+        claims=[observation(observed)],
+        evidence={observed.id: observed},
     )
     one_coaching_conclusion(result, [] if supported is None else [habits(supported)])
     shown = chat.answer_text(result.summary, [c.text for c in result.claims], result.notes)
-    assert summary not in shown
-    assert shown.startswith("Time asleep fell.")
+    assert summary not in shown and "walking" not in shown
+    assert shown.startswith("Time asleep went down: ")
     assert ("One option your own days support" in shown) == (supported is True)
     assert ("None of the everyday habits" in shown) == (supported is False)
     assert ("isn't enough" in shown) == (supported is None)
@@ -641,10 +667,14 @@ def test_too_little_data_is_said_with_no_claim():
     assert "isn't enough" in result.summary and not result.claims
 
 
-def test_unsupported_advice_claims_go_with_the_prose():
+def test_unsupported_advice_claims_go_with_the_prose(observed):
     advice = Claim(text="Try an earlier bedtime.", kind="guidance", evidence_ids=["p1"])
     result = AgentResult(
-        run_id="x", stop_reason="submitted", summary="x", claims=[observation(), advice]
+        run_id="x",
+        stop_reason="submitted",
+        summary="x",
+        claims=[observation(observed), advice],
+        evidence={observed.id: observed},
     )
     one_coaching_conclusion(result, [habits(False)])
     assert [c.kind for c in result.claims] == ["change", "no_change"]

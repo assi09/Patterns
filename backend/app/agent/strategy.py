@@ -177,7 +177,9 @@ STRATEGIES: dict[str, Strategy] = {
         ),
         guide="How to work: below are the habits tested on this person's days and what stands out "
         "in their own routine, as evidence you may cite. Give one or two suggestions, or as many "
-        "as they ask for up to five, as claims of kind suggestion: first what tested as supported, "
+        "as they ask for up to five, as claims of kind suggestion, each with option set to the "
+        "key of the lever or option it offers and offering only the habit its evidence tested: "
+        "first what tested as supported, "
         "then what stands out, said as worth trying, not as something proven. Use everything "
         "different below before stopping, and never the same point twice. Each must use their own "
         "numbers, say concretely what to do (the passages below say how: cite the one you use "

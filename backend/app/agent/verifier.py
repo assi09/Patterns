@@ -34,6 +34,13 @@ class Claim(BaseModel):
     evidence_ids: list[str] = Field(min_length=1)
     metric: str | None = None  # the metric the claim is about
     direction: Direction | None = None  # for change and association claims
+    # For a suggestion: the key of the option it offers, one its cited evidence tested.
+    option: str | None = Field(
+        default=None,
+        description="Suggestions only: the key of the option offered, as the cited evidence "
+        "names it (a habit_options lever, a personal_options option key, or the first metric of "
+        "a significant correlation or weekday split).",
+    )
 
     @field_validator("direction", mode="before")
     @classmethod
@@ -240,6 +247,28 @@ def run_adjusted(tests: list[Evidence]) -> list[Evidence]:
         else e
         for e in tests
     ]
+
+
+def supported_options(evidence: Evidence) -> dict[str, str]:
+    """The actions a record tested as worth trying for this person, by key, with their words:
+    habit_options' supported levers, personal_options' options that say what to try, and the
+    habit side (the first metric) of a significant association or weekday split."""
+    stats = evidence.stats
+    if evidence.tool == "habit_options":
+        return {
+            lever["lever"]: lever["habit"]
+            for lever in stats.get("levers", [])
+            if lever.get("supported")
+        }
+    if evidence.tool == "personal_options":
+        return {o["key"]: o["try"] for o in stats.get("options", []) if o.get("try")}
+    if (
+        evidence.tool in ("correlate", "weekday_split")
+        and evidence.metrics
+        and _significant(evidence)
+    ):
+        return {evidence.metrics[0]: evidence.metrics[0]}
+    return {}
 
 
 def _sign(evidence: Evidence) -> float | None:
@@ -605,26 +634,29 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
         if any(_significant(e) for e in tested):
             reasons.append("claims no change, but the cited evidence shows a significant one")
     if claim.kind == "suggestion":
-        # An everyday habit to try, grounded in this person's own data: some cited evidence about
-        # it must show a real pattern about the habit (a significant association or weekday
-        # split, or a lever habit_options supports). That a measure changed tests no habit: "keep
-        # activity spread across the week" stood on higher average steps (the b730 audit).
-        grounded = [
-            e
-            for e in about
-            if (_significant(e) and e.tool not in CHANGE_TOOLS)
-            or (e.tool == "habit_options" and e.stats.get("supported"))
-            or (e.tool == "personal_options" and e.stats.get("options"))
-            or e.tool == "memory"  # what they told the app, in words
-            or (e.tool == "food_log" and e.stats.get("meals_logged"))
-        ]
-        if not grounded:
+        # An everyday habit to try, grounded in this person's own data, and bound to it: the
+        # option offered must be one the cited evidence tested (a supported habit_options lever,
+        # an action personal_options found, or the habit side of a significant association or
+        # weekday split). That a measure changed tests no habit ("keep activity spread across the
+        # week" stood on higher average steps, the b730 audit), and a record about bedtime backs
+        # no walking advice (the review of 4fdac68).
+        # Memory and the food log say what they told or ate: cited beside a tested option they
+        # show it fits, but they test no action, so alone they back none (a breakfast entry
+        # backed "spread your walks across the week", the review of the binding).
+        offered = {key for e in about for key in supported_options(e)}
+        if offered and claim.option not in offered:
             reasons.append(
-                "a suggestion must cite evidence specific to this person about the habit (a "
-                "significant association, a supported habit option, or something "
-                "personal_options found); a "
-                "measure that changed is not a tested habit. Without one, say nothing specific "
-                "stands out yet and ask what is going on"
+                "a suggestion offers one option its cited evidence tested, named in option: "
+                f"one of {', '.join(sorted(offered))}. Advice about another habit needs evidence "
+                "about that habit."
+            )
+        elif not offered:
+            reasons.append(
+                "a suggestion must cite evidence specific to this person that tested the habit "
+                "it offers (a significant association or weekday split, a supported habit "
+                "option, or an option personal_options found); a measure that changed, a meal "
+                "logged or something they told you tests no habit. Without one, say nothing "
+                "specific stands out yet and ask what is going on"
             )
         if not OPTION_WORDS.search(claim.text):
             reasons.append("word a suggestion as an option the person may try (could, might, try)")

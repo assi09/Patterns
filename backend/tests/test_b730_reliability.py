@@ -14,7 +14,7 @@ from test_clauses import data, dates, earlier, read, said, windows
 from app.actions.schemas import WorkoutLog
 from app.actions.stated import mismatch
 from app.agent.agent import AgentResult
-from app.agent.ask import NO_CHANGE_TO_EXPLAIN, nothing_to_explain
+from app.agent.ask import NO_CHANGE_TO_EXPLAIN, nothing_to_explain, one_coaching_conclusion
 from app.agent.clauses import Said
 from app.agent.context import Turn
 from app.agent.llm import ScriptedLLM
@@ -23,6 +23,7 @@ from app.agent.requests import Request, ResolvedPart, interpret, said_schema, st
 from app.agent.verifier import RUN_ADJUSTED, Claim, check_claim
 from app.analysis.evidence import Evidence, Window
 from app.analysis.tools import compare_windows, correlate
+from app.api import chat
 from app.db.chat import add_answer, load_evidence
 from app.synthetic import Coupling, Step, generate
 
@@ -285,7 +286,7 @@ def moved_and_linked():
     return found
 
 
-GROUNDING = "a measure that changed is not a tested habit"
+GROUNDING = "a measure that changed, a meal logged or something they told you tests no habit"
 
 
 def suggestion_reasons(record: Evidence) -> list[str]:
@@ -304,6 +305,91 @@ def test_a_change_in_a_measure_does_not_ground_a_habit_to_try(moved_and_linked):
 
 def test_a_tested_association_grounds_a_habit_to_try(moved_and_linked):
     assert not any(GROUNDING in r for r in suggestion_reasons(moved_and_linked["linked"]))
+
+
+# ---- a suggestion offers the habit its evidence tested, and code says it ----
+# The review of 4fdac68: bedtime-and-sleep evidence accepted "spreading walks across more days".
+
+WALKS = "You could try spreading walks across more days of the week."
+BEDTIME = "You could try a steadier bedtime."
+
+
+def offered(text: str, record: Evidence, option: str | None) -> Claim:
+    return Claim(
+        text=text,
+        kind="suggestion",
+        evidence_ids=[record.id],
+        metric="sleep_minutes",
+        option=option,
+    )
+
+
+BINDING = "a suggestion offers one option its cited evidence tested"
+
+
+@pytest.mark.parametrize("option", [None, "steps", "active_days"])
+def test_bedtime_evidence_backs_no_walking_option(moved_and_linked, option):
+    linked = moved_and_linked["linked"]
+    reasons = check_claim(offered(WALKS, linked, option), {linked.id: linked})
+    assert any(BINDING in r and "bedtime_hour" in r for r in reasons)
+
+
+def test_bedtime_evidence_backs_the_bedtime_option(moved_and_linked):
+    linked = moved_and_linked["linked"]
+    assert not check_claim(offered(BEDTIME, linked, "bedtime_hour"), {linked.id: linked})
+
+
+def coaching_turn(claims, evidence):
+    return AgentResult(
+        run_id="x",
+        stop_reason="submitted",
+        summary="One good option is spreading your walks across the week.",
+        claims=claims,
+        evidence={e.id: e for e in evidence},
+    )
+
+
+def test_what_the_person_reads_is_the_option_the_evidence_tested(moved_and_linked):
+    """Even with the right key beside the wrong words, the reply is said from the record: the
+    walking prose goes, and the bedtime option it was bound to is what is shown and cited."""
+    linked = moved_and_linked["linked"]
+    result = coaching_turn([offered(WALKS, linked, "bedtime_hour")], [linked])
+    one_coaching_conclusion(result, [])
+    shown = chat.answer_text(result.summary, [c.text for c in result.claims], result.notes)
+    assert "walk" not in shown.casefold() and "bedtime" in shown
+    (claim,) = result.claims
+    assert claim.kind == "suggestion" and claim.evidence_ids == [linked.id]
+    assert claim.option == "bedtime_hour" and claim.text in shown
+
+
+def lever_record(supported: bool) -> Evidence:
+    lever = {
+        "lever": "regular_bedtime",
+        "habit": "a regular bedtime, within half an hour of your usual",
+        "group": "nights near your usual bedtime",
+        "supported": supported,
+    }
+    return Evidence(
+        tool="habit_options",
+        metrics=["sleep_minutes"],
+        windows=[Window(start="2026-10-11", end="2026-10-31")],
+        stats={"supported": supported, "levers": [lever]},
+        n=21,
+        sufficient=True,
+    )
+
+
+@pytest.mark.parametrize("supported", [True, False])
+def test_an_option_the_evidence_does_not_support_falls_back(supported):
+    record = lever_record(supported)
+    result = coaching_turn([], [record])
+    one_coaching_conclusion(result, [record])
+    if supported:
+        assert "a regular bedtime" in result.summary and result.claims[-1].kind == "suggestion"
+    else:
+        assert "None of the everyday habits" in result.summary
+        assert all(c.kind != "suggestion" for c in result.claims)
+    assert "walk" not in result.summary
 
 
 # ---- nothing changed: nothing to explain, said by code ----
@@ -387,3 +473,90 @@ def test_a_draft_matching_no_stated_length_names_what_it_has():
     problem = mismatch(walk(40), PAUSED, NOW)
     assert problem and "active time 40 min" in problem and "elapsed time 40 min" in problem
     assert "10 min" in problem
+
+
+# ---- end to end: what is stored and reopened is the supported option, linked to its record ----
+
+
+def test_a_reopened_coaching_answer_shows_only_the_tested_option_and_its_record(
+    tmp_path, monkeypatch
+):
+    """The model offers walking advice it invented twice: once under a walking key no record
+    tested, once under the valid bedtime key. The person reads, and reopens, only the bedtime
+    option the habit test supports, cited to that test."""
+    from alembic import command
+    from alembic.config import Config
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from test_chat_api import FixedRouter, signed_in, submission
+    from test_question_strategy import evidence_id_for
+
+    from app.analysis.day import with_scores
+    from app.api import auth
+    from app.api.chat import AgentParts
+    from app.api.main import create_app
+    from app.api.store import analyze, get_data
+    from app.auth.accounts import LoginThrottle
+    from app.db.session import session_scope
+    from app.ingest.takeout import DailyData
+
+    url = f"sqlite:///{tmp_path / 'chat.db'}"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    planted = (Coupling("bedtime_hour", "sleep_efficiency", 0, -0.9),)
+    frame = with_scores(generate(date(2026, 7, 1), 90, planted, seed=2).frame)
+
+    def invented(messages):
+        task = messages[1]["content"]
+        habit = evidence_id_for(task, "sleep efficiency", "Habits tested")
+        walking = "You could try spreading your walks across more days of the week."
+        claims = [
+            {
+                "text": walking,
+                "kind": "suggestion",
+                "evidence_ids": [habit],
+                "metric": "sleep_efficiency",
+                "option": "steps",
+            },
+            {
+                "text": walking,
+                "kind": "suggestion",
+                "evidence_ids": [habit],
+                "metric": "sleep_efficiency",
+                "option": "earlier_bedtime",
+            },
+        ]
+        return submission(f"{walking} It suits you best.", claims=claims)
+
+    agent = AgentParts(ScriptedLLM([invented, invented]), FixedRouter("coaching", sleep=0.9), None)
+    monkeypatch.setattr(auth, "throttle", LoginThrottle())
+    monkeypatch.setattr(chat, "_busy", set())
+    app = create_app()
+
+    def db():
+        with session_scope(engine) as scoped:
+            yield scoped
+
+    data = analyze(DailyData(frame=frame), datetime.now(UTC))
+    app.dependency_overrides[auth.get_db] = db
+    app.dependency_overrides[get_data] = lambda: data
+    app.dependency_overrides[chat.get_agent] = lambda: agent
+    app.dependency_overrides[chat.get_sessions] = lambda: lambda: session_scope(engine)
+    client = TestClient(app)
+    headers = signed_in(client, engine)
+
+    response = client.post("/chat", json={"text": "How can I sleep better?"}, headers=headers)
+    assert response.status_code == 200, response.text
+    _, answer = response.json()
+    reopened = client.get("/chat", headers=headers).json()[-1]
+    assert reopened == answer
+    for text in (answer["text"], reopened["text"]):
+        assert "walk" not in text.casefold() and "It suits you best" not in text
+        assert "being in bed by" in text
+    (cited,) = reopened["evidenceIds"]
+    record = client.get(f"/evidence/{cited}", headers=headers).json()
+    assert record["tool"] == "habit_options"
+    levers = {lever["lever"]: lever for lever in record["stats"]["levers"]}
+    assert levers["earlier_bedtime"]["supported"]

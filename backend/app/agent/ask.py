@@ -46,7 +46,7 @@ from app.agent.experts import (
     specialist_notes,
     visible_metrics,
 )
-from app.agent.findings import render_overview
+from app.agent.findings import finding_claim, render_overview
 from app.agent.followup import standalone, with_period, with_relative_day
 from app.agent.guard import Guard, GuardError, JevGuard
 from app.agent.intent import Intent
@@ -80,6 +80,7 @@ from app.agent.llm import LLM, Budget
 from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
 from app.agent.periods import asks_over_days, with_dates
 from app.agent.personal import (
+    MEMORY,
     NOT_ABOUT_EATING_LEVERS,
     NOT_ABOUT_EATING_OPTIONS,
     PERSONAL_TOOLS,
@@ -142,7 +143,13 @@ from app.agent.strategy_types import (
     is_statement,
     offer_in,
 )
-from app.agent.verifier import MEDICAL, STATISTIC_WORDS, Claim, _significant
+from app.agent.verifier import (
+    MEDICAL,
+    STATISTIC_WORDS,
+    Claim,
+    _significant,
+    supported_options,
+)
 from app.agent.world import answer_world
 from app.analysis.evidence import Evidence, Window
 from app.outside import Outside
@@ -706,6 +713,11 @@ def nothing_to_explain(result: AgentResult, typed, today: date) -> bool:
     return True
 
 
+def coaching_habits(found) -> list[Evidence]:
+    """The habit tests among the evidence a coaching run was given."""
+    return [e for records, _ in found for e in records if e.tool == "habit_options"]
+
+
 def coaching_fallback(habits: Sequence[Evidence]) -> str:
     """One option the person's own days support, said by code, or why there is none."""
     return coaching_outcome(habits)[0]
@@ -732,20 +744,114 @@ def coaching_outcome(habits: Sequence[Evidence]) -> tuple[str, Claim | None]:
 OBSERVATIONS = ("change", "no_change", "value", "day", "data_quality", "association")
 
 
-def one_coaching_conclusion(result: AgentResult, habits: Sequence[Evidence]) -> None:
-    """A coaching answer with no supported suggestion of its own is said by code: the verified
-    observations, then the one conclusion the tested habits support. The model's prose is not
-    kept, whatever its wording: a recommendation in it ("an earlier bedtime is the best move")
-    is unsupported by definition here, and guessing advice from words let one through beside
-    "there isn't enough data" (review of 1e29f3a)."""
-    text, claim = coaching_outcome(habits)
-    seen = [c for c in result.claims if c.kind in OBSERVATIONS]
-    result.summary = " ".join(dict.fromkeys([*(c.text for c in seen), text]))
-    result.claims = seen + ([claim] if claim is not None else [])
-    result.notes = [n for n in result.notes if n != text]
-    result.trace.append({"type": "coaching_conclusion", "observations": len(seen)})
+def option_sentence(record: Evidence, key: str) -> str:
+    """The option a record tested, said by code from the record: what the person sees is the
+    habit the evidence is about, whatever the model wrote beside it."""
+    stats = record.stats
+    if record.tool == "habit_options":
+        lever = next(lv for lv in stats["levers"] if lv["lever"] == key)
+        return (
+            f"One option your own days support, if you'd like to try it: {lever['habit']}. On "
+            f"your {lever['group']}, your {label(record.metrics[0])} was better."
+        )
+    if record.tool == "personal_options":
+        option = next(o for o in stats["options"] if o["key"] == key)
+        note = option["note"][:1].upper() + option["note"][1:]
+        return (
+            f"One option from your own routine, if you'd like to try it: {option['try']}. "
+            f"{note}; that is worth trying, not something tested."
+        )
+    # An association or a weekday split tests no action: it supports watching the two together,
+    # never a change to one ("an earlier bedtime" needs a test of bedtime timing; review of the
+    # binding, 2026-11-20).
+    habit = label(record.metrics[0])
+    if record.tool == "correlate":
+        target = label(record.metrics[1]) if len(record.metrics) > 1 else "the other measure"
+        way = "together" if (stats.get("rho") or 0) > 0 else "in opposite directions"
+        return (
+            f"One thing your own days point to, if you'd like: keeping an eye on your {habit} "
+            f"and {target} together. Over these days they tended to move {way}; that shows they "
+            "go together, not that changing one would change the other."
+        )
+    return (
+        f"One thing your own days point to, if you'd like: keeping an eye on your {habit} on "
+        "weekdays against weekends, where it differs clearly. That describes when it differs, "
+        "not what would change it."
+    )
+
+
+def bound_option(claim: Claim, evidence: dict[str, Evidence]) -> tuple[str, Claim] | None:
+    """A verified suggestion's option, said by code from the record that tested it."""
+    for i in claim.evidence_ids:
+        record = evidence.get(i)
+        if record is not None and claim.option in supported_options(record):
+            text, ids = option_sentence(record, claim.option), [record.id]
+            # What they told the app says how the option fits them, in their own words; it adds
+            # no action of its own.
+            for told in (evidence.get(j) for j in claim.evidence_ids):
+                if told is not None and told.tool == MEMORY and told.stats.get("text"):
+                    text += f' That fits what you told me: "{told.stats["text"]}".'
+                    ids.append(told.id)
+                    break
+            return text, claim.model_copy(update={"text": text, "evidence_ids": ids})
+    return None
+
+
+def said_observations(claims: Sequence[Claim], evidence: dict[str, Evidence]) -> list[Claim]:
+    """A coaching answer's observations, each said by code from the test it cites; one code
+    cannot say from its record is left out. A model's observation could carry advice of its own
+    ("steps rose, so you could spread your walks")."""
+    said: dict[str, Claim] = {}
+    for claim in claims:
+        if claim.kind not in OBSERVATIONS:
+            continue
+        for i in claim.evidence_ids:
+            record = evidence.get(i)
+            if record is not None and record.metrics and "difference" in record.stats:
+                said.setdefault(record.id, finding_claim(record))
+                break
+    return list(said.values())
+
+
+def coaching_by_code(
+    result: AgentResult,
+    habits: Sequence[Evidence],
+    wanted: int = 1,
+    observations: bool = True,
+) -> None:
+    """A coaching answer is said by code: every option the person reads is one a cited record
+    tested, in that record's words. The verified suggestions the model chose (each bound by its
+    option key) are said from their records, up to the number asked for; with none, the one
+    conclusion the tested habits support. The model's prose and its other advice claims are not
+    kept, whatever their wording: advice beside a tested option need not be about it ("spread
+    your walks" stood on bedtime evidence, a breakfast entry and an NHS passage; "an earlier
+    bedtime is the best move" beside "there isn't enough data", review of 1e29f3a)."""
+    chosen: dict[str, Claim] = {}
+    for claim in result.claims:
+        if claim.kind == "suggestion" and (bound := bound_option(claim, result.evidence)):
+            chosen.setdefault(bound[0], bound[1])
+    options = list(chosen.items())[: max(wanted, 1)]
+    if not options:
+        text, claim = coaching_outcome(habits)
+        options = [(text, claim)]
+    seen = said_observations(result.claims, result.evidence) if observations else []
+    said = [text for text, _ in options]
+    if len(said) > 1:
+        result.summary = "\n".join(f"- {text}" for text in said)
+    else:
+        result.summary = " ".join(dict.fromkeys([*(c.text for c in seen), *said]))
+    result.claims = seen + [claim for _, claim in options if claim is not None]
+    result.notes = [n for n in result.notes if n not in said]
+    result.trace.append(
+        {"type": "coaching_by_code", "observations": len(seen), "options": len(chosen)}
+    )
     for record in habits:
         result.evidence.setdefault(record.id, record)
+
+
+def one_coaching_conclusion(result: AgentResult, habits: Sequence[Evidence]) -> None:
+    """An investigation's coaching answer: its observations, then one option said by code."""
+    coaching_by_code(result, habits)
 
 
 def _outcome_text(habits: Sequence[Evidence]) -> str:
@@ -1648,6 +1754,9 @@ def ask(
             result.summary, result.claims = text, claims
             result.evidence |= {r.id: r for r in overview_records}
             result.trace.append({"type": "overview_by_code", "claims": len(claims)})
+    if plan and plan.coaching and not stopped_early and not investigating and not missing:
+        # Every coaching option is said from the record that tested it, as in an investigation.
+        coaching_by_code(result, coaching_habits(tested_habits), wanted, observations=False)
     if plan and plan.coaching:
         result.summary = without_filler(result.summary)
         if wanted and not stopped_early:
@@ -1668,15 +1777,10 @@ def ask(
     if investigating and not stopped_early:
         # The answer must do what was asked: one option for coaching, the limits for a "why".
         # A coaching answer gave only a recap, and an explanation was never tested (the v4 audit).
-        habits = [
-            e
-            for records, _ in (tested_habits if plan else [])
-            for e in records
-            if e.tool == "habit_options"
-        ]
+        habits = coaching_habits(tested_habits if plan else [])
         if result.summary in (NO_ANSWER, ""):
             described_days(result, typed, frame, _day(today or now), food_logs, now)
-        if typed.focus == "coaching" and not any(c.kind == "suggestion" for c in result.claims):
+        if typed.focus == "coaching":
             one_coaching_conclusion(result, habits)
         result.notes += [
             n for n in coverage_notes(typed, frame, _day(today or now)) if n not in result.notes

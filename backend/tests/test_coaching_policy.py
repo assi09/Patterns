@@ -23,8 +23,8 @@ def evidence(tool="correlate", p=0.01, metrics=("bedtime_hour", "sleep_efficienc
     )
 
 
-def suggestion(text, ids, metric="sleep_efficiency"):
-    return Claim(text=text, kind="suggestion", evidence_ids=ids, metric=metric)
+def suggestion(text, ids, metric="sleep_efficiency", option="bedtime_hour"):
+    return Claim(text=text, kind="suggestion", evidence_ids=ids, metric=metric, option=option)
 
 
 def test_a_grounded_suggestion_worded_as_an_option_passes():
