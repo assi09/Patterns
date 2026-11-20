@@ -101,7 +101,19 @@ def test_the_reading_is_described_with_its_source_statistic_and_dates():
 NEXT_TWO = "What does the same statistic come out to on the next two dates after the interval ends?"
 BLOCK = earlier("2026-08-03", "2026-08-07", "steps", "min")
 OLD_DAYS = data(NEXT_TWO, ["steps"], "min", {"kind": "same_as_earlier"}, earlier_result=0)
-NEXT = data(NEXT_TWO, ["steps"], "min", {"kind": "after_earlier", "length": 2}, earlier_result=0)
+NEXT = data(
+    NEXT_TWO,
+    ["steps"],
+    "min",
+    {
+        "kind": "beside_earlier",
+        "counted_from": "its_last_day",
+        "offset": 1,
+        "new_period": "starts_there",
+        "length": 2,
+    },
+    earlier_result=0,
+)
 
 
 def test_a_reading_the_checker_accepts_is_answered_with_one_reading():
@@ -173,7 +185,14 @@ def investigate(words, *periods, **extra):
 
 def test_a_baseline_relative_to_the_clause_counts_from_its_first_period():
     """Every v7 investigation asked "which earlier measurement?" on a first message."""
-    before = {"kind": "before_earlier", "length": 28, "relative_to": "this_clause"}
+    before = {
+        "kind": "beside_earlier",
+        "counted_from": "its_first_day",
+        "offset": -1,
+        "new_period": "ends_there",
+        "length": 28,
+        "relative_to": "this_clause",
+    }
     request, _ = read(LOOK, said(investigate(LOOK, dates("2026-10-09", "2026-10-31"), before)))
     assert windows(request) == [
         (date(2026, 10, 9), date(2026, 10, 31)),
@@ -182,8 +201,22 @@ def test_a_baseline_relative_to_the_clause_counts_from_its_first_period():
 
 
 def test_relative_to_an_earlier_result_with_none_is_sent_back_not_asked():
-    wrong = {"kind": "before_earlier", "length": 28, "relative_to": "earlier_result"}
-    right = {"kind": "before_earlier", "length": 28, "relative_to": "this_clause"}
+    wrong = {
+        "kind": "beside_earlier",
+        "counted_from": "its_first_day",
+        "offset": -1,
+        "new_period": "ends_there",
+        "length": 28,
+        "relative_to": "earlier_result",
+    }
+    right = {
+        "kind": "beside_earlier",
+        "counted_from": "its_first_day",
+        "offset": -1,
+        "new_period": "ends_there",
+        "length": 28,
+        "relative_to": "this_clause",
+    }
     request, llm = read(
         LOOK,
         said(investigate(LOOK, dates("2026-10-09", "2026-10-31"), wrong)),
@@ -195,7 +228,14 @@ def test_relative_to_an_earlier_result_with_none_is_sent_back_not_asked():
 
 def test_a_block_relative_to_an_earlier_result_still_uses_it():
     words = "And the 28 days before that?"
-    before = {"kind": "before_earlier", "length": 28, "relative_to": "earlier_result"}
+    before = {
+        "kind": "beside_earlier",
+        "counted_from": "its_first_day",
+        "offset": -1,
+        "new_period": "ends_there",
+        "length": 28,
+        "relative_to": "earlier_result",
+    }
     request, _ = read(
         words,
         said(data(words, ["steps"], "mean", before, earlier_result=0)),

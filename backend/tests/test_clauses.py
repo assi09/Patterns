@@ -192,7 +192,13 @@ def test_a_reading_that_misplaces_the_5_days_is_sent_back():
 )
 def test_that_date_and_the_three_before_it_are_four_days(day, today, start):
     question = "Use the mean over that date and the three dates immediately before it."
-    four = {"kind": "days_ending", "length": 4, "ending": "earlier_end", "offset": 0}
+    four = {
+        "kind": "beside_earlier",
+        "counted_from": "its_last_day",
+        "offset": 0,
+        "new_period": "ends_there",
+        "length": 4,
+    }
     clause = data(question, ["steps"], "mean", four, earlier_result=0)
     request, calls = read(question, said(clause), history=[earlier(day, day)], today=today)
     assert windows(request) == [(start, date.fromisoformat(day))] and calls == 1
@@ -303,7 +309,13 @@ def test_every_metric_s_value_and_previous_day_resolve_through_clauses(metric):
     request, _ = read(question, said(data(question, [metric], "value", dates("2026-11-11"))))
     assert request.parts[0].metrics == [metric]
     assert windows(request) == [(date(2026, 11, 11), date(2026, 11, 11))]
-    before = {"kind": "days_ending", "length": 1, "ending": "earlier_end", "offset": -1}
+    before = {
+        "kind": "beside_earlier",
+        "counted_from": "its_last_day",
+        "offset": -1,
+        "new_period": "ends_there",
+        "length": 1,
+    }
     back = data("Back up by a single calendar day", [metric], "value", before, earlier_result=0)
     request, _ = read(
         "Back up by a single calendar day.",
@@ -316,7 +328,13 @@ def test_every_metric_s_value_and_previous_day_resolve_through_clauses(metric):
 # ---- the smoke run's three misreadings (real readings, 2026-11-19) ----
 
 AROUND = "Use the mean over that date and the three dates immediately before it."
-FOUR = {"kind": "days_ending", "length": 4, "ending": "earlier_end", "offset": 0}
+FOUR = {
+    "kind": "beside_earlier",
+    "counted_from": "its_last_day",
+    "offset": 0,
+    "new_period": "ends_there",
+    "length": 4,
+}
 
 
 def around(*periods):

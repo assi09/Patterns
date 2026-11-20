@@ -61,20 +61,36 @@ ANCHORS = [date(2028, 2, 26), date(2026, 12, 29), date(2024, 2, 28), date(2026, 
 @pytest.mark.parametrize("anchor", ANCHORS)
 @pytest.mark.parametrize("before_length", [1, 3, 6])
 @pytest.mark.parametrize("length", [1, 5, 6, 31])
-def test_the_block_after_or_before_an_earlier_one_adjoins_it(anchor, before_length, length):
-    """Over leap days, year ends and earlier periods of other lengths: the next N days start the
-    day after the earlier last day, the previous N end the day before its first."""
+@pytest.mark.parametrize("offset", [-2, -1, 0, 1, 2])
+def test_a_block_beside_an_earlier_one_keeps_both_edges_as_said(
+    anchor, before_length, length, offset
+):
+    """Over leap days, year ends and earlier periods of other lengths: from the earlier first or
+    last day moved `offset` days, the new block starts there or ends there, `length` days long.
+    Starting and ending at the same day are different blocks (the b730 audit got Sep 4-6 for
+    "start at the next date and cover three days" after Sep 2-5)."""
     earlier_part = part(anchor, anchor + timedelta(days=before_length - 1))
-    (after,) = period_window(
-        Period(kind="after", anchor="previous", days=length), earlier_part, TODAY
-    )
-    (before,) = period_window(
-        Period(kind="before", anchor="previous", days=length), earlier_part, TODAY
-    )
-    last, first = earlier_part.windows[0].end, earlier_part.windows[0].start
-    assert (after.start, after.end) == (last + timedelta(days=1), last + timedelta(days=length))
-    assert (before.start, before.end) == (first - timedelta(days=length), first - timedelta(1))
-    assert after.days == before.days == length
+    edges = {"first": earlier_part.windows[0].start, "last": earlier_part.windows[0].end}
+    for edge, day in edges.items():
+        moved = day + timedelta(days=offset)
+        blocks = {
+            starts: period_window(
+                Period(
+                    kind="beside",
+                    anchor="previous",
+                    edge=edge,
+                    starts=starts,
+                    offset_days=offset,
+                    days=length,
+                ),
+                earlier_part,
+                TODAY,
+            )[0]
+            for starts in (True, False)
+        }
+        assert blocks[True].start == moved and blocks[True].days == length
+        assert blocks[False].end == moved and blocks[False].days == length
+        assert (blocks[True] == blocks[False]) == (length == 1)
 
 
 TWO_PERIODS = [("2026-10-01", "2026-10-07"), ("2026-11-01", "2026-11-07")]
@@ -91,7 +107,18 @@ def test_after_a_comparison_the_block_after_asks_which_period(order):
     """Reversing the two compared periods moved the answer from October to November: a block
     next to "that block" needs one earlier period, as a shift does (review of the local edits)."""
     words = "And the next three days after that block?"
-    clause = data(words, ["steps"], "mean", {"kind": "after_earlier", "length": 3})
+    clause = data(
+        words,
+        ["steps"],
+        "mean",
+        {
+            "kind": "beside_earlier",
+            "counted_from": "its_last_day",
+            "offset": 1,
+            "new_period": "starts_there",
+            "length": 3,
+        },
+    )
     request, _ = read(words, said(clause), said(clause), history=[compared(*order)])
     assert request.kind == "clarify" and not request.parts
 
@@ -105,12 +132,29 @@ BLOCK = earlier("2026-10-13", "2026-10-18", "cardio_load", "max")
     [
         {"kind": "shift_earlier", "days": 1},
         # the form the v5 audit's reading took: six days ending the day after the block
-        {"kind": "days_ending", "length": 6, "ending": "earlier_end", "offset": 1},
+        {
+            "kind": "beside_earlier",
+            "counted_from": "its_last_day",
+            "offset": 1,
+            "new_period": "ends_there",
+            "length": 6,
+        },
     ],
 )
 def test_the_six_days_following_a_block_are_the_next_block_not_the_block_moved_a_day(moved):
     moved_a_day = data(FOLLOWING, ["cardio_load"], "max", moved)
-    next_block = data(FOLLOWING, ["cardio_load"], "max", {"kind": "after_earlier", "length": 6})
+    next_block = data(
+        FOLLOWING,
+        ["cardio_load"],
+        "max",
+        {
+            "kind": "beside_earlier",
+            "counted_from": "its_last_day",
+            "offset": 1,
+            "new_period": "starts_there",
+            "length": 6,
+        },
+    )
     request, calls = read(FOLLOWING, said(moved_a_day), said(next_block), history=[BLOCK])
     assert windows(request) == [(date(2026, 10, 19), date(2026, 10, 24))]
     assert "read_back" in codes(request) and calls == 2
@@ -135,14 +179,36 @@ def test_moving_the_range_a_day_is_a_shift_and_passes_first_time(words):
     [FOLLOWING, "Now give me the next six days after that.", "And the 6 days right after those?"],
 )
 def test_a_next_block_said_any_way_passes_first_time(words):
-    clause = data(words, ["cardio_load"], "max", {"kind": "after_earlier", "length": 6})
+    clause = data(
+        words,
+        ["cardio_load"],
+        "max",
+        {
+            "kind": "beside_earlier",
+            "counted_from": "its_last_day",
+            "offset": 1,
+            "new_period": "starts_there",
+            "length": 6,
+        },
+    )
     request, calls = read(words, said(clause), history=[BLOCK])
     assert windows(request) == [(date(2026, 10, 19), date(2026, 10, 24))] and calls == 1
 
 
 def test_the_block_before_an_earlier_one_ends_the_day_before_it():
     words = "What about the 5 days before that block?"
-    clause = data(words, ["cardio_load"], "max", {"kind": "before_earlier", "length": 5})
+    clause = data(
+        words,
+        ["cardio_load"],
+        "max",
+        {
+            "kind": "beside_earlier",
+            "counted_from": "its_first_day",
+            "offset": -1,
+            "new_period": "ends_there",
+            "length": 5,
+        },
+    )
     request, calls = read(words, said(clause), history=[BLOCK])
     assert windows(request) == [(date(2026, 10, 8), date(2026, 10, 12))] and calls == 1
 
@@ -161,7 +227,13 @@ def test_that_day_as_the_last_of_five_keeps_five_days_across_a_leap_day():
         LAST_OF_FIVE,
         ["steps"],
         "mean",
-        {"kind": "days_ending", "length": 5, "ending": "earlier_end", "offset": 0},
+        {
+            "kind": "beside_earlier",
+            "counted_from": "its_last_day",
+            "offset": 0,
+            "new_period": "ends_there",
+            "length": 5,
+        },
         earlier_result=0,
     )
     request, calls = read(LAST_OF_FIVE, said(five), history=[LEAP], today=date(2028, 3, 5))
@@ -174,7 +246,13 @@ def test_that_day_alone_for_the_last_of_five_is_sent_back_for_its_length():
         LAST_OF_FIVE,
         ["steps"],
         "mean",
-        {"kind": "days_ending", "length": 5, "ending": "earlier_end", "offset": 0},
+        {
+            "kind": "beside_earlier",
+            "counted_from": "its_last_day",
+            "offset": 0,
+            "new_period": "ends_there",
+            "length": 5,
+        },
         earlier_result=0,
     )
     request, _ = read(

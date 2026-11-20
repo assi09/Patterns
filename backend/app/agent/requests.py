@@ -26,12 +26,11 @@ class Fields(BaseModel):
 
 
 class Period(Fields):
-    # after/before: the `days` days right after an earlier result's last day, or right before
-    # its first: "the six days immediately following that block" (the v5 audit moved the old
-    # block one day forward instead).
-    kind: Literal[
-        "history", "explicit", "relative", "rolling", "calendar", "inherit", "after", "before"
-    ]
+    # beside: `days` days placed against one edge of an earlier period, both edges said: from its
+    # first or last day (`edge`) moved `offset_days`, the new period starts there (`starts`) or
+    # ends there. "Start at the next date and cover three days" after Sep 2-5 is Sep 6-8; read
+    # as days ending the day after, it was answered for Sep 4-6 (the b730 audit, 9 of 12).
+    kind: Literal["history", "explicit", "relative", "rolling", "calendar", "inherit", "beside"]
     start: date | None = None
     end: date | None = None
     # previous: an earlier result; own: the first period of the same clause (its baseline).
@@ -40,6 +39,8 @@ class Period(Fields):
     days: int = Field(default=1, ge=1, le=36600)
     unit: Literal["week", "month", "year"] = "week"
     offset_units: int = Field(default=0, ge=-100, le=100)
+    edge: Literal["first", "last"] = "last"
+    starts: bool = False
 
 
 Operation = Literal[
@@ -323,17 +324,18 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
         if period.start is None or period.end is None:
             raise Ambiguous("What are the start and end dates?")
         return [Window(start=period.start, end=period.end)]
-    if period.kind in ("after", "before"):
+    if period.kind == "beside":
         # One earlier period only, as for a shift: after a comparison of two periods, "the next
         # three days after that block" must not take whichever was stored last.
         if previous is None or len(previous.windows) != 1:
             raise Ambiguous("Which of the earlier periods should I count from?")
-        length = timedelta(days=period.days)
-        if period.kind == "after":
-            end = previous.windows[-1].end
-            return [Window(start=end + timedelta(days=1), end=end + length)]
-        start = previous.windows[0].start
-        return [Window(start=start - length, end=start - timedelta(days=1))]
+        earlier = previous.windows[0]
+        day = earlier.start if period.edge == "first" else earlier.end
+        day += timedelta(days=period.offset_days)
+        rest = timedelta(days=period.days - 1)
+        if period.starts:
+            return [Window(start=day, end=day + rest)]
+        return [Window(start=day - rest, end=day)]
     anchor = today
     if period.anchor == "previous":
         if previous is None or len(previous.windows) != 1:
@@ -557,7 +559,7 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
             # "that date and the three before it" came back as the same day plus a shift.
             raise RetryReading(
                 f"Operation {operation} takes one period. Days added before or after an earlier "
-                "date ('that date and the three dates before it') are one days_ending period "
+                "date ('that date and the three dates before it') are one beside_earlier period "
                 "ending on that date, not the same days plus a shift. Two periods are only for "
                 "compare."
             )
@@ -588,6 +590,10 @@ def _source(
     wearable = [m for m in metrics if m in METRICS]
     if part.source == "food_log":
         return ["food_logs"], "food"  # what it names is a nutrient of the meals, not a metric
+    if part.meal_type is not None and set(wearable) <= {"calories"}:
+        # A meal is only in the food log: "breakfast only, how many calories?" is energy eaten.
+        # Sent back as a mix of sources, its retry lost the day (the b730 audit).
+        return ["food_logs"], "food"
     if operation == "food" or metrics == ["food_logs"]:
         if wearable:
             raise RetryReading(
@@ -659,7 +665,9 @@ Clause types:
   needs comparison and threshold (above/over/more than >, at least >=, under/below <, at most/no
   more than/no higher than <=, exactly/equal to ==); coverage counts days recorded. Never invent
   a threshold: keep their number, with threshold_unit hours when they give hours for a minutes
-  metric. "My step count on Nov 5" or "what is the count?" is the value, not count. compare
+  metric. "My step count on Nov 5" or "what is the count?" is the value, not count.
+  every_metric when they ask about every measure they have ("my full set of measurements",
+  "everything you track") instead of naming them; metrics then empty. compare
   lists the focal period first, the baseline second. correlate lists driver then
   target, max_lag only if asked; asks_cause when they ask whether one causes the other. operation
   inherit only to repeat the earlier computation.
@@ -700,28 +708,34 @@ Periods, for data and investigate clauses; pick the kind that means what was sai
 - month: a month named with its year, past or future ("January 2027"); a month named alone is
   its latest occurrence up to today.
 - same_as_earlier: exactly an earlier result's days, nothing added ("that same day", "for that
-  interval", "count again"). Days added before or after an earlier date are days_ending, never
-  same_as_earlier; "that day as the last of five days" is days_ending 5, earlier_end, 0.
-- shift_earlier: an earlier result's whole period moved ("two days earlier" is -2, "move that
-  range forward one day" is +1).
-- after_earlier / before_earlier: a new block of length days right after a period's last day
-  ("the six days immediately following that block": after_earlier 6) or right before its first
-  day ("the 5 days before those": before_earlier 5).
-shift_earlier, after_earlier and before_earlier say what they are relative_to: earlier_result
-(a result computed before this message) or this_clause (the period named first in this same
-clause: "Oct 9-31 compared with the four weeks before" is dates Oct 9-31, then before_earlier 28
-relative_to this_clause). With nothing computed earlier, nothing is relative to an earlier
-result.
-- days_ending: length days ending on a day. yesterday: 1, today, -1. two days before today: 1,
-  today, -2. the last 7 days (today included): 7, today, 0. the 5 complete days before today: 5,
-  today, -1. that date and the three dates before it: 4, earlier_end, 0. the day before that: 1,
-  earlier_end, -1.
-- all_history: a new question that names no period.
+  interval", "count again"). Days added before or after an earlier date are beside_earlier,
+  never same_as_earlier.
+- shift_earlier: an earlier result's whole period moved, its length kept ("two days earlier" is
+  -2, "move that range forward one day" is +1).
+- beside_earlier: length days placed against one day of an earlier period, each edge said.
+  counted_from: the earlier period's first or last day; offset: days from it (+1 the day after,
+  -1 the day before, 0 that day); new_period: whether the new days start there or end there,
+  as the words say ("start at", "from", "the next", "following" start there; "leading into",
+  "up to", "ending" end there). The next three days, start at the next date and cover three
+  days: its_last_day, +1, starts_there, 3. The 3 days leading into it: its_first_day, -1,
+  ends_there, 3. That date and the three dates before it: its_last_day, 0, ends_there, 4. The
+  five days ending the day after it: its_last_day, +1, ends_there, 5. The day before that:
+  its_first_day, -1, ends_there, 1.
+shift_earlier and beside_earlier say what they are relative_to: earlier_result (a result
+computed before this message) or this_clause (the period named first in this same clause: "Oct
+9-31 compared with the four weeks before" is dates Oct 9-31, then beside_earlier its_first_day,
+-1, ends_there, 28, relative_to this_clause). With nothing computed earlier, nothing is relative
+to an earlier result.
+- days_ending: length days ending on a day counted from today. yesterday: 1, -1. two days
+  before today: 1, -2. the last 7 days (today included): 7, 0. the 5 complete days before
+  today: 5, -1.
+- all_history: a new question that names no period. A follow-up that narrows an earlier read
+  (one meal, one source, another threshold) keeps its days: same_as_earlier.
 A follow-up that changes only the threshold or comparison ("exclude the days exactly on the
 boundary") keeps the earlier days and threshold: same_as_earlier, with only the comparison
 changed (at or below becomes below).
-"yesterday", "last 7 days" and "this week" count from today; earlier_end and the earlier kinds
-only when the words point at an earlier result's dates. earlier_result is that result's
+"yesterday", "last 7 days" and "this week" count from today; the earlier kinds only when the
+words point at an earlier result's dates. earlier_result is that result's
 zero-based index, only when clearly identified. Code does all the date arithmetic.
 
 subject other: asking to see another person's records, not mentioning someone in a question about
@@ -914,7 +928,12 @@ def interpret(
                             "content": json.dumps(
                                 {
                                     "validation_error": str(error),
-                                    "instruction": "Return a corrected read_request.",
+                                    # A retry that re-read everything lost what was right: a
+                                    # breakfast follow-up dropped its day, an overview of every
+                                    # metric became eight named ones (the b730 audit).
+                                    "instruction": "Return a corrected read_request. Change "
+                                    "only what this error is about; keep every other field as "
+                                    "it was, its periods and metrics included.",
                                 }
                             ),
                         },

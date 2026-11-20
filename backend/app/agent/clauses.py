@@ -43,7 +43,7 @@ class CalendarPeriod(Fields):
 
 class SameAsEarlier(Fields):
     """Exactly the days of an earlier result, nothing added ('that same day', 'for that
-    interval'). 'That date and the three before it' is days_ending, not this."""
+    interval'). 'That date and the three before it' is beside_earlier, not this."""
 
     kind: Literal["same_as_earlier"]
 
@@ -61,36 +61,33 @@ class ShiftEarlier(Fields):
 
 
 class DaysEnding(Fields):
-    """`length` consecutive days ending on a day: the day counted from `ending`, plus `offset`.
-    'yesterday': 1, today, -1. 'two days before today': 1, today, -2. 'the last 7 days' (today
-    included): 7, today, 0. 'the 5 complete days before today': 5, today, -1. 'that date and the
-    three dates before it': 4, earlier_end, 0. 'the day before that': 1, earlier_end, -1."""
+    """`length` consecutive days ending on a day counted from today, plus `offset`. 'yesterday':
+    1, -1. 'two days before today': 1, -2. 'the last 7 days' (today included): 7, 0. 'the 5
+    complete days before today': 5, -1. Days placed against an earlier result are
+    beside_earlier."""
 
     kind: Literal["days_ending"]
     length: int = Field(ge=1, le=3660)
-    ending: Literal["today", "earlier_end"]
+    ending: Literal["today"] = "today"
     offset: int = Field(ge=-3660, le=366)
 
 
-class AfterEarlier(Fields):
-    """The `length` days right after an earlier result's last day: 'the six days immediately
-    following that block', 'the next 7 days after that'. A shift moves the whole range instead
-    ('move that range forward one day' is shift_earlier +1)."""
+class BesideEarlier(Fields):
+    """`length` days placed against one day of an earlier period, with each edge said: from the
+    earlier period's first or last day (`counted_from`), move `offset` days (+1 the day after, -1
+    the day before, 0 that day itself); the new period starts there or ends there
+    (`new_period`), as the words say.
+    'the next three days', 'start at the next date and cover three days': its_last_day, +1,
+    starts_there, 3. 'the 3 days leading into it', 'the three days just prior': its_first_day, -1,
+    ends_there, 3. 'that date and the three dates before it': its_last_day, 0, ends_there, 4.
+    'the five days ending the day after it': its_last_day, +1, ends_there, 5. 'the day before
+    that': its_first_day, -1, ends_there, 1. 'a week starting two days after it ended':
+    its_last_day, +2, starts_there, 7. The whole period moved by some days is shift_earlier."""
 
-    kind: Literal["after_earlier"]
-    length: int = Field(ge=1, le=3660)
-    relative_to: Literal["earlier_result", "this_clause"] = Field(
-        default="earlier_result",
-        description="earlier_result: a result computed before this message. this_clause: the "
-        "period named first in this same clause ('Oct 9-31 compared with the 4 weeks before').",
-    )
-
-
-class BeforeEarlier(Fields):
-    """The `length` days right before an earlier result's first day: 'the 5 days before that
-    block', 'the preceding week' (7)."""
-
-    kind: Literal["before_earlier"]
+    kind: Literal["beside_earlier"]
+    counted_from: Literal["its_first_day", "its_last_day"]
+    offset: int = Field(ge=-3660, le=3660)
+    new_period: Literal["starts_there", "ends_there"]
     length: int = Field(ge=1, le=3660)
     relative_to: Literal["earlier_result", "this_clause"] = Field(
         default="earlier_result",
@@ -119,8 +116,7 @@ Span = Annotated[
     | Month
     | SameAsEarlier
     | ShiftEarlier
-    | AfterEarlier
-    | BeforeEarlier
+    | BesideEarlier
     | DaysEnding
     | AllHistory,
     Field(discriminator="kind"),
@@ -135,12 +131,18 @@ def period_of(span: Span) -> Period:
         return Period(kind="calendar", unit=span.unit, offset_units=span.offset)
     if isinstance(span, SameAsEarlier):
         return Period(kind="inherit")
-    if isinstance(span, ShiftEarlier | AfterEarlier | BeforeEarlier):
+    if isinstance(span, ShiftEarlier):
         anchor = "own" if span.relative_to == "this_clause" else "previous"
-        if isinstance(span, ShiftEarlier):
-            return Period(kind="relative", anchor=anchor, offset_days=span.days)
-        kind = "after" if isinstance(span, AfterEarlier) else "before"
-        return Period(kind=kind, anchor=anchor, days=span.length)
+        return Period(kind="relative", anchor=anchor, offset_days=span.days)
+    if isinstance(span, BesideEarlier):
+        return Period(
+            kind="beside",
+            anchor="own" if span.relative_to == "this_clause" else "previous",
+            edge="first" if span.counted_from == "its_first_day" else "last",
+            starts=span.new_period == "starts_there",
+            offset_days=span.offset,
+            days=span.length,
+        )
     if isinstance(span, Month):
         last = calendar.monthrange(span.year, span.month)[1]
         return Period(
@@ -149,8 +151,7 @@ def period_of(span: Span) -> Period:
             end=date(span.year, span.month, last),
         )
     if isinstance(span, DaysEnding):
-        anchor = "previous" if span.ending == "earlier_end" else "today"
-        return Period(kind="rolling", anchor=anchor, offset_days=span.offset, days=span.length)
+        return Period(kind="rolling", anchor="today", offset_days=span.offset, days=span.length)
     return Period(kind="history")
 
 
@@ -189,6 +190,11 @@ class DataClause(Fields):
     )
     asks_cause: bool = Field(
         default=False, description="Asks whether one thing causes another, not just goes with it."
+    )
+    every_metric: bool = Field(
+        default=False,
+        description="They ask about every measure they have ('my full set of measurements', "
+        "'everything you track'), not only ones they name.",
     )
 
 
@@ -387,6 +393,27 @@ def from_this_message(clause, question: str) -> bool:
 MIN_OWN_WORDS = 0.6
 
 
+def _every_metric_looked_into(clauses: list) -> list:
+    """Data clauses about every measure ("contrast my full set of measurements for Oct 11-31
+    with Sep 20-Oct 10") are one look across every metric over their days: read as data, the
+    question got eight metrics' averages and no comparison (v8, and the b730 audit)."""
+    wide = [c for c in clauses if isinstance(c, DataClause) and c.every_metric]
+    if not wide or any(isinstance(c, InvestigateClause) for c in clauses):
+        return clauses
+    widest = max(wide, key=lambda c: len(c.periods))
+    looked = InvestigateClause(
+        type="investigate",
+        said=widest.said,
+        focus="overview",
+        periods=widest.periods,
+        earlier_result=widest.earlier_result,
+        every_metric=True,
+    )
+    first = clauses.index(wide[0])
+    rest = [c for c in clauses if c not in wide]
+    return [*rest[:first], looked, *rest[first:]]
+
+
 def reading_from(said: Said, question: str = "") -> Reading:
     """The internal reading: the primary clause's kind, every data clause's part in order (read
     beside a log, a confirmation, a status or a memory request as well), and its own fields."""
@@ -405,6 +432,7 @@ def reading_from(said: Said, question: str = "") -> Reading:
         else c
         for c in clauses
     ]
+    clauses = _every_metric_looked_into(clauses)
     types = [c.type for c in clauses]
     primary = next((t for t in PRIMARY if t in types), None)
     fields: dict = {
