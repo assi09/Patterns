@@ -215,3 +215,7 @@ Approved with a hard $0.007 cap. Request reader only, two turns, each run once.
 | `privacy_memory-01/t2` and `calendar_rollover-01/t3`, two calls each (one retry) | $0.0062 | **$0.0062** |
 
 Allowance: $1.4655 + $0.0062 = **$1.4717 of $2**, leaving **about $0.528**.
+
+### November 20, 2026 — PR 195 independent conversation audit and PHIA gate
+
+Frozen candidate `7ef95c7`. Upper-bound spend was $0.192801780 for the initial conversation run, $0.028625010 to complete the 22 budget-blocked turns and $0.031907418 for the 24-question B1 gate. Total **$0.253334208**. Cumulative spend is approximately **$1.7250 of $2**, leaving **$0.2750**. Results and limitations are in [the audit handoff](independent-audit-v5-handoff.md).

@@ -209,8 +209,10 @@ frozen expected meaning, plus the replay's bad readings where they show a check 
 
 ## After the v5 audit (2026-11-20)
 
-The [v5 audit](independent-audit-v5-handoff.md) found the reader usually right and later code
-losing or contradicting its decision. The [plan](pr-195-v5-reliability-plan.md) fixes the places
+The [v5 audit](independent-audit-v5-handoff.md) recorded 66 pass, 8 partial and 17 fail over 91
+turns. It found the reader usually right and later code losing or contradicting its decision.
+All 25 turns that did not pass are targeted below; they are development material now, so a
+fresh frozen set is what can measure the change. The [plan](pr-195-v5-reliability-plan.md) fixes the places
 where that happens, by rule rather than by wording. Nothing here was checked with a paid run.
 
 - **Date relations.** New period kinds: `after_earlier` / `before_earlier` (the N days right
@@ -230,7 +232,9 @@ where that happens, by rule rather than by wording. Nothing here was checked wit
   replacing the reply keeps their evidence IDs, which the API stores and reopens. Prose may not
   claim a draft or a write the store does not hold, on any turn. A correction the model did not
   make is made by code from the card's own values through the same tool and checks (a new day
-  keeps the local clock time in the account's zone, across daylight saving); if it cannot
+  keeps the local clock time in the account's zone and the real elapsed time, added to the UTC
+  instant, so a workout spanning a clock change keeps its length and a paused one its active
+  time); if it cannot
   be (a paused workout), the old card stays and the reply says so.
 - **Memory resources.** Whether a preference is "still saved" is recall, not tracker status. A
   "keep this out of my profile" read as a forget with nothing to forget says nothing is kept.
@@ -243,7 +247,10 @@ where that happens, by rule rather than by wording. Nothing here was checked wit
   metrics over its named days. Coaching with no supported suggestion of its own is said by code:
   the verified observations, then the one conclusion the tested habits support, cited; the
   model's prose is dropped however it is worded. Coverage notes are per metric (one missing
-  beside another) and, for several metrics, give the days recorded together. Parts of a whole (time in bed and time asleep, stages, efficiency, distance
+  beside another) and, for several metrics, give the days recorded together. In a broad
+  overview, every metric the summary names is cited from the overview's own test, checked
+  against what the clause says of it (up, down, steady); a sentence no record or verified claim
+  supports is left out, and with none left the overview's clear changes are listed by code. Parts of a whole (time in bed and time asleep, stages, efficiency, distance
   and steps) cannot be correlated as explanations.
 - **Guidance.** A qualifier topic ("no equipment") folds into its movement instead of becoming a
   second subject; a follow-up on two movements asks which by name. With a known topic and its
@@ -251,7 +258,7 @@ where that happens, by rule rather than by wording. Nothing here was checked wit
   call no longer bypasses them (its "no" still stands). Cited and saved passages are those that
   share the reply's words.
 
-Tests: `backend/tests/test_v5_reliability.py` (121), each failure beside a control and a minimal
+Tests: `backend/tests/test_v5_reliability.py` (130), each failure beside a control and a minimal
 pair with a different answer, including the regressions found in review of these edits (two date
-cases, a mixed-source loss, daylight saving, coaching wording, a metric hidden by another). Not done: separate claim IDs per overview finding, and a fresh frozen
-evaluation; paired-phrasing consistency is for that run.
+cases, a mixed-source loss, daylight saving twice, coaching wording, a metric hidden by another).
+Not done: a fresh frozen evaluation; paired-phrasing consistency is for that run.
