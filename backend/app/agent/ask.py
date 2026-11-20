@@ -716,35 +716,21 @@ def coaching_outcome(habits: Sequence[Evidence]) -> tuple[str, Claim | None]:
     return text, None
 
 
-# Prose that recommends something, or says nothing can be recommended: either contradicts a
-# conclusion code reached from the tested habits (the v5 audit had both, in opposite directions).
-ADVISES = re.compile(
-    r"\b(?:you could|you can try|try(?:ing)?|consider|adjust\w*|aim (?:for|to)|suggest\w*|"
-    r"recommend\w*|might help|could help|should|worth (?:trying|testing))\b",
-    re.IGNORECASE,
-)
-ADVISES_NONE = re.compile(
-    r"\b(?:don'?t see anything|nothing specific|no (?:habit|option|adjustment|change) "
-    r"(?:to|stands|is)|none of|doesn'?t (?:suggest|point))\b",
-    re.IGNORECASE,
-)
 OBSERVATIONS = ("change", "no_change", "value", "day", "data_quality", "association")
 
 
 def one_coaching_conclusion(result: AgentResult, habits: Sequence[Evidence]) -> None:
-    """A coaching answer with no supported suggestion of its own ends on code's conclusion, once.
-    Prose that advises or rules advice out is replaced by the verified observations, so the
-    message cannot say both "try this" and "nothing is supported"."""
+    """A coaching answer with no supported suggestion of its own is said by code: the verified
+    observations, then the one conclusion the tested habits support. The model's prose is not
+    kept, whatever its wording: a recommendation in it ("an earlier bedtime is the best move")
+    is unsupported by definition here, and guessing advice from words let one through beside
+    "there isn't enough data" (review of 1e29f3a)."""
     text, claim = coaching_outcome(habits)
-    if ADVISES.search(result.summary) or ADVISES_NONE.search(result.summary):
-        seen = [c.text for c in result.claims if c.kind in OBSERVATIONS]
-        result.summary = " ".join(dict.fromkeys([*seen, text]))
-        result.claims = [c for c in result.claims if c.kind in OBSERVATIONS]
-        result.trace.append({"type": "coaching_conclusion", "replaced_prose": True})
-    elif text not in result.notes:
-        result.notes.append(text)
-    if claim is not None:
-        result.claims.append(claim)
+    seen = [c for c in result.claims if c.kind in OBSERVATIONS]
+    result.summary = " ".join(dict.fromkeys([*(c.text for c in seen), text]))
+    result.claims = seen + ([claim] if claim is not None else [])
+    result.notes = [n for n in result.notes if n != text]
+    result.trace.append({"type": "coaching_conclusion", "observations": len(seen)})
     for record in habits:
         result.evidence.setdefault(record.id, record)
 
@@ -833,24 +819,57 @@ def outside_data(typed, frame: pd.DataFrame, today: date) -> str | None:
 
 
 def coverage_notes(typed, frame: pd.DataFrame, today: date) -> list[str]:
-    """What an investigation's named days are missing, said rather than filled: a baseline with
-    no data, part of a period not reached yet or not recorded."""
+    """What an investigation's named days are missing, per metric, said rather than filled: a
+    metric with no readings beside one that has them (steps hid missing HRV when days were counted
+    for any metric, review of 1e29f3a), a baseline with nothing, partial coverage, and for several
+    metrics the days they were recorded together, which is all a relationship can rest on."""
     notes = []
     for part in (p for p in typed.parts if p.windows):
+        metrics = [m for m in part.metrics if m in frame.columns]
         for index, window in enumerate(part.windows):
-            days = _days_with(frame, part.metrics, window)
             when = _when(window, today)
-            if index and not days:
+            each = {m: _days_with(frame, [m], window) for m in metrics}
+            if not metrics:
+                days = _days_with(frame, [], window)
+                if index and not days:
+                    notes.append(f"There's no data {when} to compare with.")
+                continue
+            empty = [m for m, n in each.items() if not n]
+            if index and empty:
                 notes.append(
-                    f"There's no {_names(part.metrics)} {when} to compare with, so that side of "
-                    "the comparison is missing."
+                    f"There's no {_names(empty)} {when} to compare with, so that side of the "
+                    "comparison is missing."
                 )
-            elif 0 < days < window.days:
+            elif empty and len(empty) < len(metrics):
+                found = [m for m in metrics if m not in empty]
                 notes.append(
-                    f"Your data has {_names(part.metrics)} on {days} of the {window.days} days "
-                    f"{when}; the other days are left out, not filled in."
+                    f"There's no {_names(empty)} {when}, so only {_names(found)} can be looked "
+                    "at there."
                 )
+            for metric, days in each.items():
+                if 0 < days < window.days:
+                    notes.append(
+                        f"Your data has {label(metric)} on {days} of the {window.days} days "
+                        f"{when}; the other days are left out, not filled in."
+                    )
+            if len(metrics) >= 2 and not empty:
+                rows = frame.loc[pd.Timestamp(window.start) : pd.Timestamp(window.end), metrics]
+                paired = int(rows.notna().all(axis=1).sum())
+                if paired < min(each.values()) or paired < window.days:
+                    notes.append(
+                        f"{_first_up(_and(metrics))} were recorded together on {paired} of the "
+                        f"{window.days} days {when}; any link between them rests on those days."
+                    )
     return list(dict.fromkeys(notes))
+
+
+def _and(metrics: Sequence[str]) -> str:
+    names = [label(m) for m in metrics]
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _first_up(text: str) -> str:
+    return text[:1].upper() + text[1:]
 
 
 def ask(

@@ -351,6 +351,31 @@ def test_days_the_data_reaches_without_the_asked_metric_are_still_missing():
     )
 
 
+def test_one_metric_missing_beside_another_is_said_and_pairs_are_counted():
+    """Two days of steps hid zero HRV readings when days were counted for any metric."""
+    frame = frame_until(TODAY, ("steps", "hrv_ms"))
+    frame["hrv_ms"] = float("nan")
+    both = investigation(("2026-11-18", "2026-11-19"), metrics=("steps", "hrv_ms"))
+    assert outside_data(both, frame, TODAY) is None  # steps are there to look at
+    notes = coverage_notes(both, frame, TODAY)
+    assert any("no heart rate variability" in n and "only steps" in n for n in notes)
+    frame.loc["2026-11-18", "hrv_ms"] = 40.0
+    frame.loc["2026-11-18", "steps"] = float("nan")
+    notes = coverage_notes(both, frame, TODAY)
+    assert any("recorded together on 0 of the 2 days" in n for n in notes)
+    assert outside_data(
+        investigation(("2026-11-18", "2026-11-19"), metrics=("hrv_ms",)),
+        frame_until(TODAY, ("steps", "hrv_ms")).assign(hrv_ms=float("nan")),
+        TODAY,
+    )
+
+
+def test_fully_recorded_metrics_get_no_notes():
+    frame = frame_until(TODAY, ("steps", "hrv_ms"))
+    both = investigation(("2026-11-10", "2026-11-19"), metrics=("steps", "hrv_ms"))
+    assert coverage_notes(both, frame, TODAY) == []
+
+
 def test_a_missing_baseline_and_a_partly_covered_period_are_noted():
     frame = frame_until(TODAY)
     notes = coverage_notes(
@@ -511,42 +536,46 @@ def observation() -> Claim:
     "summary",
     [
         "You could try a small change to your bedtime so you spend more time in bed.",
+        "An earlier bedtime is the best move for you.",  # no advice word (review of 1e29f3a)
+        "Go to bed earlier.",
         COACHING_NO_ANSWER,
+        "Your sleep dipped mid-month.",
     ],
 )
-@pytest.mark.parametrize("supported", [True, False])
+@pytest.mark.parametrize("supported", [True, False, None])
 def test_coaching_says_one_thing_whatever_the_prose_said(summary, supported):
     """The v5 audit: a bedtime suggestion then "none was supported", and "I don't see anything"
-    then a supported bedtime. The prose's verdict goes; code's, from the tested habits, stays."""
+    then a supported bedtime. With no suggestion claim of its own, the prose goes, however it is
+    worded; the reply as the API assembles it is the observations and code's one conclusion."""
     result = AgentResult(
         run_id="x", stop_reason="submitted", summary=summary, claims=[observation()]
     )
-    one_coaching_conclusion(result, [habits(supported)])
-    text = " ".join([result.summary, *result.notes])
-    assert ("One option your own days support" in text) == supported
-    assert ("None of the everyday habits" in text) == (not supported)
-    assert "You could try" not in text and "don't see anything" not in text
-    assert "Time asleep fell." in text
-    outcome = result.claims[-1]
-    assert outcome.kind == ("suggestion" if supported else "no_change")
-    assert outcome.evidence_ids[0] in result.evidence
-
-
-def test_a_recap_without_a_verdict_keeps_its_words_and_gets_the_conclusion_added():
-    result = AgentResult(
-        run_id="x",
-        stop_reason="submitted",
-        summary="Your sleep dipped mid-month.",
-        claims=[observation()],
-    )
-    one_coaching_conclusion(result, [habits(False)])
-    assert result.summary == "Your sleep dipped mid-month." and result.notes
+    one_coaching_conclusion(result, [] if supported is None else [habits(supported)])
+    shown = chat.answer_text(result.summary, [c.text for c in result.claims], result.notes)
+    assert summary not in shown
+    assert shown.startswith("Time asleep fell.")
+    assert ("One option your own days support" in shown) == (supported is True)
+    assert ("None of the everyday habits" in shown) == (supported is False)
+    assert ("isn't enough" in shown) == (supported is None)
+    if supported is not None:
+        outcome = result.claims[-1]
+        assert outcome.kind == ("suggestion" if supported else "no_change")
+        assert outcome.evidence_ids[0] in result.evidence
 
 
 def test_too_little_data_is_said_with_no_claim():
     result = AgentResult(run_id="x", stop_reason="submitted", summary=COACHING_NO_ANSWER)
     one_coaching_conclusion(result, [])
     assert "isn't enough" in result.summary and not result.claims
+
+
+def test_unsupported_advice_claims_go_with_the_prose():
+    advice = Claim(text="Try an earlier bedtime.", kind="guidance", evidence_ids=["p1"])
+    result = AgentResult(
+        run_id="x", stop_reason="submitted", summary="x", claims=[observation(), advice]
+    )
+    one_coaching_conclusion(result, [habits(False)])
+    assert [c.kind for c in result.claims] == ["change", "no_change"]
 
 
 def test_a_part_of_a_whole_cannot_explain_the_whole():
@@ -875,3 +904,43 @@ class Synchronous:
         if fn is chat._answer:
             return self.pool.submit(fn, *args, **kwargs)
         fn(*args, **kwargs)
+
+
+# ---- a corrected day keeps the local clock time, across daylight saving ----
+
+BEIRUT = "Asia/Beirut"  # leaves summer time on Sunday, Oct 25, 2026
+
+
+@pytest.mark.parametrize("moved_to", [date(2026, 10, 27), date(2026, 10, 20), date(2026, 3, 30)])
+def test_a_workout_moved_to_another_day_keeps_its_local_clock_time(moved_to):
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo(BEIRUT)
+    start = datetime(2026, 10, 23, 12, 0, tzinfo=zone)
+    prior = walk(start.astimezone(UTC), 30)
+    moved = chat.corrected_payload(prior, None, moved_to, zone)
+    new_start = datetime.fromisoformat(moved["startTime"]).astimezone(zone)
+    new_end = datetime.fromisoformat(moved["endTime"])
+    assert (new_start.date(), new_start.hour, new_start.minute) == (moved_to, 12, 0)
+    assert new_end - datetime.fromisoformat(moved["startTime"]) == timedelta(minutes=30)
+    assert moved["activeSeconds"] == 1800
+
+
+def test_a_meal_moved_to_another_day_keeps_its_local_clock_time():
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo(BEIRUT)
+    eaten = datetime(2026, 10, 23, 8, 30, tzinfo=zone).astimezone(UTC)
+    prior = logged("BREAKFAST", "2026-10-23", 400, 20) | {"consumedAt": eaten.isoformat()}
+    moved = chat.corrected_payload(prior, None, date(2026, 10, 27), zone)
+    local = datetime.fromisoformat(moved["consumedAt"]).astimezone(zone)
+    assert (local.date(), local.hour, local.minute) == (date(2026, 10, 27), 8, 30)
+
+
+def test_a_new_duration_keeps_the_start_instant():
+    from zoneinfo import ZoneInfo
+
+    start = datetime(2026, 10, 23, 9, 0, tzinfo=UTC)
+    moved = chat.corrected_payload(walk(start, 30), 8, None, ZoneInfo(BEIRUT))
+    assert datetime.fromisoformat(moved["startTime"]) == start
+    assert datetime.fromisoformat(moved["endTime"]) == start + timedelta(minutes=8)

@@ -294,7 +294,9 @@ def test_coaching_that_gives_no_option_gets_one_from_code_or_says_why_not(steps_
     )
     reply = ask(llm, Router("lookup"), steps_fell, "What could I try for my sleep?", today=END)
     habits = [e for e in reply.result.evidence.values() if e.tool == "habit_options"]
-    assert coaching_fallback(habits) in reply.result.notes
+    # Code's conclusion is the reply's, not a note beside the model's words (review of 1e29f3a).
+    assert reply.result.summary.endswith(coaching_fallback(habits))
+    assert coaching_fallback(habits) not in reply.result.notes
 
 
 def test_a_why_with_no_tested_relationship_says_what_it_cannot_tell(steps_fell):

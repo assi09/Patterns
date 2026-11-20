@@ -229,7 +229,8 @@ where that happens, by rule rather than by wording. Nothing here was checked wit
   router said. Side reads keep their claims apart (`AgentResult.side_claims`), so a card's note
   replacing the reply keeps their evidence IDs, which the API stores and reopens. Prose may not
   claim a draft or a write the store does not hold, on any turn. A correction the model did not
-  make is made by code from the card's own values through the same tool and checks; if it cannot
+  make is made by code from the card's own values through the same tool and checks (a new day
+  keeps the local clock time in the account's zone, across daylight saving); if it cannot
   be (a paused workout), the old card stays and the reply says so.
 - **Memory resources.** Whether a preference is "still saved" is recall, not tracker status. A
   "keep this out of my profile" read as a forget with nothing to forget says nothing is kept.
@@ -239,9 +240,10 @@ where that happens, by rule rather than by wording. Nothing here was checked wit
   data is read, and medical words never let an investigation override the router's refusal.
   Coverage is checked per metric and per period (a future month, a metric missing on those days,
   a missing baseline, partial coverage). A run with no verified answer describes its named
-  metrics over its named days. Coaching ends on one conclusion from the tested habits: prose
-  that advises, or rules advice out, is replaced by the verified observations plus that
-  conclusion, cited. Parts of a whole (time in bed and time asleep, stages, efficiency, distance
+  metrics over its named days. Coaching with no supported suggestion of its own is said by code:
+  the verified observations, then the one conclusion the tested habits support, cited; the
+  model's prose is dropped however it is worded. Coverage notes are per metric (one missing
+  beside another) and, for several metrics, give the days recorded together. Parts of a whole (time in bed and time asleep, stages, efficiency, distance
   and steps) cannot be correlated as explanations.
 - **Guidance.** A qualifier topic ("no equipment") folds into its movement instead of becoming a
   second subject; a follow-up on two movements asks which by name. With a known topic and its
@@ -249,7 +251,7 @@ where that happens, by rule rather than by wording. Nothing here was checked wit
   call no longer bypasses them (its "no" still stands). Cited and saved passages are those that
   share the reply's words.
 
-Tests: `backend/tests/test_v5_reliability.py` (103), each failure beside a control and a minimal
-pair with a different answer, including the two date regressions and the mixed-source loss found
-in review of these edits. Not done: separate claim IDs per overview finding, and a fresh frozen
+Tests: `backend/tests/test_v5_reliability.py` (121), each failure beside a control and a minimal
+pair with a different answer, including the regressions found in review of these edits (two date
+cases, a mixed-source loss, daylight saving, coaching wording, a metric hidden by another). Not done: separate claim IDs per overview finding, and a fresh frozen
 evaluation; paired-phrasing consistency is for that run.

@@ -456,10 +456,18 @@ def forget_from(sessions: Sessions, agent: AgentParts, user_id, question_id, tex
         return NOT_HEARD
 
 
+def _on_day(moment: datetime, day, zone) -> datetime:
+    """The same local clock time on another local day, in the account's named zone: adding days
+    to a fixed offset moved a noon walk to 11:00 across a daylight-saving change."""
+    local = moment.astimezone(zone)
+    return datetime.combine(day, local.time().replace(tzinfo=None), tzinfo=zone)
+
+
 def corrected_payload(prior: dict, minutes: float | None, day, zone) -> dict | None:
     """The waiting card with only what the correction states changed: a new duration keeps the
-    start and ends that long after it; a new day keeps the clock times. None when it states
-    neither, or when a paused workout makes "the duration" unclear (active time or elapsed)."""
+    start and ends that long after it; a new day keeps the local clock times and the elapsed
+    time. None when it states neither, or when a paused workout makes "the duration" unclear
+    (active time or elapsed)."""
     if minutes is None and day is None:
         return None
     payload = {
@@ -474,14 +482,13 @@ def corrected_payload(prior: dict, minutes: float | None, day, zone) -> dict | N
             end = start + timedelta(minutes=minutes)
             payload["activeSeconds"] = round(minutes * 60)
         if day is not None:
-            shift = timedelta(days=(day - start.astimezone(zone).date()).days)
-            start, end = start + shift, end + shift
+            moved = _on_day(start, day, zone)
+            start, end = moved, moved + (end - start)
         return payload | {"startTime": start.isoformat(), "endTime": end.isoformat()}
     if minutes is not None:
         return None  # a meal has no duration: the model's to read
-    eaten = datetime.fromisoformat(prior["consumedAt"])
-    shift = timedelta(days=(day - eaten.astimezone(zone).date()).days)
-    return payload | {"consumedAt": (eaten + shift).isoformat()}
+    eaten = _on_day(datetime.fromisoformat(prior["consumedAt"]), day, zone)
+    return payload | {"consumedAt": eaten.isoformat()}
 
 
 def noted_reply(statuses: list[str] | None) -> str:
