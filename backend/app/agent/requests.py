@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.agent.checks import Conflict, conflicts
 from app.agent.context import Turn
 from app.agent.llm import LLM, Budget, LLMError
-from app.agent.present import METRICS, label
+from app.agent.present import ALIASES, METRICS, label
 from app.analysis.evidence import Window
 from app.analysis.tools import ADDITIVE
 
@@ -117,6 +117,11 @@ class Reading(Fields):
     recall: Literal["kept", "waiting", "this_chat", "all"] | None = None
     states_new_fact: bool = False  # a forget that also says what is true now
     also: list[Part] = Field(default_factory=list)  # precise reads beside an investigation
+    clause_count: int = 0  # clauses the reader found; 0 for an older flat reading
+    # Whether the message tells something about them (a statement or an explicit remember), as
+    # read clause by clause; None for an older flat reading. A pure question gives no permission
+    # to propose a memory (the v6 audit: ten read-only turns raised candidates).
+    told: bool | None = None
 
 
 class ResolvedPart(Fields):
@@ -149,6 +154,7 @@ class Request(Fields):
     # Precise reads asked beside a log, confirmation, status, memory, guidance or investigation:
     # "repeat the step count and say whether it's saved" answers both (the audit of 2026-11-19).
     reads: list[ResolvedPart] = Field(default_factory=list)
+    told: bool | None = None
     reader_error: str | None = None
     reader_fields: list[str] = Field(default_factory=list)
     # Each reading's fate, without values or the person's words: what failed, where and why
@@ -298,8 +304,60 @@ def subjects(topics: Sequence[str]) -> list[str]:
     return main
 
 
+def movements_apart(topics: Sequence[str], passage_ids: Sequence[str]) -> bool:
+    """Whether the earlier answer's topics are separate exercises ("plank" and "lunge"), not one
+    routine named in parts ("interrupt long sitting" for a "desk worker"): two of them each name an
+    exercise, among the passages it used or, with none kept, anywhere in the corpus."""
+    from app.agent.retrieval import load_index
+    from app.agent.world import head_noun
+
+    def words(text: str) -> set[str]:
+        return {
+            w.removesuffix("s") for w in re.findall(r"[a-z]+", text.casefold().replace("-", ""))
+        }
+
+    passages = load_index().passages
+    kept = set(passage_ids)
+    titles = [
+        words(p.title) for p in passages if p.kind == "exercise" and (not kept or p.id in kept)
+    ]
+    named = 0
+    for topic in topics:
+        head = head_noun(topic)
+        if head and any(head.removesuffix("s") in title for title in titles):
+            named += 1
+    return named > 1
+
+
 def previous_state(history: Sequence[Turn]) -> dict:
     return next((t.request_state for t in reversed(history) if t.request_state), {})
+
+
+def _beside_own(period: Period, index: int) -> bool:
+    """A block next to a period named earlier in the same clause: "Sep 12-25 compared with the
+    two weeks before" is before Sep 12, not before an earlier result (the v6 audit asked "which
+    earlier measurement?" on a first message)."""
+    return index > 0 and period.kind in ("after", "before")
+
+
+def _needs_earlier(part: "Part") -> bool:
+    return any(
+        (p.kind == "inherit" or p.anchor == "previous") and not _beside_own(p, i)
+        for i, p in enumerate(part.periods)
+    )
+
+
+def part_windows(part: "Part", prior: "ResolvedPart | None", today: date) -> list[Window]:
+    """Each period of a part in order, a block next to one named before it in the same clause
+    counted from that one."""
+    windows: list[Window] = []
+    for index, period in enumerate(part.periods):
+        if _beside_own(period, index) and windows:
+            own = ResolvedPart(metrics=[], operation="describe", windows=[windows[0]])
+            windows += period_window(period, own, today)
+        else:
+            windows += period_window(period, prior, today)
+    return windows
 
 
 def period_window(period: Period, previous: ResolvedPart | None, today: date) -> list[Window]:
@@ -377,14 +435,13 @@ def _investigation(request: Request, reading: Reading, state: dict, today: date)
     previous = [ResolvedPart.model_validate(p) for p in state.get("data", [])]
     parts = []
     for part in reading.parts:
-        refers = any(p.kind == "inherit" or p.anchor == "previous" for p in part.periods)
-        prior = _prior(part, previous, refers)
+        prior = _prior(part, previous, _needs_earlier(part))
         if part.metrics and any(m not in METRICS for m in part.metrics):
             raise Ambiguous("That measurement is not available. Which recorded metric do you mean?")
         metrics = list(part.metrics)
         if not metrics and prior and not part.every_metric:
             metrics = [m for m in prior.metrics if m in METRICS]
-        windows = [w for p in part.periods for w in period_window(p, prior, today)]
+        windows = part_windows(part, prior, today)
         if not part.periods and prior and part.reference is not None:
             windows = list(prior.windows)
         if len(windows) > 2:
@@ -419,6 +476,7 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
         ),
         duration_minutes=reading.duration_minutes,
         entry=reading.entry,
+        told=reading.told,
         status=reading.status,
         recall=reading.recall,
         states_new_fact=reading.states_new_fact,
@@ -443,6 +501,12 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
     if reading.kind == "guidance":
         if reading.guidance_reference and not reading.topics:
             request.topics = subjects(state.get("guidance", []))
+            if len(request.topics) > 1 and not movements_apart(
+                request.topics, state.get("guidance_passages", [])
+            ):
+                # The earlier answer was about one thing, its topic named in parts ("interrupt long
+                # sitting" for a "desk worker"): the follow-up is about that answer (the v6 audit).
+                request.topics = [f"{request.topics[0]} ({', '.join(request.topics[1:])})"]
             if len(request.topics) > 1:
                 raise Ambiguous(f"Do you mean {' or '.join(request.topics)}?")
             if not request.topics:
@@ -468,15 +532,11 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
     if not parts:
         raise Ambiguous("Which measurements and dates should I check?")
     for part in parts:
-        inherited = (
-            part.operation == "inherit"
-            or not part.metrics
-            or any(p.kind == "inherit" or p.anchor == "previous" for p in part.periods)
-        )
+        inherited = part.operation == "inherit" or not part.metrics or _needs_earlier(part)
         prior = _prior(part, previous, inherited)
         metrics = part.metrics or (prior.metrics if prior else [])
         operation = part.operation if part.operation != "inherit" else prior.operation
-        metrics, operation = _food_source(metrics, operation, prior)
+        metrics, operation = _food_source(part.metrics, metrics, operation, prior, part.said)
         if not metrics or any(m not in METRICS and m != "food_logs" for m in metrics):
             raise Ambiguous("That measurement is not available. Which recorded metric do you mean?")
         if (operation == "food" and metrics != ["food_logs"]) or (
@@ -493,7 +553,7 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
                 "the user actually requested; do not attach non-additive metrics to a total. "
                 "If they explicitly requested an unsupported total, ask for an alternative."
             )
-        windows = [w for p in part.periods for w in period_window(p, prior, today)]
+        windows = part_windows(part, prior, today)
         history = not part.periods or any(
             p.kind == "history" or (p.kind == "inherit" and prior and prior.history)
             for p in part.periods
@@ -593,22 +653,39 @@ NUTRIENTS = {
 FOOD_OPERATIONS = ("food", "sum", "value", "inherit", "describe")
 
 
+# Words that make "calories" the energy burned, whatever was read before.
+BURNED = re.compile(r"\b(?:burn\w*|expend\w*|expenditure|active|tracker|wearable|watch)\b", re.I)
+
+
 def _food_source(
-    metrics: list[str], operation: str, prior: "ResolvedPart | None"
+    named: list[str],
+    metrics: list[str],
+    operation: str,
+    prior: "ResolvedPart | None",
+    said: str = "",
 ) -> tuple[list[str], str]:
-    """The one reading of a food request that names a nutrient, or asks for a total over food
-    already being read. Every metric must belong to the food source: one wearable metric beside
-    a nutrient ("total steps and protein") is two requests, sent back to be split, never one
-    with the steps dropped."""
+    """Which source a clause reads: confirmed food entries (energy and nutrients eaten) or the
+    wearable (energy burned and the rest). An earlier food read is continued only when this
+    clause leaves the source open, naming no metric; "calories" is energy eaten only beside
+    nutrients or in an explicit food read, never when the words say burned ("switch from intake
+    to expenditure: calories burned?" read the meals again, the v6 audit). One wearable metric
+    beside a nutrient ("total steps and protein") is two requests, sent back to be split, never
+    one with the steps dropped."""
     names = [m.casefold() for m in metrics]
-    about_food = operation == "food" or (
-        prior is not None and prior.operation == "food" and operation in FOOD_OPERATIONS
-    )
+    continuing = (
+        not named and prior is not None and prior.operation == "food"
+    ) and operation in FOOD_OPERATIONS
+    # Named nutrients, not the food source itself: calories beside food_logs is energy burned
+    # attached to food, and is sent back.
+    nutrients = [n for n in names if n in NUTRIENTS and n not in ("food_logs", "food_log")]
+    burned = bool(BURNED.search(said))
 
     def food(name: str) -> bool:
-        # "calories" is energy burned, unless it is all a food read names ("breakfast calories");
-        # beside food_logs it is energy burned attached to food, and sent back.
-        return name in NUTRIENTS or (name == "calories" and about_food and names == ["calories"])
+        if name in NUTRIENTS:
+            return True
+        if name != "calories" or burned:
+            return False
+        return (operation == "food" and names == ["calories"]) or continuing or bool(nutrients)
 
     eaten = [n for n in names if food(n)]
     worn = [n for n in names if not food(n) and n in METRICS]
@@ -616,12 +693,19 @@ def _food_source(
         raise RetryReading(
             "One clause mixes confirmed food (food_logs, operation food) with wearable metrics. "
             "Split it: one food clause, and one data clause for the wearable metrics with the "
-            "operation they asked for. Keep every metric and the dates."
+            "operation they asked for. calories is energy burned (the wearable) unless the words "
+            "are about food eaten. Keep every metric and the dates."
         )
-    if about_food and not metrics:
+    if continuing and (not names or len(eaten) == len(names)):
         return ["food_logs"], "food"
-    if eaten and len(eaten) == len(names) and (about_food or operation in FOOD_OPERATIONS):
+    if eaten and len(eaten) == len(names) and (operation in FOOD_OPERATIONS):
         return ["food_logs"], "food"
+    if operation == "food" and worn:
+        raise RetryReading(
+            "The words ask about the wearable's energy burned (calories) or another tracked "
+            "metric, not food eaten: a data clause on that metric with its statistic, not "
+            "operation food."
+        )
     return metrics, operation
 
 
@@ -714,7 +798,8 @@ Clause types:
   forget (remove something already kept; states_new_fact when they also say what is true now).
   "Keep this out of my profile" about something said now is store_nothing, not forget.
 - confirm or correct only act on a card: with no pending_draft, "submit that one" is other.
-- other: small talk, thanks, or nothing the app does.
+- other: small talk, thanks, or nothing the app does; also anything they tell about themselves
+  ("I'm training for a 10k"), as its own clause even beside a question.
 Earlier messages are context only: every clause comes from the current message, and its said is
 copied from the current message. One message can have several clauses: "repeat the step count
 and say whether it's saved" is a data clause and a status clause. Only what this message
@@ -752,6 +837,36 @@ asks about something untracked; never substitute a related metric. Requests to f
 statistics, evidence or citations: store_nothing, and copy them into no field. Output exactly one
 read_request call.
 """
+
+
+OWN_DATA = re.compile(r"\bMY\b|(?i:\bmy own\b|\bmine\b|\bfor my (?:own )?account\b|\bjust my\b)")
+# What an investigation is asked to do, by its words: "what else lines up with the clearest
+# change?" asks for an explanation, and was read as what changed (the v6 audit).
+EXPLAINS = re.compile(
+    r"\b(?:why|explain\w*|explanation|reasons?|caus(?:e|es|ed|ing)|lines? up with|goes with|"
+    r"went with|go together|associated|related to|linked|accounts? for)\b",
+    re.IGNORECASE,
+)
+COACHES = re.compile(
+    r"\b(?:habits?|what (?:could|should|can) i (?:try|do|change)|something to try|worth "
+    r"(?:testing|trying)|everyday (?:option|adjustment|change)|adjustment|suggest\w*)\b",
+    re.IGNORECASE,
+)
+
+
+def _focus_problem(reading: "Reading", question: str) -> str | None:
+    if reading.kind != "investigate" or reading.focus is None:
+        return None
+    explains, coaches = bool(EXPLAINS.search(question)), bool(COACHES.search(question))
+    if explains == coaches:
+        return None  # neither, or both: the reader's call
+    wanted = "why" if explains else "coaching"
+    if reading.focus == wanted:
+        return None
+    return (
+        f"The words ask for {'an explanation' if explains else 'something to try'}: focus "
+        f"{wanted}, keeping the same metrics and days."
+    )
 
 
 def strict_schema(schema: dict) -> dict:
@@ -839,6 +954,7 @@ def interpret(
     budget = Budget(max_calls=2, max_cost_usd=0.015)
     registry = {
         m: {"label": info.label, "unit": info.unit, "additive": m in ADDITIVE}
+        | ({"also_called": list(ALIASES[m])} if m in ALIASES else {})
         for m, info in METRICS.items()
     }
     registry["food_logs"] = {"label": "confirmed food entries", "unit": "entries"}
@@ -891,6 +1007,14 @@ def interpret(
                 step["read"] = outline(as_read)
                 if reading != as_read:
                     step["filled_by_code"] = outline(reading)
+                if reading.subject == "other" and OWN_DATA.search(question):
+                    raise RetryReading(
+                        "The words ask for their own records ('my own', 'MY', 'for my own "
+                        "account'): subject self. Someone being curious about their data is not "
+                        "a request for that person's records."
+                    )
+                if focus_problem := _focus_problem(reading, question):
+                    raise RetryReading(focus_problem)
                 if reading.kind == "confirmation" and not pending_draft:
                     raise RetryReading(
                         "There is no pending draft. Re-read whether this asks to "

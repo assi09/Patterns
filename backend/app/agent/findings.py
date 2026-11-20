@@ -12,25 +12,14 @@ import re
 from collections.abc import Sequence
 
 from app.agent.agent import AgentResult
-from app.agent.present import METRICS, label
+from app.agent.present import ALIASES, METRICS, label
 from app.agent.tools import evidence_payload
 from app.agent.verifier import Claim
 from app.agent.verifier import _significant as is_significant
 from app.analysis.evidence import Evidence
 
 # Other names the answers use for a metric; the catalog labels are read as well.
-ALIASES = {
-    "hrv": "hrv_ms",
-    "heart rate variability": "hrv_ms",
-    "rem": "rem_sleep_minutes",
-    "calories": "calories",
-    "check-in rating": "checkin_rating",
-    "check-in": "checkin_rating",
-    "resting pulse": "resting_hr",
-    "time awake": "awake_in_bed_minutes",
-    "step count": "steps",
-    "azm": "active_zone_minutes",
-}
+EXTRA_NAMES = {"calories": "calories"}
 
 
 def _names() -> list[tuple[str, str]]:
@@ -39,7 +28,8 @@ def _names() -> list[tuple[str, str]]:
         text = info.label.lower()
         names[text] = metric
         names[re.sub(r"\s*\(.*?\)", "", text).strip()] = metric
-    names |= ALIASES
+    names |= {alias: metric for metric, aliases in ALIASES.items() for alias in aliases}
+    names |= EXTRA_NAMES
     return sorted(names.items(), key=lambda item: -len(item[0]))
 
 
@@ -72,7 +62,8 @@ DOWN = re.compile(
 )
 STEADY = re.compile(
     r"\b(?:steady|held|unchanged|stable|flat|similar|the same|no clear|not clearly|didn'?t "
-    r"(?:clearly )?(?:change|move|shift)|did not (?:clearly )?(?:change|move|shift))\b",
+    r"(?:clearly )?(?:change|move|shift)|did not (?:clearly )?(?:change|move|shift)|"
+    r"nothing else (?:\w+ )?changed)\b",
     re.IGNORECASE,
 )
 SENTENCE = re.compile(r"(?<=[.!?])\s+")
@@ -158,37 +149,61 @@ def overview_summary(records: Sequence[Evidence]) -> tuple[str, list[Evidence]]:
     return "", []
 
 
+# "The rest looked steady", "everything else held": a claim about every tested metric the answer
+# did not name. It was never checked, and was false twice (the v6 audit).
+BLANKET = re.compile(
+    r"\b(?:the rest|everything else|all (?:the )?other\w*|other (?:measures|metrics|numbers|"
+    r"markers|areas)|the remaining\w*|remaining (?:measures|metrics)|nothing else)\b",
+    re.IGNORECASE,
+)
+PIECE = re.compile(r"\s*;\s*")
+
+
 def cite_findings(result: AgentResult, records: Sequence[Evidence]) -> None:
     """Each metric the summary names gets a claim citing what supports what is said of it; a
-    sentence saying something no record or verified claim supports is left out."""
+    blanket "the rest held steady" is checked against every tested metric it covers. A piece of
+    a sentence saying something no record or verified claim supports is left out; the clear
+    changes a dropped blanket claim hid are listed with their evidence."""
     if not result.summary or not records:
         return
     by_metric = {r.metrics[0]: r for r in records if r.metrics}
     claims = {c.metric: c for c in result.claims if c.metric}
-    kept, needed, dropped = [], [], 0
+    mentioned = set(named(result.summary))
+    sentences, needed, dropped, blanket_dropped = [], [], 0, False
     for sentence in SENTENCE.split(result.summary.strip()):
-        cited_here, supported = [], True
-        for clause in CLAUSE.split(sentence):
-            said = verdict(clause)
-            for metric in named(clause):
-                record, claim = by_metric.get(metric), claims.get(metric)
-                if claim is not None and _claim_agrees(claim, said):
-                    continue
-                if record is not None and _agrees(record, said):
-                    cited_here.append(record)
-                    continue
-                supported = False
-        if supported:
-            kept.append(sentence)
-            needed += cited_here
-        else:
-            dropped += 1
-    if dropped and not kept:
+        pieces = []
+        for piece in PIECE.split(sentence.rstrip(".!? ")):
+            ok, cited = _supported(piece, by_metric, claims, mentioned)
+            if ok:
+                pieces.append(piece)
+                needed += cited
+            else:
+                dropped += 1
+                blanket_dropped |= bool(BLANKET.search(piece))
+        if pieces:
+            end = sentence.rstrip()[-1] if sentence.rstrip()[-1:] in ".!?" else "."
+            sentences.append("; ".join(pieces) + end)
+    if blanket_dropped:
+        hidden = [
+            r
+            for metric, r in by_metric.items()
+            if metric not in mentioned and "difference" in r.stats and is_significant(r)
+        ]
+        if hidden:
+            hidden.sort(key=lambda r: r.stats.get("overview_rank", 99))
+            listed = hidden[:MAX_LISTED]
+            sentences.append(
+                "Also clearly changed: "
+                + "; ".join(finding_claim(r).text[:-1] for r in listed)
+                + "."
+            )
+            needed += listed
+    if dropped and not sentences:
         text, listed = overview_summary(records)
         if not text:
             return
-        kept, needed = [text], listed
-    result.summary = " ".join(kept)
+        sentences, needed = [text], listed
+    result.summary = " ".join(sentences)
     have = {i for c in result.claims for i in c.evidence_ids}
     for record in {r.id: r for r in needed}.values():
         result.evidence.setdefault(record.id, record)
@@ -196,9 +211,26 @@ def cite_findings(result: AgentResult, records: Sequence[Evidence]) -> None:
             result.claims.append(finding_claim(record))
             have.add(record.id)
     result.trace.append(
-        {
-            "type": "findings_cited",
-            "dropped_sentences": dropped,
-            "cited": len({r.id for r in needed}),
-        }
+        {"type": "findings_cited", "dropped_pieces": dropped, "cited": len({r.id for r in needed})}
     )
+
+
+def _supported(piece, by_metric, claims, mentioned) -> tuple[bool, list[Evidence]]:
+    cited: list[Evidence] = []
+    for clause in CLAUSE.split(piece):
+        said = verdict(clause)
+        if BLANKET.search(clause) and said is not None:
+            # The rest: every tested metric the answer names nowhere, except those named here.
+            here = set(named(clause))
+            covered = [r for m, r in by_metric.items() if m not in mentioned or m in here]
+            if not all(_agrees(r, said) for r in covered if "difference" in r.stats):
+                return False, []
+        for metric in named(clause):
+            record, claim = by_metric.get(metric), claims.get(metric)
+            if claim is not None and _claim_agrees(claim, said):
+                continue
+            if record is not None and _agrees(record, said):
+                cited.append(record)
+                continue
+            return False, []
+    return True, cited

@@ -858,28 +858,67 @@ def test_keeping_a_chat_statement_out_of_memory_is_not_a_forget(setup):  # noqa:
     assert kept["waiting"] == [] and kept["kept"] == []
 
 
+STEPS_DAY = "How many steps did I take on July 20?"
+COUNT_WEEK = "During Jul 1-7 count the days on which my steps were 6000 or above."
+NEXT_DOOR = "I'd like the July 9 step total for the person next door."
+TRAINING = "I'm training for a 10k."
+
+
 @pytest.mark.parametrize(
-    "clause, listened",
+    "words, clauses, subject, listened",
     [
         (
-            {
-                "type": "memory",
-                "said": "Remind me what I said here about weekends.",
-                "action": "recall",
-                "recall": "this_chat",
-                "states_new_fact": False,
-            },
+            "Remind me what I said here about weekends.",
+            [
+                {
+                    "type": "memory",
+                    "said": "Remind me what I said here about weekends.",
+                    "action": "recall",
+                    "recall": "this_chat",
+                    "states_new_fact": False,
+                }
+            ],
+            "self",
             False,
         ),
+        # The v6 audit: pure questions, however personal their words, raised candidates.
+        (STEPS_DAY, [data(STEPS_DAY, ["steps"], "value", dates(DAY.isoformat()))], "self", False),
         (
-            data(
-                "How many steps did I take on July 20?", ["steps"], "value", dates(DAY.isoformat())
-            ),
+            COUNT_WEEK,
+            [
+                data(
+                    COUNT_WEEK,
+                    ["steps"],
+                    "count",
+                    dates("2026-07-01", "2026-07-07"),
+                    comparison=">=",
+                    threshold=6000,
+                )
+            ],
+            "self",
+            False,
+        ),
+        (NEXT_DOOR, [data(NEXT_DOOR, ["steps"], "value", dates("2026-07-09"))], "other", False),
+        # A statement beside the question is theirs to have heard, through its card.
+        (
+            f"{TRAINING} {STEPS_DAY}",
+            [
+                {"type": "other", "said": TRAINING},
+                data(STEPS_DAY, ["steps"], "value", dates(DAY.isoformat())),
+            ],
+            "self",
             True,
         ),
     ],
 )
-def test_a_readback_is_never_listened_to_for_new_facts(setup, monkeypatch, clause, listened):  # noqa: F811
+def test_only_a_statement_in_the_message_is_listened_to(
+    setup,  # noqa: F811
+    monkeypatch,
+    words,
+    clauses,
+    subject,
+    listened,
+):
     client, _, agent = setup
     headers = sign_in(setup)
     heard = []
@@ -888,8 +927,8 @@ def test_a_readback_is_never_listened_to_for_new_facts(setup, monkeypatch, claus
     monkeypatch.setattr(chat, "_pool", Synchronous(chat._pool))
     listening = replace(agent, background=True)
     client.app.dependency_overrides[chat.get_agent] = lambda: listening
-    words = clause["said"]
-    agent.llm.request_turns = [reader_said(clause)]
+    reading = said(*clauses) | {"subject": subject}
+    agent.llm.request_turns = [ScriptedLLM.call("read_request", **reading)] * 2
     client.post("/chat", headers=headers, json={"text": words})
     assert bool(heard) == listened
 

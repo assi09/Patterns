@@ -340,6 +340,12 @@ def answer_world(
             if topic and topic.casefold() not in query.casefold():
                 # The movement itself too, not only the reworded question about it.
                 candidates += search(topic, llm=llm, budget=budget).found
+            movement = any(f.passage.kind == "exercise" for f in candidates)
+            head = head_noun(topic) if topic and movement else None
+            if head and head not in query.casefold().replace("-", "").split():
+                # And the plain movement: "floor glute bridge" found only the barbell one, while
+                # the bodyweight bridge was in the corpus (the v6 audit).
+                candidates += search(head, llm=llm, budget=budget).found
             selected = for_topic(_unique(candidates), topic, llm, budget)[:MAX_PASSAGES]
             records = [passage_evidence(f.passage) for f in selected]
             # Narrowed to the passages behind the reply once it is written (`supporting`).
@@ -408,7 +414,7 @@ def answer_world(
             return result
     result.summary = reply
     if records:  # shown as sources, and kept for the follow-up that asks about them
-        records = supporting(reply, records)
+        records = supporting(reply, records, topic)
         chosen["passage_ids"][:] = [r.stats["passage_id"] for r in records]
         result.evidence |= {record.id: record for record in records}
         result.claims = [
@@ -430,10 +436,26 @@ MAX_PASSAGES = 5
 SUPPORT_SHARE = 0.5  # of the best passage's overlap with the reply
 
 
-def supporting(reply: str, records: list[Evidence]) -> list[Evidence]:
-    """The passages the reply is drawn from: those sharing at least half as many of its words as
-    the one sharing most. Cited and kept for a follow-up, they are the ones behind it, not every
+GENERIC = stems(
+    "how do i the a an of for to with without in on and or my your guidance routine tips form "
+    "exercise exercises movement version variation basic standard ordinary regular simple plain "
+    "doing do"
+)
+
+
+def supporting(reply: str, records: list[Evidence], topic: str | None = None) -> list[Evidence]:
+    """The passages the reply is drawn from: about the topic (a passage on light was cited for a
+    caffeine answer, the v6 audit), then those sharing at least half as many of its words as the
+    one sharing most. Cited and kept for a follow-up, they are the ones behind it, not every
     variant searched (a basic push-up answer cited two other push-ups, the v5 audit)."""
+    wanted = stems(topic or "") - GENERIC
+    if wanted:
+        about = [
+            r
+            for r in records
+            if wanted & stems(f"{r.stats.get('title', '')} {r.stats.get('text', '')}")
+        ]
+        records = about or records
     said = stems(reply)
     if not said or len(records) < 2:
         return records
@@ -527,8 +549,101 @@ def for_topic(found, topic: str | None, llm: LLM | None = None, budget: Budget |
         titles = list(dict.fromkeys(f.passage.title for f in exercises))
         same = _same_variant(llm, topic, titles, budget)
         if same is not None:
-            return [f for f in found if f.passage.kind != "exercise" or f.passage.title in same]
+            picked = [f for f in found if f.passage.kind != "exercise" or f.passage.title in same]
+            return unasked_variants_out(picked, topic)
     if not matched:
-        return found
+        return unasked_variants_out(found, topic)
     specificity = max(len(words(f.passage.title)) for f in matched)
     return [f for f in matched if len(words(f.passage.title)) == specificity]
+
+
+# Words in an exercise title that make it a variant: equipment, one limb, an angle or a stance.
+# Not exercise names: they qualify any movement ("Barbell Glute Bridge", "Clock Push-Up").
+VARIANT_MARKERS = frozenset(
+    {
+        "barbell",
+        "dumbbell",
+        "dumbbells",
+        "kettlebell",
+        "kettlebells",
+        "cable",
+        "machine",
+        "smith",
+        "band",
+        "bands",
+        "chains",
+        "weighted",
+        "weight",
+        "weights",
+        "belt",
+        "single",
+        "one",
+        "arm",
+        "leg",
+        "legs",
+        "decline",
+        "incline",
+        "elevated",
+        "ball",
+        "physioball",
+        "kneeling",
+        "hack",
+        "clock",
+        "wide",
+        "close",
+        "narrow",
+        "grip",
+        "sumo",
+        "jump",
+        "plyo",
+        "split",
+        "goblet",
+        "front",
+        "overhead",
+        "pistol",
+        "box",
+        "bench",
+        "suspended",
+        "reverse",
+        "side",
+        "handstand",
+        "depth",
+        "stance",
+        "sled",
+        "chair",
+        "triceps",
+        "medium",
+        "feet",
+    }
+)
+PARENTHESES = re.compile(r"\(.*?\)")
+
+
+def head_noun(topic: str) -> str | None:
+    """The movement's last word, without its qualifiers: "floor glute bridge" is "bridge"."""
+    plain = re.sub(r"\(.*?\)", " ", topic.casefold()).replace("-", "")
+    plain = re.split(r"\b(?:with|without|no|using|on|for|at|in|from)\b", plain)[0]
+    found = [w for w in re.findall(r"[a-z]+", plain) if w not in VARIANT_MARKERS]
+    return found[-1] if found else None
+
+
+def unasked_variants_out(found, topic: str):
+    """Exercise passages for a variant nobody asked for are left out when a plain one is there:
+    a weighted, single-arm or clock push-up is not the ordinary one (the v6 audit cited them for
+    it). Only the title's own words count; "(Close and Wide Hand Positions)" describes a passage
+    of plain push-ups, and a variant the person named is theirs."""
+    asked = {w.removesuffix("s") for w in re.findall(r"[a-z]+", topic.casefold())}
+
+    def unasked(f) -> int:
+        title = PARENTHESES.sub(" ", f.passage.title).casefold()
+        return sum(
+            w.removesuffix("s") not in asked
+            for w in re.findall(r"[a-z]+", title)
+            if w in VARIANT_MARKERS or w.removesuffix("s") in VARIANT_MARKERS
+        )
+
+    exercises = [f for f in found if f.passage.kind == "exercise"]
+    plain = [f for f in exercises if not unasked(f)]
+    if not plain:
+        return found
+    return [f for f in found if f.passage.kind != "exercise" or not unasked(f)]

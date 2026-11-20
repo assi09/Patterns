@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from app.agent.periods import period_range
-from app.agent.present import METRICS, label
+from app.agent.present import ALIASES, METRICS, label
 
 DATA_KINDS = ("data", "causality", "investigate")
 
@@ -243,7 +243,7 @@ def shift_said(text: str) -> int | None:
 # "The six days immediately following that block", "the next 7 days after that", "the 5 days
 # before those": a block of days next to an earlier one, starting the day after its last day or
 # ending the day before its first. Not a shift: "move that range forward one day" is a shift.
-_NIGHTS = r"(?:calendar |whole |full |complete |consecutive )?(?:days|nights)"
+_NIGHTS = r"(?:calendar |whole |full |complete |consecutive )?(?:days|nights|dates)"
 _RIGHT = r"(?:immediately |right |just |directly )"
 ADJACENT_AFTER = re.compile(
     rf"\b(?:next|following|subsequent|succeeding) {COUNT} {_NIGHTS}\b|"
@@ -266,6 +266,8 @@ def adjacent_said(text: str) -> tuple[str, int] | None:
     after, before = _counts(ADJACENT_AFTER, text), _counts(ADJACENT_BEFORE, text)
     if len(after) + len(before) != 1 or not REFERS_TO_EARLIER.search(text):
         return None
+    if AROUND.search(text):
+        return None  # "that date and the three dates before it" includes that date
     return ("after", after[0]) if after else ("before", before[0])
 
 
@@ -290,11 +292,16 @@ def length_said(text: str) -> int | None:
     return found[0]
 
 
+# "Same week" after a question about Sep 1-7 is Sep 1-7, not the calendar week holding today (the
+# v6 audit counted Aug 31-Sep 6).
+_PERIOD_NOUNS = (
+    r"(?:date|day|night|interval|stretch|period|range|window|span|dates|days|nights|week|weeks|"
+    r"month|fortnight|weekend|block|timeframe|time frame)"
+)
 SAME_DAYS = re.compile(
-    r"\b(?:that|those)(?: same| identical| whole| entire)? (?:date|day|night|interval|stretch|"
-    r"period|range|window|span|dates|days|nights)\b|"
-    r"\b(?:the )?(?:same|identical) (?:date|day|night|dates|days|period|interval|stretch|range|"
-    r"window|span)\b|\bkeep (?:its|their|the) dates\b",
+    rf"\b(?:that|those)(?: same| identical| whole| entire)? {_PERIOD_NOUNS}\b|"
+    rf"\b(?:the )?(?:same|identical) {_PERIOD_NOUNS}\b|\bkeep (?:its|their|the)"
+    r"(?: \w+)? dates\b",
     re.IGNORECASE,
 )
 # Any of these and "that day" may be a point to count from, not the days themselves.
@@ -303,6 +310,15 @@ MOVED = re.compile(
     r"ahead|since|until)\b",
     re.IGNORECASE,
 )
+
+
+def _message(state: dict, text: str) -> str:
+    """The whole message, for checks that a period is absent: what the clause's own words leave
+    out may be in the rest of it."""
+    return state.get(MESSAGE) or text
+
+
+MESSAGE = "_message"
 
 
 def _previous(state: dict) -> list[list]:
@@ -329,14 +345,20 @@ def _shift(text, part, resolved, state, today) -> Conflict | None:
 
 
 def _same_days(text, part, resolved, state, today) -> Conflict | None:
-    previous = _previous(state)
-    if not previous or written(text) != ([], []) or shift_said(text) is not None:
+    previous, message = _previous(state), _message(state, text)
+    if not previous or not SAME_DAYS.search(text):
         return None
-    if not SAME_DAYS.search(text) or MOVED.search(text) or from_today(text):
+    # Whatever moves or names days anywhere in the message: the reader's copy of a clause's words
+    # can stop short of them (the v6 audit).
+    if written(message) != ([], []) or shift_said(message) is not None:
+        return None
+    if MOVED.search(message) or from_today(message):
         return None
     # "Take that day as the last of five consecutive days": "that day" is an endpoint here, not
     # the interval to reuse (the v5 audit sent the right five-day reading back and got one day).
-    if length_said(text) is not None or adjacent_said(text) is not None:
+    if length_said(message) is not None or adjacent_said(message) is not None:
+        return None
+    if CALENDAR.search(message) and not re.search(r"\bsame\b", message, re.I):
         return None
     if list(resolved.windows) in previous:
         return None
@@ -490,9 +512,14 @@ def catalog_named(text: str) -> list[str]:
     "instead of" or inside quotes is not asked for."""
     lowered = text.lower().replace("heart rate", "heart-rate")
     found, taken = [], []
-    for key, info in sorted(METRICS.items(), key=lambda item: -len(item[1].label)):
-        name = info.label.lower().replace("heart rate", "heart-rate")
-        at = lowered.find(name)
+    names = [(key, info.label) for key, info in METRICS.items()]
+    names += [(key, alias) for key, aliases in ALIASES.items() for alias in aliases]
+    for key, words in sorted(names, key=lambda item: -len(item[1])):
+        if key in found:
+            continue
+        name = words.lower().replace("heart rate", "heart-rate")
+        match = re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", lowered)
+        at = match.start() if match else -1
         if at < 0 or any(start <= at < end for start, end in taken):
             continue
         taken.append((at, at + len(name)))
@@ -505,7 +532,16 @@ def catalog_named(text: str) -> list[str]:
 
 def _metric(text, part, resolved, state, today) -> Conflict | None:
     named = catalog_named(text)
-    metrics = part.metrics
+    metrics = list(resolved.metrics) or part.metrics
+    if metrics == ["food_logs"] and named and all(m in WEARABLE_ENERGY for m in named):
+        # "Switch from intake to expenditure: calories burned?" read the meals again (the v6
+        # audit): energy burned is the wearable's, never the food log's.
+        return Conflict(
+            "metric",
+            f"'{text}' names {label(named[0])}, the wearable's registry id {named[0]}, not food "
+            "eaten: read it as a data clause on that metric, not food_logs.",
+            f"Do you mean your {label(named[0])} from your tracker?",
+        )
     if len(named) != 1 or not metrics or named[0] in metrics or metrics == ["food_logs"]:
         return None
     return Conflict(
@@ -513,6 +549,53 @@ def _metric(text, part, resolved, state, today) -> Conflict | None:
         f"'{text}' names '{label(named[0])}', registry id {named[0]}; the reading has "
         f"{', '.join(metrics)}. Use the metric the words name.",
         f"Do you mean your {label(named[0])}?",
+    )
+
+
+WEARABLE_ENERGY = ("calories",)
+
+# ---- the statistic the words name ----
+
+STATISTICS = {
+    "min": re.compile(r"\b(?:lowest|minimum|min|smallest|(?<!at )least)\b", re.I),
+    "max": re.compile(
+        r"\b(?:highest|maximum|max|largest|biggest|peak(?! (?:heart[- ]rate )?zone)|top)\b", re.I
+    ),
+    "median": re.compile(r"\bmedian\b", re.I),
+    "mean": re.compile(r"\b(?:average|mean|avg|per day on average)\b", re.I),
+    "sum": re.compile(r"\b(?:total|sum|combined|altogether|in all)\b", re.I),
+}
+
+
+def _without_names(text: str) -> str:
+    lowered = text.lower().replace("heart rate", "heart-rate")
+    names = [info.label for info in METRICS.values()]
+    names += [alias for aliases in ALIASES.values() for alias in aliases]
+    for name in sorted(names, key=len, reverse=True):
+        lowered = lowered.replace(name.lower().replace("heart rate", "heart-rate"), " ")
+    return lowered
+
+
+FREE_OPERATIONS = ("count", "compare", "correlate", "trend", "coverage", "food", "describe")
+
+
+def _statistic(text, part, resolved, state, today) -> Conflict | None:
+    """ "Back to the first result: give the lowest day's value" kept the mean (the v6 audit). One
+    statistic named, and the reading computes another."""
+    if resolved.operation in FREE_OPERATIONS or COMPARED.search(text):
+        return None
+    windows = resolved.windows
+    if len(windows) == 1 and windows[0].start == windows[0].end:
+        return None  # on one day every statistic is that day's value
+    plain = _without_names(text)  # "time in the peak heart-rate zone" names no maximum
+    named = [op for op, words in STATISTICS.items() if words.search(plain)]
+    if len(named) != 1 or resolved.operation == named[0]:
+        return None
+    return Conflict(
+        "statistic",
+        f"'{text}' asks for the {named[0]}: operation {named[0]}, not {resolved.operation} "
+        "(an earlier result's operation is kept only when the words name none).",
+        f"Should I give the {named[0]}?",
     )
 
 
@@ -640,7 +723,7 @@ def _length(text, part, resolved, state, today) -> Conflict | None:
     days = length_said(text)
     if days is None or part.operation == "compare" or len(resolved.windows) != 1:
         return None
-    if LAST_N.search(text) or adjacent_said(text) is not None:
+    if LAST_N.search(text) or adjacent_said(text) is not None or AROUND.search(text):
         return None  # their own checks say where the days end, too
     window = resolved.windows[0]
     if window.days == days:
@@ -679,7 +762,8 @@ def _unnamed_period(text, part, resolved, state, today) -> Conflict | None:
     if not previous or not resolved.windows:
         return None
     follows = part.reference is not None or part.operation == "inherit" or AGAIN.search(text)
-    if not follows or PERIOD_WORDS.search(COMPARED.sub(" ", text)):
+    message = _message(state, text)
+    if not follows or PERIOD_WORDS.search(COMPARED.sub(" ", message)):
         return None
     if list(resolved.windows) in previous:
         return None
@@ -739,8 +823,8 @@ def _strictness(text, part, resolved, state, today) -> Conflict | None:
 # audit answered January 2027 with November).
 MONTH_NAMED = re.compile(
     r"(?<!\bof )(?<!\d )\b(january|february|march|april|june|july|august|september|october|"
-    r"november|december|may(?=,? \d{4})|(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)"
-    r"(?=\.?,? \d{4}))\.?(?:,? (\d{4}))?\b(?! ?\d{1,2}\b)",
+    r"november|december|may(?=,? (?:of )?\d{4})|(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|"
+    r"dec)(?=\.?,? (?:of )?\d{4}))\.?(?:,? (?:of )?(\d{4}))?\b(?! ?\d{1,2}\b)",
     re.IGNORECASE,
 )
 
@@ -802,6 +886,10 @@ def _named_month(text, part, resolved, state, today) -> Conflict | None:
     ends = [(w.start, w.end) for w in resolved.windows]
     wrong = []
     for (first_year, first), (last_year, last) in named:
+        if last_year is None:  # "in February": the whole month is checked, its year is not
+            starts = {(w.start.month, w.start.day) for w in resolved.windows}
+            if (first, 1) in starts:
+                continue
         years = [last_year] if last_year else [today.year, today.year - 1]
         fits = []
         for year in years:
@@ -838,6 +926,7 @@ CHECKS: tuple[Check, ...] = (
     _unnamed_period,
     _strictness,
     _named_month,
+    _statistic,
     _anchored_today,
     _last_n_days,
     _calendar,
@@ -862,7 +951,12 @@ def conflicts(reading, request, question: str, state: dict, today: date) -> list
     pairs = list(zip(reading.parts, request.parts, strict=False))
     if not pairs or len(reading.parts) != len(request.parts):
         return []
+    state = {**state, MESSAGE: question}
     own = [_own_words(part, question) for part, _ in pairs]
+    if getattr(reading, "clause_count", 0) == 1:
+        # One clause is the whole message: the reader's copy of its words can stop short of the
+        # dates ("what does the same statistic come out to" without "on the next two dates").
+        own = [question]
     found: list[Conflict] = []
     if all(own):  # each clause against its own words
         for (part, resolved), text in zip(pairs, own, strict=True):

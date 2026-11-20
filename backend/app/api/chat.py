@@ -810,6 +810,12 @@ def _answer(
                 )
             )
         )
+        # Listening needs permission from the message itself: a statement about them or an explicit
+        # request to remember, as read clause by clause. A pure question gives none, however
+        # personal its words ("count the days my steps were 6000 or above" became a goal, the
+        # v6 audit). An older flat reading, or none, keeps the earlier word rules.
+        told = typed.told if typed is not None and typed.told is not None else True
+        read_only = read_only or not told
         # Something they told us in passing: heard now too, so the reply can point to its card.
         chatted = reply is not None and reply.result.stop_reason in CHATTED
         # "That seems wrong, I walked more" disputes a figure; it says nothing lasting about them.

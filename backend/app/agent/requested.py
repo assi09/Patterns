@@ -141,10 +141,29 @@ def execute(
             stats = record.stats
             names = " and ".join(label(m) for m in part.metrics)
             if stats["rho"] is None and stats.get("paired_days") == 0:
-                statements.append(
-                    f"{_first_up(_span(window))}, {names} were never recorded on the same "
-                    "days, so whether they go together can't be told."
+                # Each metric's own days, cited, and the joint count: "never on the same days"
+                # hid that HRV had no readings at all, with nothing to inspect (the v6 audit).
+                if window.end < first or window.start > last:
+                    statements.append(
+                        f"Your data has no days {_span(window)}: it runs "
+                        f"{_span(Window(start=first, end=last))}, so there's nothing to compare."
+                    )
+                    continue
+                each = coverage(frame[[m for m in part.metrics if m in frame]], window)
+                days = each.stats["days_present"]
+                counted = "; ".join(
+                    f"{label(m)} on {days.get(m, 0)} of {_days(window.days)}" for m in part.metrics
                 )
+                none = [label(m) for m in part.metrics if not days.get(m, 0)]
+                text = (
+                    f"{_first_up(_span(window))}, {names} were never recorded on the same days "
+                    f"({counted}), so whether they go together can't be told."
+                )
+                if none:
+                    text += f" There are no {' or '.join(none)} readings then at all."
+                say(text, each, part.metrics[0], "data_quality")
+                result.evidence[record.id] = record
+                result.claims[-1].evidence_ids.append(record.id)
             elif (
                 stats["rho"] is None
                 and stats.get("paired_days", 0) >= 3

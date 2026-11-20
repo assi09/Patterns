@@ -141,7 +141,10 @@ def period_of(span: Span) -> Period:
 
 # ---- clauses ----
 
-SAID = Field(description="The words of the message this clause comes from, copied exactly.")
+SAID = Field(
+    description="All the words of the message this clause comes from, copied exactly, with its "
+    "dates and periods."
+)
 
 
 class DataClause(Fields):
@@ -381,7 +384,8 @@ def reading_from(said: Said, question: str = "") -> Reading:
     }
     if said.clarification or primary is None:
         kind = "clarify" if said.clarification or not clauses else "other"
-        return Reading(kind=kind, **fields)
+        told = any(isinstance(c, OtherClause) for c in clauses)
+        return Reading(kind=kind, clause_count=len(clauses), told=told, **fields)
     data = [c for c in clauses if isinstance(c, DataClause)]
     kind = KIND[primary]
     if primary == "data" and any(c.asks_cause for c in data):
@@ -419,4 +423,11 @@ def reading_from(said: Said, question: str = "") -> Reading:
             "states_new_fact": memory.states_new_fact,
         }
     fields["status"] = "status" in types
+    fields["clause_count"] = len(clauses)
+    fields["told"] = any(
+        isinstance(c, OtherClause)
+        or (isinstance(c, MemoryClause) and c.action == "remember")
+        or isinstance(c, LogClause | CorrectClause)
+        for c in clauses
+    )
     return Reading(kind=kind, parts=parts, **fields)
