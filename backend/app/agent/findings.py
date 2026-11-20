@@ -71,22 +71,28 @@ def render_overview(records: Sequence[Evidence], today: date) -> tuple[str, list
         )
         steady = [r for r in tested if not is_significant(r)]
         head = f"{_first_up(_when(focal, today))}, compared with {_when(baseline, today)}"
-        claims = [finding_claim(r) for r in clear[:MAX_LISTED]]
+        # Every clear change is named and cited: the first ones with their figures, the rest by
+        # name and direction ("1 more measures also changed clearly" was shown uncited, v8).
+        claims = [finding_claim(r) for r in clear]
         if claims:
-            text = f"{head}, the clear changes were: " + " ".join(c.text for c in claims)
-            if len(clear) > MAX_LISTED:
-                text += f" {len(clear) - MAX_LISTED} more measures also changed clearly."
+            text = f"{head}, the clear changes were: " + " ".join(
+                c.text for c in claims[:MAX_LISTED]
+            )
+            if overflow := claims[MAX_LISTED:]:
+                named = ", ".join(f"{label(c.metric)} ({c.direction})" for c in overflow)
+                text += f" Also changed clearly: {named}."
         else:
             text = f"{head}, nothing changed clearly."
         if steady:
+            measures = "measure" if len(steady) == 1 else "measures"
             text += (
-                f" The other {len(steady)} measures tested showed no clear change"
+                f" The other {len(steady)} {measures} tested showed no clear change"
                 if claims
-                else f" None of the {len(steady)} measures tested showed a clear change"
+                else f" None of the {len(steady)} {measures} tested showed a clear change"
             ) + "; that doesn't prove they stayed the same."
             claims.append(
                 Claim(
-                    text=f"{len(steady)} measures showed no clear change.",
+                    text=f"{len(steady)} {measures} showed no clear change.",
                     kind="no_change",
                     evidence_ids=[r.id for r in steady],
                     metric=steady[0].metrics[0],

@@ -316,12 +316,14 @@ Live checks by Claude (same harness and rules as Codex's v6; not independent):
 
 | Run | Commit | Turns | Fully correct | Both wordings | Notes |
 |---|---|---:|---:|---:|---|
-| v7 | `4582185` | 226 | 205 (90.7%) | 101/113 | follow-ups 136/136; investigations 0/12 (every cold-start baseline asked "which earlier measurement?") |
-| v8 | `0d858a0` | 94 | 86 (91.5%) | 40/47 | follow-ups 48/48, thresholds, missing data, safety all full; investigations 6/12 (5 partial, 1 fail) |
+| v7 | `4582185` | 226 | 205 (90.7%) | 101/113 | metric openings 68/68 and their adjacent-period follow-ups 68/68 (34 metrics, both wordings); investigations 0/12 (every cold-start baseline asked "which earlier measurement?") |
+| v8 | `0d858a0` | 94 | 86 (91.5%) | 40/47 | metric openings 24/24 and follow-ups 24/24 (12 metrics, both wordings); thresholds, missing data, safety all full; investigations 6/12 (5 partial, 1 fail) |
 
 The v8 deck ran first, for 34 turns, on the read-back commit; Claude saw 7 of those answers before
 the same frozen deck ran again. Still weak: an investigation read as a data comparison of eight
-measures instead of every measure; the fixed "what this can't tell apart" line shown when nothing
+measures instead of every measure; an overview with more than eight clear changes counted the rest
+without naming or citing them (fixed after the run: every clear change is named and cited); the
+fixed "what this can't tell apart" line shown when nothing
 changed; one explanation that was only that line; "Just breakfast." read as a possible log; one
 caffeine answer from the web instead of the vetted passage. 4,154 checked numerical fields
 matched the source rows. The harness's frozen clock had given every message the same time, so

@@ -499,3 +499,47 @@ def test_a_pure_question_leaves_no_candidate_in_the_store(setup, monkeypatch, to
 def test_resolved_part_helper_sanity():
     assert ResolvedPart(metrics=["steps"], operation="mean").windows == []
     assert AgentResult(run_id="x", stop_reason="x").side_claims == []
+
+
+def _compared(metric: str, difference: float, p: float, rank: int | None = None):
+    from app.analysis.evidence import Evidence
+
+    stats = {"difference": difference, "p_value": p, "mean_recent": 1.0, "mean_baseline": 1.0}
+    if rank is not None:
+        stats["overview_rank"] = rank
+    return Evidence(
+        tool="compare_windows",
+        metrics=[metric],
+        windows=[
+            Window(start="2026-10-12", end="2026-10-31"),
+            Window(start="2026-09-21", end="2026-10-11"),
+        ],
+        stats=stats,
+        n=20,
+        sufficient=True,
+    )
+
+
+def test_an_overview_with_nine_clear_changes_names_and_cites_every_one():
+    """v8 showed "1 more measures also changed clearly." with no citation: past the eighth, a
+    clear change was counted but neither named nor linked to its evidence."""
+    moved = [
+        "steps",
+        "distance_km",
+        "calories",
+        "hrv_ms",
+        "deep_sleep_minutes",
+        "rem_sleep_minutes",
+        "sleep_minutes",
+        "light_sleep_minutes",
+        "time_in_bed",
+    ]
+    clear = [_compared(m, -1.0 if i % 2 else 1.0, 0.001, rank=i + 1) for i, m in enumerate(moved)]
+    steady = [_compared("resting_hr", 0.1, 0.6)]
+    text, claims = render_overview([*clear, *steady], TODAY)
+    changes = [c for c in claims if c.kind == "change"]
+    assert [c.metric for c in changes] == moved
+    assert {i for c in changes for i in c.evidence_ids} == {r.id for r in clear}
+    assert "Also changed clearly: time in bed (up)." in text and "more measures" not in text
+    assert "The other 1 measure tested showed no clear change" in text
+    assert claims[-1].evidence_ids == [steady[0].id]
