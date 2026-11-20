@@ -295,3 +295,35 @@ while eight follow-ups answered the old interval and a "same week" count used th
 
 Tests: `backend/tests/test_v6_reliability.py` (56), with the v5 file's listener control updated
 to this rule. The v6 decks are development material now; a fresh frozen set is what can measure it.
+
+## Explicit anchors instead of word checks (2026-11-20)
+
+Three audits showed the pattern checks in `checks.py` both rejected right readings and let wrong
+ones through, one wording at a time; each fix added a pattern. They are gone. The reader now
+states what each relative period hangs on (`relative_to`: an earlier result or this clause's first
+period), the data source (`source`: food log or tracker), whether a guidance question refers back
+(`refers_back`) and whether it is a medical request (`medical`). Code still does all the dates. An
+overview is said by code from its own tests, each cited. Guidance passages are chosen by the small
+model's variant pick, and only those the writer reports using are cited.
+
+A small-model read-back of each resolved request (`readback.py`, gpt-5.4-nano) was built and
+measured: it sent back correct readings ("the 3 days leading into it", an explicit day, an
+equality count) in at least 6 of about 20 checked turns, then asked confusing questions. The
+reader's first reading had been right on 162 of 163 data turns in v7, so the read-back is off
+(`read_back_enabled`), kept with its tests.
+
+Live checks by Claude (same harness and rules as Codex's v6; not independent):
+
+| Run | Commit | Turns | Fully correct | Both wordings | Notes |
+|---|---|---:|---:|---:|---|
+| v7 | `4582185` | 226 | 205 (90.7%) | 101/113 | follow-ups 136/136; investigations 0/12 (every cold-start baseline asked "which earlier measurement?") |
+| v8 | `0d858a0` | 94 | 86 (91.5%) | 40/47 | follow-ups 48/48, thresholds, missing data, safety all full; investigations 6/12 (5 partial, 1 fail) |
+
+The v8 deck ran first, for 34 turns, on the read-back commit; Claude saw 7 of those answers before
+the same frozen deck ran again. Still weak: an investigation read as a data comparison of eight
+measures instead of every measure; the fixed "what this can't tell apart" line shown when nothing
+changed; one explanation that was only that line; "Just breakfast." read as a possible log; one
+caffeine answer from the web instead of the vetted passage. 4,154 checked numerical fields
+matched the source rows. The harness's frozen clock had given every message the same time, so
+history in chats of three or more turns had no order; v8 fixes that in the harness, and v6 and v7
+three-turn results may include failures from it.

@@ -223,3 +223,12 @@ Frozen candidate `7ef95c7`. Upper-bound spend was $0.192801780 for the initial c
 ### November 20, 2026 — PR 195 v6 fresh audit and PHIA gate
 
 Frozen candidate `9684d77`. The first 36 conversation turns cost $0.122029424 and the 24-question PHIA B1 run cost $0.038393718. Four expansion shards cost $0.105157540, $0.135743342, $0.099541266 and $0.072930334. Replacing six meal turns after correcting the evaluation fixture cost $0.008667570. Total **$0.582463194**. With the approved additional $2, cumulative spend is approximately **$2.3075 of $4**, leaving **$1.6925**. Results are in the [v6 audit handoff](independent-audit-v6-handoff.md).
+
+### November 20, 2026 — Claude's own live checks while Codex was away (v7, v8)
+
+Same harness, oracle and grading rules as v6; graded by Claude, who wrote the code, so not
+independent. v7 on `4582185` (226 turns): $0.381964. v8 on `5f51a36` with the gpt-5.4-nano
+read-back, stopped after 34 turns when it rejected correct readings: $0.093391. The same frozen
+v8 deck on `0d858a0` with the read-back off (94 turns): $0.256848. Total **$0.732203**. Cumulative
+spend is approximately **$3.0397 of $4**, leaving **$0.9603**. Results are in
+[typed-requests.md](typed-requests.md#explicit-anchors-instead-of-word-checks-2026-11-20).
