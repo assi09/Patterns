@@ -236,3 +236,16 @@ spend is approximately **$3.0397 of $4**, leaving **$0.9603**. Results are in
 ### November 20, 2026 — independent audit of the frozen redesigned reader
 
 On `b730fda`, 110 fresh synthetic conversation turns cost $0.325881382. The separate 24-question B1 gate cost $0.034121418. Total **$0.360002800** against the predeclared $0.935 ceiling. Cumulative spend is approximately **$3.3997 of $4**, leaving **$0.6003**. See the [independent audit handoff](independent-audit-b730fda-handoff.md).
+
+### November 21, 2026 — focused independent live audit on a196c6d
+
+86 fresh turns in 36 synthetic chats cost **$0.286983744** ($0.278319480 OpenAI and $0.008664264 Jev), within the $0.59 cap. The reopen checks incurred no paid calls. Cumulative audit spend is approximately **$3.6867 of $4**, leaving **$0.3133**. See the [audit handoff](independent-audit-a196c6d-handoff.md).
+
+### November 21, 2026 — matched reader comparison on the edit slice (Claude)
+
+Reader-only calls (gpt-5.4-mini, no agent run) on the 48 historical date follow-ups and 6 workout
+edits: two price probes $0.009252, the edit reader $0.066747, the current reader at `a196c6d`
+$0.091011 (stopped at its $0.09 cap after 36 cases), and the edit reader with a required length
+$0.080902 (stopped at its $0.08 cap after 41 cases). Total **$0.247912**. Cumulative spend is
+approximately **$3.9346 of $4**, leaving **$0.0654**. Results are in
+[typed-requests.md](typed-requests.md#edits-to-an-earlier-result-or-card-2026-11-21).

@@ -387,3 +387,57 @@ and the PHIA B1 gate 24/24 held. Adjacent-period follow-ups 15/24, investigation
 
 These change model behaviour (the reader's schema and prompt, the verifier); no live run was made
 after them. The next independent run should reuse fresh paired wordings for these families.
+
+## Edits to an earlier result or card (2026-11-21)
+
+Codex's review of `a196c6d` ([plan](a196c6d-root-causes-and-fix-plan.md),
+[audit](independent-audit-a196c6d-handoff.md)) showed that the date executor reproduces all 48
+date follow-ups of the last two independent decks when given the intended edit, while the live
+agent got 30/48: 13 of the 18 misses had the right number of days on the wrong side of, or at
+the wrong distance from, the earlier period. The work moved from adding follow-up wordings to
+making the edit explicit:
+
+- **One computation for every edit of an earlier period.** `from_earlier` replaces the same-days,
+  shift and beside kinds: the earlier first or last day it hangs on, an offset, whether the new
+  period starts or ends there, and its length. The reader sees each earlier result with its
+  actual first and last day and number of days (`earlier_results`), not raw state.
+- **The card is an object the reader sees.** A correction gets the waiting card's day, start,
+  active, elapsed and paused minutes; a day said against the card is `days_from_card`; a duration
+  the card already has is no change. A correction the reading fully states is applied to the
+  stored card by code before any drafting model runs, and a replacement that changes an
+  untouched duration is refused, naming the field. With no card waiting, a correction reading is
+  sent back.
+
+**Matched reader comparison** on identical inputs (development data: the 48 historical date
+follow-ups and 6 workout edits), gpt-5.4-mini, read-back off:
+
+| | Current reader (`a196c6d`) | Edit reader, length optional | Edit reader, length required |
+|---|---:|---:|---:|
+| b730 date follow-ups | 24/24 | 22/24 | 24/24 |
+| a196 date follow-ups | 16/24 (8 rerun, 8 from the a196 audit) | 23/24 | 17/17 run |
+| Workout edits | 0/2 paused moves (a196 audit) | 6/6 | not run |
+| The 36 cases all three ran | 32/36 | 34/36 | 36/36 |
+| Unnecessary clarifications | 0 | 0 | 0 |
+
+The optional length was the weak spot: "three calendar days" and "four days up to the day before"
+came back with no length, so the earlier length was kept or the four went into the offset; the
+length is now required (the earlier number of days when none is said). One reading moved a card
+when none was waiting, which the no-card rule now sends back. The last run stopped at its $0.08
+cap with 7 a196 date cases and the 6 workout edits unrun. These are development cases; the release
+decision needs an unseen deck with new paraphrases, scored on exact dates and unchanged card
+fields through the normal API.
+
+Fixes from the same review that need no smarter model:
+
+- An explanation or coaching follow-up that names no new days keeps the single investigation under
+  discussion; a new broad question still gets the default. An investigation of two periods is the
+  later against the earlier, however they were said.
+- Switching from food eaten to the tracker keeps the days and the energy: an inherited food
+  operation becomes the tracker's value for one day, or its total or mean over several.
+- An overview counts measures, not records: the latest record of each metric over each pair of
+  periods speaks for it (32 metrics were "39 measures").
+- Each habit lever says what its comparison permits: an action when the days differ in the habit
+  itself (bedtime, activity, a late meal), a pattern to watch when they differ in something else
+  (a stress tag, a hard day before). A stress-tag split is no longer "a wind-down routine".
+- An instruction for this answer ("give me three options here") is not something told about the
+  person, so it makes no memory card; "I generally prefer three options" still can.
