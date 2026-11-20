@@ -262,3 +262,36 @@ Tests: `backend/tests/test_v5_reliability.py` (130), each failure beside a contr
 pair with a different answer, including the regressions found in review of these edits (two date
 cases, a mixed-source loss, daylight saving twice, coaching wording, a metric hidden by another).
 Not done: a fresh frozen evaluation; paired-phrasing consistency is for that run.
+
+## After the v6 audit (2026-11-20)
+
+The [v6 live audit](independent-audit-v6-handoff.md) of `9684d77` passed 209 of 254 fresh turns
+fully (19 partial, 26 fail); direct lookups 67/68, actions 18/18 and explicit memory 20/20 held,
+while eight follow-ups answered the old interval and a "same week" count used the wrong week. Its
+45 non-passing turns had six causes, each fixed as a rule. Nothing here was checked with a paid run.
+
+- **Absence is read from the whole message.** The reader's copy of a clause's words can stop
+  short of its dates, so "the words name no period" sent the right "next two dates" reading back.
+  A one-clause message is checked against the whole message, and "dates" counts as a length.
+- **A baseline beside a period in the same message** ("Sep 12-25 compared with before") counts
+  from that period, not from an earlier chat result; a block next to an earlier result still uses
+  it. "February of 2027" is February 2027, and "same week" is the earlier days.
+- **Source and statistic.** An earlier food read continues only when the clause names no metric;
+  "calories" is energy eaten only beside nutrients or in an explicit food read, never when the words
+  say burned. Metric aliases ("physical stress-signs score" is the stress score) are given to the
+  reader and read by the checks. A statistic the words name ("the lowest day's value") must be the
+  one computed. "MY sleep score" asked for a teammate is the person's own; a "what lines up with
+  the change" investigation is an explanation.
+- **Overviews and relationships.** "The rest looked steady" is checked against every tested metric
+  it covers; a false one is left out and the clear changes it hid are listed, cited. A relationship
+  with no paired days gives each metric's own coverage, cited, or says the days are outside the data.
+- **Guidance.** Passages for variants nobody asked for (barbell, single-arm, clock, wide) are left
+  out when a plain one is there, the plain movement is searched by its head noun, and a cited
+  passage must be about the topic. One earlier answer's topics named in parts ("desk worker",
+  "interrupt long sitting") are one routine; two exercises are still asked about.
+- **Memory.** The listener runs only when the message itself tells something (a statement or an
+  explicit remember, read clause by clause); a pure question, however personal its words, raises no
+  candidate. Checked in the store, not only in the listener call.
+
+Tests: `backend/tests/test_v6_reliability.py` (56), with the v5 file's listener control updated
+to this rule. The v6 decks are development material now; a fresh frozen set is what can measure it.

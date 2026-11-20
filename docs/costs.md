@@ -219,3 +219,7 @@ Allowance: $1.4655 + $0.0062 = **$1.4717 of $2**, leaving **about $0.528**.
 ### November 20, 2026 — PR 195 independent conversation audit and PHIA gate
 
 Frozen candidate `7ef95c7`. Upper-bound spend was $0.192801780 for the initial conversation run, $0.028625010 to complete the 22 budget-blocked turns and $0.031907418 for the 24-question B1 gate. Total **$0.253334208**. Cumulative spend is approximately **$1.7250 of $2**, leaving **$0.2750**. Results and limitations are in [the audit handoff](independent-audit-v5-handoff.md).
+
+### November 20, 2026 — PR 195 v6 fresh audit and PHIA gate
+
+Frozen candidate `9684d77`. The first 36 conversation turns cost $0.122029424 and the 24-question PHIA B1 run cost $0.038393718. Four expansion shards cost $0.105157540, $0.135743342, $0.099541266 and $0.072930334. Replacing six meal turns after correcting the evaluation fixture cost $0.008667570. Total **$0.582463194**. With the approved additional $2, cumulative spend is approximately **$2.3075 of $4**, leaving **$1.6925**. Results are in the [v6 audit handoff](independent-audit-v6-handoff.md).
