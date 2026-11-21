@@ -249,3 +249,11 @@ $0.091011 (stopped at its $0.09 cap after 36 cases), and the edit reader with a 
 $0.080902 (stopped at its $0.08 cap after 41 cases). Total **$0.247912**. Cumulative spend is
 approximately **$3.9346 of $4**, leaving **$0.0654**. Results are in
 [typed-requests.md](typed-requests.md#edits-to-an-earlier-result-or-card-2026-11-21).
+
+### November 21, 2026 — independent audit on 9228fe6
+
+88 fresh synthetic chat turns cost $0.232728534 and 24 frozen PHIA B1 questions cost $0.036339018. Total **$0.269067552** of this audit's $2 authorization. Offline grading and reopening incurred no API charges. See the [audit handoff](independent-audit-9228fe6-handoff.md).
+
+### November 21, 2026 — post-audit diagnostic probes on 9228fe6
+
+Matched reader, calendar and exercise-selector probes recorded $0.248385800 in returned usage. Combined with the preceding audit, confirmed spend is $0.517453352 against the same $2 cap. Two diagnostic meters retain $0.603452250 in unresolved reservations, including a reproduced HTTP 400 for unsupported reasoning effort with function tools. These reservations are an upper bound, not confirmed charges. Conservative remaining allowance is $0.879094. No paid diagnostic result is a release score.

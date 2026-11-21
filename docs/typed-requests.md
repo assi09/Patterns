@@ -441,3 +441,43 @@ Fixes from the same review that need no smarter model:
   (a stress tag, a hard day before). A stress-tag split is no longer "a wind-down routine".
 - An instruction for this answer ("give me three options here") is not something told about the
   person, so it makes no memory card; "I generally prefer three options" still can.
+
+## After the independent audit of `9228fe6` (2026-11-21)
+
+Codex's audit ([handoff](independent-audit-9228fe6-handoff.md)) kept the paused-workout repair
+(8/8), memory (6/6), evidence versioning and PHIA B1 (24/24), and held the merge on dates (16/24
+follow-ups), investigations (3/16), food (3/6) and guidance (0/4 fully correct). Its offline
+root-cause checks named the earliest wrong field in each; the changes follow them, with the
+controls it named:
+
+- **A reference keeps its days before the source picks the operation.** A part that points at an
+  earlier result (by reference, an inherited operation or no metric of its own) and names no new
+  days keeps that result's days; "keep the date, burned energy now" had read the empty period
+  list as all history and summed 150 days. Explicit whole history, an explicit new date and a
+  cold total are unchanged.
+- **One look written twice is one look.** Beside an investigation, a whole-registry data clause
+  over the same days goes, and an investigation that names no days takes the one scope the
+  message's data clauses share. A side read of named metrics stays; a whole-registry clause over
+  other days is kept, not dropped. A meal read with no metric is never a look across everything,
+  and never needs an earlier result.
+- **A whole comparison is reused whole.** `same_as_earlier` is back, for all of an earlier
+  result's periods unchanged; `from_earlier` is only for editing days. Both wordings of "why"
+  after a two-period look had come back as two single-period edits. The guard that asks which
+  period an edit of one side means is unchanged.
+- **The last answer again, in another form, keeps its request.** A `redo` clause ("give me up to
+  three options here, saying which are personal") answers the last request again with its scope;
+  after a look at their data, options asked for are coaching on that look. It was read as small
+  talk, and the habits were then tested on the default two months.
+- **Coaching on a comparison says which period it tested.** The habit tools take one period: the
+  later one of the comparison, said in the reply, never the enclosing range.
+- **A meal is kept by name or time of day.** The reader is told "that morning only" is breakfast
+  and that intake is the food log; an absent meal still means every meal.
+- **A failed variant pick authorizes no other variant.** Title neighbours and the titles the pick
+  sees are ordered closest first (most shared words, fewest extra), so the plain entry is inside
+  the 25 titles; the fallback normalizes words one way ("push-up" is "Pushups"), keeps passages an
+  earlier answer established for the movement, and with no word-for-word title offers no exercise
+  passage instead of every candidate.
+
+No live run followed: these are offline repairs with the audit's cases and controls as tests
+(`tests/test_r922_reliability.py`). The release decision needs fresh paired conversations under
+the unchanged gates.
