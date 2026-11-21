@@ -310,3 +310,20 @@ improved 103/150 → 133/150 (42 improved, 12 spoiled); the two new duration-bas
 reported separately. These are development extraction checks, not held-out answer accuracy.
 The successor-block category regressed 12/12 → 3/12, and a deterministic renderer issue remains.
 No fresh release audit ran. See the [e1c1eec handoff](independent-audit-e1c1eec-handoff.md).
+
+### November 22, 2026 — bcdb0ff matched-reader development comparison
+
+Frozen `bcdb0ffb205effdc4e3145d89400a0454eab2482` versus `e1c1eec` on the same 152 exposed
+synthetic inputs per arm, with complete stored claims attached to both arms before freezing.
+Baseline **$0.339550950**, candidate **$0.272442000**: combined **$0.611992950**, under the
+predeclared combined $0.75 ceiling. All 304 inputs completed, with 324 reader completions including
+interpretation retries. No paid judge, embeddings, web lookup, PHIA or Google traffic/writes.
+Offline review, probes and 2,685 backend tests cost $0.
+
+Shared new-$5 cumulative usage is **$2.713750702** (OpenAI $2.656394410, Jev $0.057356292),
+with **$0 unresolved reservations**, leaving **$2.286249298**. Strict request matches improve
+138/152 → 146/152 (common fields 136/150 → 144/150; 11 improved, three spoiled). One strict
+workout mismatch is action-equivalent in an independent actual-edit control; the frozen score is
+retained. This is development extraction coverage, not held-out answer accuracy. HOLD: coaching
+renderer, compound dispatch, duplicate state and semantic reader misses remain. No fresh release
+audit ran. See the [bcdb0ff independent handoff](independent-audit-bcdb0ff-handoff.md).

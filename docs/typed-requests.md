@@ -596,3 +596,24 @@ cannot be fixed by replaying old readings: the new period kinds and `target` nee
 reader step again, with the protected before, ending, trailing and calendar controls. Not
 addressed: the chat-only recall miss (`memory_chatonly-01/t2`, D). The provenance guard stays,
 and the retry still reads the recall as unsure.
+
+## After the review and matched-reader comparison of `bcdb0ff` (2026-11-22)
+
+Codex's comparison ([handoff](independent-audit-bcdb0ff-handoff.md)) put the reader at 146/152,
+against 138/152 for the e1c1eec reader on the same exposed inputs. Successor blocks went from
+7/12 to 12/12, with no other date relation spoiled. It also found three code gaps and three
+reader misses. Fixes, tested with the review's reproductions and controls
+(`tests/test_bcdb0ff_review.py`):
+
+| Finding | Contract now enforced |
+|---|---|
+| 1 | One record-aware renderer (`code_claim`) for every observation a reply can say: explanations, coaching observations and the overview's listed findings. The old window-only renderer is removed. A coaching observation code cannot state is left out, the reply says so, and every published claim passes the verifier again. |
+| 2 | A repeat beside another clause is composed by what it is (`_composed`). A repeated figure joins the request's results. A repeated look leads, and a status or recall asked beside it is answered under it by code (`_with_beside`). The same answer twice is one. A pair that cannot be answered together, such as a look and a guidance question, gets a question instead of losing one. |
+| 3 | Equivalent results are kept once before execution and storage, main against side included, and the answer's counts are taken after that. A state already saved with a duplicate reads it once. Two different results still ask which. |
+| Reader | A retry keeps a length the message said (`RetryReading.keeps` with `periods.length`, on the clause with the same words). If the retry still conflicts, the reply asks which days, never one day in place of the three said. The prompt says a follow-up asking for all of their history in place of the earlier days is `all_history`, never `same_as_earlier`, and that asking for the card that removes something kept is memory forget. |
+
+Checked offline at no cost: replaying the bcdb0ff candidate's 152 recorded readings through this
+code, scored with Codex's frozen `score`, changes nothing that passed (146 of 146). The duplicate
+case now passes (`investigate_lowwear-02/t4`). The two lost-length cases now ask instead of
+accepting a one-day window. The history-override and memory-removal misses need a live reader,
+and their prompt changes are unmeasured.
