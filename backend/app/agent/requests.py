@@ -46,6 +46,7 @@ class Period(Fields):
     end_edge: Literal["first", "last"] | None = None
     end_offset: int = Field(default=0, ge=-36600, le=36600)
     sized: bool = True
+    keep_width: bool = False  # beside: the earlier period's own number of days (a shift)
 
 
 Operation = Literal[
@@ -138,6 +139,7 @@ class Reading(Fields):
     recall: Literal["kept", "waiting", "this_chat", "all"] | None = None
     states_new_fact: bool = False  # a forget that also says what is true now
     memory_said: str = ""  # the memory clause's own words: the fact to keep or forget
+    redo_part: Part | None = None  # a redo beside another primary clause, answered as reads
     also: list[Part] = Field(default_factory=list)  # precise reads beside an investigation
     clause_count: int = 0  # clauses the reader found; 0 for an older flat reading
     # Whether the message tells something about them (a statement or an explicit remember), as
@@ -366,6 +368,8 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
             return (earlier.start if edge == "first" else earlier.end) + timedelta(days=offset)
 
         day = placed(period.edge, period.offset_days)
+        if period.keep_width:
+            return [Window(start=day, end=day + (earlier.end - earlier.start))]
         if period.end_edge is not None:
             last = placed(period.end_edge, period.end_offset)
             if last < day:
@@ -466,6 +470,7 @@ def _changes(edit: Part, previous: Sequence[ResolvedPart]) -> bool:
     lags = {p.max_lag for p in previous if p.operation == "correlate"}
     return bool(
         edit.metrics
+        or edit.every_metric
         or edit.operation != "inherit"
         or any(p.kind != "inherit" for p in edit.periods)
         or edit.comparison is not None
@@ -580,8 +585,19 @@ def _redo(request: Request, reading: Reading, state: dict, today: date) -> Reque
         if looked:
             edit = edit.model_copy(update={"operation": "describe"})
         elif described and not edit.metrics:
-            # A statistic of a look's own measures: the measures it looked at.
-            edit = edit.model_copy(update={"metrics": list(referent.metrics)})
+            # A statistic of a look's own measures: the measures it looked at, or every one
+            # when it looked at every one (a broad look made a comparison kept its breadth).
+            if referent.metrics:
+                edit = edit.model_copy(update={"metrics": list(referent.metrics)})
+            else:
+                edit = edit.model_copy(update={"every_metric": True})
+        if (
+            referent is not None
+            and referent.every_metric
+            and not edit.metrics
+            and not edit.every_metric
+        ):
+            edit = edit.model_copy(update={"every_metric": True})  # an all-measure result
         asked = Reading(
             kind="investigate" if looked else "data",
             parts=[edit],
@@ -591,6 +607,12 @@ def _redo(request: Request, reading: Reading, state: dict, today: date) -> Reque
         )
         resolved = resolve(asked, state, today)
         request.parts, request.focus = resolved.parts, resolved.focus
+        if [p.every_metric for p in request.parts] == [True]:
+            # Every measure over days is one look across them, as a data clause about every
+            # measure is (`_every_metric_looked_into`): the existing overview, said by code.
+            (wide,) = request.parts
+            request.parts = [ResolvedPart(metrics=[], operation="describe", windows=wide.windows)]
+            request.focus = "overview"
     looked = all(p.operation == "describe" for p in request.parts)
     if looked:
         request.kind = "investigate"
@@ -696,6 +718,9 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
     if beside and reading.subject == "self":
         asked = Reading(kind="data", parts=beside)
         request.reads = resolve(asked, state, today).parts
+    if reading.redo_part is not None and reading.subject == "self":
+        again = resolve(Reading(kind="redo", parts=[reading.redo_part]), state, today)
+        request.reads += [p for p in [*again.parts, *again.reads] if p not in request.reads]
     if reading.kind in BESIDE and reading.kind != "guidance":
         return request
     if reading.kind == "guidance":
@@ -731,17 +756,14 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
         # over other days, it asked for an earlier result on a cold question (the review of
         # b3d64ca). A comparison of every measure is said as an overview of them.
         if part.every_metric and not part.metrics:
-            if part.operation != "compare" or len(part.periods) != 2:
+            # Every measure: a comparison of two periods, however they were said (two dates,
+            # or the same two as an earlier result's), said as an overview of them.
+            prior = _prior(part, previous, _needs_earlier(part), older)
+            span = part_windows(part, prior, today)
+            if part.operation not in ("compare", "inherit") or len(span) != 2:
                 raise Ambiguous("Which measures should I look at over those days?")
             request.parts.append(
-                ResolvedPart(
-                    metrics=[],
-                    operation="compare",
-                    windows=part_windows(
-                        part, _prior(part, previous, _needs_earlier(part), older), today
-                    ),
-                    every_metric=True,
-                )
+                ResolvedPart(metrics=[], operation="compare", windows=span, every_metric=True)
             )
             continue
         unnamed = (
@@ -1002,7 +1024,8 @@ Clause types:
   form (more or fewer options, which are personal and which general, fewer words), or with new
   days, another statistic, measure, threshold or lag. Say the request it repeats as a data
   clause would: periods (same_as_earlier when the days are kept, otherwise the new days),
-  operation (inherit keeps the statistic), metrics (empty keeps them), comparison, threshold
+  operation (inherit keeps the statistic), target (same, named with metrics, or every_metric
+  for every measure they have), comparison, threshold
   and max_lag (null keeps them). earlier_result names an earlier result by index ("the steps
   result", "the all-measure comparison"); null is the last answer as a whole. options: how
   many options they ask for. Code keeps whatever it does not change.
@@ -1025,23 +1048,27 @@ Periods, for data and investigate clauses; pick the kind that means what was sai
 - same_as_earlier: all of an earlier result's periods, unchanged: the same days, or the same
   comparison of two periods. Explaining it, coaching on it, or a new threshold, meal, source or
   statistic on the same days is this; an edit of the days is from_earlier.
-- from_earlier: days placed against an earlier result's period, which earlier_results lists
-  with its first day, last day and number of days. Place the new period's first day
-  (new_first_day), its last day (new_last_day), or both, each counted from the earlier
-  period's first or last day (counted_from) with days_after (+1 the day after, -1 the day
-  before, 0 that day itself), and give its length: the number of days said, or the earlier
-  period's own number of days when none is said (null only when both days are placed). Place
-  the day the message describes. After a five-day period: the whole period two days earlier:
-  new_first_day its_first_day -2, length 5. The five days before it: new_last_day its_first_day
-  -1, length 5. The next four days: new_first_day its_last_day +1, length 4. Its last three
-  days: new_last_day its_last_day 0, length 3. Four days starting on its second day:
-  new_first_day its_first_day +1, length 4. Three days whose last day is its first day:
+- block_after: a block right after an earlier result's period ("the next four days", "the
+  four dates after that block"): length, and starts_days_after_its_last_day (1 the day after,
+  2 "beginning two days after its last day"). block_before: a block right before it ("the
+  five days before it"): length, and ends_days_before_its_first_day (1 the day before).
+  whole_shifted: the whole period moved, its size kept ("the same block two days earlier"
+  is -2). These say the relation; code works out the dates.
+- from_earlier: any other days placed against an earlier result's period, which
+  earlier_results lists with its first day, last day and number of days. Place the new
+  period's first day (new_first_day), its last day (new_last_day), or both, each counted from
+  the earlier period's first or last day (counted_from) with days_after (+1 the day after, -1
+  the day before, 0 that day itself), and give its length: the number of days said (null only
+  when both days are placed). Place the day the message describes. After a five-day period:
+  its last three days: new_last_day its_last_day 0, length 3. Four days starting on its second
+  day: new_first_day its_first_day +1, length 4. Three days whose last day is its first day:
   new_last_day its_first_day 0, length 3. Without its first and last day: new_first_day
-  its_first_day +1 and new_last_day its_last_day -1, length null. relative_to: earlier_result
-  (a result computed before this message) or this_clause (the period named first in this same
-  clause: "Oct 9-31 compared with the four weeks before" is dates Oct 9-31, then new_last_day
-  its_first_day -1, length 28, relative_to this_clause). With nothing computed earlier, nothing
-  is relative to an earlier result.
+  its_first_day +1 and new_last_day its_last_day -1, length null.
+- relative_to, for block_after, block_before and from_earlier: earlier_result (a result
+  computed before this message) or this_clause (the period named first in this same clause:
+  "Oct 9-31 compared with the four weeks before" is dates Oct 9-31, then block_before
+  length 28, relative_to this_clause). With nothing computed earlier, nothing is relative to
+  an earlier result.
 - days_ending: length days ending on a day counted from today. yesterday: 1, -1. two days
   before today: 1, -2. the last 7 days (today included): 7, 0. the 5 complete days before
   today: 5, -1. Only when the words count from today, never for days placed against an
@@ -1186,7 +1213,7 @@ def _period_outline(period: "Period") -> str:
         shown += f"/{period.edge}{period.offset_days:+d}/{boundary}"
         if period.end_edge is not None:
             shown += f"/{period.end_edge}{period.end_offset:+d}/ends"
-        shown += f"/{period.days if period.sized else '-'}"
+        shown += f"/{'same' if period.keep_width else period.days if period.sized else '-'}"
     return shown
 
 

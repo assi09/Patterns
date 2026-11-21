@@ -46,6 +46,7 @@ from app.agent.experts import (
     specialist_notes,
     visible_metrics,
 )
+from app.agent.findings import SAYERS as SAID_TOOLS
 from app.agent.findings import code_claim, finding_claim, render_overview
 from app.agent.followup import standalone, with_period, with_relative_day
 from app.agent.guard import Guard, GuardError, JevGuard
@@ -535,7 +536,7 @@ def said_by_claims(result: AgentResult) -> None:
     (WHY_LIMIT). A reply code wrote already, or one citing no finding, is left as it is."""
     if result.stop_reason in FROM_CODE_STOPS or not result.claims:
         return
-    stated, seen = [], set()
+    stated, seen, unstated = [], set(), 0
     for claim in result.claims:
         for evidence_id in claim.evidence_ids:
             record = result.evidence.get(evidence_id)
@@ -544,6 +545,13 @@ def said_by_claims(result: AgentResult) -> None:
             seen.add(evidence_id)
             if (said := code_claim(record)) is not None:
                 stated.append(said)
+            elif record.metrics and record.tool in SAID_TOOLS:
+                unstated += 1  # a finding's record with too little data or a figure missing
+    if unstated:
+        result.notes.append(
+            f"{unstated} of the tests cited had too little data or no figure to state, so "
+            f"{'it is' if unstated == 1 else 'they are'} left out."
+        )
     if not stated:
         # Nothing cited is a finding code can state: the model's words are not said in its place.
         result.summary, result.claims = NO_TESTED_FINDING, []

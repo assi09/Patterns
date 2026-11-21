@@ -55,51 +55,156 @@ def finding_claim(record: Evidence) -> Claim:
 
 def code_claim(record: Evidence) -> Claim | None:
     """What one record establishes, in a fixed sentence citing it, and nothing more: the subject
-    is its metric and the statement its own statistic. None for a record that is not a finding
-    about the person's measures (a passage, a habit test, a coverage count), which code says
-    elsewhere or not at all."""
+    is its metric, the statement its own statistic, worded for what that statistic means. A
+    change point compares the days either side of a split, a weekday split two groups of days,
+    a tag effect tagged against untagged days; read as a window comparison, each came out as
+    "Steps went up: against ." (the review of e1c1eec). The claim kind is one the record
+    supports. None for a record with too little data, a figure missing, or no finding about the
+    person's measures (a passage, a habit test, a coverage count)."""
     if not record.metrics or not record.sufficient:
         return None
-    if "difference" in record.stats or (
-        record.tool == "describe" and record.stats.get("mean") is not None
-    ):
-        return finding_claim(record)
-    if record.tool == "trend" and record.stats.get("slope_per_day") is not None:
-        name = _first_up(label(record.metrics[0]))
-        if is_significant(record):
-            way = "up" if record.stats["slope_per_day"] > 0 else "down"
-            return Claim(
-                text=f"{name} trended {'upward' if way == 'up' else 'downward'}.",
-                kind="change",
-                evidence_ids=[record.id],
-                metric=record.metrics[0],
-                direction=way,
-            )
-        return Claim(
-            text=f"{name} showed no clear trend.",
-            kind="no_change",
-            evidence_ids=[record.id],
-            metric=record.metrics[0],
+    say = SAYERS.get(record.tool)
+    if say is None:
+        return None
+    shown = evidence_payload(record)["display"]
+    try:
+        return say(record, shown, is_significant(record))
+    except _Missing:
+        return None
+
+
+class _Missing(Exception):
+    """A figure the sentence needs is not in the record."""
+
+
+def _shown(shown: dict, *keys: str) -> list[str]:
+    values = [shown.get(k) for k in keys]
+    if not all(isinstance(v, str) and v.strip() for v in values):
+        raise _Missing
+    return values
+
+
+def _claim(record, text, kind, direction=None, metric=None) -> Claim:
+    return Claim(
+        text=_first_up(text),
+        kind=kind,
+        evidence_ids=[record.id],
+        metric=metric or record.metrics[0],
+        direction=direction,
+    )
+
+
+def _up(record) -> str:
+    return "up" if (record.stats.get("difference") or 0) > 0 else "down"
+
+
+def _windows(record, shown, significant) -> Claim:
+    recent, baseline = _shown(shown, "mean_recent", "mean_baseline")
+    name = label(record.metrics[0])
+    if significant:
+        way = _up(record)
+        return _claim(record, f"{name} went {way}: {recent} against {baseline}.", "change", way)
+    return _claim(
+        record, f"{name} showed no clear change: {recent} against {baseline}.", "no_change"
+    )
+
+
+def _change_point(record, shown, significant) -> Claim:
+    before, after, when = _shown(shown, "mean_before", "mean_after", "change_date")
+    name = label(record.metrics[0])
+    if significant:
+        way = _up(record)
+        return _claim(
+            record,
+            f"{name} went {way} around {when}: {after} after against {before} before.",
+            "change",
+            way,
         )
-    if record.tool == "correlate" and record.stats.get("rho") is not None:
-        rho = record.stats["rho"]
-        names = " and ".join(label(m) for m in record.metrics)
-        if is_significant(record):
-            way = "together" if rho > 0 else "in opposite directions"
-            return Claim(
-                text=_first_up(f"{names} tended to move {way} (correlation {rho:g})."),
-                kind="association",
-                evidence_ids=[record.id],
-                metric=record.metrics[-1],
-                direction="up" if rho > 0 else "down",
-            )
-        return Claim(
-            text=_first_up(f"{names} showed no clear link (correlation {rho:g})."),
-            kind="no_change",
-            evidence_ids=[record.id],
-            metric=record.metrics[-1],
+    return _claim(
+        record,
+        f"{name} showed no clear shift: {after} after {when} against {before} before.",
+        "no_change",
+    )
+
+
+def _weekdays(record, shown, significant) -> Claim:
+    weekend, weekday = _shown(shown, "mean_weekend", "mean_weekday")
+    name = label(record.metrics[0])
+    if significant:
+        way = _up(record)
+        more = "higher" if way == "up" else "lower"
+        return _claim(
+            record,
+            f"{name}: {more} on weekend days than on weekdays, {weekend} against {weekday}.",
+            "change",
+            way,
         )
-    return None
+    return _claim(
+        record,
+        f"{name} showed no clear weekday-weekend difference: {weekend} on weekend days against "
+        f"{weekday} on weekdays.",
+        "no_change",
+    )
+
+
+def _tagged(record, shown, significant) -> Claim:
+    tagged, untagged = _shown(shown, "with_tag", "without_tag")
+    name = label(record.metrics[-1])
+    if significant:
+        # Two groups of days, not a change over time: a value claim, as the verifier allows.
+        return _claim(record, f"{name}: {tagged}, against {untagged}.", "value")
+    return _claim(
+        record, f"{name} showed no clear difference: {tagged}, against {untagged}.", "no_change"
+    )
+
+
+def _trend(record, shown, significant) -> Claim:
+    if record.stats.get("slope_per_day") is None:
+        raise _Missing
+    name = label(record.metrics[0])
+    if significant:
+        way = "up" if record.stats["slope_per_day"] > 0 else "down"
+        word = "upward" if way == "up" else "downward"
+        return _claim(record, f"{name} trended {word}.", "change", way)
+    return _claim(record, f"{name} showed no clear trend.", "no_change")
+
+
+def _correlate(record, shown, significant) -> Claim:
+    rho = record.stats.get("rho")
+    if rho is None or len(record.metrics) != 2:
+        raise _Missing
+    names = " and ".join(label(m) for m in record.metrics)
+    if significant:
+        way = "together" if rho > 0 else "in opposite directions"
+        return _claim(
+            record,
+            f"{names} tended to move {way} (correlation {rho:g}).",
+            "association",
+            "up" if rho > 0 else "down",
+            record.metrics[-1],
+        )
+    return _claim(
+        record,
+        f"{names} showed no clear link (correlation {rho:g}).",
+        "no_change",
+        metric=record.metrics[-1],
+    )
+
+
+def _described(record, shown, significant) -> Claim:
+    (mean,) = _shown(shown, "mean")
+    return _claim(record, f"{label(record.metrics[0])} averaged {mean}.", "value")
+
+
+SAYERS = {
+    "compare_windows": _windows,
+    "change_point": _change_point,
+    "weekday_split": _weekdays,
+    "tag_effect": _tagged,
+    "trend": _trend,
+    "correlate": _correlate,
+    "describe": _described,
+}
 
 
 def _when(window: Window, today: date) -> str:

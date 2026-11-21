@@ -88,12 +88,11 @@ class FromEarlier(Fields):
     belongs to the day it worked it out for. Code does the rest, and checks that two days and
     a length agree.
 
-    After a five-day period: the whole period two days earlier: new_first_day its_first_day -2,
-    length 5. The five days before it: new_last_day its_first_day -1, length 5 (or new_first_day
-    its_first_day -5, length 5). The next four days: new_first_day its_last_day +1, length 4.
-    Its last three days: new_last_day its_last_day 0, length 3. Four days starting on its
-    second day: new_first_day its_first_day +1, length 4. Three days whose last day is its first
-    day: new_last_day its_first_day 0, length 3. Without its first and last day: new_first_day
+    A block right after or before it, or the whole period moved, has its own kind
+    (block_after, block_before, whole_shifted). After a five-day period: its last three
+    days: new_last_day its_last_day 0, length 3. Four days starting on its second day:
+    new_first_day its_first_day +1, length 4. Three days whose last day is its first day:
+    new_last_day its_first_day 0, length 3. Without its first and last day: new_first_day
     its_first_day +1 and new_last_day its_last_day -1, length null."""
 
     kind: Literal["from_earlier"]
@@ -133,6 +132,47 @@ class FromEarlier(Fields):
         return value
 
 
+class AfterEarlier(Fields):
+    """A block of days after an earlier period, its boundary worked out by code: "the next four
+    days" is length 4; "four days beginning two days after its last day" is length 4, starting 2
+    days after it. Placed as a new last day, "the next four days after that block" ended on the
+    day after it, nine of twelve times (the review of e1c1eec)."""
+
+    kind: Literal["block_after"]
+    length: int = Field(ge=1, le=3660, description="Days in the new block.")
+    starts_days_after_its_last_day: int = Field(
+        default=1,
+        ge=1,
+        le=3660,
+        description="1: it starts the day after the earlier period's last day.",
+    )
+    relative_to: Literal["earlier_result", "this_clause"] = "earlier_result"
+
+
+class BeforeEarlier(Fields):
+    """A block of days before an earlier period, its boundary worked out by code: "the five days
+    before it" is length 5; "four days ending two days before its first day" ends 2 days before."""
+
+    kind: Literal["block_before"]
+    length: int = Field(ge=1, le=3660, description="Days in the new block.")
+    ends_days_before_its_first_day: int = Field(
+        default=1,
+        ge=1,
+        le=3660,
+        description="1: it ends the day before the earlier period's first day.",
+    )
+    relative_to: Literal["earlier_result", "this_clause"] = "earlier_result"
+
+
+class ShiftedEarlier(Fields):
+    """The whole earlier period moved, its number of days kept by code: "the same block two days
+    earlier" is -2. Placed with a length, a translation that kept its size came back with none
+    (the review of e1c1eec)."""
+
+    kind: Literal["whole_shifted"]
+    days: int = Field(ge=-3660, le=3660, description="+2 two days later, -2 two days earlier.")
+
+
 class Month(Fields):
     """A month named with its year, past or future: 'January 2027', 'in March 2026'."""
 
@@ -148,7 +188,16 @@ class AllHistory(Fields):
 
 
 Span = Annotated[
-    Dates | CalendarPeriod | Month | SameAsEarlier | FromEarlier | DaysEnding | AllHistory,
+    Dates
+    | CalendarPeriod
+    | Month
+    | SameAsEarlier
+    | AfterEarlier
+    | BeforeEarlier
+    | ShiftedEarlier
+    | FromEarlier
+    | DaysEnding
+    | AllHistory,
     Field(discriminator="kind"),
 ]
 
@@ -161,6 +210,27 @@ def period_of(span: Span) -> Period:
         return Period(kind="calendar", unit=span.unit, offset_units=span.offset)
     if isinstance(span, SameAsEarlier):
         return Period(kind="inherit")
+    if isinstance(span, AfterEarlier | BeforeEarlier):
+        after = isinstance(span, AfterEarlier)
+        return Period(
+            kind="beside",
+            anchor="own" if span.relative_to == "this_clause" else "previous",
+            edge="last" if after else "first",
+            starts=after,
+            offset_days=span.starts_days_after_its_last_day
+            if after
+            else -span.ends_days_before_its_first_day,
+            days=span.length,
+        )
+    if isinstance(span, ShiftedEarlier):
+        return Period(
+            kind="beside",
+            anchor="previous",
+            edge="first",
+            starts=True,
+            offset_days=span.days,
+            keep_width=True,
+        )
     if isinstance(span, FromEarlier):
         placed = span.new_first_day or span.new_last_day
         if placed is None:
@@ -415,9 +485,18 @@ class RedoClause(Fields):
         description="inherit keeps the earlier statistic; the statistic this message asks for "
         "instead ('the median instead' is median)."
     )
+    # What it is about, said apart from the statistic: with only an empty metric list, "every
+    # measure, on those two blocks" inherited the last steps result, and a broad look edited to
+    # a comparison lost its breadth (the review of e1c1eec).
+    target: Literal["same", "named", "every_metric"] = Field(
+        default="same",
+        description="same: the earlier answer's own measures (all of them, if it looked at "
+        "every one); named: the measures in metrics, which this message names; every_metric: "
+        "every measure they have.",
+    )
     metrics: list[str] = Field(
         max_length=8,
-        description="Empty keeps the earlier measures; the measures this message names instead.",
+        description="With target named: the measures this message names. Otherwise empty.",
     )
     comparison: Literal[">", ">=", "<", "<=", "=="] | None = Field(
         default=None, description="Null keeps the earlier comparison."
@@ -615,8 +694,18 @@ def _nutrients(clause: DataClause) -> list[str]:
 
 def _edit(redo: RedoClause) -> Part:
     """What a redo repeats, as a data part: what it keeps is left to inherit from the earlier
-    result, what it changes is said."""
+    result, what it changes is said. Measures it states are the ones used, whatever its target
+    says (the reader restates an unchanged metric often, and that is no conflict). A target
+    that contradicts its metrics, named with none or every measure with some, goes back."""
+    if (redo.target == "named" and not redo.metrics) or (
+        redo.target == "every_metric" and redo.metrics
+    ):
+        raise RetryReading(
+            "A redo's target and metrics disagree: target named lists the measures the message "
+            "names in metrics; every_metric leaves metrics empty."
+        )
     return Part(
+        every_metric=redo.target == "every_metric",
         metrics=redo.metrics,
         operation=redo.operation,
         periods=[period_of(s) for s in redo.periods],
@@ -883,6 +972,10 @@ def reading_from(
         fields["redo_options"] = redo.options
         if primary == "redo":
             parts = [_edit(redo)]
+        else:
+            # Beside a status, a recall or guidance, the redo is answered too: "say both again"
+            # read as a redo and a status lost the repeated figure (the review of e1c1eec).
+            fields["redo_part"] = _edit(redo)
     fields["status"] = "status" in types
     fields["clause_count"] = len(clauses)
     fields["told"] = any(

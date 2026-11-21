@@ -79,6 +79,7 @@ def redo(words, *periods, operation="inherit", metrics=(), **extra):
         "periods": list(periods) or [SAME],
         "operation": operation,
         "metrics": list(metrics),
+        "target": "named" if metrics else "same",
         **extra,
     }
 
