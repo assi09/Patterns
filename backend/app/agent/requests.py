@@ -474,21 +474,26 @@ def _changes(edit: Part, previous: Sequence[ResolvedPart]) -> bool:
     )
 
 
-def _legacy_answer(state: dict, previous: list[ResolvedPart]) -> dict:
-    """A state saved before the whole answer was kept, read as one: a data kind's results are
-    its own; beside guidance, a recall or a status, the results kept are taken as the side
-    reads it gave."""
+def _legacy_answer(state: dict, previous: list[ResolvedPart]) -> tuple[dict, list[ResolvedPart]]:
+    """A state saved before the whole answer was kept, read as one, and the results it gave. A
+    data kind's results are its own. Beside guidance, a recall or a status, a kept result was a
+    side read only when the last answer's own verified claims name its metric (`claimed`, from
+    the turn): taken as one regardless, an older resting heart rate mean was added to a repeat
+    of plank guidance (the review of 462f700). Older results stay addressable by index."""
     kind = state["last"]
     own = kind in ("data", "causality", "investigate")
-    return {
+    claimed = set(state.get("claimed", ()))
+    side = [] if own else [p for p in previous if claimed & set(p.metrics)]
+    answer = {
         "kind": kind,
         "parts": len(previous) if own else 0,
-        "reads": 0 if own else len(previous),
+        "reads": len(side),
         "status": kind == "status",
         "focus": state.get("focus"),
         "topics": state.get("guidance", []) if kind == "guidance" else [],
         "recall": None,
     }
+    return answer, previous if own else side
 
 
 def _last_answers(state: dict, previous: list[ResolvedPart]) -> list[ResolvedPart]:
@@ -540,16 +545,20 @@ def _redo(request: Request, reading: Reading, state: dict, today: date) -> Reque
     request's own kind, so new days, a statistic or a measure are never lost to "the same
     answer" (the 689fa7c audit). An explicit statistic wins over a look's description: "the
     median steps for those dates" after an investigation is the median (the review of 40baaee)."""
-    request.points = reading.redo_options
+    # The answer's form is kept too: a three-option answer repeated "briefly" is three options,
+    # unless a new count is said (it fell back to one, the review of 462f700).
+    last = state.get("answer") if isinstance(state.get("answer"), dict) else {}
+    request.points = reading.redo_options or last.get("points")
     edit = reading.parts[0] if reading.parts else Part(periods=[Period(kind="inherit")])
     previous, older = _addressable(state)
     if not _changes(edit, _last_answers(state, previous)) and edit.reference is None:
         if not isinstance(state.get("answer"), dict) and state.get("last"):
-            state = {**state, "answer": _legacy_answer(state, previous)}
+            answer, previous = _legacy_answer(state, previous)
+            state = {**state, "answer": answer}
         if isinstance(state.get("answer"), dict):
             request = _replayed(request, state, previous)
             if request.kind == "investigate" and reading.redo_options:
-                request.focus = "coaching"
+                request.focus = "coaching"  # options asked for on a look: coaching on it
             elif request.kind == "investigate":
                 request.focus = request.focus or state.get("focus", "overview")
             return request
@@ -1246,6 +1255,12 @@ def interpret(
 
         read_back = settings.read_back_enabled
     state = previous_state(history)
+    # For a state saved before whole answers were kept: the metrics the last answer's verified
+    # claims name, the only reliable sign of what it delivered. Used to resolve, never saved.
+    resolving = state
+    if state and not isinstance(state.get("answer"), dict) and history:
+        claimed = {c.get("metric") for c in history[-1].claims if isinstance(c, dict)}
+        resolving = {**state, "claimed": sorted(m for m in claimed if m)}
     # Two readings and a read-back of each.
     budget = Budget(max_calls=4, max_cost_usd=0.02)
     registry = {
@@ -1341,7 +1356,7 @@ def interpret(
                         "retrieve existing entries or needs clarification. Never "
                         "invent a pending draft or turn readback into a write."
                     )
-                request = checked(reading, question, state, today)
+                request = checked(reading, question, resolving, today)
                 if read_back and (
                     wrong := readback.check(llm, question, request, state, today, budget)
                 ):
@@ -1433,6 +1448,7 @@ def interpret(
             "reads": len(request.reads) if stored else 0,
             "status": request.status,
             "focus": request.focus,
+            "points": request.points,
             "topics": request.topics if request.kind == "guidance" else [],
             "recall": request.recall
             if request.kind == "memory" and request.memory_action == "recall"

@@ -53,6 +53,55 @@ def finding_claim(record: Evidence) -> Claim:
     )
 
 
+def code_claim(record: Evidence) -> Claim | None:
+    """What one record establishes, in a fixed sentence citing it, and nothing more: the subject
+    is its metric and the statement its own statistic. None for a record that is not a finding
+    about the person's measures (a passage, a habit test, a coverage count), which code says
+    elsewhere or not at all."""
+    if not record.metrics or not record.sufficient:
+        return None
+    if "difference" in record.stats or (
+        record.tool == "describe" and record.stats.get("mean") is not None
+    ):
+        return finding_claim(record)
+    if record.tool == "trend" and record.stats.get("slope_per_day") is not None:
+        name = _first_up(label(record.metrics[0]))
+        if is_significant(record):
+            way = "up" if record.stats["slope_per_day"] > 0 else "down"
+            return Claim(
+                text=f"{name} trended {'upward' if way == 'up' else 'downward'}.",
+                kind="change",
+                evidence_ids=[record.id],
+                metric=record.metrics[0],
+                direction=way,
+            )
+        return Claim(
+            text=f"{name} showed no clear trend.",
+            kind="no_change",
+            evidence_ids=[record.id],
+            metric=record.metrics[0],
+        )
+    if record.tool == "correlate" and record.stats.get("rho") is not None:
+        rho = record.stats["rho"]
+        names = " and ".join(label(m) for m in record.metrics)
+        if is_significant(record):
+            way = "together" if rho > 0 else "in opposite directions"
+            return Claim(
+                text=_first_up(f"{names} tended to move {way} (correlation {rho:g})."),
+                kind="association",
+                evidence_ids=[record.id],
+                metric=record.metrics[-1],
+                direction="up" if rho > 0 else "down",
+            )
+        return Claim(
+            text=_first_up(f"{names} showed no clear link (correlation {rho:g})."),
+            kind="no_change",
+            evidence_ids=[record.id],
+            metric=record.metrics[-1],
+        )
+    return None
+
+
 def _when(window: Window, today: date) -> str:
     from app.agent.requested import _when as when
 

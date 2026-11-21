@@ -46,7 +46,7 @@ from app.agent.experts import (
     specialist_notes,
     visible_metrics,
 )
-from app.agent.findings import finding_claim, render_overview
+from app.agent.findings import code_claim, finding_claim, render_overview
 from app.agent.followup import standalone, with_period, with_relative_day
 from app.agent.guard import Guard, GuardError, JevGuard
 from app.agent.intent import Intent
@@ -521,19 +521,37 @@ def coaching_query(typed, records: Iterable[Evidence]) -> str | None:
 
 
 MAX_TOPICS = 3
+NO_TESTED_FINDING = "I can't tie an explanation to a tested result for those days."
 FROM_CODE_STOPS = ("limits", "urgent", "refused", "noted", "chatted", "chat_fallback")
 
 
 def said_by_claims(result: AgentResult) -> None:
-    """An explanation says only what its verified claims say: the model's own prose around
-    them, checked by nothing, added "feeling more run down", an outcome nobody reported or
-    measured, beside four valid claims (the review of 40baaee). What it cannot tell is said by
-    code (WHY_LIMIT). A reply code wrote already, or one with no claim, is left as it is."""
-    texts = [c.text.strip() for c in result.claims if c.text.strip()]
-    if not texts or result.stop_reason in FROM_CODE_STOPS:
+    """An explanation says only what its cited records establish, in code's words: each record
+    the investigator chose to cite, once, as a fixed statement of its own statistic. Joining the
+    model's claim texts was not enough: "steps went up from 7,184 to 12,780. You have been
+    feeling more run down" was one accepted claim, and a steps record says nothing about how
+    anyone feels or how they get to work (the review of 462f700). Before that, the prose around
+    the claims had said it (the review of 40baaee). What cannot be told is code's note
+    (WHY_LIMIT). A reply code wrote already, or one citing no finding, is left as it is."""
+    if result.stop_reason in FROM_CODE_STOPS or not result.claims:
         return
-    result.summary = " ".join(texts)
-    result.trace.append({"type": "summary_from_claims", "claims": len(texts)})
+    stated, seen = [], set()
+    for claim in result.claims:
+        for evidence_id in claim.evidence_ids:
+            record = result.evidence.get(evidence_id)
+            if evidence_id in seen or record is None:
+                continue
+            seen.add(evidence_id)
+            if (said := code_claim(record)) is not None:
+                stated.append(said)
+    if not stated:
+        # Nothing cited is a finding code can state: the model's words are not said in its place.
+        result.summary, result.claims = NO_TESTED_FINDING, []
+        result.trace.append({"type": "said_from_records", "claims": 0})
+        return
+    result.summary = " ".join(c.text for c in stated)
+    result.claims = stated
+    result.trace.append({"type": "said_from_records", "claims": len(stated)})
 
 
 def _options_without_data(llm: LLM, result: AgentResult, typed, wanted: int, guard) -> None:

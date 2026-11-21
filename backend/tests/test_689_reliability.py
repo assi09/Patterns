@@ -111,9 +111,10 @@ def test_a_redo_after_a_status_and_a_figure_repeats_both():
     """mixed_log-01/t3: "say both again in a shorter answer" dropped the status."""
     state = {**SIX.request_state, "last": "status"}
     words = "Say both again in a shorter answer."
-    request, _ = read(
-        words, said(redo(words)), history=[Turn("Saved? And HR?", "x", request_state=state)]
-    )
+    # The figure was part of that answer: its verified claim names the metric.
+    figure = ({"text": "x", "metric": "still_hr_above_resting", "evidence_ids": ["e"]},)
+    answered = Turn("Saved? And HR?", "x", claims=figure, request_state=state)
+    request, _ = read(words, said(redo(words)), history=[answered])
     assert request.kind == "status" and request.status and request.reads
 
 

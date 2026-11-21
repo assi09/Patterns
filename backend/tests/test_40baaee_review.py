@@ -14,7 +14,7 @@ from test_clauses import data, dates, read, redo, said, windows
 from test_investigate_and_memory import reading_llm
 
 from app.agent.agent import AgentResult
-from app.agent.ask import ask, said_by_claims
+from app.agent.ask import NO_TESTED_FINDING, ask, said_by_claims
 from app.agent.context import Turn
 from app.agent.llm import ScriptedLLM
 from app.agent.requests import Request, interpret, kept_fields
@@ -346,11 +346,9 @@ def test_an_explanations_unchecked_prose_is_not_what_is_said():
         "Time asleep fell: 6 h against 7 h 2 min.",
     )
     said_by_claims(result)
-    assert "run down" not in result.summary
-    assert (
-        result.summary
-        == "Steps went up: 12,780 against 7,184. Time asleep fell: 6 h against 7 h 2 min."
-    )
+    # Its records are stated by code, never its words (tests/test_462f700_review.py); this
+    # stand-in record holds no statistic, so nothing of the model's is said in its place.
+    assert "run down" not in result.summary and result.summary == NO_TESTED_FINDING
 
 
 @pytest.mark.parametrize(
@@ -367,14 +365,29 @@ def test_a_reply_with_no_verified_claim_or_from_code_is_left_alone(result):
 
 
 @pytest.mark.parametrize(
-    "state, kind, reads",
+    "state, claimed, kind, reads",
     [
-        ({"last": "status"}, "status", 0),
-        ({"last": "memory", "data": [SLEEP_PART]}, "memory", 1),
-        ({"last": "guidance", "guidance": ["plank"], "data": [SLEEP_PART]}, "guidance", 1),
+        ({"last": "status"}, (), "status", 0),
+        # The kept sleep mean is no part of a recall or a guidance answer that named no metric
+        # (the review of 462f700: plank guidance came back with an old resting heart rate)...
+        ({"last": "memory", "data": [SLEEP_PART]}, (), "memory", 0),
+        ({"last": "guidance", "guidance": ["plank"], "data": [SLEEP_PART]}, (), "guidance", 0),
+        ({"last": "status", "data": [SLEEP_PART]}, (), "status", 0),
+        # ...and is one when the answer's own verified claims name its metric.
+        ({"last": "memory", "data": [SLEEP_PART]}, ("sleep_minutes",), "memory", 1),
+        (
+            {"last": "guidance", "guidance": ["plank"], "data": [SLEEP_PART]},
+            ("sleep_minutes",),
+            "guidance",
+            1,
+        ),
     ],
 )
-def test_a_state_saved_before_whole_answers_were_kept_replays_the_same_way(state, kind, reads):
+def test_a_state_saved_before_whole_answers_were_kept_replays_only_what_it_shows(
+    state, claimed, kind, reads
+):
     words = "Again, briefly."
-    request, _ = read(words, said(redo(words)), history=[Turn("x", "y", request_state=state)])
+    claims = tuple({"text": "x", "metric": m, "evidence_ids": ["e"]} for m in claimed)
+    history = [Turn("x", "y", claims=claims, request_state=state)]
+    request, _ = read(words, said(redo(words)), history=history)
     assert request.kind == kind and len(request.reads) == reads
