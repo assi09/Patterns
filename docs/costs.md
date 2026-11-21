@@ -257,3 +257,26 @@ approximately **$3.9346 of $4**, leaving **$0.0654**. Results are in
 ### November 21, 2026 — post-audit diagnostic probes on 9228fe6
 
 Matched reader, calendar and exercise-selector probes recorded $0.248385800 in returned usage. Combined with the preceding audit, confirmed spend is $0.517453352 against the same $2 cap. Two diagnostic meters retain $0.603452250 in unresolved reservations, including a reproduced HTTP 400 for unsupported reasoning effort with function tools. These reservations are an upper bound, not confirmed charges. Conservative remaining allowance is $0.879094. No paid diagnostic result is a release score.
+
+### November 21, 2026 — independent audit of b3d64ca
+
+Frozen candidate `b3d64ca33f7da5992890b20dd290c6bace660955`: 90 fresh synthetic API turns
+cost **$0.308799922** (OpenAI $0.299549590, Jev $0.009250332); the frozen 24-item PHIA B1
+regression gate cost **$0.043868418** (OpenAI $0.041856450, Jev $0.002011968). Combined
+**$0.352668340**, within the user's explicit $0.65 approval and the existing shared $2 allowance.
+The initial automatic approval rejection did not execute and cost $0. New unresolved reservations:
+$0. Including the earlier $0.603452250 unresolved reservations, conservative cumulative usage
+is **$1.473573942 of $2**, leaving **$0.526426058**. No paid judge, Google traffic or writes;
+offline replays/tests/preflight/reopening cost $0. Results and limitations are in the
+[b3d64ca independent handoff](independent-audit-b3d64ca-handoff.md): HOLD; 83 full, 1 partial,
+6 failed of 90 fresh turns; PHIA 24/24. The prior diagnostic runs remain development results.
+
+### November 21, 2026 — next-audit authorization and planning
+
+The user authorized a **new $5 maximum across the next audits**, with broader question coverage.
+This is a forward-looking shared cap, not $5 per run; the previous approximately $0.526 remaining
+is not added to it. Earlier usage and unresolved reservations remain recorded above. This
+planning/code review cost **$0**, leaving the new **$5.00** unspent. Proposed allocations:
+$0.75 matched development diagnosis, $3.50 fresh broad conversations, $0.25 PHIA B1 and $0.50
+uncertainty/confirmation reserve, all under one combined meter. No paid run started. See
+[the general repair and expanded audit plan](pr-195-general-repair-plan.md).

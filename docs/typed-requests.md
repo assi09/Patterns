@@ -481,3 +481,25 @@ controls it named:
 No live run followed: these are offline repairs with the audit's cases and controls as tests
 (`tests/test_r922_reliability.py`). The release decision needs fresh paired conversations under
 the unchanged gates.
+
+## After the independent audit of `b3d64ca` and the general repair plan (2026-11-21)
+
+Codex's audit ([handoff](independent-audit-b3d64ca-handoff.md)) confirmed the food chain (10/10),
+guidance (16/16), comparison and coaching scope, card patches and evidence versions, and held the
+merge on five date follow-ups and one correction moved the wrong way. Its
+[general repair plan](pr-195-general-repair-plan.md) named the contracts behind those and three
+more defects its offline probes reproduced. Each change below enforces one invariant, tested with
+the plan's reproduction and its contrasting control (`tests/test_b3_reliability.py`):
+
+| Section | Invariant now enforced |
+|---|---|
+| F | An unknown habit exposure is in neither group: a night with no bedtime, or a day with no strain, is not a "later night" or an "ordinary day". Adding unknown rows does not change a known-pair result. |
+| E | The run's correction family counts hypotheses, not records: an identical retest under a new id is one test (0.03 and 0.07 stay at 0.06, not 0.045); a different test of the same metric is another. |
+| D | Every result of an answer is addressable next turn, its side reads included, and the last answer's kind is kept: "that again" after guidance redoes the guidance. Two clauses are one look only for the same periods of the same result. A comparison of every measure over other days runs cold, as an overview. |
+| A | The trace outline keeps every field of a date edit (landmark, offset, boundary, length), a correction's signed move and a redo's count, so the first wrong field of a reading is visible without another call. |
+| B | A redo keeps the data or is sent back: the reader states `keeps_the_data`, and a shorter period is a data edit. A reading that is neither small talk nor something about them, and no request the app can run, gets one question naming the last result, never a default data run. |
+| C | A reported date error ("two days too early") is `card_was` plus days, and code derives the move; an instruction to move is still `days_from_card`. The reader is told that a new edge on the earlier edge is offset 0. |
+| G | Coaching is assembled once: an investigation's options are said by code first, then topped up with labelled general points up to the number asked for, which the reader now states (`points`) instead of a word count that never recognised "options". |
+
+The C and B reader changes, and `points`, are prompt and schema changes with no live measurement
+yet. The plan's matched-reader step and Codex's unseen paired deck decide whether they help.
