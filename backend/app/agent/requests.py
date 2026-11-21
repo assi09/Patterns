@@ -379,11 +379,19 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
                 )
             span = (last - day).days + 1
             if period.sized and span != period.days:
-                raise RetryReading(
+                # The count the message said stays: the retry once dropped it to make the two
+                # days agree, and a three-day block became one day (the review of bcdb0ff).
+                error = RetryReading(
                     f"The placed first and last days give {span} days, but length says "
-                    f"{period.days}. Keep the days the message names; give the length only "
-                    "when it is said or the earlier period's own."
+                    f"{period.days}. Keep the length: when the message names one day of the "
+                    "new period and its number of days, place only that day."
                 )
+                error.keeps = ("periods.length",)
+                error.ask = (
+                    f"Which {period.days} days do you mean: should the new period end or start "
+                    "on that date?"
+                )
+                raise error
             return [Window(start=day, end=last)]
         rest = timedelta(days=period.days - 1)
         if period.starts:
@@ -428,9 +436,11 @@ def _addressable(state: dict) -> tuple[list[ResolvedPart], list[ResolvedPart]]:
         found = []
         for raw in state.get(key, []):
             try:
-                found.append(ResolvedPart.model_validate(raw))
+                part = ResolvedPart.model_validate(raw)
             except ValidationError:
                 continue
+            if part not in found:  # a state saved with the same result twice reads it once
+                found.append(part)
         return found
 
     return parts("data"), parts("older")
@@ -674,6 +684,71 @@ def _investigation(request: Request, reading: Reading, state: dict, today: date)
 
 
 def resolve(reading: Reading, state: dict, today: date) -> Request:
+    """The request the reading asks for: its primary clause's, with a repeat beside it composed
+    in as what that repeat is, and equivalent results kept once."""
+    request = _resolve(reading, state, today)
+    if reading.redo_part is not None and reading.subject == "self":
+        again = _resolve(
+            Reading(kind="redo", parts=[reading.redo_part], redo_options=reading.redo_options),
+            state,
+            today,
+        )
+        request = _composed(request, again)
+    return _normalized(request)
+
+
+TOGETHER = "Which should I do first: repeat that earlier answer, or the rest of your message?"
+
+
+def _composed(request: Request, again: Request) -> Request:
+    """A repeat beside another request, composed by what each is. Kept as a list of precise
+    reads, a repeated all-measure look ran through the precise executor and said nothing beside
+    a status; nor beside guidance (the review of bcdb0ff). A repeated figure joins the request's
+    own results; a repeated look leads, with the status or recall asked beside it; the same
+    answer twice is one; a pair that cannot be answered together is asked about."""
+    precise = again.kind in ("data", "causality")
+    figures = [*again.parts, *again.reads] if precise else list(again.reads)
+    if again.kind == "investigate":
+        if request.kind == "investigate":
+            if again.parts == request.parts:
+                return request
+            raise Ambiguous(TOGETHER)
+        if request.kind in ("status", "memory") and request.memory_action in (None, "recall"):
+            return again.model_copy(
+                update={
+                    "status": request.status or again.status,
+                    "memory_action": request.memory_action,
+                    "recall": request.recall,
+                    "reads": [*again.reads, *request.reads],
+                    "told": request.told,
+                }
+            )
+        raise Ambiguous(TOGETHER)
+    if again.kind == "guidance" and (request.kind != "guidance" or request.topics != again.topics):
+        raise Ambiguous(TOGETHER)
+    if again.kind == "memory" and request.kind != "memory":
+        raise Ambiguous(TOGETHER)
+    if again.status:
+        request.status = True
+    if request.kind in ("data", "causality"):
+        request.parts += figures
+    else:
+        request.reads += figures
+    return request
+
+
+def _normalized(request: Request) -> Request:
+    """Equivalent results once: a repeat and a look written for the same follow-up saved the
+    same look twice, and the next turn's "why?" asked which of the two (the review of bcdb0ff).
+    Different metrics, periods or goals stay apart."""
+    parts = [p for i, p in enumerate(request.parts) if p not in request.parts[:i]]
+    reads = [
+        r for i, r in enumerate(request.reads) if r not in parts and r not in request.reads[:i]
+    ]
+    return request.model_copy(update={"parts": parts, "reads": reads})
+
+
+def _resolve(reading: Reading, state: dict, today: date) -> Request:
     request = Request(
         kind=reading.kind,
         subject=reading.subject,
@@ -718,9 +793,6 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
     if beside and reading.subject == "self":
         asked = Reading(kind="data", parts=beside)
         request.reads = resolve(asked, state, today).parts
-    if reading.redo_part is not None and reading.subject == "self":
-        again = resolve(Reading(kind="redo", parts=[reading.redo_part]), state, today)
-        request.reads += [p for p in [*again.parts, *again.reads] if p not in request.reads]
     if reading.kind in BESIDE and reading.kind != "guidance":
         return request
     if reading.kind == "guidance":
@@ -1017,7 +1089,8 @@ Clause types:
   Reading entries already saved is a data clause.
 - memory: remember (keep something about them, however politely asked); recall (kept: what they
   approved; waiting: cards not yet tapped; this_chat: what they said in this conversation; all);
-  forget (remove something already kept; states_new_fact when they also say what is true now).
+  forget (remove something already kept, or prepare the card that removes it once they tap,
+  "ask me to confirm removing it"; states_new_fact when they also say what is true now).
   "Keep this out of my profile" about something said now is store_nothing, not forget.
 - confirm or correct only act on a card: with no pending_draft, "submit that one" is other.
 - redo: an earlier answer again, changed only where this message changes it: in another
@@ -1073,7 +1146,9 @@ Periods, for data and investigate clauses; pick the kind that means what was sai
   before today: 1, -2. the last 7 days (today included): 7, 0. the 5 complete days before
   today: 5, -1. Only when the words count from today, never for days placed against an
   earlier result.
-- all_history: a new question that names no period.
+- all_history: all of their data: a new question that names no period, or a follow-up that
+  asks for all of their history in place of the earlier days ("drop the window, use all my
+  history"), which is never same_as_earlier.
 A follow-up that changes only the comparison ("exclude the days exactly on the boundary") keeps
 the earlier days and threshold, with only the comparison changed (at or below becomes below).
 "yesterday", "last 7 days" and "this week" count from today; from_earlier only when the
@@ -1105,25 +1180,51 @@ UNPLACED = (
 
 def kept_fields(arguments, before, fields: Sequence[str]):
     """A corrected reading with the fields its error was not about put back as they were, onto
-    the same clause: the data clause of the first reading with the same words (`said`), when
-    exactly one has them. Matched by position, a retry that put steps before food moved food's
-    source onto steps and lost the steps read (the review of 40baaee). A clause with no unique
-    match keeps what the retry gave it: nothing is moved between clauses."""
+    the same clause: the data or redo clause of the first reading with the same words (`said`),
+    when exactly one has them. Matched by position, a retry that put steps before food moved
+    food's source onto steps and lost the steps read (the review of 40baaee). A clause with no
+    unique match keeps what the retry gave it: nothing is moved between clauses.
+    "periods.length" keeps a stated length on the same-place period the retry left without one."""
     if not (isinstance(arguments, dict) and isinstance(before, dict)):
         return arguments
     new, old = arguments.get("clauses"), before.get("clauses")
     if not (isinstance(new, list) and isinstance(old, list)):
         return arguments
-    earlier = [c for c in old if isinstance(c, dict) and c.get("type") == "data"]
+    kinds = ("data", "redo")
+    earlier = [c for c in old if isinstance(c, dict) and c.get("type") in kinds]
     clauses = []
     for clause in new:
-        if isinstance(clause, dict) and clause.get("type") == "data":
-            same = [c for c in earlier if c.get("said") == clause.get("said")]
+        if isinstance(clause, dict) and clause.get("type") in kinds:
+            same = [
+                c
+                for c in earlier
+                if c.get("said") == clause.get("said") and c.get("type") == clause.get("type")
+            ]
             mine = [c for c in new if isinstance(c, dict) and c.get("said") == clause.get("said")]
             if len(same) == 1 and len(mine) == 1:
-                clause = clause | {f: same[0][f] for f in fields if f in same[0]}
+                flat = [f for f in fields if "." not in f]
+                clause = clause | {f: same[0][f] for f in flat if f in same[0]}
+                if "periods.length" in fields:
+                    clause = clause | {"periods": _lengths_kept(clause, same[0])}
         clauses.append(clause)
     return arguments | {"clauses": clauses}
+
+
+def _lengths_kept(clause: dict, before: dict) -> list:
+    periods = list(clause.get("periods") or [])
+    old = list(before.get("periods") or [])
+    for index, period in enumerate(periods):
+        earlier = old[index] if index < len(old) else None
+        if (
+            isinstance(period, dict)
+            and isinstance(earlier, dict)
+            and period.get("kind") == earlier.get("kind")
+            and "length" in period
+            and period.get("length") is None
+            and earlier.get("length")
+        ):
+            periods[index] = period | {"length": earlier["length"]}
+    return periods
 
 
 def strict_schema(schema: dict) -> dict:

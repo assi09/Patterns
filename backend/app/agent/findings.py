@@ -23,36 +23,6 @@ def _first_up(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def finding_claim(record: Evidence) -> Claim:
-    """The record's finding in a fixed sentence, citing it."""
-    metric = record.metrics[0]
-    shown = evidence_payload(record)["display"]
-    name = _first_up(label(metric))
-    if "difference" not in record.stats:
-        return Claim(
-            text=f"{name} averaged {shown.get('mean', '')}.",
-            kind="value",
-            evidence_ids=[record.id],
-            metric=metric,
-        )
-    against = f"{shown.get('mean_recent', '')} against {shown.get('mean_baseline', '')}"
-    if is_significant(record):
-        way = "up" if (record.stats.get("difference") or 0) > 0 else "down"
-        return Claim(
-            text=f"{name} went {way}: {against}.",
-            kind="change",
-            evidence_ids=[record.id],
-            metric=metric,
-            direction=way,
-        )
-    return Claim(
-        text=f"{name} showed no clear change: {against}.",
-        kind="no_change",
-        evidence_ids=[record.id],
-        metric=metric,
-    )
-
-
 def code_claim(record: Evidence) -> Claim | None:
     """What one record establishes, in a fixed sentence citing it, and nothing more: the subject
     is its metric, the statement its own statistic, worded for what that statistic means. A
@@ -233,7 +203,7 @@ def render_overview(records: Sequence[Evidence], today: date) -> tuple[str, list
         head = f"{_first_up(_when(focal, today))}, compared with {_when(baseline, today)}"
         # Every clear change is named and cited: the first ones with their figures, the rest by
         # name and direction ("1 more measures also changed clearly" was shown uncited, v8).
-        claims = [finding_claim(r) for r in clear]
+        claims = [c for r in clear if (c := code_claim(r)) is not None]
         if claims:
             text = f"{head}, the clear changes were: " + " ".join(
                 c.text for c in claims[:MAX_LISTED]
@@ -261,7 +231,9 @@ def render_overview(records: Sequence[Evidence], today: date) -> tuple[str, list
         return text, claims
     if described:
         window = described[0].windows[0]
-        claims = [finding_claim(r) for r in described[:MAX_LISTED]]
+        claims = [c for r in described if (c := code_claim(r)) is not None][:MAX_LISTED]
+        if not claims:
+            return "", []
         text = (
             f"{_first_up(_when(window, today))} is too short to compare with the days before, so "
             "here is what was recorded: " + " ".join(c.text for c in claims)

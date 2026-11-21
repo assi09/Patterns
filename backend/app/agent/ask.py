@@ -47,7 +47,7 @@ from app.agent.experts import (
     visible_metrics,
 )
 from app.agent.findings import SAYERS as SAID_TOOLS
-from app.agent.findings import code_claim, finding_claim, render_overview
+from app.agent.findings import code_claim, render_overview
 from app.agent.followup import standalone, with_period, with_relative_day
 from app.agent.guard import Guard, GuardError, JevGuard
 from app.agent.intent import Intent
@@ -944,19 +944,35 @@ def bound_option(claim: Claim, evidence: dict[str, Evidence]) -> tuple[str, Clai
 
 
 def said_observations(claims: Sequence[Claim], evidence: dict[str, Evidence]) -> list[Claim]:
-    """A coaching answer's observations, each said by code from the test it cites; one code
-    cannot say from its record is left out. A model's observation could carry advice of its own
-    ("steps rose, so you could spread your walks")."""
+    """A coaching answer's observations, each said by code from the test it cites, by the same
+    renderer as an explanation's (`code_claim`); one code cannot say from its record is left
+    out. A model's observation could carry advice of its own ("steps rose, so you could spread
+    your walks"). Sent through the window comparison's renderer, a change point, a weekday split
+    and a tag effect came out as "Steps went up: against ." (the review of bcdb0ff)."""
     said: dict[str, Claim] = {}
     for claim in claims:
         if claim.kind not in OBSERVATIONS:
             continue
         for i in claim.evidence_ids:
             record = evidence.get(i)
-            if record is not None and record.metrics and "difference" in record.stats:
-                said.setdefault(record.id, finding_claim(record))
+            if record is not None and (stated := code_claim(record)) is not None:
+                said.setdefault(record.id, stated)
                 break
     return list(said.values())
+
+
+def unstated_observations(claims: Sequence[Claim], evidence: dict[str, Evidence]) -> int:
+    """Observation claims whose cited findings code could not state: said as a count, never in
+    the model's words."""
+    left = 0
+    for claim in claims:
+        if claim.kind not in OBSERVATIONS:
+            continue
+        cited = [evidence[i] for i in claim.evidence_ids if i in evidence]
+        findings = [r for r in cited if r.metrics and r.tool in SAID_TOOLS]
+        if findings and all(code_claim(r) is None for r in findings):
+            left += 1
+    return left
 
 
 def coaching_by_code(
@@ -981,6 +997,11 @@ def coaching_by_code(
         text, claim = coaching_outcome(habits)
         options = [(text, claim)]
     seen = said_observations(result.claims, result.evidence) if observations else []
+    if observations and (left := unstated_observations(result.claims, result.evidence)):
+        result.notes.append(
+            f"{left} of the results cited had too little data or no figure to state, so "
+            f"{'it is' if left == 1 else 'they are'} left out."
+        )
     said = [text for text, _ in options]
     if len(said) > 1:
         result.summary = "\n".join(f"- {text}" for text in said)
@@ -1030,6 +1051,17 @@ STATUS_WAITING = (
 STATUS_SAVED = "Yes: the entry was written to your tracker when you tapped Log it."
 STATUS_FAILED = "No: the entry couldn't be written to your tracker. You can try again on its card."
 STATUS_NONE = "Nothing from this chat has been written to your tracker, and no card is waiting."
+
+
+def _with_beside(result, typed, states, card, memory, chat, history) -> None:
+    """A status or a recall asked beside another answer (a repeated look and "is it saved?"),
+    said by code under it: read from the store and from what is kept, never a write."""
+    if typed.kind not in ("data", "causality", "investigate", "guidance"):
+        return  # a status or recall is the answer itself; logging turns say their own
+    if typed.status:
+        result.notes.append(status_reply(states, card))
+    if typed.memory_action == "recall":
+        result.notes.append(recalled(memory, chat, history, typed.recall))
 
 
 def status_reply(states: Sequence[str], card: str | None = None) -> str:
@@ -1385,6 +1417,7 @@ def ask(
             )
         if typed.kind not in ("data", "causality"):
             _with_reads(result, typed, frame, _day(today or now), food_logs, now)
+        _with_beside(result, typed, action_states, waiting_card, memory, chat, history)
         _with_reading(result, context, route, typed, request_state, reading_budget)
         return Answer(route, no_false_success(result, after_draft, logging_turn), context)
     # "Am I ok?" asks how their data looks, not for a diagnosis: answered, as an overall look.
@@ -2018,6 +2051,7 @@ def ask(
         result.notes.append(note)
     if typed is not None and not stopped_early:
         _with_reads(result, typed, frame, _day(today or now), food_logs, now)
+        _with_beside(result, typed, action_states, waiting_card, memory, chat, history)
     result.budget.cost_usd += rewrite_cost
     result.budget.cost_usd += reading_budget.cost_usd
     result.budget.calls += reading_budget.calls

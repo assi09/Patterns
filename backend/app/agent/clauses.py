@@ -570,8 +570,8 @@ class OtherClause(Fields):
     message: Literal["small_talk", "about_them", "outside_the_app", "unsure"] = Field(
         default="small_talk",
         description="small_talk: thanks, greetings, chat. about_them: something they tell about "
-        "themselves. outside_the_app: asks for something the app does not do. unsure: you cannot "
-        "tell what it asks.",
+        "themselves. outside_the_app: asks for something the app does not do (what the app keeps "
+        "about them, and removing it, is memory). unsure: you cannot tell what it asks.",
     )
 
 

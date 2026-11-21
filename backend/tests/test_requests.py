@@ -117,12 +117,15 @@ def test_new_period_preserves_operation_but_standalone_new_metric_uses_history()
 
 
 def test_ambiguous_reference_does_not_pick_the_first_data_part():
+    # Two different results: which one is unclear. (The same result stored twice is one, and
+    # no longer ambiguous: the review of bcdb0ff.)
+    two = state(previous(), ResolvedPart(metrics=["hrv_ms"], operation="sum", windows=[SPAN]))
     with pytest.raises(Ambiguous):
         resolve(
             Reading(
                 kind="data", parts=[Part(operation="median", periods=[Period(kind="inherit")])]
             ),
-            state(previous(), previous()),
+            two,
             TODAY,
         )
     result = resolve(
@@ -130,10 +133,19 @@ def test_ambiguous_reference_does_not_pick_the_first_data_part():
             kind="data",
             parts=[Part(operation="median", reference=1, periods=[Period(kind="inherit")])],
         ),
+        two,
+        TODAY,
+    )
+    assert result.parts[0].operation == "median" and result.parts[0].metrics == ["hrv_ms"]
+
+
+def test_the_same_result_stored_twice_is_one_result():
+    result = resolve(
+        Reading(kind="data", parts=[Part(operation="median", periods=[Period(kind="inherit")])]),
         state(previous(), previous()),
         TODAY,
     )
-    assert result.parts[0].operation == "median"
+    assert result.parts[0].metrics == ["steps"]
 
 
 def test_guidance_and_data_context_survive_intervening_turns():
