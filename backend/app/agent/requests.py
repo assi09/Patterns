@@ -458,29 +458,102 @@ def _prior(
     return previous[0]
 
 
-def _changes(edit: Part) -> bool:
+def _changes(edit: Part, previous: Sequence[ResolvedPart]) -> bool:
     """Whether a redo changes the request it repeats: new days, statistic, measures, threshold,
-    comparison or lag. Only the answer's form changing is no change."""
+    comparison or lag. Only the answer's form changing is no change. A lag is a change when it is
+    said and differs from the last answer's: 0 is the same-day test, a value, and read as "not
+    said" it kept a one-day lag that was asked away (the review of 40baaee)."""
+    lags = {p.max_lag for p in previous if p.operation == "correlate"}
     return bool(
         edit.metrics
         or edit.operation != "inherit"
         or any(p.kind != "inherit" for p in edit.periods)
         or edit.comparison is not None
         or edit.threshold is not None
-        or edit.max_lag
+        or (edit.max_lag is not None and bool(lags) and lags != {edit.max_lag})
     )
 
 
+def _legacy_answer(state: dict, previous: list[ResolvedPart]) -> dict:
+    """A state saved before the whole answer was kept, read as one: a data kind's results are
+    its own; beside guidance, a recall or a status, the results kept are taken as the side
+    reads it gave."""
+    kind = state["last"]
+    own = kind in ("data", "causality", "investigate")
+    return {
+        "kind": kind,
+        "parts": len(previous) if own else 0,
+        "reads": 0 if own else len(previous),
+        "status": kind == "status",
+        "focus": state.get("focus"),
+        "topics": state.get("guidance", []) if kind == "guidance" else [],
+        "recall": None,
+    }
+
+
+def _last_answers(state: dict, previous: list[ResolvedPart]) -> list[ResolvedPart]:
+    """The results the last answer itself gave: a guidance or memory answer gave none, even
+    with an older data result still kept."""
+    last = state.get("answer")
+    if isinstance(last, dict):
+        return previous[: last.get("parts", 0) + last.get("reads", 0)]
+    kept = state.get("last") in (None, "data", "causality", "investigate", "status")
+    return previous if kept else []
+
+
+def _replayed(request: Request, state: dict, previous: list[ResolvedPart]) -> Request:
+    """The last answer again as it was delivered, every part of it: its kind, the status or
+    memory recall it gave, its guidance topic, its main results and the side reads beside them.
+    Special cases for status and guidance left a memory recall beside a figure, a status alone
+    and a guidance answer's side read out (the review of 40baaee). A memory change is replayed
+    as what is kept now, never made again; a card is never confirmed again."""
+    last = state["answer"]
+    kind = last.get("kind", "data")
+    main, side = previous[: last.get("parts", 0)], previous[last.get("parts", 0) :]
+    side = side[: last.get("reads", len(side))]
+    if kind in ("data", "causality", "investigate"):
+        if not main:
+            raise Ambiguous("Which earlier answer should I give again?")
+        request.parts, request.reads = main, side
+        request.kind = "investigate" if all(p.operation == "describe" for p in main) else "data"
+        request.focus = last.get("focus") if request.kind == "investigate" else None
+        return request
+    request.reads = side
+    if kind == "guidance" and last.get("topics"):
+        request.kind, request.topics = "guidance", list(last["topics"])
+    elif kind == "memory":
+        request.kind, request.memory_action = "memory", "recall"
+        request.recall = last.get("recall") or "kept"
+    elif kind in ("status", "confirmation", "logging", "correction") or last.get("status"):
+        # A card again is what it holds and whether it is saved: never another draft or write.
+        request.kind, request.status = "status", True
+    else:
+        raise Ambiguous("Which earlier answer should I give again?")
+    request.status = request.status or bool(last.get("status"))
+    return request
+
+
 def _redo(request: Request, reading: Reading, state: dict, today: date) -> Request:
-    """An earlier answer again. Unchanged, it is the last answer as it was: after guidance that
-    guidance, after a status read with a figure beside it both, after a look the same look
-    (options asked for on a look are coaching on it). Changed, it is the earlier request with
-    what it keeps inherited and what it says applied, resolved as that request's own kind, so
-    new days, a statistic or a measure are never lost to "the same answer" (the 689fa7c audit)."""
+    """An earlier answer again. Unchanged, it is the last answer as it was delivered, every part
+    of it (`_replayed`); options asked for on a look are coaching on it. Changed, it is the
+    earlier request with what it keeps inherited and what it says applied, resolved as that
+    request's own kind, so new days, a statistic or a measure are never lost to "the same
+    answer" (the 689fa7c audit). An explicit statistic wins over a look's description: "the
+    median steps for those dates" after an investigation is the median (the review of 40baaee)."""
     request.points = reading.redo_options
     edit = reading.parts[0] if reading.parts else Part(periods=[Period(kind="inherit")])
     previous, older = _addressable(state)
-    if not _changes(edit) and edit.reference is None:
+    if not _changes(edit, _last_answers(state, previous)) and edit.reference is None:
+        if not isinstance(state.get("answer"), dict) and state.get("last"):
+            state = {**state, "answer": _legacy_answer(state, previous)}
+        if isinstance(state.get("answer"), dict):
+            request = _replayed(request, state, previous)
+            if request.kind == "investigate" and reading.redo_options:
+                request.focus = "coaching"
+            elif request.kind == "investigate":
+                request.focus = request.focus or state.get("focus", "overview")
+            return request
+        # State saved before the whole answer was kept.
         if state.get("last") == "guidance" and state.get("guidance"):
             request.kind = "guidance"
             request.topics = list(state["guidance"])
@@ -493,9 +566,13 @@ def _redo(request: Request, reading: Reading, state: dict, today: date) -> Reque
         request.parts = previous
     else:
         referent = _prior(edit, previous, True, older)
-        looked = referent is not None and referent.operation == "describe"
+        described = referent is not None and referent.operation == "describe"
+        looked = described and edit.operation == "inherit"
         if looked:
             edit = edit.model_copy(update={"operation": "describe"})
+        elif described and not edit.metrics:
+            # A statistic of a look's own measures: the measures it looked at.
+            edit = edit.model_copy(update={"metrics": list(referent.metrics)})
         asked = Reading(
             kind="investigate" if looked else "data",
             parts=[edit],
@@ -991,23 +1068,24 @@ UNPLACED = (
 
 
 def kept_fields(arguments, before, fields: Sequence[str]):
-    """A corrected reading with the fields its error was not about put back as they were, clause
-    by clause where both readings have a data clause in the same place: "change only what this
-    error is about" was not always kept (the 689fa7c audit added a meal filter on a retry)."""
+    """A corrected reading with the fields its error was not about put back as they were, onto
+    the same clause: the data clause of the first reading with the same words (`said`), when
+    exactly one has them. Matched by position, a retry that put steps before food moved food's
+    source onto steps and lost the steps read (the review of 40baaee). A clause with no unique
+    match keeps what the retry gave it: nothing is moved between clauses."""
     if not (isinstance(arguments, dict) and isinstance(before, dict)):
         return arguments
     new, old = arguments.get("clauses"), before.get("clauses")
     if not (isinstance(new, list) and isinstance(old, list)):
         return arguments
+    earlier = [c for c in old if isinstance(c, dict) and c.get("type") == "data"]
     clauses = []
-    for index, clause in enumerate(new):
-        earlier = old[index] if index < len(old) else None
-        if (
-            isinstance(clause, dict)
-            and isinstance(earlier, dict)
-            and clause.get("type") == earlier.get("type") == "data"
-        ):
-            clause = clause | {f: earlier[f] for f in fields if f in earlier}
+    for clause in new:
+        if isinstance(clause, dict) and clause.get("type") == "data":
+            same = [c for c in earlier if c.get("said") == clause.get("said")]
+            mine = [c for c in new if isinstance(c, dict) and c.get("said") == clause.get("said")]
+            if len(same) == 1 and len(mine) == 1:
+                clause = clause | {f: same[0][f] for f in fields if f in same[0]}
         clauses.append(clause)
     return arguments | {"clauses": clauses}
 
@@ -1188,7 +1266,9 @@ def interpret(
                     # its actual days, and the card waiting. A date edit hung on the wrong day
                     # when the reader saw only raw state (the b730 and a196 audits).
                     "earlier_results": earlier_results(state),
-                    "state": {k: v for k, v in state.items() if k not in ("data", "older")},
+                    "state": {
+                        k: v for k, v in state.items() if k not in ("data", "older", "answer")
+                    },
                     "previous_questions": [t.question[:700] for t in history[-6:]],
                     "question": question,
                     "pending_draft": draft if (pending_draft and draft) else pending_draft,
@@ -1332,7 +1412,8 @@ def interpret(
     # review of b3d64ca). The last answer's kind is kept too, so "that again" means that answer,
     # not an older data result that outlived a guidance turn.
     answered = [*request.parts, *request.reads]
-    if answered and request.subject == "self":
+    stored = bool(answered) and request.subject == "self"
+    if stored:
         now = [p.model_dump(mode="json") for p in answered]
         # Older results stay addressable by index after the last answer's, so "return to the
         # steps result for Oct 3-9" names one that a later answer replaced (the 689fa7c audit).
@@ -1344,6 +1425,19 @@ def interpret(
             next_state["focus"] = request.focus  # what a redo of this answer asks again
     if request.kind not in ("clarify", "redo"):
         next_state["last"] = request.kind
+        # The whole delivered request, for "say that again": its kind, what it read beside its
+        # main results (stored together in `data`, main first), a status or a recall, a topic.
+        next_state["answer"] = {
+            "kind": request.kind,
+            "parts": len(request.parts) if stored else 0,
+            "reads": len(request.reads) if stored else 0,
+            "status": request.status,
+            "focus": request.focus,
+            "topics": request.topics if request.kind == "guidance" else [],
+            "recall": request.recall
+            if request.kind == "memory" and request.memory_action == "recall"
+            else None,
+        }
     if request.kind == "guidance" and request.topics:
         if request.topics != state.get("guidance"):
             next_state.pop("guidance_passages", None)  # another movement's passages

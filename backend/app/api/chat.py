@@ -557,9 +557,12 @@ def card_edit(prior: dict, typed: Request, zone) -> CardEdit:
     said_pause = typed.paused_minutes
     kept = pause if said_pause is None else said_pause
     basis = typed.duration_is
-    restated = minutes is not None and (_close(minutes, active) or _close(minutes, elapsed))
-    if restated and said_pause is None:
-        minutes = None  # the card's own duration, restated
+    # The card's own duration, restated: with no basis said, either of its durations is one
+    # (a date-only edit came back with the elapsed 50 minutes). With a basis, only that one: a
+    # new active time equal to the old elapsed time is an edit (the review of 40baaee).
+    own = {"active": [active], "elapsed": [elapsed]}.get(basis or "", [active, elapsed])
+    if minutes is not None and said_pause is None and any(_close(minutes, v) for v in own):
+        minutes = None
     if minutes is not None and basis is None:
         if kept >= 0.5:
             return CardEdit(day=day, unclear=True)

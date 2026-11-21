@@ -521,9 +521,42 @@ def coaching_query(typed, records: Iterable[Evidence]) -> str | None:
 
 
 MAX_TOPICS = 3
+FROM_CODE_STOPS = ("limits", "urgent", "refused", "noted", "chatted", "chat_fallback")
 
 
-def _fill_points(llm: LLM, result: AgentResult, question: str, wanted: int, guard) -> None:
+def said_by_claims(result: AgentResult) -> None:
+    """An explanation says only what its verified claims say: the model's own prose around
+    them, checked by nothing, added "feeling more run down", an outcome nobody reported or
+    measured, beside four valid claims (the review of 40baaee). What it cannot tell is said by
+    code (WHY_LIMIT). A reply code wrote already, or one with no claim, is left as it is."""
+    texts = [c.text.strip() for c in result.claims if c.text.strip()]
+    if not texts or result.stop_reason in FROM_CODE_STOPS:
+        return
+    result.summary = " ".join(texts)
+    result.trace.append({"type": "summary_from_claims", "claims": len(texts)})
+
+
+def _options_without_data(llm: LLM, result: AgentResult, typed, wanted: int, guard) -> None:
+    """Coaching asked for on days with no data: no personal option can be tested, so none is
+    given; general points come from vetted sources on the measures asked about, labelled, and
+    a shortfall is said. With no measure to look them up for, that is said instead."""
+    result.notes.append(
+        "With no data for those days, no option can be tested on your own days, so none of "
+        "these is personal."
+    )
+    topic = coaching_query(typed, [])
+    if topic is None:
+        result.notes.append(
+            "There is no measure named to look up general guidance for, so I haven't given any "
+            "options rather than make them up."
+        )
+        return
+    _fill_points(llm, result, topic, wanted, guard, lead=True)
+
+
+def _fill_points(
+    llm: LLM, result: AgentResult, question: str, wanted: int, guard, lead: bool = False
+) -> None:
     """When an answer falls short of the points asked for, the rest come straight from the sources
     it retrieved, each marked as general with its source. Fewer than asked is said, never
     filled with invented tips."""
@@ -545,7 +578,8 @@ def _fill_points(llm: LLM, result: AgentResult, question: str, wanted: int, guar
         except GuardError:
             return
         added = [a for a, bad in zip(added, flags, strict=True) if not bad]
-    lines = [as_points(base)] if base else []
+    # `lead`: the summary is a lead-in (a data limit), said as it is above the points.
+    lines = [(base + "\n") if lead else as_points(base)] if base else []
     lines += [
         f"- General ({a.record.stats.get('source') or 'public guidance'}): "
         f"{a.tip.lstrip('- ').strip()}"
@@ -554,7 +588,7 @@ def _fill_points(llm: LLM, result: AgentResult, question: str, wanted: int, guar
     if added:
         closing = "The points marked General are public guidance, not from your own data."
         result.summary = "\n".join(lines) + f"\n\n{closing}"
-    elif base:
+    elif base and not lead:
         result.summary = as_points(base)
     if len(points) + len(added) < wanted:
         found = len(points) + len(added)
@@ -1138,6 +1172,7 @@ def ask(
     logging_turn = after_draft or (
         typed is not None and typed.kind in ("logging", "correction", "confirmation")
     )
+    gap = None  # days an investigation named that the data does not have
     if typed is not None:
         # Wearable bounds do not bound confirmed food or public guidance. Precise requests
         # determine availability per source/part, including mixed food and wearable questions.
@@ -1283,6 +1318,13 @@ def ask(
         )
         if fixed:
             result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="limits", summary=fixed)
+            if gap and typed.focus == "coaching":
+                # Options asked for on days with no data: the limit stands, and the options
+                # asked for are still answered, from vetted general sources when there is a
+                # measure to look them up for, or said to be impossible (the review of 40baaee).
+                _options_without_data(
+                    llm, result, typed, max(asked_count(said), typed.points or 1), guard
+                )
         elif typed.kind == "guidance":
             # The passages the last answer used, when this one is about the same movement.
             before = previous_state(history)
@@ -1919,6 +1961,8 @@ def ask(
         result.notes += [
             n for n in coverage_notes(typed, frame, _day(today or now)) if n not in result.notes
         ]
+        if typed.focus == "why":
+            said_by_claims(result)
         cited = {e.tool for e in result.cited_evidence.values()}
         explained = typed.focus == "why" and not nothing_to_explain(
             result, typed, _day(today or now)
