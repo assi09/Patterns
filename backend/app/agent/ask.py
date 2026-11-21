@@ -713,6 +713,22 @@ def nothing_to_explain(result: AgentResult, typed, today: date) -> bool:
     return True
 
 
+def unresolved_follow_up(history: Sequence[Turn], today: date) -> str:
+    """One concrete question about the last result, for a message the reader could not place."""
+    from app.agent.requests import ResolvedPart
+
+    parts = [ResolvedPart.model_validate(p) for p in previous_state(history).get("data", [])]
+    if not parts:
+        return "I'm not sure what you'd like me to look at. Which measure and which days?"
+    last = parts[-1]
+    names = " and ".join(label(m) for m in last.metrics) or "every measure"
+    days = " against ".join(_when(w, today) for w in last.windows) or "all of your data"
+    return (
+        f"I'm not sure what to change in the last result ({names}, {days}). Tell me the "
+        "measure or the days to use and I'll work it out."
+    )
+
+
 def coaching_habits(found) -> list[Evidence]:
     """The habit tests among the evidence a coaching run was given."""
     return [e for records, _ in found for e in records if e.tool == "habit_options"]
@@ -862,9 +878,12 @@ def coaching_by_code(
         result.evidence.setdefault(record.id, record)
 
 
-def one_coaching_conclusion(result: AgentResult, habits: Sequence[Evidence]) -> None:
-    """An investigation's coaching answer: its observations, then one option said by code."""
-    coaching_by_code(result, habits)
+def one_coaching_conclusion(
+    result: AgentResult, habits: Sequence[Evidence], wanted: int = 1
+) -> None:
+    """An investigation's coaching answer: its observations, then its options said by code,
+    as many as were asked for and are bound to a tested habit."""
+    coaching_by_code(result, habits, wanted)
 
 
 def _outcome_text(habits: Sequence[Evidence]) -> str:
@@ -1393,6 +1412,17 @@ def ask(
             )
         )
     )
+    if (
+        typed is not None
+        and typed.kind == "other"
+        and not typed.told
+        and not fixed
+        and not (acting or continuing or reminding or logging_tools or world or chatting)
+    ):
+        # A reading that is neither small talk nor something about them, and no request the
+        # app can run, is asked about, never answered with defaults: "use days +1 through +4"
+        # read as other got recent steps (the b3d64ca audit).
+        fixed = unresolved_follow_up(history, _day(today or now))
     plan = (
         None
         if acting or continuing or reminding or logging_tools or world or chatting or fixed
@@ -1614,7 +1644,9 @@ def ask(
     if relevant or fit.notes:
         what = "; ".join([*(r.text for r in relevant), *fit.notes])
         asked = f"{asked}\n(What they told you, which the advice has to fit: {what})"
-    wanted = asked_count(question) if plan and plan.coaching else 0
+    # The points asked for, by number in the message or by a redo of the last answer.
+    asked_points = (typed.points or 0) if typed is not None else 0
+    wanted = max(asked_count(question), asked_points) if plan and plan.coaching else 0
     passage_ids = frozenset(e.id for e in retrieved.evidence) if retrieved else frozenset()
     check = (
         personal_check(personal_ids, fit, wanted, passage_ids) if plan and plan.coaching else None
@@ -1777,7 +1809,10 @@ def ask(
         coaching_by_code(result, coaching_habits(tested_habits), wanted, observations=False)
     if plan and plan.coaching:
         result.summary = without_filler(result.summary)
-        if wanted and not stopped_early:
+        # An investigation's coaching is rebuilt from its options below, then topped up: topped
+        # up here first, its general points were dropped by that rebuild (the review of
+        # b3d64ca).
+        if wanted and not stopped_early and not investigating:
             _fill_points(llm, result, question, wanted, guard)
     if plan and plan.coaching and result.summary in (NO_ANSWER, ""):
         result.summary = COACHING_NO_ANSWER
@@ -1799,7 +1834,9 @@ def ask(
         if result.summary in (NO_ANSWER, ""):
             described_days(result, typed, frame, _day(today or now), food_logs, now)
         if typed.focus == "coaching":
-            one_coaching_conclusion(result, habits)
+            one_coaching_conclusion(result, habits, max(wanted, 1))
+            if wanted:
+                _fill_points(llm, result, question, wanted, guard)
             if len(named) == 2 and habits:
                 # The habit tests take one period: the later one of the comparison, said so,
                 # never the enclosing range (Sep 2-Oct 31 was cited for Oct 2-15 against Sep

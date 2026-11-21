@@ -182,7 +182,7 @@ THREE = "Could you give me up to three options here, saying which are personal v
 
 
 def redo(options=3):
-    return {"type": "redo", "said": THREE, "options": options}
+    return {"type": "redo", "said": THREE, "options": options, "keeps_the_data": True}
 
 
 def test_options_asked_for_after_a_look_are_coaching_on_that_look():
@@ -195,7 +195,9 @@ def test_options_asked_for_after_a_look_are_coaching_on_that_look():
 
 def test_a_redo_of_a_data_answer_keeps_the_read():
     shorter = "Say that again, shorter."
-    request, _ = read(shorter, said({"type": "redo", "said": shorter}), history=[ATE])
+    request, _ = read(
+        shorter, said({"type": "redo", "said": shorter, "keeps_the_data": True}), history=[ATE]
+    )
     assert request.kind == "data" and windows(request) == [(date(2026, 10, 17), date(2026, 10, 17))]
 
 

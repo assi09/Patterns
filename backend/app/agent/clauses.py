@@ -74,7 +74,8 @@ class FromEarlier(Fields):
     days:
     its_last_day, +1, starts_there, 4. Four days ending the day before it began: its_first_day,
     -1, ends_there, 4. Its last three days: its_last_day, 0, ends_there, 3. Four days starting on
-    its second day: its_first_day, +1, starts_there, 4."""
+    its second day: its_first_day, +1, starts_there, 4. Three days whose last day is its first
+    day: its_first_day, 0, ends_there, 3."""
 
     kind: Literal["from_earlier"]
     landmark: Literal["its_first_day", "its_last_day"]
@@ -201,6 +202,11 @@ class InvestigateClause(Fields):
     every_metric: bool = Field(
         default=False, description="Look across every metric over those days."
     )
+    # Said by the reader, not counted from words: "give me three options" was never counted,
+    # so a three-option request got one (the a196 and b3d64ca audits).
+    points: int | None = Field(
+        default=None, ge=1, le=5, description="How many options or points they ask for."
+    )
 
 
 class GuidanceClause(Fields):
@@ -246,20 +252,39 @@ class CorrectClause(Fields):
         default=None,
         ge=-366,
         le=366,
-        description="A day said against the card's own day: 'a day later' is 1.",
+        description="An instruction to move the card, against its own day: 'move it a day "
+        "later' is 1, 'move it back two days' is -2.",
+    )
+    # A report that the card's date is wrong is not an instruction to move it: "that was two
+    # days too early" needs the card moved later, and as a signed move it went two days earlier
+    # (the b3d64ca audit). The reader says which; code works out the sign.
+    card_was: Literal["too_early", "too_late"] | None = Field(
+        default=None,
+        description="They report the card's date is wrong: too_early when the card is earlier "
+        "than the day it happened ('that was two days too early'), too_late when later.",
+    )
+    by_days: int | None = Field(
+        default=None, ge=1, le=366, description="With card_was: by how many days."
     )
 
 
 class RedoClause(Fields):
     """The last answer again, in another form, with nothing new asked: more or fewer options,
-    which are personal and which general, shorter, another unit. "Give me up to three options
-    here, saying which are personal" after a look at their data was read as small talk, and the
-    look was lost (the 9228fe6 audit)."""
+    which are personal and which general, in fewer words, another unit. "Give me up to three
+    options here, saying which are personal" after a look at their data was read as small talk,
+    and the look was lost (the 9228fe6 audit). The data stays exactly as it was: "shorten it to
+    a three-date average" is a shorter period, a data clause, and as a redo it kept all seven
+    days (the b3d64ca audit)."""
 
     type: Literal["redo"]
     said: str = SAID
     options: int | None = Field(
         default=None, ge=1, le=5, description="How many options or points they ask for."
+    )
+    keeps_the_data: bool = Field(
+        description="True only when the same days, measures, statistic and threshold are kept "
+        "and only the wording or format of the answer changes. A shorter or longer period, "
+        "another statistic, measure or threshold makes this false: that is a data clause."
     )
 
 
@@ -300,8 +325,9 @@ class MemoryClause(Fields):
 
 
 class OtherClause(Fields):
-    """Small talk, thanks, an instruction for this answer, something they tell about
-    themselves, or something outside what the app does."""
+    """Small talk, thanks, something they tell about themselves, or something outside what the
+    app does. Never a request about their data or about the last answer: those have their own
+    clauses."""
 
     type: Literal["other"]
     said: str = SAID
@@ -310,8 +336,7 @@ class OtherClause(Fields):
     about_them: bool = Field(
         default=False,
         description="They tell something about themselves or their life ('I'm training for a "
-        "10k', 'I generally prefer three options'). False for thanks, small talk and "
-        "instructions for this answer ('give me three options here').",
+        "10k', 'I generally prefer three options'). False for thanks and small talk.",
     )
 
 
@@ -396,6 +421,7 @@ def _part(clause: DataClause | InvestigateClause) -> Part:
         max_lag=clause.max_lag,
         meal_type=clause.meal_type,
         source=clause.source,
+        every_metric=_whole_registry(clause),
         **common,
     )
 
@@ -462,7 +488,16 @@ def _every_metric_looked_into(clauses: list) -> list:
                 for c in clauses
             ]
         looks = [c for c in clauses if isinstance(c, InvestigateClause)]
-        same = [c for c in wide if any(c.periods == look.periods for look in looks)]
+        # The same look: the same periods of the same result. Two "same as earlier" spans that
+        # point at different results are not one look (the review of b3d64ca).
+        same = [
+            c
+            for c in wide
+            if any(
+                c.periods == look.periods and c.earlier_result == look.earlier_result
+                for look in looks
+            )
+        ]
         return [
             c.model_copy(update={"every_metric": True})
             if isinstance(c, InvestigateClause) and not c.metrics and same
@@ -532,6 +567,7 @@ def reading_from(said: Said, question: str = "") -> Reading:
     if primary == "investigate":
         looked_into = [c for c in clauses if isinstance(c, InvestigateClause)]
         fields["focus"] = looked_into[0].focus
+        fields["points"] = looked_into[0].points
         fields["also"] = parts  # precise reads asked beside the investigation
         parts = [_part(c) for c in looked_into]
     guidance = next((c for c in clauses if isinstance(c, GuidanceClause)), None)
@@ -546,6 +582,10 @@ def reading_from(said: Said, question: str = "") -> Reading:
         fields |= {"duration_minutes": entry.duration_minutes, "log_day": _day(entry)}
         if isinstance(entry, CorrectClause) and entry.on_date is None:
             fields["card_day_offset"] = entry.days_from_card
+            if entry.card_was is not None and entry.by_days is not None:
+                # Too early: it happened later than the card says, so the card moves later.
+                way = 1 if entry.card_was == "too_early" else -1
+                fields["card_day_offset"] = way * entry.by_days
         if isinstance(entry, LogClause):
             fields["entry"] = entry.entry
     memory = next((c for c in clauses if isinstance(c, MemoryClause)), None)
@@ -557,6 +597,12 @@ def reading_from(said: Said, question: str = "") -> Reading:
         }
     redo = next((c for c in clauses if isinstance(c, RedoClause)), None)
     if redo is not None:
+        if not redo.keeps_the_data:
+            raise RetryReading(
+                "A redo keeps the same days, measures, statistic and threshold and changes only "
+                "the wording or format. A change to the period, measure, statistic or threshold "
+                "is a data clause, its days placed with from_earlier."
+            )
         fields["redo_options"] = redo.options
     fields["status"] = "status" in types
     fields["clause_count"] = len(clauses)

@@ -236,17 +236,41 @@ def run_adjusted(tests: list[Evidence]) -> list[Evidence]:
     usable = [e for e in tests if e.tool in TEST_TOOLS and _base_p(e) is not None]
     if not usable:
         return list(tests)
-    q = dict(
-        zip((e.id for e in usable), benjamini_hochberg([_base_p(e) for e in usable]), strict=True)
-    )
+    # One hypothesis is one test in the family, however many records carry it: an identical
+    # retest under a new record id made three tests of two and moved an adjusted 0.06 to 0.045,
+    # across the cutoff (the review of b3d64ca). Distinct tests of one metric stay distinct.
+    keys = list(dict.fromkeys(hypothesis(e) for e in usable))
+    base = {hypothesis(e): _base_p(e) for e in usable}
+    q = dict(zip(keys, benjamini_hochberg([base[k] for k in keys]), strict=True))
     return [
         e.model_copy(
-            update={"stats": {**e.stats, RUN_ADJUSTED: round(q[e.id], 6), "tests_in_run": len(q)}}
+            update={
+                "stats": {
+                    **e.stats,
+                    RUN_ADJUSTED: round(q[hypothesis(e)], 6),
+                    "tests_in_run": len(q),
+                }
+            }
         )
-        if e.id in q
+        if e.tool in TEST_TOOLS and _base_p(e) is not None
         else e
         for e in tests
     ]
+
+
+def hypothesis(evidence: Evidence) -> tuple:
+    """What a test tested, not which record holds it: the method, its measures and their order,
+    the ordered periods, its own parameters, and the data it saw (n and its unadjusted p)."""
+    stats = evidence.stats
+    return (
+        evidence.tool,
+        tuple(evidence.metrics),
+        tuple((w.start, w.end) for w in evidence.windows),
+        evidence.n,
+        stats.get("lags_tested"),
+        stats.get("best_lag"),
+        _base_p(evidence),
+    )
 
 
 def supported_options(evidence: Evidence) -> dict[str, str]:

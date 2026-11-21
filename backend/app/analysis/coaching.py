@@ -61,9 +61,14 @@ class _Test:
     permits: str = "action"
 
 
-def _split(values: pd.Series, mask: pd.Series) -> tuple[pd.Series, pd.Series]:
+def _split(values: pd.Series, exposure: pd.Series, mask: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """The days with the habit and the days without it, among days where the habit is known.
+    An unknown exposure is neither: a missing bedtime made `bed <= median` false, so ten nights
+    with no bedtime joined the "later nights" and supported an earlier bedtime that the known
+    nights did not (the review of b3d64ca)."""
+    known = exposure.reindex(values.index).notna()
     mask = mask.reindex(values.index).fillna(False).astype(bool)
-    return values[mask], values[~mask]
+    return values[known & mask], values[known & ~mask]
 
 
 def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_Test], float | None]:
@@ -73,7 +78,7 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
         bed = frame["bedtime_hour"].reindex(values.index)
         if bed.notna().sum() >= 2 * MIN_GROUP:
             split_at = float(bed.median())
-            early, late = _split(values, bed <= split_at)
+            early, late = _split(values, bed, bed <= split_at)
             tests.append(
                 _Test(
                     "earlier_bedtime",
@@ -84,7 +89,7 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
                     late,
                 )
             )
-            regular, irregular = _split(values, (bed - split_at).abs() * 60 <= REGULAR_MINUTES)
+            regular, irregular = _split(values, bed, (bed - split_at).abs() * 60 <= REGULAR_MINUTES)
             tests.append(
                 _Test(
                     "regular_bedtime",
@@ -97,11 +102,12 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
             )
     if "strain" in frame.columns and metric in MORNING:
         strain = frame["strain"]
-        hard_day = strain >= strain.quantile(HARD_QUANTILE)
+        # 1 a hard day, 0 an ordinary one, unknown with no strain recorded: a missing day is not
+        # an ordinary day.
+        hard_day = (strain >= strain.quantile(HARD_QUANTILE)).astype(float).where(strain.notna())
         # The morning after: the target on day d against strain on day d - 1.
         after_hard = hard_day.shift(1).reindex(values.index)
-        rest, hard = _split(values, after_hard == False)  # noqa: E712 (NaN is neither)
-        hard = values[after_hard == True]  # noqa: E712
+        rest, hard = _split(values, after_hard, after_hard == 0)
         tests.append(
             _Test(
                 "rest_after_hard_day",
@@ -116,7 +122,7 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
     if "active_zone_minutes" in frame.columns and metric in SLEEP:
         azm = frame["active_zone_minutes"].reindex(values.index)
         if azm.notna().sum() >= 2 * MIN_GROUP:
-            active, quiet = _split(values, azm >= azm.median())
+            active, quiet = _split(values, azm, azm >= azm.median())
             tests.append(
                 _Test(
                     "active_days",

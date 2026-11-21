@@ -12,7 +12,8 @@ from datetime import date
 import pandas as pd
 
 from app.agent.agent import AgentResult
-from app.agent.present import format_level, label
+from app.agent.findings import render_overview
+from app.agent.present import METRICS, format_level, label
 from app.agent.requests import Request
 from app.agent.verifier import RUN_ADJUSTED, Claim, run_adjusted
 from app.analysis.evidence import Evidence, ToolError, Window
@@ -72,6 +73,16 @@ def execute(
 
     first = frame.index.min().date() if not frame.empty else today
     last = frame.index.max().date() if not frame.empty else today
+    # Every measure they have: the registry's metrics their data holds.
+    measured = [m for m in METRICS if m in frame.columns and frame[m].notna().any()]
+    request = request.model_copy(
+        update={
+            "parts": [
+                p.model_copy(update={"metrics": measured}) if p.every_metric else p
+                for p in request.parts
+            ]
+        }
+    )
     tests, errors = {}, {}
     # Make the statistical family before interpreting any test. A multi-metric request must
     # not silently multiply its opportunity to report a false positive.
@@ -100,6 +111,25 @@ def execute(
         windows = part.windows or [Window(start=first, end=last)]
         window = windows[0]
         op = part.operation
+        if part.every_metric and op == "compare":
+            # A comparison of every measure is said as an overview: the clear changes, each
+            # cited, and how many showed none, not one line per metric.
+            records = [
+                tests[index, m]
+                for m in part.metrics
+                if (index, m) in tests and tests[index, m].sufficient
+            ]
+            text, claims = render_overview(records, today)
+            if text:
+                statements.append(text)
+                result.claims += claims
+                result.evidence |= {r.id: r for r in records}
+            else:
+                statements.append(
+                    f"There aren't enough days {_span(windows[0])} and {_span(windows[1])} to "
+                    "compare your measures."
+                )
+            continue
         if op == "food" or part.metrics == ["food_logs"]:
             # Logged food is not restricted to the wearable export's dates.
             if part.history:
