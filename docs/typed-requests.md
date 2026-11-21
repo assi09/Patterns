@@ -533,3 +533,24 @@ prompt, and none has been measured live: no paid call was made for this round. T
 wording for PHIA B1-021 is a prompt change of the same kind. Not addressed here: the
 investigation prose that calls a measure steady or "run down" without a test (handoff §6) needs
 the verifier to check adjacent prose, a larger change.
+
+## After the offline review of `40baaee` (2026-11-21)
+
+Codex's offline review ([findings](pr-195-40baaee-offline-review.md)) reproduced seven gaps the
+suite missed, with supplied reader fields and no paid call. Each fix enforces the contract and is
+tested with the review's reproduction and contrasting controls (`tests/test_40baaee_review.py`):
+
+| Review § | Contract now enforced |
+|---|---|
+| 1 | A redo's lag is an edit when it is said and differs from the last answer's own lag; 0 is a value (the same-day test). Null keeps it. A lag beside an answer that gave no association (guidance, memory) is no data edit. |
+| 2 | An explicit statistic wins over a look's description: "the median steps for those dates" after an investigation is the median over its days. With no measure named it takes the look's measures. After a two-period look the single-period guard still asks which. An unchanged redo stays the look. |
+| 3 | A duration with a basis is compared only with that duration of the card. A new active time equal to the old elapsed time is an edit (40 active, 49 in all), and the same holds the other way. With no basis, either duration restated is still no change. |
+| 4 | The state keeps the whole delivered request (`answer`): kind, main results and side reads, status, recall scope, guidance topic, focus. An unchanged redo replays all of it: a recall with its figure, a status with no figure, guidance with its side read. It never replays older data the last answer did not give. A memory change is replayed as what is kept now, and a card as its status, never another write. A state saved in the old form is read the same way. |
+| 5 | A retry's kept fields go back onto the data clause with the same words, only when exactly one matches. Reordered clauses keep their own sources, and nothing moves between clauses that cannot be told apart. |
+| 6 | Coaching options asked for on days with no data keep the data limit. They are answered with labelled general points from vetted sources on the measures asked about, the shortfall is said, and the reply says none is personal. With no measure to look up, it says why no options are given. |
+| 7 | An explanation ("why") says only what its verified claims say: its shown text is assembled from them, and what cannot be told is code's note. The model's surrounding prose had added "feeling more run down", which nobody reported and no tool measured. A reply written by code, or one with no verified claim, is left as it is. |
+
+Codex's probes (`data/eval/40baaee_review/probes.py`) now give the expected result for every case
+but the direct verifier replay of the old "run down" answer. That class is closed in assembly
+(§7), not by the claim and summary checks, which are unchanged. The reader schema itself is
+still unmeasured live.
