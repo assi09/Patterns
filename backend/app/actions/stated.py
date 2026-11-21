@@ -155,16 +155,19 @@ def _shifted(value: object, days: int) -> object:
     return (datetime.fromisoformat(str(value)) - timedelta(days=days)).isoformat()
 
 
-def latest_past(given: dict, said: Sequence[str], local_now: datetime) -> dict:
+def latest_past(
+    given: dict, said: Sequence[str], local_now: datetime, day_known: bool = False
+) -> dict:
     """A clock time with no day that has not come yet today means yesterday: at 1 am, "at 7 am"
-    is the morning that has gone. Corrected here, so an answer does not depend on the model."""
+    is the morning that has gone. Corrected here, so an answer does not depend on the model.
+    `day_known`: the request reader already read the day, which then stands."""
     key = "startTime" if "startTime" in given else "consumedAt"
     try:
         start = datetime.fromisoformat(str(given[key]))
     except (KeyError, ValueError):
         return given
     words = "\n".join(said)
-    named = NAMED_DAY.search(words)
+    named = day_known or NAMED_DAY.search(words)
     if start.tzinfo is None:
         return given
     if "endTime" in given and JUST_NOW.search(words):
@@ -203,9 +206,13 @@ def _corrected(said: Sequence[str]) -> set[int]:
     return set()
 
 
-def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime) -> str | None:
+def mismatch(
+    log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime, day_known: bool = False
+) -> str | None:
     """What the draft gets wrong against the person's words, for the model to put right; None if
-    nothing contradicts them."""
+    nothing contradicts them. `day_known`: the day was read and checked already (the request
+    reader's), so the words' own day pattern does not judge it again; clock times and durations
+    are still checked."""
     text = "\n".join(said)
     zone = local_now.tzinfo
     start = (log.start_time if isinstance(log, WorkoutLog) else log.consumed_at).astimezone(zone)
@@ -244,7 +251,7 @@ def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime
             "The time does not match what the person said. Use the time in their words, in their "
             "local time at the top of the task."
         )
-    if not NAMED_DAY.search(text) and local_now - start > RECENT:
+    if not day_known and not NAMED_DAY.search(text) and local_now - start > RECENT:
         return (
             "The person did not name another day, so this must be within the last 24 hours. Do "
             "not move it to an earlier day."

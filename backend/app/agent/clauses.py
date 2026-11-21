@@ -14,11 +14,13 @@ dates, references and statistics are still worked out by the same code.
 
 import calendar
 import re
+from collections.abc import Sequence
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
+from app.actions.exercises import TYPES
 from app.agent.requests import Fields, Operation, Part, Period, Reading, RetryReading
 
 # ---- periods: one kind per meaning ----
@@ -63,38 +65,72 @@ class SameAsEarlier(Fields):
     kind: Literal["same_as_earlier"]
 
 
+class EdgeDay(Fields):
+    """One day of the new period, counted from one of the earlier period's days."""
+
+    counted_from: Literal["its_first_day", "its_last_day"]
+    days_after: int = Field(
+        ge=-3660,
+        le=3660,
+        description="Days from that day: +1 the day after, -1 the day before, 0 that day itself.",
+    )
+
+
 class FromEarlier(Fields):
-    """Days placed against an earlier period, every part of the edit said, and one computation
-    for all of them: from the earlier period's first or last day (`landmark`), move `offset`
-    days (+1 the day after, -1 the day before, 0 that day); the new period starts there or ends
-    there (`boundary`); it is `length` days long: the number said, or the earlier period's own
-    number of days when none is said.
-    The same days, or a whole comparison, unchanged, is same_as_earlier. After a five-day
-    period: the whole period two days earlier: its_first_day, -2, starts_there, 5. The next four
-    days:
-    its_last_day, +1, starts_there, 4. Four days ending the day before it began: its_first_day,
-    -1, ends_there, 4. Its last three days: its_last_day, 0, ends_there, 3. Four days starting on
-    its second day: its_first_day, +1, starts_there, 4. Three days whose last day is its first
-    day: its_first_day, 0, ends_there, 3."""
+    """Days placed against an earlier period: the new period's first day, its last day, or
+    both, each counted from the earlier period's first or last day, and its length.
+
+    One offset with a separate "starts there / ends there" flag was misread one way, every
+    time: for a period that ends somewhere, the offset given was where it starts. "The five
+    dates immediately before that range" came back as its first day -5, ends there, five days
+    long, four days too early; "its final two dates" as its last day -1, ends there (the 689fa7c
+    audit, seven inputs). Each day now names what it is, so the number the reader works out
+    belongs to the day it worked it out for. Code does the rest, and checks that two days and
+    a length agree.
+
+    After a five-day period: the whole period two days earlier: new_first_day its_first_day -2,
+    length 5. The five days before it: new_last_day its_first_day -1, length 5 (or new_first_day
+    its_first_day -5, length 5). The next four days: new_first_day its_last_day +1, length 4.
+    Its last three days: new_last_day its_last_day 0, length 3. Four days starting on its
+    second day: new_first_day its_first_day +1, length 4. Three days whose last day is its first
+    day: new_last_day its_first_day 0, length 3. Without its first and last day: new_first_day
+    its_first_day +1 and new_last_day its_last_day -1, length null."""
 
     kind: Literal["from_earlier"]
-    landmark: Literal["its_first_day", "its_last_day"]
-    offset: int = Field(ge=-3660, le=3660)
-    boundary: Literal["starts_there", "ends_there"]
-    # Required: left optional, "three calendar days" and "four days up to the day before" came
-    # back with no length, so the earlier length was kept or the four went into the offset (the
-    # matched comparison on the b730 and a196 inputs, 2026-11-21).
-    length: int = Field(
+    new_first_day: EdgeDay | None = Field(
+        default=None, description="The new period's first day, when the message places it."
+    )
+    new_last_day: EdgeDay | None = Field(
+        default=None, description="The new period's last day, when the message places it."
+    )
+    # Required with one day placed: left optional, "three calendar days" and "four days up to
+    # the day before" came back with no length (the matched comparison on the b730 and a196
+    # inputs, 2026-11-21). With both days placed, they give it.
+    length: int | None = Field(
+        default=None,
         ge=1,
         le=3660,
-        description="Days in the new period: the number of days said, or the earlier period's own "
-        "number of days (earlier_results) when no number is said.",
+        description="Days in the new period: the number of days said, or the earlier period's "
+        "own number of days (earlier_results) when none is said. Null only when both days are "
+        "placed.",
     )
     relative_to: Literal["earlier_result", "this_clause"] = Field(
         default="earlier_result",
         description="earlier_result: a result computed before this message. this_clause: the "
         "period named first in this same clause ('Oct 9-31 compared with the 4 weeks before').",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _one_offset(cls, value):
+        """A reading recorded with the single-offset form (older replays and fixtures): its
+        offset was the day its boundary names, so it is that day."""
+        if isinstance(value, dict) and "boundary" in value:
+            value = dict(value)
+            day = {"counted_from": value.pop("landmark"), "days_after": value.pop("offset")}
+            edge = "new_first_day" if value.pop("boundary") == "starts_there" else "new_last_day"
+            value[edge] = day
+        return value
 
 
 class Month(Fields):
@@ -126,13 +162,29 @@ def period_of(span: Span) -> Period:
     if isinstance(span, SameAsEarlier):
         return Period(kind="inherit")
     if isinstance(span, FromEarlier):
+        placed = span.new_first_day or span.new_last_day
+        if placed is None:
+            raise RetryReading(
+                "A from_earlier period places its first day, its last day or both against the "
+                "earlier period; this one placed neither."
+            )
+        if span.length is None and not (span.new_first_day and span.new_last_day):
+            raise RetryReading(
+                "A from_earlier period with one day placed needs its length: the number of days "
+                "said, or the earlier period's own number of days when none is said."
+            )
+        other = span.new_last_day if span.new_first_day else None
+        side = {"its_first_day": "first", "its_last_day": "last"}
         return Period(
             kind="beside",
             anchor="own" if span.relative_to == "this_clause" else "previous",
-            edge="first" if span.landmark == "its_first_day" else "last",
-            starts=span.boundary == "starts_there",
-            offset_days=span.offset,
-            days=span.length,
+            edge="first" if placed.counted_from == "its_first_day" else "last",
+            starts=span.new_first_day is not None,
+            offset_days=placed.days_after,
+            days=span.length or 1,
+            sized=span.length is not None,
+            end_edge=side[other.counted_from] if other else None,
+            end_offset=other.days_after if other else 0,
         )
     if isinstance(span, Month):
         last = calendar.monthrange(span.year, span.month)[1]
@@ -147,6 +199,18 @@ def period_of(span: Span) -> Period:
 
 
 # ---- clauses ----
+
+Nutrient = Literal["energy", "protein", "carbohydrate", "fat"]
+# What the reader may write as a food clause's metric for a nutrient: the same four, by name.
+NUTRIENT_NAMES = {
+    "energy": "energy",
+    "calories": "energy",
+    "protein": "protein",
+    "carbohydrate": "carbohydrate",
+    "carbohydrates": "carbohydrate",
+    "carbs": "carbohydrate",
+    "fat": "fat",
+}
 
 SAID = Field(
     description="All the words of the message this clause comes from, copied exactly, with its "
@@ -172,12 +236,29 @@ class DataClause(Fields):
     comparison: Literal[">", ">=", "<", "<=", "=="] | None = None
     threshold: float | None = Field(default=None, allow_inf_nan=False)
     threshold_unit: Literal["native", "hours", "minutes"] = "native"
-    max_lag: int = Field(default=0, ge=0, le=14)
+    # Null keeps an earlier result's lag: required as a number, "can that prove walking caused
+    # it?" after a one-day-lag result came back 0 and was answered with a same-day test (the
+    # 689fa7c audit).
+    max_lag: int | None = Field(
+        default=None,
+        ge=0,
+        le=14,
+        description="Days of lag to test, when asked. Null keeps an earlier result's lag (none "
+        "for a new question); 0 only when they ask for the same day.",
+    )
     meal_type: Literal["BREAKFAST", "LUNCH", "DINNER", "SNACK"] | None = None
     source: Literal["tracker", "food_log"] = Field(
         default="tracker",
         description="food_log: the meals they logged (energy and nutrients eaten; metrics then "
         "empty). tracker: what the wearable records, calories burned included.",
+    )
+    # For food eaten: which nutrients the question is about. "Protein for that same entry?",
+    # where protein was not recorded, was answered with energy, carbohydrate and fat, and never
+    # said protein was missing (the 689fa7c audit).
+    nutrients: list[Nutrient] = Field(
+        default_factory=list,
+        max_length=4,
+        description="source food_log: the nutrients asked about; empty for all of them.",
     )
     asks_cause: bool = Field(
         default=False, description="Asks whether one thing causes another, not just goes with it."
@@ -220,6 +301,15 @@ class GuidanceClause(Fields):
         description="The one movement, variant or routine asked about, its qualifiers in the same "
         "phrase ('basic floor push-up, no equipment'); empty when it refers back or names none.",
     )
+    # The base movement apart from its modifier: "pushups on a moving surfboard" came back as
+    # topic "moving-surfboard variation", and "drop that variation, the standard floor movement"
+    # then had no push-up to return to and taught a foam-roller stretch (the 689fa7c audit).
+    movement: str = Field(
+        default="",
+        max_length=100,
+        description="The base movement or routine the topic is a version of ('push-up' for "
+        "'push-ups on a moving surfboard'); empty when it names none.",
+    )
     refers_back: bool = Field(
         default=False,
         description="It is about the previous guidance answer's subject ('that version', 'it').",
@@ -233,6 +323,15 @@ class LogClause(Fields):
     type: Literal["log"]
     said: str = SAID
     entry: Literal["workout", "food"]
+    # The activity as the person named it, from the tracker's own types: the drafting model
+    # once carded "prepare a run" as a generic workout (the 689fa7c audit).
+    exercise_type: str | None = Field(
+        default=None,
+        max_length=40,
+        description="For a workout: the tracker's exercise type for the activity they name, in "
+        "its upper-case form (RUNNING, WALKING, BIKING, SWIMMING, HIKING, YOGA, "
+        "STRENGTH_TRAINING, TENNIS ...); null when they name none.",
+    )
     duration_minutes: float | None = Field(default=None, gt=0, le=1440, allow_inf_nan=False)
     on_date: date | None = Field(default=None, description="A date they wrote.")
     days_from_today: int | None = Field(
@@ -246,6 +345,23 @@ class CorrectClause(Fields):
     type: Literal["correct"]
     said: str = SAID
     duration_minutes: float | None = Field(default=None, gt=0, le=1440, allow_inf_nan=False)
+    # A workout with a pause has two durations, and a new one is one of them: "active walking
+    # was 33 minutes, with the same nine stopped" is 33 active and 42 in all. With no basis, a
+    # paused card's edit could only be refused, and the fallback draft dropped the pause (the
+    # 689fa7c audit).
+    duration_is: Literal["active", "elapsed"] | None = Field(
+        default=None,
+        description="Which duration duration_minutes is: active (moving time) or elapsed (start "
+        "to end, pauses included); null when they do not say.",
+    )
+    paused_minutes: float | None = Field(
+        default=None,
+        ge=0,
+        le=1440,
+        allow_inf_nan=False,
+        description="A pause this message states, kept or new ('keep the 9-minute pause' is 9, "
+        "'no pause' is 0); null when it says none.",
+    )
     on_date: date | None = None
     days_from_today: int | None = Field(default=None, ge=-366, le=7)
     days_from_card: int | None = Field(
@@ -269,22 +385,52 @@ class CorrectClause(Fields):
 
 
 class RedoClause(Fields):
-    """The last answer again, in another form, with nothing new asked: more or fewer options,
-    which are personal and which general, in fewer words, another unit. "Give me up to three
-    options here, saying which are personal" after a look at their data was read as small talk,
-    and the look was lost (the 9228fe6 audit). The data stays exactly as it was: "shorten it to
-    a three-date average" is a shorter period, a data clause, and as a redo it kept all seven
-    days (the b3d64ca audit)."""
+    """An earlier answer again, changed only where this message changes it: the same request,
+    in another form (more or fewer options, which are personal and which general, fewer words),
+    or with new days, another statistic, measure, threshold or lag.
+
+    A redo said only "keep the data" or not, and the same reader said it: "translate the
+    complete block back by two dates" came back as a redo that kept the data, and the old days
+    were repeated (the 689fa7c audit, twenty inputs over every family of date edit). So a redo
+    now says the request it repeats, field by field, as a data clause does: its days (the same,
+    or placed against the earlier ones), its statistic, its measures. Code inherits whatever it
+    keeps from the earlier result, and works out the days."""
 
     type: Literal["redo"]
     said: str = SAID
+    earlier_result: int | None = Field(
+        default=None,
+        ge=0,
+        le=7,
+        description="The earlier result it names, by its index in earlier_results ('the steps "
+        "result', 'the all-measure comparison'); null for the last answer as a whole.",
+    )
+    periods: list[Span] = Field(
+        min_length=1,
+        max_length=2,
+        description="The answer's days: same_as_earlier when this message keeps them; the new "
+        "days when it changes them (from_earlier, dates, calendar, days_ending).",
+    )
+    operation: Operation = Field(
+        description="inherit keeps the earlier statistic; the statistic this message asks for "
+        "instead ('the median instead' is median)."
+    )
+    metrics: list[str] = Field(
+        max_length=8,
+        description="Empty keeps the earlier measures; the measures this message names instead.",
+    )
+    comparison: Literal[">", ">=", "<", "<=", "=="] | None = Field(
+        default=None, description="Null keeps the earlier comparison."
+    )
+    threshold: float | None = Field(
+        default=None, allow_inf_nan=False, description="Null keeps the earlier threshold."
+    )
+    threshold_unit: Literal["native", "hours", "minutes"] = "native"
+    max_lag: int | None = Field(
+        default=None, ge=0, le=14, description="Null keeps the earlier lag."
+    )
     options: int | None = Field(
         default=None, ge=1, le=5, description="How many options or points they ask for."
-    )
-    keeps_the_data: bool = Field(
-        description="True only when the same days, measures, statistic and threshold are kept "
-        "and only the wording or format of the answer changes. A shorter or longer period, "
-        "another statistic, measure or threshold makes this false: that is a data clause."
     )
 
 
@@ -338,6 +484,16 @@ class OtherClause(Fields):
         description="They tell something about themselves or their life ('I'm training for a "
         "10k', 'I generally prefer three options'). False for thanks and small talk.",
     )
+    # Which kind of other it is: clear follow-ups ("use the preceding calendar day", "keep that
+    # exact historical day", "read the pending workout's pause") came back as other and were
+    # asked about (the 689fa7c audit, ten turns). One that is not small talk or about them goes
+    # back once, with what a follow-up can be, before anyone is asked.
+    message: Literal["small_talk", "about_them", "outside_the_app", "unsure"] = Field(
+        default="small_talk",
+        description="small_talk: thanks, greetings, chat. about_them: something they tell about "
+        "themselves. outside_the_app: asks for something the app does not do. unsure: you cannot "
+        "tell what it asks.",
+    )
 
 
 Clause = Annotated[
@@ -367,8 +523,30 @@ class Said(Fields):
     )
     medical: bool = Field(
         default=False,
-        description="They ask for a diagnosis, whether they have an illness or condition, or for "
-        "treatment or medication.",
+        description="This message asks for a diagnosis, whether they have an illness or "
+        "condition, or for treatment or medication.",
+    )
+    # The words that make it medical, from this message: "return to my own daily step count"
+    # after an urgent reply was refused as medical, the earlier message's pain carried over (the
+    # 689fa7c audit). Words from an earlier message make nothing medical now.
+    medical_said: str = Field(
+        default="",
+        max_length=300,
+        description="With medical: the words of this message that ask it, copied exactly.",
+    )
+    # Said as a field, so the reply says why: answered as "unclear", a request to invent a
+    # value and its evidence id got a generic rephrase (the 689fa7c audit, both wordings).
+    fabricate: bool = Field(
+        default=False,
+        description="They ask to make up or pretend a value, evidence, an id or a citation.",
+    )
+    # One source per history: asked to join an export and the live sync, one wording claimed a
+    # combined series no tool had read, the other answered from one source silently (the
+    # 689fa7c audit).
+    mix_sources: bool = Field(
+        default=False,
+        description="They ask to join records from different sources (an export and the live "
+        "sync, two devices) into one series.",
     )
     clarification: str = Field(
         default="",
@@ -404,7 +582,7 @@ KIND = {
 }
 
 
-def _part(clause: DataClause | InvestigateClause) -> Part:
+def _part(clause: DataClause | InvestigateClause, earlier: bool = False) -> Part:
     common = {
         "metrics": clause.metrics,
         "periods": [period_of(s) for s in clause.periods],
@@ -421,8 +599,33 @@ def _part(clause: DataClause | InvestigateClause) -> Part:
         max_lag=clause.max_lag,
         meal_type=clause.meal_type,
         source=clause.source,
-        every_metric=_whole_registry(clause),
+        every_metric=_whole_registry(clause, earlier),
+        nutrients=_nutrients(clause),
         **common,
+    )
+
+
+def _nutrients(clause: DataClause) -> list[str]:
+    """The nutrients a food clause asks about: said as such, or written as its metrics."""
+    if clause.source != "food_log":
+        return []
+    named = [*clause.nutrients, *(NUTRIENT_NAMES.get(m.casefold(), "") for m in clause.metrics)]
+    return list(dict.fromkeys(n for n in named if n))
+
+
+def _edit(redo: RedoClause) -> Part:
+    """What a redo repeats, as a data part: what it keeps is left to inherit from the earlier
+    result, what it changes is said."""
+    return Part(
+        metrics=redo.metrics,
+        operation=redo.operation,
+        periods=[period_of(s) for s in redo.periods],
+        reference=redo.earlier_result,
+        comparison=redo.comparison,
+        threshold=redo.threshold,
+        threshold_unit=redo.threshold_unit,
+        max_lag=redo.max_lag,
+        said=redo.said,
     )
 
 
@@ -438,30 +641,65 @@ def _words(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", text.casefold())
 
 
-def from_this_message(clause, question: str) -> bool:
+def _share(said: list[str], text: str) -> float:
+    words = set(_words(text))
+    return sum(w in words for w in said) / len(said) if said else 1.0
+
+
+def from_this_message(clause, question: str, before: Sequence[str] = ()) -> bool:
     """Whether a clause's words come from the current message. The reader once copied the
     previous message into a "remember" clause, answering "what have I told you?" with a new
-    fact to keep (the smoke run of 2026-11-19); every clean clause had copied its words exactly."""
-    said, asked = _words(clause.said), set(_words(question))
-    return not said or not asked or sum(w in asked for w in said) / len(said) >= MIN_OWN_WORDS
+    fact to keep (the smoke run of 2026-11-19); every clean clause had copied its words exactly.
+    Words shared with the current message are not enough when an earlier message has them
+    nearly all: "remove the preference about walking after lunch" shares most of its words with
+    "is the after-lunch walking preference still in my profile?", and a status question became
+    a forget card (the 689fa7c audit)."""
+    said = _words(clause.said)
+    if not said or not question:
+        return True
+    own = _share(said, question)
+    copied = max((_share(said, text) for text in before), default=0.0)
+    return own >= MIN_OWN_WORDS and not (copied >= COPIED_WORDS and copied > own)
+
+
+def _medical_here(said: "Said", question: str, before: Sequence[str]) -> bool:
+    """Medical when the words that make it so are this message's. A reading with no words
+    quoted (older fixtures) keeps the flag; code's own medical checks still apply after it."""
+    if not said.medical_said or not question:
+        return True
+    quoted = OtherClause(type="other", said=said.medical_said)
+    return from_this_message(quoted, question, before)
+
+
+def _covers(clauses: list, question: str) -> bool:
+    """Whether these clauses' words cover the current message: nothing it asks is left out."""
+    asked = _words(question)
+    said = {w for c in clauses for w in _words(c.said)}
+    return bool(asked) and sum(w in said for w in asked) / len(asked) >= MIN_OWN_WORDS
 
 
 MIN_OWN_WORDS = 0.6
+COPIED_WORDS = 0.9  # an earlier message with nearly all of a clause's words is where it came from
 
 
-def _whole_registry(clause) -> bool:
-    """A data clause about every measure they have: said so, or a tracker read over named days
-    that names no metric and no earlier result."""
-    return (
+def _whole_registry(clause, earlier: bool = False) -> bool:
+    """A data clause about every measure they have: said so, or, with nothing earlier to point
+    at, a tracker read over named days that names no metric. With an earlier result, naming no
+    metric keeps its metric: "use last week, Monday through Sunday" after a resting heart rate
+    mean became a look at every measure (the 689fa7c audit, three date edits). A clause that
+    repeats the earlier computation (inherit) points back whatever is there."""
+    if not (
         isinstance(clause, DataClause)
         and clause.source == "tracker"
         and clause.meal_type is None
         and not clause.metrics
-        and (clause.every_metric or (bool(clause.periods) and clause.earlier_result is None))
-    )
+    ):
+        return False
+    unnamed = bool(clause.periods) and clause.earlier_result is None
+    return clause.every_metric or (unnamed and not earlier and clause.operation != "inherit")
 
 
-def _every_metric_looked_into(clauses: list) -> list:
+def _every_metric_looked_into(clauses: list, earlier: bool = False) -> list:
     """Data clauses about every measure ("contrast my full set of measurements for Oct 11-31
     with Sep 20-Oct 10") are one look across every metric over their days: read as data, the
     question got eight metrics' averages and no comparison (v8, and the b730 audit).
@@ -471,7 +709,7 @@ def _every_metric_looked_into(clauses: list) -> list:
     over the investigation's own days is the same look, so it goes. Read as a side read, it
     named no metric and asked for an earlier result on a cold question (the 9228fe6 review). A
     side read of named metrics stays, and so does a whole-registry clause over other days."""
-    wide = [c for c in clauses if _whole_registry(c)]
+    wide = [c for c in clauses if _whole_registry(c, earlier)]
     looks = [c for c in clauses if isinstance(c, InvestigateClause)]
     if looks:
         scoped = [
@@ -521,16 +759,29 @@ def _every_metric_looked_into(clauses: list) -> list:
     return [*rest[:first], looked, *rest[first:]]
 
 
-def reading_from(said: Said, question: str = "") -> Reading:
+def reading_from(
+    said: Said, question: str = "", earlier: bool = False, before: Sequence[str] = ()
+) -> Reading:
     """The internal reading: the primary clause's kind, every data clause's part in order (read
-    beside a log, a confirmation, a status or a memory request as well), and its own fields."""
+    beside a log, a confirmation, a status or a memory request as well), and its own fields.
+    `earlier`: whether an earlier result is there for a clause to point at; `before`: the
+    earlier messages, which no clause may come from.
+
+    A clause copied from an earlier message is not asked now. When the clauses left cover the
+    current message and none of them is other, they are the reading; otherwise it goes back."""
     clauses = list(said.clauses)
-    if question and (strays := [c for c in clauses if not from_this_message(c, question)]):
-        raise RetryReading(
-            f"A {strays[0].type} clause has words from an earlier message. Earlier messages are "
-            "context only: make clauses only for what the current message asks, with said "
-            "copied from it."
-        )
+    strays = [c for c in clauses if not from_this_message(c, question, before)]
+    if strays:
+        rest = [c for c in clauses if c not in strays]
+        placed = rest and not any(isinstance(c, OtherClause) for c in rest)
+        if not (placed and _covers(rest, question)):
+            raise RetryReading(
+                f"A {strays[0].type} clause has words from an earlier message. Earlier messages "
+                "are context only: make clauses only for what the current message asks, with "
+                "said copied from it, and give every part of the current message its clause "
+                "(what the app keeps, or what they said here, is memory recall)."
+            )
+        clauses = rest
     # "What outdoor preference is still saved?" asks what is kept, not about a tracker entry (the
     # v5 audit answered it about the tracker).
     clauses = [
@@ -539,11 +790,18 @@ def reading_from(said: Said, question: str = "") -> Reading:
         else c
         for c in clauses
     ]
-    clauses = _every_metric_looked_into(clauses)
+    clauses = _every_metric_looked_into(clauses, earlier)
     types = [c.type for c in clauses]
     primary = next((t for t in PRIMARY if t in types), None)
     fields: dict = {
-        "medical": said.medical,
+        "medical": said.medical and _medical_here(said, question, before),
+        "fabricate": said.fabricate,
+        "mix_sources": said.mix_sources,
+        "unplaced": any(
+            isinstance(c, OtherClause) and c.message in ("outside_the_app", "unsure")
+            for c in clauses
+        )
+        or not clauses,
         "subject": said.subject,
         "memory": "deny" if said.store_nothing else "unspecified",
         "clarification": said.clarification,
@@ -558,12 +816,23 @@ def reading_from(said: Said, question: str = "") -> Reading:
         kind = "causality"
     for clause in data:
         if not (clause.metrics or clause.earlier_result is not None or clause.periods):
+            if clause.source == "food_log":
+                # Food eaten names no metric by design: what it lacks is its days. Told it needed
+                # a metric, the retry added a snack filter from the waiting card and read the
+                # wrong meals (the 689fa7c audit).
+                error = RetryReading(
+                    "A food_log clause names no metrics; it needs the days it reads: the date "
+                    "written or referred to (the waiting card's day, from pending_draft, as "
+                    "dates), or the earlier result it refers to."
+                )
+                error.keeps = ("source", "operation", "meal_type", "nutrients")
+                raise error
             raise RetryReading(
                 "A data clause needs the metrics it asks about or the earlier result it refers "
                 "to. A log, correction, status, confirmation or memory request has no data "
                 "clause unless the person also asks about their data in the same message."
             )
-    parts = [_part(c) for c in data]
+    parts = [_part(c, earlier) for c in data]
     if primary == "investigate":
         looked_into = [c for c in clauses if isinstance(c, InvestigateClause)]
         fields["focus"] = looked_into[0].focus
@@ -572,14 +841,24 @@ def reading_from(said: Said, question: str = "") -> Reading:
         parts = [_part(c) for c in looked_into]
     guidance = next((c for c in clauses if isinstance(c, GuidanceClause)), None)
     if guidance is not None:
+        topics = [
+            topic
+            if not guidance.movement or set(_words(guidance.movement)) <= set(_words(topic))
+            else f"{guidance.movement}, {topic}"
+            for topic in guidance.topics
+        ]
         fields |= {
-            "topics": guidance.topics,
+            "topics": topics,
             "guidance_question": guidance.question,
-            "guidance_reference": guidance.refers_back and not guidance.topics,
+            "guidance_reference": guidance.refers_back and not topics,
         }
     entry = next((c for c in clauses if isinstance(c, LogClause | CorrectClause)), None)
     if entry is not None:
         fields |= {"duration_minutes": entry.duration_minutes, "log_day": _day(entry)}
+        if isinstance(entry, CorrectClause):
+            fields |= {"duration_is": entry.duration_is, "paused_minutes": entry.paused_minutes}
+        if isinstance(entry, LogClause) and entry.exercise_type in TYPES:
+            fields["exercise_type"] = entry.exercise_type
         if isinstance(entry, CorrectClause) and entry.on_date is None:
             fields["card_day_offset"] = entry.days_from_card
             if entry.card_was is not None and entry.by_days is not None:
@@ -594,16 +873,16 @@ def reading_from(said: Said, question: str = "") -> Reading:
             "memory_action": memory.action,
             "recall": memory.recall,
             "states_new_fact": memory.states_new_fact,
+            # Only these words are the fact to keep or forget: given the whole message, the
+            # listener kept "average time asleep Oct 3-9" beside the walk preference asked for
+            # (the 689fa7c audit).
+            "memory_said": memory.said,
         }
     redo = next((c for c in clauses if isinstance(c, RedoClause)), None)
     if redo is not None:
-        if not redo.keeps_the_data:
-            raise RetryReading(
-                "A redo keeps the same days, measures, statistic and threshold and changes only "
-                "the wording or format. A change to the period, measure, statistic or threshold "
-                "is a data clause, its days placed with from_earlier."
-            )
         fields["redo_options"] = redo.options
+        if primary == "redo":
+            parts = [_edit(redo)]
     fields["status"] = "status" in types
     fields["clause_count"] = len(clauses)
     fields["told"] = any(

@@ -148,7 +148,8 @@ def test_a_constant_driver_is_named_as_the_reason_not_too_few_days():
     assert record.stats["paired_days"] == 140 and not record.stats["both_vary"]
     part = ResolvedPart(metrics=["steps", "hrv_ms"], operation="correlate", windows=[window])
     result = execute(Request(kind="data", parts=[part]), frame, days[-1].date())
-    assert "didn't change at all" in result.summary
+    # Named, and cited with what shows it (the 689fa7c audit found it uncited).
+    assert "steps stayed the same on every day" in result.summary and result.claims
     assert "too few" not in result.summary and "goes together;" not in result.summary
     assert "can't establish or rule out" not in result.summary  # no link was tested
 

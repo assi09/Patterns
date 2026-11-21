@@ -21,7 +21,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from functools import lru_cache
 from time import monotonic
-from typing import Annotated, Literal
+from typing import Annotated, Literal, NamedTuple
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
@@ -29,6 +29,7 @@ from pydantic import Field, model_validator
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.actions import exercises
 from app.actions import store as health_store
 from app.actions.schemas import Measured
 from app.actions.tools import proposal_tools
@@ -431,17 +432,24 @@ FORGET_CARD = (
 )
 FORGET_WHICH = "Which of these should I forget? You can also remove any of them in Settings."
 MAX_LISTED = 5
+CONTEXT_MESSAGES = 4  # the turns just before a forget, for what "it" means
+CONTEXT_CHARS = 400
 
 
-def forget_from(sessions: Sessions, agent: AgentParts, user_id, question_id, text, now) -> str:
+def forget_from(
+    sessions: Sessions, agent: AgentParts, user_id, question_id, text, now, context=()
+) -> str:
     """ "Forget my old running goal": a card for the one kept fact it means, which their tap then
-    deletes, or the kept facts to choose from when it is not clear which. Never a deletion here."""
+    deletes, or the kept facts to choose from when it is not clear which. Never a deletion here.
+    `context`: the turns just before, so "forget that updated preference" means the one they
+    were about; given the message alone, the picker asked "which?" of a single kept fact (the
+    689fa7c audit)."""
     try:
         with sessions() as db:
             kept = [(fact.id, fact.text) for fact in memory.kept_facts(db, user_id)][:MAX_KNOWN]
         if not kept:
             return NOTHING_KEPT
-        index, cost = which_kept(agent.llm, text, [words for _, words in kept])
+        index, cost = which_kept(agent.llm, text, [words for _, words in kept], context)
         with sessions() as db:
             question = db.get(ChatMessage, question_id)
             if question is not None and question.conversation_id:
@@ -490,27 +498,103 @@ def card_fields(payload: dict, zone) -> dict:
     return {"kind": "food", "day": f"{eaten.date().isoformat()} ({eaten:%a})"}
 
 
-def card_edit(prior: dict, typed: Request, zone) -> tuple[float | None, date | None]:
+class CardEdit(NamedTuple):
+    """What a correction changes on the card, worked out by code: the new active and elapsed
+    minutes (both, or neither), the new day, and whether a duration was given that cannot be
+    placed (a paused card's "30 minutes" with no word on which of its two durations it is)."""
+
+    active_minutes: float | None = None
+    elapsed_minutes: float | None = None
+    day: date | None = None
+    unclear: bool = False
+
+
+def _close(a: float, b: float) -> bool:
+    return abs(a - b) < 0.5
+
+
+def card_described(payload: dict, zone) -> str:
+    """The waiting card in words, from its stored values: what "what is still waiting?" reads."""
+    fields = card_fields(payload, zone)
+    day = date.fromisoformat(fields["day"][:10])
+    when = f"{day:%a %b} {day.day}"
+    if fields["kind"] == "food":
+        eaten = datetime.fromisoformat(payload["consumedAt"]).astimezone(zone)
+        return f"{payload.get('foodName', 'food')}, {when} at {eaten:%H:%M}."
+    name = exercises.name(payload["exerciseType"]).lower()
+    held = f"{fields['active_minutes']:g} min active"
+    if fields["paused_minutes"] >= 0.5:
+        held += (
+            f", {fields['paused_minutes']:g} min paused, {fields['elapsed_minutes']:g} min "
+            "from start to end"
+        )
+    return f"{name}, {when} at {fields['start']}, {held}."
+
+
+def card_edit(prior: dict, typed: Request, zone) -> CardEdit:
     """What a correction changes on the card, worked out against the card: a day said against
     it counts from its own local day, never from today ("a day later" became the day after the
     clock, the a196 audit); a duration the card already has is no change (a date-only edit
-    came back with the elapsed 50 minutes, which turned a 12-minute pause into active time)."""
+    came back with the elapsed 50 minutes, which turned a 12-minute pause into active time).
+
+    A paused workout has two durations and a pause, and a new duration is one of them: active
+    time keeps the pause and moves the end ("33 active, the same nine stopped" is 42 in all),
+    elapsed time keeps the pause and gives less active time. A pause said changes the end and
+    keeps the active time. Refusing every paused duration edit sent it to the drafting model,
+    which dropped the pause (the 689fa7c audit)."""
     fields = card_fields(prior, zone)
     day = typed.log_day
     if day is None and typed.card_day_offset is not None:
         day = date.fromisoformat(fields["day"][:10]) + timedelta(days=typed.card_day_offset)
     minutes = typed.duration_minutes
-    held = ("active_minutes", "elapsed_minutes") if fields["kind"] == "workout" else ()
-    if minutes is not None and any(abs(minutes - fields[k]) < 0.5 for k in held):
-        minutes = None
-    return minutes, day
+    if fields["kind"] != "workout":
+        return CardEdit(active_minutes=minutes, day=day)
+    active, elapsed, pause = (
+        fields["active_minutes"],
+        fields["elapsed_minutes"],
+        fields["paused_minutes"],
+    )
+    said_pause = typed.paused_minutes
+    kept = pause if said_pause is None else said_pause
+    basis = typed.duration_is
+    restated = minutes is not None and (_close(minutes, active) or _close(minutes, elapsed))
+    if restated and said_pause is None:
+        minutes = None  # the card's own duration, restated
+    if minutes is not None and basis is None:
+        if kept >= 0.5:
+            return CardEdit(day=day, unclear=True)
+        basis = "active"  # no pause: one duration
+    if minutes is None:
+        if said_pause is None:
+            return CardEdit(day=day)
+        new_active, new_elapsed = active, active + kept
+    elif basis == "active":
+        new_active, new_elapsed = minutes, minutes + kept
+    else:
+        new_active, new_elapsed = minutes - kept, minutes
+        if new_active <= 0:
+            return CardEdit(day=day, unclear=True)
+    if _close(new_active, active) and _close(new_elapsed, elapsed):
+        return CardEdit(day=day)
+    return CardEdit(new_active, new_elapsed, day)
 
 
-def corrected_payload(prior: dict, minutes: float | None, day, zone) -> dict | None:
-    """The waiting card with only what the correction states changed: a new duration keeps the
-    start and ends that long after it; a new day keeps the local clock times and the elapsed
-    time. None when it states neither, or when a paused workout makes "the duration" unclear
-    (active time or elapsed)."""
+def unclear_duration(prior: dict, typed: Request, zone) -> str:
+    """The one question for a paused card's duration that could be either of its two."""
+    fields = card_fields(prior, zone)
+    return (
+        f"Is {typed.duration_minutes:g} minutes the active time, or the whole time including "
+        f"the {fields['paused_minutes']:g}-minute pause? The card stays as it is until you say."
+    )
+
+
+def corrected_payload(
+    prior: dict, minutes: float | None, day, zone, elapsed: float | None = None
+) -> dict | None:
+    """The waiting card with only what the correction states changed: `minutes` is the new
+    active time and `elapsed` the new start-to-end time (the same as `minutes` when not given);
+    the start is kept. A new day keeps the local clock times and the elapsed time. None when it
+    states neither, or when a paused workout is given one duration with nothing to say which."""
     if minutes is None and day is None:
         return None
     payload = {
@@ -519,15 +603,15 @@ def corrected_payload(prior: dict, minutes: float | None, day, zone) -> dict | N
     if prior.get("kind") == "workout":
         start = datetime.fromisoformat(prior["startTime"]).astimezone(UTC)
         end = datetime.fromisoformat(prior["endTime"]).astimezone(UTC)
-        elapsed = end - start  # real time, as instants: a pause stays inside it
+        span = end - start  # real time, as instants: a pause stays inside it
         if minutes is not None:
-            if abs(elapsed.total_seconds() - prior["activeSeconds"]) > 1:
+            if elapsed is None and abs(span.total_seconds() - prior["activeSeconds"]) > 1:
                 return None
-            elapsed = timedelta(minutes=minutes)
+            span = timedelta(minutes=elapsed if elapsed is not None else minutes)
             payload["activeSeconds"] = round(minutes * 60)
         if day is not None:
             start = _on_day(start, day, zone)
-        end = start + elapsed  # UTC arithmetic: the same elapsed time across a clock change
+        end = start + span  # UTC arithmetic: the same elapsed time across a clock change
         return payload | {"startTime": _local(start, zone), "endTime": _local(end, zone)}
     if minutes is not None:
         return None  # a meal has no duration: the model's to read
@@ -677,11 +761,8 @@ def _answer(
                 continuing_log = last.pending_log_expert
         if correcting:
             continuing_log = "nutrition" if waiting[-1].kind == "food" else "activity"
-        edit_minutes, edit_day = (
-            card_edit(waiting[-1].payload, typed, zone)
-            if correcting and typed is not None
-            else (None, None)
-        )
+        edit = card_edit(waiting[-1].payload, typed, zone) if correcting and typed else CardEdit()
+        edit_minutes, edit_day = edit.active_minutes, edit.day
         # With the app's own scores as daily metrics, and the morning check-ins (rating and tags),
         # so they can be asked about and cited.
         frame = with_checkins(with_scores(data.daily.frame), checkins, CHECKIN_TAGS)
@@ -729,9 +810,13 @@ def _answer(
             said=[*thread, body.text],
             local_now=local_now,
             described=described,
-            required_duration_seconds=edit_minutes * 60 if edit_minutes is not None else None,
+            required_seconds=(edit.active_minutes * 60, edit.elapsed_minutes * 60)
+            if edit.active_minutes is not None and edit.elapsed_minutes is not None
+            else None,
             required_day=edit_day if correcting else (typed.log_day if typed else None),
             prior_draft=waiting[-1].payload if correcting else None,
+            # The activity they named, as the reader typed it: never a generic workout instead.
+            required_exercise=typed.exercise_type if typed and not correcting else None,
         )
         if outside.food_data:
             draft_tools["nutrition"] = [
@@ -748,8 +833,12 @@ def _answer(
         # (both a196 date-only edits went wrong in the model's draft; given the intended edit,
         # the card's own values were kept).
         by_code = None
-        if correcting and (edit_minutes is not None or edit_day is not None):
-            payload = corrected_payload(waiting[-1].payload, edit_minutes, edit_day, zone)
+        # An edit with a duration that cannot be placed changes nothing until it is answered,
+        # not even the day beside it: half an edit is a card nobody asked for.
+        if correcting and not edit.unclear and (edit_minutes is not None or edit_day is not None):
+            payload = corrected_payload(
+                waiting[-1].payload, edit_minutes, edit_day, zone, edit.elapsed_minutes
+            )
             tools = draft_tools.get("activity" if waiting[-1].kind == "workout" else "nutrition")
             if payload is not None and tools:
                 _, by_code = tools[0].run(payload)
@@ -780,7 +869,15 @@ def _answer(
                 after_draft=bool(waiting) and not correcting,
                 request_bundle=request_bundle,
                 action_states=action_states,
-                fixed_reply=(" ".join(described) or DRAFT_NOTE) if prepared else None,
+                waiting_card=card_described(waiting[-1].payload, zone) if waiting else None,
+                data_source=data.source,
+                fixed_reply=(" ".join(described) or DRAFT_NOTE)
+                if prepared
+                else (
+                    unclear_duration(waiting[-1].payload, typed, zone)
+                    if edit.unclear and typed is not None
+                    else None
+                ),
             )
             if by_code is not None:
                 reply.result.trace.append({"type": "correction_by_code", **by_code})
@@ -792,7 +889,13 @@ def _answer(
         # too, the old card stays and the reply says so (a run's correction got "ask it another
         # way" and kept its old duration, the v5 audit).
         if reply is not None and correcting and not prepared and typed is not None:
-            payload = corrected_payload(waiting[-1].payload, edit_minutes, edit_day, zone)
+            payload = (
+                None
+                if edit.unclear
+                else corrected_payload(
+                    waiting[-1].payload, edit_minutes, edit_day, zone, edit.elapsed_minutes
+                )
+            )
             tools = draft_tools.get("activity" if waiting[-1].kind == "workout" else "nutrition")
             if payload is not None and tools and by_code is None:
                 _, step = tools[0].run(payload)
@@ -824,18 +927,23 @@ def _answer(
         # "Remember that …" is heard now, not after: the reply says what actually happened.
         noted = reply is not None and reply.result.stop_reason == "noted"
         action = typed.memory_action if typed is not None else None
+        # The memory clause's own words, never the rest of the message beside it.
+        fact_words = (typed.memory_said if typed is not None else "") or body.text
+        recent = [m.text[:CONTEXT_CHARS] for m in earlier[-CONTEXT_MESSAGES:]]
         if noted and action == "forget":
             # A change ("forget Mondays, it's Tuesdays now") is the listener's replacement card;
             # a plain "forget my old goal" is a card to forget that kept fact. "Don't save" stops
             # only the new fact, never the forget.
             changed = False
             if typed.states_new_fact and not memory_denied:
-                outcome = listen_to(sessions, agent, user_id, question_id, body.text, today, now)
+                outcome = listen_to(sessions, agent, user_id, question_id, fact_words, today, now)
                 changed = bool(outcome and "proposed" in outcome)
             said = (
                 FORGET_NOTE
                 if changed
-                else forget_from(sessions, agent, user_id, question_id, body.text, now)
+                else forget_from(
+                    sessions, agent, user_id, question_id, fact_words, now, context=recent
+                )
             )
             if memory_denied and (said == NOTHING_KEPT or said.startswith(FORGET_WHICH)):
                 # "Just here in this chat, I like kayaking. Keep that out of my profile": a
@@ -850,7 +958,7 @@ def _answer(
         elif noted and not memory_denied:
             asked = action == "remember"
             outcome = listen_to(
-                sessions, agent, user_id, question_id, body.text, today, now, asked=asked
+                sessions, agent, user_id, question_id, fact_words, today, now, asked=asked
             )
             reply.result.summary = noted_reply(outcome)
         # A read-only request ("remind me what I said", "is it saved?") gives no permission to

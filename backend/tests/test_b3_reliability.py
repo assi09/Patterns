@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from test_broad_questions import END, ON, Router, planted, submit
-from test_clauses import data, dates, earlier, read, said, windows
+from test_clauses import data, dates, earlier, read, redo, said, windows
 from test_edits import from_earlier
 from test_investigate_and_memory import reading_llm
 from test_r922_reliability import LOOKED, OCT, OPENING, SEP, look
@@ -174,15 +174,13 @@ def test_redo_after_guidance_redoes_the_guidance_not_the_older_data():
     state = {**LOOKED.request_state, "guidance": ["plank"], "last": "guidance"}
     after_guidance = Turn("How do I do a plank?", "Hold a straight line.", request_state=state)
     words = "Say that again in fewer words."
-    redo = {"type": "redo", "said": words, "keeps_the_data": True}
-    request, _ = read(words, said(redo), history=[after_guidance])
+    request, _ = read(words, said(redo(words)), history=[after_guidance])
     assert request.kind == "guidance" and request.topics == ["plank"]
 
 
 def test_redo_after_data_still_redoes_the_data():
     words = "Say that again in fewer words."
-    redo = {"type": "redo", "said": words, "keeps_the_data": True}
-    request, _ = read(words, said(redo), history=[LOOKED])
+    request, _ = read(words, said(redo(words)), history=[LOOKED])
     assert request.kind == "investigate" and len(request.parts[0].windows) == 2
 
 
@@ -192,21 +190,18 @@ SEVEN = earlier("2026-09-27", "2026-10-03", "time_in_bed", "mean")
 SHORTEN = "Shorten it to a three-date average, still finishing on that same last date."
 
 
-def test_a_shorter_period_read_as_a_redo_goes_back_and_becomes_the_shorter_period():
-    """time_in_bed-02/t2: as a redo it kept all seven days."""
-    as_redo = {"type": "redo", "said": SHORTEN, "keeps_the_data": False}
-    as_edit = data(
-        SHORTEN, ["time_in_bed"], "mean", from_earlier("its_last_day", 0, "ends_there", 3)
-    )
-    as_edit["earlier_result"] = 0
-    request, calls = read(SHORTEN, said(as_redo), said(as_edit), history=[SEVEN])
-    assert calls == 2 and windows(request) == [(date(2026, 10, 1), date(2026, 10, 3))]
+def test_a_shorter_period_said_in_a_redo_is_the_shorter_period():
+    """time_in_bed-02/t2: as a redo it kept all seven days. A redo now says its days."""
+    edit = from_earlier("its_last_day", 0, "ends_there", 3)
+    request, calls = read(SHORTEN, said(redo(SHORTEN, edit)), history=[SEVEN])
+    assert calls == 1 and request.kind == "data"
+    assert windows(request) == [(date(2026, 10, 1), date(2026, 10, 3))]
+    assert request.parts[0].metrics == ["time_in_bed"] and request.parts[0].operation == "mean"
 
 
 def test_fewer_words_on_the_same_result_is_still_a_redo():
     words = "Say that same result in fewer words, keeping its dates."
-    redo = {"type": "redo", "said": words, "keeps_the_data": True}
-    request, calls = read(words, said(redo), history=[SEVEN])
+    request, calls = read(words, said(redo(words)), history=[SEVEN])
     assert calls == 1 and windows(request) == [(date(2026, 9, 27), date(2026, 10, 3))]
 
 
@@ -276,9 +271,7 @@ def test_the_outline_keeps_a_corrections_sign_and_a_redos_count():
     )
     assert outline(move)["card_day_offset"] == -2
     again = reading_from(
-        Said.model_validate(
-            said({"type": "redo", "said": "x", "options": 3, "keeps_the_data": True})
-        ),
+        Said.model_validate(said(redo("x", options=3))),
         "x",
     )
     assert outline(again)["redo_options"] == 3
@@ -314,6 +307,6 @@ def test_options_asked_for_beside_an_investigations_coaching_survive_its_assembl
     )
     reply = ask(llm, Router("lookup"), frame, "Give me three options for my sleep.", today=END)
     shown = reply.result.summary
-    assert "general guidance from the sources" in shown
+    assert "points marked General are public guidance" in shown and "- General (" in shown
     kinds = [c.kind for c in reply.result.claims]
     assert "guidance" in kinds and len([k for k in kinds if k in ("suggestion", "guidance")]) <= 3

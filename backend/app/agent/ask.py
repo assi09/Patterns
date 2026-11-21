@@ -10,7 +10,7 @@ are the first steps of the trace, so every answer can be traced to its context a
 
 import re
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 
@@ -98,7 +98,7 @@ from app.agent.personal import (
     top_up,
     without_filler,
 )
-from app.agent.present import label
+from app.agent.present import METRICS, label
 from app.agent.requested import _when
 from app.agent.requested import execute as execute_request
 from app.agent.requests import interpret, previous_state
@@ -237,7 +237,8 @@ def recalled(
         )
         if not only:
             return {
-                "kept": "Nothing is kept about you yet: nothing has been approved.",
+                # Now, not ever: after a deletion, "nothing has been approved" was untrue.
+                "kept": "Nothing is kept about you right now.",
                 "waiting": "No card is waiting for your tap.",
                 "this_chat": "You haven't told me anything about yourself in this chat yet.",
             }[scope]
@@ -503,9 +504,29 @@ def _food_lines(record: Evidence) -> str:
     )
 
 
+def coaching_query(typed, records: Iterable[Evidence]) -> str | None:
+    """What a coaching answer's public guidance is searched for: the resolved request's own
+    measures, or those its habits were tested for. The person's words in a follow-up are about
+    the answer's form ("three options here, labelled personal or general"), and searched for
+    themselves they found no passage at all, so no general option was given (the 689fa7c audit,
+    all twelve option requests). None for anything but an investigation."""
+    if typed is None or typed.kind != "investigate":
+        return None
+    named = [m for p in typed.parts for m in p.metrics]
+    tested = [r.metrics[0] for r in records if r.tool == "habit_options" and r.metrics]
+    metrics = list(dict.fromkeys(m for m in (named or tested) if m in METRICS))[:MAX_TOPICS]
+    if not metrics:
+        return None
+    return "Everyday habits that support better " + " and ".join(label(m) for m in metrics)
+
+
+MAX_TOPICS = 3
+
+
 def _fill_points(llm: LLM, result: AgentResult, question: str, wanted: int, guard) -> None:
     """When an answer falls short of the points asked for, the rest come straight from the sources
-    it retrieved, marked as general and linked."""
+    it retrieved, each marked as general with its source. Fewer than asked is said, never
+    filled with invented tips."""
     points = [c for c in result.claims if c.kind in ("suggestion", "guidance")]
     if len(points) >= wanted:
         result.summary = as_points(result.summary)
@@ -525,12 +546,22 @@ def _fill_points(llm: LLM, result: AgentResult, question: str, wanted: int, guar
             return
         added = [a for a, bad in zip(added, flags, strict=True) if not bad]
     lines = [as_points(base)] if base else []
-    lines += [f"- {a.tip.lstrip('- ').strip()}" for a in added]
+    lines += [
+        f"- General ({a.record.stats.get('source') or 'public guidance'}): "
+        f"{a.tip.lstrip('- ').strip()}"
+        for a in added
+    ]
     if added:
-        closing = "The last points are general guidance from the sources."
+        closing = "The points marked General are public guidance, not from your own data."
         result.summary = "\n".join(lines) + f"\n\n{closing}"
     elif base:
         result.summary = as_points(base)
+    if len(points) + len(added) < wanted:
+        found = len(points) + len(added)
+        result.notes.append(
+            f"You asked for {wanted}; the evidence and sources I have support {found}, so that is "
+            "all I've given rather than make one up."
+        )
     for item in added:
         result.evidence[item.record.id] = item.record
         result.claims.append(
@@ -711,6 +742,32 @@ def nothing_to_explain(result: AgentResult, typed, today: date) -> bool:
     result.evidence |= tests
     result.trace.append({"type": "nothing_to_explain", "tests": len(tests)})
     return True
+
+
+SOURCE_NAMES = {"takeout": "your Fitbit export (Takeout)", "api": "the live Google Health sync"}
+
+
+def one_source(source: str | None) -> str:
+    """Why two sources are never joined, and which one this history is: said by code, so no
+    answer can claim a combined series that no tool read."""
+    reply = (
+        "I don't join your Fitbit export and the live Google sync into one series: they measure "
+        "differently (the sync's sleep comes from a newer algorithm), so a joined history would "
+        "show a change that is only the switch between them."
+    )
+    if source in SOURCE_NAMES:
+        reply += (
+            f" Your history here comes from {SOURCE_NAMES[source]} only; ask about it on its "
+            "own and I'll analyze it."
+        )
+    return reply
+
+
+NO_FABRICATION = (
+    "I can't make up a value, a piece of evidence or a citation. I only report what your records "
+    "show, and every figure I give cites the computation behind it. I can look up what was "
+    "actually recorded instead."
+)
 
 
 def unresolved_follow_up(history: Sequence[Turn], today: date) -> str:
@@ -915,11 +972,13 @@ STATUS_FAILED = "No: the entry couldn't be written to your tracker. You can try 
 STATUS_NONE = "Nothing from this chat has been written to your tracker, and no card is waiting."
 
 
-def status_reply(states: Sequence[str]) -> str:
-    """Whether an entry was saved, from the store: the latest entry of this chat decides."""
+def status_reply(states: Sequence[str], card: str | None = None) -> str:
+    """Whether an entry was saved, from the store: the latest entry of this chat decides. With a
+    card waiting, what it holds, from its stored values: "tell me exactly what is still waiting"
+    got only "a card is waiting" (the 689fa7c audit)."""
     latest = states[-1] if states else None
     if latest in ("draft", "executing"):
-        return STATUS_WAITING
+        return f"{STATUS_WAITING} On the card: {card}" if card else STATUS_WAITING
     if latest == "succeeded":
         return STATUS_SAVED
     if latest in ("failed", "unknown"):
@@ -1054,6 +1113,8 @@ def ask(
     fixed_reply: str | None = None,  # said by code already (a card edit code applied)
     request_bundle: tuple | None = None,  # the API may interpret before preparing action tools
     action_states: Sequence[str] = (),  # this chat's recent entries' statuses, oldest first
+    waiting_card: str | None = None,  # the card waiting for a tap, described from its values
+    data_source: str | None = None,  # where this person's history comes from: takeout or api
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -1089,6 +1150,10 @@ def ask(
             fixed = "I can only see your own data, not another person's records."
         elif typed.medical:
             fixed = MEDICAL_REFUSAL  # a diagnosis or a condition asked about: no data is read
+        elif typed.fabricate:
+            fixed = NO_FABRICATION
+        elif typed.mix_sources:
+            fixed = one_source(data_source)
         elif typed.clarification:
             fixed = typed.clarification
         elif (
@@ -1106,7 +1171,7 @@ def ask(
         ):
             fixed = gap  # never another period's days in place of the ones named
         elif typed.kind == "status":
-            fixed = status_reply(action_states)  # read from the store, never a write
+            fixed = status_reply(action_states, waiting_card)  # from the store, never a write
         elif typed.kind == "confirmation":
             # Only a tap on the card logs anything: "Yes, go ahead and save that" was answered
             # "Saved." while the card stayed a draft (the audit of 2026-11-19).
@@ -1614,8 +1679,13 @@ def ask(
             if guidance_mode != "picked":
                 guidance = list(load_cards()) if guidance_mode == "all" else []
             if guidance_mode == "picked":
+                tested = [e for records, _ in found for e in records]
                 retrieved = guidance_for(
-                    question, picked, llm, " ".join(r.text for r in relevant), area=topics
+                    coaching_query(typed, tested) or question,
+                    picked,
+                    llm,
+                    " ".join(r.text for r in relevant),
+                    area=topics,
                 )
                 evidence |= {record.id: record for record in retrieved.evidence}
                 block = "\n\n".join(part for part in (block, retrieved.text) if part)
@@ -1836,7 +1906,8 @@ def ask(
         if typed.focus == "coaching":
             one_coaching_conclusion(result, habits, max(wanted, 1))
             if wanted:
-                _fill_points(llm, result, question, wanted, guard)
+                topic = coaching_query(typed, result.evidence.values()) or question
+                _fill_points(llm, result, topic, wanted, guard)
             if len(named) == 2 and habits:
                 # The habit tests take one period: the later one of the comparison, said so,
                 # never the enclosing range (Sep 2-Oct 31 was cited for Oct 2-15 against Sep

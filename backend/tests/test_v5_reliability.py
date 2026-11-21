@@ -941,14 +941,16 @@ def test_a_duration_correction_the_model_did_not_make_is_made_by_code(setup, kin
 
 
 def test_a_correction_that_cannot_be_made_keeps_the_old_card_and_says_so(setup):  # noqa: F811
-    """A paused workout: "the duration" could be active or elapsed time, so code makes nothing."""
+    """A paused workout: "the duration" could be active or elapsed time, so code makes nothing
+    and asks which, naming the pause; the card stays."""
     client, _, agent = setup
     headers = sign_in(setup)
     start = datetime.now(UTC) - timedelta(hours=3)
     words = "Log my walk: 30 minutes of walking, with a 10 minute pause, 40 minutes in all."
     first = log_first(client, headers, agent, walk(start, 40, active=30), words)
     second = correct(client, headers, agent, first)
-    assert not second.get("actionIds") and "still waiting as it was" in second["text"]
+    assert not second.get("actionIds")
+    assert "active time, or the whole time including the 10-minute pause" in second["text"]
     entries = {e["id"]: e for e in client.get("/actions", headers=headers).json()}
     assert entries[first["actionIds"][0]]["status"] == "draft"
     assert entries[first["actionIds"][0]]["log"]["activeSeconds"] == 1800

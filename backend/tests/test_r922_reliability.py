@@ -7,7 +7,7 @@ one of the controls Codex named; made-up data only."""
 from datetime import date, timedelta
 
 from test_broad_questions import END, ON, Router, planted, submit
-from test_clauses import data, dates, read, said, windows
+from test_clauses import data, dates, read, redo, said, windows
 from test_edits import from_earlier
 from test_investigate_and_memory import reading_llm
 
@@ -181,33 +181,31 @@ def test_an_edit_of_one_side_of_two_periods_still_asks_which():
 THREE = "Could you give me up to three options here, saying which are personal versus general?"
 
 
-def redo(options=3):
-    return {"type": "redo", "said": THREE, "options": options, "keeps_the_data": True}
+def options(count=3):
+    return redo(THREE, options=count)
 
 
 def test_options_asked_for_after_a_look_are_coaching_on_that_look():
     """screenflat-02/t4: read as small talk, the look was lost and habits were tested on the
     default two months."""
-    request, calls = read(THREE, said(redo()), history=[LOOKED])
+    request, calls = read(THREE, said(options()), history=[LOOKED])
     assert request.kind == "investigate" and request.focus == "coaching" and calls == 1
     assert windows(request) == BOTH
 
 
 def test_a_redo_of_a_data_answer_keeps_the_read():
     shorter = "Say that again, shorter."
-    request, _ = read(
-        shorter, said({"type": "redo", "said": shorter, "keeps_the_data": True}), history=[ATE]
-    )
+    request, _ = read(shorter, said(redo(shorter)), history=[ATE])
     assert request.kind == "data" and windows(request) == [(date(2026, 10, 17), date(2026, 10, 17))]
 
 
 def test_a_redo_with_nothing_earlier_asks():
-    request, _ = read(THREE, said(redo()))
+    request, _ = read(THREE, said(options()))
     assert request.kind == "clarify"
 
 
 def test_a_formatting_redo_is_not_something_told_about_them():
-    request, _ = read(THREE, said(redo()), history=[LOOKED])
+    request, _ = read(THREE, said(options()), history=[LOOKED])
     assert not request.told
 
 

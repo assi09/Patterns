@@ -143,14 +143,24 @@ def execute(
             )
             totals = stats["totals"]
             names = {
-                "energyKcal": ("energy consumed", "kcal"),
-                "proteinG": ("protein", "g"),
-                "carbohydrateG": ("carbohydrate", "g"),
-                "fatG": ("fat", "g"),
+                "energy": ("energyKcal", "energy consumed", "kcal"),
+                "protein": ("proteinG", "protein", "g"),
+                "carbohydrate": ("carbohydrateG", "carbohydrate", "g"),
+                "fat": ("fatG", "fat", "g"),
             }
-            for key, (name, unit) in names.items():
+            # The nutrients asked about, each said even when unknown (never as zero); none named
+            # is every nutrient recorded.
+            asked = part.nutrients or list(names)
+            counted = stats["entries_with_values"]
+            for nutrient in asked:
+                key, name, unit = names[nutrient]
                 if totals[key] is not None:
-                    text += f" {name.capitalize()}: {totals[key]:,g} {unit}."
+                    text += f" {name.capitalize()}: {totals[key]:,g} {unit}"
+                    if entries and counted[key] < entries:
+                        text += f" (recorded for {counted[key]} of the {entries})"
+                    text += "."
+                elif part.nutrients and entries:
+                    text += f" {name.capitalize()}: not recorded, so it is unknown, not zero."
             text += " Only what you logged is counted, and missing nutrient values aren't guessed."
             say(text, record, "food_logs")
             if stats["names"]:
@@ -199,14 +209,31 @@ def execute(
                 and stats.get("paired_days", 0) >= 3
                 and not stats.get("both_vary", True)
             ):
-                statements.append(
-                    f"{_first_up(_span(window))}, one of {names} didn't change at all, so "
-                    "whether they go together can't be told from these days."
+                # Which one never changed, from each metric's own description over the days,
+                # cited with the test: said uncited, the constancy could not be inspected (the
+                # 689fa7c audit, both wordings).
+                shown = [describe(frame, m, window) for m in part.metrics if m in frame]
+                flat = [r for r in shown if r.n and r.stats.get("sd") in (0, 0.0)]
+                which = " and ".join(label(r.metrics[0]) for r in flat) or f"one of {names}"
+                say(
+                    f"{_first_up(_span(window))}, {which} stayed the same on every day with "
+                    f"both recorded ({stats['paired_days']} days), so whether {names} go "
+                    "together can't be told from these days.",
+                    flat[0] if flat else record,
+                    part.metrics[0],
+                    "data_quality",
                 )
+                for extra in [*flat[1:], record]:
+                    result.evidence[extra.id] = extra
+                    if extra.id not in result.claims[-1].evidence_ids:
+                        result.claims[-1].evidence_ids.append(extra.id)
             elif not record.sufficient or stats["rho"] is None:
-                statements.append(
+                say(
                     f"{_first_up(_span(window))}, there aren't enough days with both {names} "
-                    "to say whether they go together."
+                    f"({stats.get('paired_days', record.n)}) to say whether they go together.",
+                    record,
+                    part.metrics[0],
+                    "data_quality",
                 )
             elif stats[RUN_ADJUSTED] < 0.05:
                 positive = stats["rho"] > 0

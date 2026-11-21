@@ -359,9 +359,12 @@ def answer_world(
             retrieved = search(query, llm=llm, budget=budget)
             result.trace.append(retrieved.trace(query))
             candidates = [*shown(active), *retrieved.found]
+            best = [*retrieved.found[:1]]
             if topic and topic.casefold() not in query.casefold():
                 # The movement itself too, not only the reworded question about it.
-                candidates += search(topic, llm=llm, budget=budget).found
+                about = search(topic, llm=llm, budget=budget).found
+                candidates += about
+                best = [*about[:1], *best]
             if topic and any(f.passage.kind == "exercise" for f in candidates):
                 # Every exercise sharing a word of its title with the movement, for the variant
                 # pick to choose from: "floor glute bridge" found only the barbell one by meaning,
@@ -370,6 +373,18 @@ def answer_world(
             selected = for_topic(_unique(candidates), topic, llm, budget, established=active)[
                 :MAX_PASSAGES
             ]
+            # An exercise asked about, and no vetted passage is that exercise: said so, never
+            # the web's page on something else or another movement's instructions in its place
+            # (the surfing pop-up, then a foam-roller stretch, the 689fa7c audit).
+            exercise = bool(best) and best[0].passage.kind == "exercise"
+            if topic and exercise and not any(f.passage.kind == "exercise" for f in selected):
+                result.trace += [
+                    {"type": "guidance_passages", "passage_ids": []},
+                    {"type": "guidance_topic", "topic": topic, "passage_ids": []},
+                ]
+                result.stop_reason = "lookup_failed"
+                result.summary = NOT_COVERED.format(topic=clean(topic, 100))
+                return result
             records = [passage_evidence(f.passage) for f in selected]
             # Narrowed to the passages behind the reply once it is written (`supporting`).
             chosen = {"type": "guidance_passages", "passage_ids": [f.passage.id for f in selected]}
@@ -463,6 +478,10 @@ def answer_world(
 
 MAX_PASSAGES = 5
 MAX_NEIGHBOURS = 20
+NOT_COVERED = (
+    "The vetted exercise instructions I have don't cover {topic}, so I won't describe another "
+    "movement in its place. Ask about the movement without that variation and I'll look it up."
+)
 
 
 def title_words(text: str) -> set[str]:

@@ -404,7 +404,7 @@ def test_causality_follows_observed_association_state(mode):
     # A question about a cause is answered about the cause either way (Codex's review).
     assert tested or "can't say whether one affects the other" in result.summary
     if mode == "constant":
-        assert "didn't change at all" in result.summary
+        assert "stayed the same on every day" in result.summary
     if mode == "missing":
         assert "never recorded on the same days" in result.summary
 

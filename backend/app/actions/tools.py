@@ -88,13 +88,20 @@ def proposal_tools(
     said: Sequence[str] = (),
     local_now: datetime | None = None,
     described: list[str] | None = None,
-    required_duration_seconds: float | None = None,
+    required_seconds: tuple[float, float] | None = None,
     required_day: date | None = None,
     prior_draft: dict | None = None,
+    required_exercise: str | None = None,
 ) -> dict[str, list[ExtraTool]]:
     """`estimates` holds what food lookups found in this answer: a food draft made after one is
     labelled as an estimate by code, whatever the model says. `said` is the person's own words in
-    this request and `local_now` their local time: a draft that contradicts them is refused."""
+    this request and `local_now` their local time: a draft that contradicts them is refused.
+
+    The request reader's validated facts bind the draft: `required_seconds` (active, elapsed) a
+    correction's durations as code worked them out from the card, `required_day` the day it
+    read, and `required_exercise` the activity it typed. A second recognizer of the same words
+    must not overrule them: "Oct31" passed the reader and failed the day pattern, which then
+    refused the draft as more than a day old (the 689fa7c audit)."""
 
     def tool(model: type[FoodLog] | type[WorkoutLog], expert: str) -> ExtraTool:
         schema = model.model_json_schema(by_alias=True)
@@ -129,20 +136,38 @@ def proposal_tools(
                         ).total_seconds()
                         previous += f" Previously stated duration: {elapsed / 60:g} minutes."
                     checked_said.insert(0, previous)
-                if required_duration_seconds is not None:
-                    checked_said.append(f"Correction: {required_duration_seconds / 60:g} minutes")
+                if required_seconds is not None:
+                    active, elapsed = required_seconds
+                    checked_said.append(
+                        f"Correction: {active / 60:g} minutes active, {elapsed / 60:g} minutes "
+                        "elapsed"
+                    )
+                if (
+                    model is WorkoutLog
+                    and required_exercise
+                    and given.get("exerciseType") != required_exercise
+                ):
+                    given["exerciseType"] = required_exercise
                 if model is WorkoutLog and checked_said and lacks_a_duration(checked_said):
                     problem = "The person did not say how long it lasted. Ask them, kindly."
                     content = {"error": "This draft was not prepared.", "problems": [problem]}
                     return json.dumps(content | {"note": REFUSED_NOTE}), {"error": "not_as_said"}
+                day_known = expected_day is not None
                 if said and local_now:
-                    given = latest_past(given, checked_said, local_now)
+                    given = latest_past(given, checked_said, local_now, day_known=day_known)
                 log = model.model_validate(given)
                 # Editing a card with no new duration keeps the card's interval: its words name no
                 # pause, so rebuilding the end from them turned a 12-minute pause into active
                 # time (the a196 audit).
-                keeps_card = prior_draft is not None and required_duration_seconds is None
-                if isinstance(log, WorkoutLog) and checked_said and not keeps_card:
+                keeps_card = prior_draft is not None and required_seconds is None
+                # A correction's interval is code's, from the card (`required_seconds`): rebuilt
+                # from the words, "33 active, the same twelve stopped" lost its pause again.
+                if (
+                    isinstance(log, WorkoutLog)
+                    and checked_said
+                    and not keeps_card
+                    and required_seconds is None
+                ):
                     log = with_stated_interval(log, checked_said)
                 if (
                     isinstance(log, WorkoutLog)
@@ -156,16 +181,15 @@ def proposal_tools(
                             "Change only what they said."
                         }
                     ), {"error": "untouched_field", "field": changed}
-                if isinstance(log, WorkoutLog) and required_duration_seconds is not None:
+                if isinstance(log, WorkoutLog) and required_seconds is not None:
+                    active, elapsed = required_seconds
                     seconds = (log.end_time - log.start_time).total_seconds()
-                    if (
-                        abs(seconds - required_duration_seconds) > 1
-                        or abs(log.active_seconds - required_duration_seconds) > 1
-                    ):
+                    if abs(seconds - elapsed) > 1 or abs(log.active_seconds - active) > 1:
                         return json.dumps(
                             {
-                                "error": "Use the corrected duration, preserving the "
-                                "other draft fields. Do not reuse the old duration."
+                                "error": f"Use {active / 60:g} minutes of active time and "
+                                f"{elapsed / 60:g} minutes from start to end (the pause kept), "
+                                "preserving the other draft fields."
                             }
                         ), {"error": "stale_duration"}
                 if expected_day is not None and local_now is not None:
@@ -180,7 +204,7 @@ def proposal_tools(
                 if (
                     checked_said
                     and local_now
-                    and (problem := mismatch(log, checked_said, local_now))
+                    and (problem := mismatch(log, checked_said, local_now, day_known=day_known))
                 ):
                     content = {"error": "This draft was not prepared.", "problems": [problem]}
                     return json.dumps(content | {"note": REFUSED_NOTE}), {"error": "not_as_said"}

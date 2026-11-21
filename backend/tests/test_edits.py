@@ -108,21 +108,68 @@ def paused(start: datetime) -> dict:
         (50, 1, None, 1),  # the a196 reading: the elapsed 50 minutes is no change
         (38, 1, None, 1),  # nor the active 38
         (None, -2, None, -2),  # counted from the card, not from today
-        (45, None, 45, 0),  # a new duration is a change
     ],
 )
 def test_a_correction_is_worked_out_against_the_card(said_minutes, offset, minutes, moved):
     start = datetime(2026, 10, 21, 15, 0, tzinfo=UTC)
     typed = Request(kind="correction", duration_minutes=said_minutes, card_day_offset=offset)
-    got_minutes, day = chat.card_edit(paused(start), typed, ZONE)
-    assert got_minutes == minutes
-    assert day == (date(2026, 10, 21) + timedelta(days=moved) if moved else None)
+    edit = chat.card_edit(paused(start), typed, ZONE)
+    assert edit.active_minutes == minutes and not edit.unclear
+    assert edit.day == (date(2026, 10, 21) + timedelta(days=moved) if moved else None)
 
 
 def test_an_explicit_date_wins_over_the_card():
     typed = Request(kind="correction", log_day=date(2026, 10, 25), card_day_offset=1)
-    _, day = chat.card_edit(paused(datetime(2026, 10, 21, 15, tzinfo=UTC)), typed, ZONE)
-    assert day == date(2026, 10, 25)
+    edit = chat.card_edit(paused(datetime(2026, 10, 21, 15, tzinfo=UTC)), typed, ZONE)
+    assert edit.day == date(2026, 10, 25)
+
+
+# ---- a paused card's two durations and its pause (the 689fa7c audit) ----
+
+START = datetime(2026, 10, 21, 15, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "fields, active, elapsed",
+    [
+        # workout_paused-01/t3 and -02/t3: "33 active, keep the 9-minute pause" is 42 in all
+        ({"duration_minutes": 33, "duration_is": "active", "paused_minutes": 12}, 33, 45),
+        ({"duration_minutes": 33, "duration_is": "active"}, 33, 45),  # the pause kept unsaid
+        ({"duration_minutes": 60, "duration_is": "elapsed"}, 48, 60),  # less active time
+        ({"paused_minutes": 5}, 38, 43),  # a new pause: the active time stays
+        ({"paused_minutes": 0}, 38, 38),  # no pause at all
+        ({"duration_minutes": 45, "duration_is": "active", "paused_minutes": 0}, 45, 45),
+    ],
+)
+def test_a_paused_cards_duration_edit_keeps_what_it_does_not_change(fields, active, elapsed):
+    edit = chat.card_edit(paused(START), Request(kind="correction", **fields), ZONE)
+    assert (edit.active_minutes, edit.elapsed_minutes, edit.unclear) == (active, elapsed, False)
+    payload = chat.corrected_payload(
+        paused(START), edit.active_minutes, edit.day, ZONE, edit.elapsed_minutes
+    )
+    begins = datetime.fromisoformat(payload["startTime"])
+    ends = datetime.fromisoformat(payload["endTime"])
+    assert begins == START and payload["activeSeconds"] == active * 60
+    assert ends - begins == timedelta(minutes=elapsed)
+    assert payload["exerciseType"] == paused(START)["exerciseType"]
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"duration_minutes": 45},  # active or in all? the card has a 12-minute pause
+        {"duration_minutes": 10, "duration_is": "elapsed"},  # shorter than its pause
+    ],
+)
+def test_a_paused_cards_duration_that_cannot_be_placed_is_asked_about(fields):
+    typed = Request(kind="correction", **fields)
+    edit = chat.card_edit(paused(START), typed, ZONE)
+    assert edit.unclear and edit.active_minutes is None and edit.elapsed_minutes is None
+
+
+def test_an_unpaused_cards_one_duration_is_both():
+    edit = chat.card_edit(walk(START, 30), Request(kind="correction", duration_minutes=45), ZONE)
+    assert (edit.active_minutes, edit.elapsed_minutes) == (45, 45)
 
 
 def test_a_replacement_that_changes_an_untouched_duration_is_named():

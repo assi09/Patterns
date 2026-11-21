@@ -68,6 +68,21 @@ def data(words, metrics, operation, *periods, **extra):
     }
 
 
+SAME = {"kind": "same_as_earlier"}
+
+
+def redo(words, *periods, operation="inherit", metrics=(), **extra):
+    """A redo clause: the request it repeats, said field by field; kept fields inherit."""
+    return {
+        "type": "redo",
+        "said": words,
+        "periods": list(periods) or [SAME],
+        "operation": operation,
+        "metrics": list(metrics),
+        **extra,
+    }
+
+
 def dates(start, end=None):
     return {"kind": "dates", "start": start, "end": end or start}
 

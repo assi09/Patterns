@@ -109,7 +109,8 @@ def test_days_counted_from_an_earlier_end_are_no_longer_a_period_kind():
         Said.model_validate(said(data("Start at the next date.", ["steps"], "median", old)))
     schema = str(strict_schema(said_schema()))
     assert "earlier_end" not in schema and "after_earlier" not in schema
-    assert "starts_there" in schema and "its_first_day" in schema
+    assert "new_first_day" in schema and "new_last_day" in schema and "its_first_day" in schema
+    assert "starts_there" not in schema  # the one-offset form, read the wrong way (689fa7c)
 
 
 # ---- a food follow-up keeps its day, whatever the source and the meal ----

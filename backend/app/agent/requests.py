@@ -41,6 +41,11 @@ class Period(Fields):
     offset_units: int = Field(default=0, ge=-100, le=100)
     edge: Literal["first", "last"] = "last"
     starts: bool = False
+    # beside, both days placed: the new period's last day, from the earlier period's first or
+    # last day; `sized` False when the length was left to those two days.
+    end_edge: Literal["first", "last"] | None = None
+    end_offset: int = Field(default=0, ge=-36600, le=36600)
+    sized: bool = True
 
 
 Operation = Literal[
@@ -69,7 +74,7 @@ class Part(Fields):
     comparison: Literal[">", ">=", "<", "<=", "=="] | None = None
     threshold: float | None = Field(default=None, allow_inf_nan=False)
     threshold_unit: Literal["native", "hours", "minutes"] = "native"
-    max_lag: int = Field(default=0, ge=0, le=14)
+    max_lag: int | None = Field(default=None, ge=0, le=14)  # None: an earlier result's, or 0
     meal_type: Literal["BREAKFAST", "LUNCH", "DINNER", "SNACK"] | None = None
     source: Literal["tracker", "food_log"] | None = None  # None: an older flat reading
     every_metric: bool = Field(
@@ -77,6 +82,7 @@ class Part(Fields):
         description="investigate only: look across every metric over these days, rather than "
         "explaining the earlier result's own metric.",
     )
+    nutrients: list[str] = Field(default_factory=list)  # food eaten: the nutrients asked about
     said: str = ""  # the words of the message this part comes from: checks read these
 
 
@@ -97,6 +103,9 @@ class Reading(Fields):
     ]
     subject: Literal["self", "other", "general"] = "self"
     medical: bool = False  # asks for a diagnosis, a condition, treatment or medication
+    fabricate: bool = False  # asks to make up a value, evidence or a citation
+    mix_sources: bool = False  # asks to join two sources' records into one series
+    unplaced: bool = False  # a clause the reader could not place, or none at all
     redo_options: int | None = None  # the last answer again, with this many options
     points: int | None = None  # how many options or points the answer is to give
     parts: list[Part] = Field(default_factory=list, max_length=8)
@@ -119,12 +128,16 @@ class Reading(Fields):
     memory_action: Literal["remember", "recall", "forget"] | None = None
     focus: Literal["what_changed", "why", "overview", "coaching"] | None = None
     duration_minutes: float | None = Field(default=None, gt=0, le=1440, allow_inf_nan=False)
+    duration_is: Literal["active", "elapsed"] | None = None  # which duration a correction gives
+    paused_minutes: float | None = Field(default=None, ge=0, le=1440, allow_inf_nan=False)
+    exercise_type: str | None = None  # the tracker's type for the activity a log names
     log_day: Period | None = None
     card_day_offset: int | None = None  # a correction's day, said against the card's own day
     entry: Literal["workout", "food"] | None = None  # what a log or correction is for
     status: bool = False  # asks whether an entry was saved: read-only
     recall: Literal["kept", "waiting", "this_chat", "all"] | None = None
     states_new_fact: bool = False  # a forget that also says what is true now
+    memory_said: str = ""  # the memory clause's own words: the fact to keep or forget
     also: list[Part] = Field(default_factory=list)  # precise reads beside an investigation
     clause_count: int = 0  # clauses the reader found; 0 for an older flat reading
     # Whether the message tells something about them (a statement or an explicit remember), as
@@ -143,12 +156,15 @@ class ResolvedPart(Fields):
     max_lag: int = 0
     meal_type: Literal["BREAKFAST", "LUNCH", "DINNER", "SNACK"] | None = None
     every_metric: bool = False  # every measure they have, over these days
+    nutrients: list[str] = Field(default_factory=list)  # food eaten: the nutrients asked about
 
 
 class Request(Fields):
     kind: str
     subject: str = "self"
     medical: bool = False
+    fabricate: bool = False
+    mix_sources: bool = False
     parts: list[ResolvedPart] = Field(default_factory=list)
     topics: list[str] = Field(default_factory=list)
     guidance_question: str = ""
@@ -157,6 +173,9 @@ class Request(Fields):
     memory_action: str | None = None
     focus: str | None = None
     duration_minutes: float | None = None
+    duration_is: str | None = None
+    paused_minutes: float | None = None
+    exercise_type: str | None = None
     log_day: date | None = None
     card_day_offset: int | None = None
     points: int | None = None  # how many options or points the answer is to give
@@ -164,6 +183,7 @@ class Request(Fields):
     status: bool = False
     recall: str | None = None
     states_new_fact: bool = False
+    memory_said: str = ""
     # Precise reads asked beside a log, confirmation, status, memory, guidance or investigation:
     # "repeat the step count and say whether it's saved" answers both (the audit of 2026-11-19).
     reads: list[ResolvedPart] = Field(default_factory=list)
@@ -205,7 +225,11 @@ class Ambiguous(ValueError):
 
 
 class RetryReading(Ambiguous):
-    """An interpretation contradicts a known capability or actual server action state."""
+    """An interpretation contradicts a known capability or actual server action state.
+    `keeps`: fields of each data clause the corrected reading keeps from this one, because the
+    error is not about them; the reader is told so, and code holds it to that."""
+
+    keeps: tuple[str, ...] = ()
 
 
 # Days an entry is put on, said from today: "put it on tomorrow".
@@ -337,8 +361,26 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
         if previous is None or len(previous.windows) != 1:
             raise Ambiguous("Which of the earlier periods should I count from?")
         earlier = previous.windows[0]
-        day = earlier.start if period.edge == "first" else earlier.end
-        day += timedelta(days=period.offset_days)
+
+        def placed(edge: str, offset: int) -> date:
+            return (earlier.start if edge == "first" else earlier.end) + timedelta(days=offset)
+
+        day = placed(period.edge, period.offset_days)
+        if period.end_edge is not None:
+            last = placed(period.end_edge, period.end_offset)
+            if last < day:
+                raise RetryReading(
+                    "The new period's last day falls before its first day. Place each day the "
+                    "message names against the earlier period's first or last day."
+                )
+            span = (last - day).days + 1
+            if period.sized and span != period.days:
+                raise RetryReading(
+                    f"The placed first and last days give {span} days, but length says "
+                    f"{period.days}. Keep the days the message names; give the length only "
+                    "when it is said or the earlier period's own."
+                )
+            return [Window(start=day, end=last)]
         rest = timedelta(days=period.days - 1)
         if period.starts:
             return [Window(start=day, end=day + rest)]
@@ -375,9 +417,27 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
 BESIDE = ("logging", "correction", "confirmation", "status", "memory", "guidance", "other")
 
 
-def _prior(part: Part, previous: list[ResolvedPart], inherited: bool) -> ResolvedPart | None:
-    """The earlier part this part refers to: the one it names by index, else the only one there
-    is when it inherits anything; data and investigations resolve references alike."""
+def _addressable(state: dict) -> tuple[list[ResolvedPart], list[ResolvedPart]]:
+    """The last answer's results, and the older ones still addressable by index after them."""
+
+    def parts(key: str) -> list[ResolvedPart]:
+        found = []
+        for raw in state.get(key, []):
+            try:
+                found.append(ResolvedPart.model_validate(raw))
+            except ValidationError:
+                continue
+        return found
+
+    return parts("data"), parts("older")
+
+
+def _prior(
+    part: Part, previous: list[ResolvedPart], inherited: bool, older: Sequence[ResolvedPart] = ()
+) -> ResolvedPart | None:
+    """The earlier part this part refers to: the one it names by index (the last answer's
+    results first, then older ones), else the only one the last answer has when it inherits
+    anything; data and investigations resolve references alike."""
     if (part.reference is not None or inherited) and not previous:
         error = RetryReading(
             "Nothing has been computed earlier in this conversation, so nothing can be relative "
@@ -387,9 +447,10 @@ def _prior(part: Part, previous: list[ResolvedPart], inherited: bool) -> Resolve
         error.ask = "Which earlier measurement or period do you mean?"
         raise error
     if part.reference is not None:
-        if part.reference >= len(previous):
+        named = [*previous, *older]
+        if part.reference >= len(named):
             raise Ambiguous("Which earlier measurement or period do you mean?")
-        return previous[part.reference]
+        return named[part.reference]
     if not inherited:
         return None
     if len(previous) != 1:
@@ -397,25 +458,61 @@ def _prior(part: Part, previous: list[ResolvedPart], inherited: bool) -> Resolve
     return previous[0]
 
 
-def _redo(request: Request, reading: Reading, state: dict) -> Request:
-    """The last answer again, in another form: the same request, its scope untouched. After a
-    look at their data, options asked for are coaching on that same look. The last answer is
-    the one redone: after a guidance answer it is that guidance, even with older data kept."""
+def _changes(edit: Part) -> bool:
+    """Whether a redo changes the request it repeats: new days, statistic, measures, threshold,
+    comparison or lag. Only the answer's form changing is no change."""
+    return bool(
+        edit.metrics
+        or edit.operation != "inherit"
+        or any(p.kind != "inherit" for p in edit.periods)
+        or edit.comparison is not None
+        or edit.threshold is not None
+        or edit.max_lag
+    )
+
+
+def _redo(request: Request, reading: Reading, state: dict, today: date) -> Request:
+    """An earlier answer again. Unchanged, it is the last answer as it was: after guidance that
+    guidance, after a status read with a figure beside it both, after a look the same look
+    (options asked for on a look are coaching on it). Changed, it is the earlier request with
+    what it keeps inherited and what it says applied, resolved as that request's own kind, so
+    new days, a statistic or a measure are never lost to "the same answer" (the 689fa7c audit)."""
     request.points = reading.redo_options
-    if state.get("last") == "guidance" and state.get("guidance"):
-        request.kind = "guidance"
-        request.topics = list(state["guidance"])
-        return request
-    previous = [ResolvedPart.model_validate(p) for p in state.get("data", [])]
-    if not previous:
-        raise Ambiguous("Which earlier answer should I give again?")
-    looked = all(p.operation == "describe" for p in previous)
-    request.parts = previous
+    edit = reading.parts[0] if reading.parts else Part(periods=[Period(kind="inherit")])
+    previous, older = _addressable(state)
+    if not _changes(edit) and edit.reference is None:
+        if state.get("last") == "guidance" and state.get("guidance"):
+            request.kind = "guidance"
+            request.topics = list(state["guidance"])
+            return request
+        if not previous:
+            raise Ambiguous("Which earlier answer should I give again?")
+        if state.get("last") == "status":
+            request.kind, request.status, request.reads = "status", True, previous
+            return request
+        request.parts = previous
+    else:
+        referent = _prior(edit, previous, True, older)
+        looked = referent is not None and referent.operation == "describe"
+        if looked:
+            edit = edit.model_copy(update={"operation": "describe"})
+        asked = Reading(
+            kind="investigate" if looked else "data",
+            parts=[edit],
+            focus=("coaching" if reading.redo_options else state.get("focus", "overview"))
+            if looked
+            else None,
+        )
+        resolved = resolve(asked, state, today)
+        request.parts, request.focus = resolved.parts, resolved.focus
+    looked = all(p.operation == "describe" for p in request.parts)
     if looked:
         request.kind = "investigate"
-        request.focus = "coaching" if reading.redo_options else state.get("focus", "overview")
+        request.focus = request.focus or (
+            "coaching" if reading.redo_options else state.get("focus", "overview")
+        )
     else:
-        request.kind = "data"
+        request.kind, request.focus = "data", None
     return request
 
 
@@ -423,11 +520,11 @@ def _investigation(request: Request, reading: Reading, state: dict, today: date)
     """A "why" or "what changed" keeps what it names: its metrics and its days, or those of the
     earlier result it points at ("why did that happen?" keeps that metric). Nothing named means
     every metric over the recent default; `every_metric` means every metric over named days."""
-    previous = [ResolvedPart.model_validate(p) for p in state.get("data", [])]
+    previous, older = _addressable(state)
     looked_into = [p for p in previous if p.operation == "describe"]
     parts = []
     for part in reading.parts:
-        prior = _prior(part, previous, _needs_earlier(part))
+        prior = _prior(part, previous, _needs_earlier(part), older)
         # Explaining or coaching on a look already made changes the answer's goal, not its
         # scope: with no new days named it keeps the comparison under discussion ("three
         # distinct ideas" widened Oct 10-30 to two months, the a196 audit). A new broad
@@ -473,6 +570,8 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
         kind=reading.kind,
         subject=reading.subject,
         medical=reading.medical,
+        fabricate=reading.fabricate,
+        mix_sources=reading.mix_sources,
         topics=reading.topics,
         guidance_question=reading.guidance_question,
         memory=reading.memory,
@@ -484,6 +583,9 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
             else ""
         ),
         duration_minutes=reading.duration_minutes,
+        duration_is=reading.duration_is,
+        paused_minutes=reading.paused_minutes,
+        exercise_type=reading.exercise_type,
         card_day_offset=reading.card_day_offset,
         points=reading.points,
         entry=reading.entry,
@@ -491,6 +593,7 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
         status=reading.status,
         recall=reading.recall,
         states_new_fact=reading.states_new_fact,
+        memory_said=reading.memory_said,
     )
     if reading.log_day is not None:
         days = period_window(reading.log_day, None, today)
@@ -522,12 +625,12 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
             request.guidance_question = f"About {request.topics[0]}: {reading.guidance_question}"
         return request
     if reading.kind == "redo":
-        return _redo(request, reading, state)
+        return _redo(request, reading, state, today)
     if reading.kind == "investigate":
         return _investigation(request, reading, state, today)
     if reading.kind not in ("data", "causality"):
         return request
-    previous = [ResolvedPart.model_validate(p) for p in state.get("data", [])]
+    previous, older = _addressable(state)
     parts = reading.parts
     if reading.kind == "causality" and not parts:
         if len(previous) != 1 or previous[0].operation != "correlate":
@@ -548,7 +651,9 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
                 ResolvedPart(
                     metrics=[],
                     operation="compare",
-                    windows=part_windows(part, _prior(part, previous, _needs_earlier(part)), today),
+                    windows=part_windows(
+                        part, _prior(part, previous, _needs_earlier(part), older), today
+                    ),
                     every_metric=True,
                 )
             )
@@ -560,7 +665,7 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
             and part.operation != "food"
         )
         inherited = part.operation == "inherit" or unnamed or _needs_earlier(part)
-        prior = _prior(part, previous, inherited)
+        prior = _prior(part, previous, inherited, older)
         metrics = part.metrics or (prior.metrics if prior else [])
         # A part that points at an earlier result and names no new days keeps that result's
         # days, before anything is derived from them: "keep the date, burned energy now" read the
@@ -662,10 +767,15 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
                 history=history,
                 comparison=comparison,
                 threshold=threshold,
-                max_lag=part.max_lag,
+                # Kept from the result it points back at unless said: "can that prove it?"
+                # after a one-day-lag result was answered with a same-day test (689fa7c).
+                max_lag=part.max_lag
+                if part.max_lag is not None
+                else (prior.max_lag if prior is not None and points_back else 0),
                 # Never carried over: "my protein total for that day" after a snack question is
                 # every meal (Codex's review, 2026-11-19). A meal is named again to keep it.
                 meal_type=part.meal_type,
+                nutrients=part.nutrients if operation == "food" else [],
             )
         )
     return request
@@ -748,7 +858,8 @@ pick dates.
 Clause types:
 - data: a precise statistic from their own data; one clause per operation, every requested
   metric kept. Use registry metric ids exactly: calories is energy burned, not food eaten;
-  still_minutes is awake but still, not awake_in_bed_minutes; checkin_rating is not
+  awake time is a sleep measure (awake_in_bed_minutes, Fitbit's "awake" sleep stage), while
+  still_minutes is daytime activity, still but awake, never sleep; checkin_rating is not
   recovery_score. source food_log reads the meals they logged (food eaten: energy and nutrients),
   with no metrics; source tracker is everything the wearable records, calories burned included.
   Intake, meals and what they ate are source food_log. A message asking about both is one
@@ -762,8 +873,10 @@ Clause types:
   every_metric when they ask about every measure they have ("my full set of measurements",
   "everything you track") instead of naming them; metrics then empty. compare
   lists the focal period first, the baseline second. correlate lists driver then
-  target, max_lag only if asked; asks_cause when they ask whether one causes the other. operation
-  inherit only to repeat the earlier computation.
+  target; max_lag only when they ask for a lag (0 for the same day), null to keep an earlier
+  result's lag; asks_cause when they ask whether one causes the other. operation inherit only
+  to repeat the earlier computation; earlier_results shows each result's comparison, threshold
+  and lag, and a follow-up that keeps one leaves it null or copies it exactly.
 - investigate: why something in their data happened, what changed, how they have been, or what
   they could try, without a precise statistic. focus why for explanations ("what could explain",
   "why"), what_changed, overview, coaching for something to try. metrics and periods are what it
@@ -773,11 +886,13 @@ Clause types:
   from their own data is investigate coaching, never guidance. points: how many options or
   points they ask for ("three options"), when they give a number.
 - guidance: public how-to, about no one's data. topics: the one movement, variant or routine,
-  qualifiers in the same phrase; refers_back when it is about the previous guidance answer's
+  qualifiers in the same phrase; movement: the base movement it is a version of (push-up for
+  push-ups on a surfboard); refers_back when it is about the previous guidance answer's
   subject ("that version", "it"), topics then empty. A question that names its own subject has it
   in topics, or none when it is general. question: standalone, with the details asked.
-- log: prepare a new workout or food entry. duration_minutes only when said; on_date for a
-  written date; days_from_today 1 for tomorrow, -1 for yesterday. A log has no data clause.
+- log: prepare a new workout or food entry. exercise_type: the tracker type of the activity
+  named (a run is RUNNING). duration_minutes only when said; on_date for a written date;
+  days_from_today 1 for tomorrow, -1 for yesterday. A log has no data clause.
 - correct: change the card waiting for their tap (pending_draft, with its day and minutes).
   Only what this message changes is set; everything else stays absent and is kept from the
   card. An instruction to move it against its own day ("move it a day later", "move it back
@@ -785,7 +900,9 @@ Clause types:
   too early", "it's a day too late") is card_was (too_early, too_late) with by_days, and no
   days_from_card: code works out which way to move it. A date they write is on_date; a day
   said from today ("make it tomorrow") is days_from_today. duration_minutes only for a new
-  duration this message gives, never one the card already has.
+  duration this message gives, never one the card already has; duration_is says which it is
+  (active: moving time; elapsed: start to end, pauses included), null when they do not say.
+  paused_minutes: a pause the message states, kept or new ("keep the 9-minute pause" is 9).
 - status: asks whether a workout or food entry was saved or written to the tracker. Read-only,
   never confirm. Whether a preference, goal or fact is still kept is memory recall kept.
 - confirm: asks to save the waiting card ("go ahead", "log it"); only with pending_draft true.
@@ -795,16 +912,20 @@ Clause types:
   forget (remove something already kept; states_new_fact when they also say what is true now).
   "Keep this out of my profile" about something said now is store_nothing, not forget.
 - confirm or correct only act on a card: with no pending_draft, "submit that one" is other.
-- redo: the last answer again in another form, with nothing new asked (more or fewer options,
-  which are personal and which general, in fewer words, another unit); options: how many they
-  ask for. The data stays exactly as it was: keeps_the_data is true only then. A shorter or
-  longer period ("shorten it to the last three days"), another statistic, measure or
-  threshold is a data clause, never redo. Code keeps the last request's scope.
+- redo: an earlier answer again, changed only where this message changes it: in another
+  form (more or fewer options, which are personal and which general, fewer words), or with new
+  days, another statistic, measure, threshold or lag. Say the request it repeats as a data
+  clause would: periods (same_as_earlier when the days are kept, otherwise the new days),
+  operation (inherit keeps the statistic), metrics (empty keeps them), comparison, threshold
+  and max_lag (null keeps them). earlier_result names an earlier result by index ("the steps
+  result", "the all-measure comparison"); null is the last answer as a whole. options: how
+  many options they ask for. Code keeps whatever it does not change.
 - other: small talk, thanks, or nothing the app does; also anything they tell about themselves
-  ("I'm training for a 10k"), as its own clause even beside a question, with about_them true.
-  Never a request about their data or about the last answer: a follow-up that only gives new
-  days ("days +1 through +4 for the mean") is a data clause on the earlier result; how to give
-  the last answer is redo; how to give a new answer needs no clause of its own.
+  ("I'm training for a 10k"), as its own clause even beside a question, with about_them true;
+  message says which. Never a request about their data or about an earlier answer: a
+  follow-up that keeps the earlier request and changes its days, statistic or form ("days +1
+  through +4 for the mean", "the preceding calendar day", "keep that exact day") is redo; how
+  to give a new answer needs no clause of its own.
 Earlier messages are context only: every clause comes from the current message, and its said is
 copied from the current message. One message can have several clauses: "repeat the step count
 and say whether it's saved" is a data clause and a status clause. Only what this message
@@ -819,23 +940,22 @@ Periods, for data and investigate clauses; pick the kind that means what was sai
   comparison of two periods. Explaining it, coaching on it, or a new threshold, meal, source or
   statistic on the same days is this; an edit of the days is from_earlier.
 - from_earlier: days placed against an earlier result's period, which earlier_results lists
-  with its first and last day. Every edit is the same four answers: which of its days the new
-  period hangs on (landmark: its_first_day or its_last_day); how many days from that day
-  (offset: +1 the day after, -1 the day before, 0 that day); whether the new period starts
-  there or ends there (boundary); and how many days it has (length: the number of days said,
-  or the earlier period's own days from earlier_results when none is said). The offset only
-  moves to the day the new period hangs on; the number of days is always the length. When the
-  new period's first or last day is the earlier first or last day itself, the offset is 0: a
-  three-day period whose last day is the earlier first day is its_first_day, 0, ends_there, 3.
-  After a five-day period: the whole period moved two days earlier: its_first_day, -2,
-  starts_there, 5.
-  The next four days: its_last_day, +1,
-  starts_there, 4. Four days ending the day before it began: its_first_day, -1, ends_there, 4.
-  Its last three days: its_last_day, 0, ends_there, 3. Four days starting on its second day:
-  its_first_day, +1, starts_there, 4. relative_to: earlier_result (a result computed before this
-  message) or this_clause (the period named first in this same clause: "Oct 9-31 compared with
-  the four weeks before" is dates Oct 9-31, then its_first_day, -1, ends_there, 28, relative_to
-  this_clause). With nothing computed earlier, nothing is relative to an earlier result.
+  with its first day, last day and number of days. Place the new period's first day
+  (new_first_day), its last day (new_last_day), or both, each counted from the earlier
+  period's first or last day (counted_from) with days_after (+1 the day after, -1 the day
+  before, 0 that day itself), and give its length: the number of days said, or the earlier
+  period's own number of days when none is said (null only when both days are placed). Place
+  the day the message describes. After a five-day period: the whole period two days earlier:
+  new_first_day its_first_day -2, length 5. The five days before it: new_last_day its_first_day
+  -1, length 5. The next four days: new_first_day its_last_day +1, length 4. Its last three
+  days: new_last_day its_last_day 0, length 3. Four days starting on its second day:
+  new_first_day its_first_day +1, length 4. Three days whose last day is its first day:
+  new_last_day its_first_day 0, length 3. Without its first and last day: new_first_day
+  its_first_day +1 and new_last_day its_last_day -1, length null. relative_to: earlier_result
+  (a result computed before this message) or this_clause (the period named first in this same
+  clause: "Oct 9-31 compared with the four weeks before" is dates Oct 9-31, then new_last_day
+  its_first_day -1, length 28, relative_to this_clause). With nothing computed earlier, nothing
+  is relative to an earlier result.
 - days_ending: length days ending on a day counted from today. yesterday: 1, -1. two days
   before today: 1, -2. the last 7 days (today included): 7, 0. the 5 complete days before
   today: 5, -1. Only when the words count from today, never for days placed against an
@@ -850,12 +970,46 @@ earlier_results, only when clearly identified. Code does all the date arithmetic
 subject other: asking to see another person's records, not mentioning someone in a question about
 their own data or general guidance ("my teammate asks about MY sleep score" is self). medical:
 they ask for a diagnosis, whether they have an illness or condition, or treatment or medication.
-store_nothing: they ask that nothing from this message be
+medical_said: the words of this message that make it medical, copied exactly; never words of an
+earlier message. store_nothing: they ask that nothing from this message be
 kept; a forget is still a forget. clarification: only when the message is genuinely unclear or
 asks about something untracked; never substitute a related metric. Requests to fabricate
-statistics, evidence or citations: store_nothing, and copy them into no field. Output exactly one
-read_request call.
+statistics, evidence or citations: fabricate and store_nothing, and copy them into no field.
+mix_sources: they ask to join an export and the live sync (or two devices) into one series.
+Output exactly one read_request call.
 """
+
+
+# One more look before a follow-up is asked about: what a message after an answer can be.
+UNPLACED = (
+    "This message follows the conversation and was not placed. If it asks for an earlier "
+    "answer again or changed (other days, statistic, measure, threshold, or another form), it is "
+    "redo; whether an entry was saved or what the waiting card holds is status; what the app "
+    "keeps or what they said here is memory recall; a change to the waiting card is correct. "
+    "Keep other only for small talk, something about them, or what the app does not do."
+)
+
+
+def kept_fields(arguments, before, fields: Sequence[str]):
+    """A corrected reading with the fields its error was not about put back as they were, clause
+    by clause where both readings have a data clause in the same place: "change only what this
+    error is about" was not always kept (the 689fa7c audit added a meal filter on a retry)."""
+    if not (isinstance(arguments, dict) and isinstance(before, dict)):
+        return arguments
+    new, old = arguments.get("clauses"), before.get("clauses")
+    if not (isinstance(new, list) and isinstance(old, list)):
+        return arguments
+    clauses = []
+    for index, clause in enumerate(new):
+        earlier = old[index] if index < len(old) else None
+        if (
+            isinstance(clause, dict)
+            and isinstance(earlier, dict)
+            and clause.get("type") == earlier.get("type") == "data"
+        ):
+            clause = clause | {f: earlier[f] for f in fields if f in earlier}
+        clauses.append(clause)
+    return arguments | {"clauses": clauses}
 
 
 def strict_schema(schema: dict) -> dict:
@@ -891,13 +1045,15 @@ def said_schema() -> dict:
     return Said.model_json_schema()
 
 
-def parsed(arguments, question: str = "") -> "Reading":
+def parsed(
+    arguments, question: str = "", earlier: bool = False, before: Sequence[str] = ()
+) -> "Reading":
     """The reader's clauses as the internal reading. A flat reading (older scripted fixtures,
     which describe the stage after the reader) is taken as it is."""
     if isinstance(arguments, dict) and "clauses" in arguments:
         from app.agent.clauses import Said, reading_from
 
-        return reading_from(Said.model_validate(arguments), question)
+        return reading_from(Said.model_validate(arguments), question, earlier, before)
     return Reading.model_validate(arguments)
 
 
@@ -914,6 +1070,9 @@ def outline(reading: "Reading") -> dict:
         # A correction's signed move against the card, and an answer-again's point count: a
         # wrong sign or a missed edit is then visible in the trace (the review of b3d64ca).
         "card_day_offset": reading.card_day_offset,
+        "duration_is": reading.duration_is,
+        "paused": reading.paused_minutes is not None,
+        "exercise_type": reading.exercise_type,
         "redo_options": reading.redo_options,
         "parts": [
             {
@@ -937,8 +1096,14 @@ def _period_outline(period: "Period") -> str:
     shown = f"{period.kind}/{period.anchor}"
     if period.kind == "beside":
         boundary = "starts" if period.starts else "ends"
-        shown += f"/{period.edge}{period.offset_days:+d}/{boundary}/{period.days}"
+        shown += f"/{period.edge}{period.offset_days:+d}/{boundary}"
+        if period.end_edge is not None:
+            shown += f"/{period.end_edge}{period.end_offset:+d}/ends"
+        shown += f"/{period.days if period.sized else '-'}"
     return shown
+
+
+MAX_RESULTS = 8  # earlier results the reader can name by index (earlier_result 0-7)
 
 
 def _day_named(day: date) -> str:
@@ -948,19 +1113,26 @@ def _day_named(day: date) -> str:
 def earlier_results(state: dict) -> list[dict]:
     """The earlier results a follow-up can refer to, by index, each with its actual days."""
     shown = []
-    for index, raw in enumerate(state.get("data", [])):
-        try:
-            part = ResolvedPart.model_validate(raw)
-        except ValidationError:
-            continue
+    current, older = _addressable(state)
+    for index, part in enumerate([*current, *older]):
         food = part.operation == "food" or part.metrics == ["food_logs"]
+        # Every parameter a follow-up may keep, as it is: shown only its metric and days, "keep
+        # the comparison, change the boundary" lost "at or above" (the 689fa7c audit).
+        kept = {
+            "comparison": part.comparison,
+            "threshold": part.threshold,
+            "max_lag": part.max_lag or None,
+            "meal_type": part.meal_type,
+            "every_metric": part.every_metric or None,
+        }
         shown.append(
             {
                 "earlier_result": index,
+                "answer": "last" if index < len(current) else "older",
                 "metrics": part.metrics,
                 "operation": part.operation,
                 "source": "food_log" if food else "tracker",
-                **({"meal_type": part.meal_type} if part.meal_type else {}),
+                **{k: v for k, v in kept.items() if v is not None},
                 "periods": [
                     {
                         "first_day": _day_named(w.start),
@@ -1016,7 +1188,7 @@ def interpret(
                     # its actual days, and the card waiting. A date edit hung on the wrong day
                     # when the reader saw only raw state (the b730 and a196 audits).
                     "earlier_results": earlier_results(state),
-                    "state": {k: v for k, v in state.items() if k != "data"},
+                    "state": {k: v for k, v in state.items() if k not in ("data", "older")},
                     "previous_questions": [t.question[:700] for t in history[-6:]],
                     "question": question,
                     "pending_draft": draft if (pending_draft and draft) else pending_draft,
@@ -1035,6 +1207,7 @@ def interpret(
     }
     asked = ""  # the question for the person if the reader keeps a contradiction
     attempts: list[dict] = []
+    held: tuple[dict, tuple[str, ...]] | None = None  # a sent-back reading, and what it keeps
     try:
         for attempt in range(2):
             completion = reader(messages, tools=[tool], budget=budget)
@@ -1049,14 +1222,34 @@ def interpret(
             step: dict = {"attempt": attempt + 1}
             attempts.append(step)
             arguments = completion.tool_calls[0].arguments
+            if held is not None:
+                arguments = kept_fields(arguments, *held)
             if keep_readings:
                 step["reading"] = arguments
             try:
-                as_read = parsed(arguments, question)
+                as_read = parsed(
+                    arguments,
+                    question,
+                    bool(earlier_results(state)),
+                    [t.question for t in history[-6:]],
+                )
                 reading = anchored_by_code(as_read, question, today, state)
                 step["read"] = outline(as_read)
                 if reading != as_read:
                     step["filled_by_code"] = outline(reading)
+                if (
+                    not attempt
+                    and reading.unplaced
+                    and not reading.fabricate
+                    and not reading.clarification
+                    and (
+                        not reading.clause_count
+                        or earlier_results(state)
+                        or pending_draft
+                        or state.get("guidance")
+                    )
+                ):
+                    raise RetryReading(UNPLACED)
                 if reading.kind == "correction" and not pending_draft:
                     raise RetryReading(
                         "There is no card waiting, so nothing can be corrected: a follow-up about "
@@ -1088,6 +1281,8 @@ def interpret(
                         or "Which measurement or saved entry should I check, and how?"
                     ) from error
                 asked = getattr(error, "ask", "")
+                if error.keeps:
+                    held = (arguments, error.keeps)
                 messages.extend(
                     [
                         completion.as_message(),
@@ -1138,7 +1333,13 @@ def interpret(
     # not an older data result that outlived a guidance turn.
     answered = [*request.parts, *request.reads]
     if answered and request.subject == "self":
-        next_state["data"] = [p.model_dump(mode="json") for p in answered]
+        now = [p.model_dump(mode="json") for p in answered]
+        # Older results stay addressable by index after the last answer's, so "return to the
+        # steps result for Oct 3-9" names one that a later answer replaced (the 689fa7c audit).
+        before = [*state.get("data", []), *state.get("older", [])]
+        kept = [p for i, p in enumerate(before) if p not in now and p not in before[:i]]
+        next_state["data"] = now
+        next_state["older"] = kept[: max(0, MAX_RESULTS - len(now))]
         if request.kind == "investigate" and request.focus:
             next_state["focus"] = request.focus  # what a redo of this answer asks again
     if request.kind not in ("clarify", "redo"):
