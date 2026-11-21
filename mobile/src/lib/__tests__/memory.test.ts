@@ -7,6 +7,8 @@ const fact = (over: Partial<MemoryFact>): MemoryFact => ({
   kind: 'routine',
   text: 'Works nights',
   status: 'approved',
+  action: 'keep',
+  forgets: null,
   start: null,
   end: null,
   createdAt: '2026-11-05T09:00:00Z',

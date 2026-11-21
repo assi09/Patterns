@@ -10,7 +10,7 @@ are the first steps of the trace, so every answer can be traced to its context a
 
 import re
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 
@@ -46,6 +46,7 @@ from app.agent.experts import (
     specialist_notes,
     visible_metrics,
 )
+from app.agent.findings import finding_claim, render_overview
 from app.agent.followup import standalone, with_period, with_relative_day
 from app.agent.guard import Guard, GuardError, JevGuard
 from app.agent.intent import Intent
@@ -74,11 +75,12 @@ from app.agent.limits import (
     untracked,
     untracked_note,
 )
-from app.agent.listener import is_explicit, worth_listening
+from app.agent.listener import about_them, is_explicit
 from app.agent.llm import LLM, Budget
 from app.agent.memory_tools import conversation_search_tool, memory_lookup_tool
 from app.agent.periods import asks_over_days, with_dates
 from app.agent.personal import (
+    MEMORY,
     NOT_ABOUT_EATING_LEVERS,
     NOT_ABOUT_EATING_OPTIONS,
     PERSONAL_TOOLS,
@@ -96,6 +98,10 @@ from app.agent.personal import (
     top_up,
     without_filler,
 )
+from app.agent.present import METRICS, label
+from app.agent.requested import _when
+from app.agent.requested import execute as execute_request
+from app.agent.requests import interpret, previous_state
 from app.agent.router import (
     OFF_TOPIC,
     FallbackRouter,
@@ -107,8 +113,6 @@ from app.agent.router import (
     decide,
 )
 from app.agent.sanitize import clean
-from app.agent.scope import note as scope_note
-from app.agent.scope import with_scope
 from app.agent.strategy import (
     BROAD_GUIDE,
     COACHING_OFFER,
@@ -139,9 +143,15 @@ from app.agent.strategy_types import (
     is_statement,
     offer_in,
 )
-from app.agent.verifier import MEDICAL, STATISTIC_WORDS, Claim
+from app.agent.verifier import (
+    MEDICAL,
+    STATISTIC_WORDS,
+    Claim,
+    _significant,
+    supported_options,
+)
 from app.agent.world import answer_world
-from app.analysis.evidence import Evidence
+from app.analysis.evidence import Evidence, Window
 from app.outside import Outside
 from app.reminders.tools import REMINDER_PROMPT
 
@@ -178,6 +188,77 @@ URGENT_MIND_REPLY = (
     "local crisis line, or your local emergency number if you might act on these thoughts."
 )
 NOTED = "Got it. Tap Keep on the card and I'll bear that in mind from now on."
+NOT_KEPT_ASKED = "Okay, I won't keep that."
+MEMORY_WHICH = (
+    "Do you want me to remember something about you, tell you what I've kept, or forget something?"
+)
+MAX_RECALLED = 5
+LOG_EXPERT = {"workout": "activity", "food": "nutrition"}
+
+
+def _with_reading(result, context, route, typed, request_state, reading_budget) -> None:
+    """Every early return carries the request reader's cost, calls and reading in its trace."""
+    result.budget.calls += reading_budget.calls
+    result.budget.cost_usd += reading_budget.cost_usd
+    result.trace[:0] = [
+        _context_step(context),
+        _route_step(route),
+        {
+            "type": "request",
+            "request": typed.model_dump(mode="json"),
+            "state": request_state,
+            "cost_usd": reading_budget.cost_usd,
+            "model_calls": reading_budget.calls,
+        },
+    ]
+
+
+def recalled(
+    memory: Sequence[MemoryItem],
+    chat: ChatState | None,
+    history: Sequence[Turn],
+    scope: str | None = None,
+) -> str:
+    """What is known about them, from three places kept apart: what they approved, cards still
+    waiting for their tap, and what they said in this chat only. A waiting card or something
+    said here is never presented as kept (the audit of 2026-11-19 asked for all three). `scope`
+    answers only the one asked about ("kept", "waiting", "this_chat"); None or "all" gives all."""
+    kept = [
+        *(chat.kept if chat else ()),  # approved facts only: never "Often looks at", inferred
+        *(m.text for m in memory if m.kind in ("fact", "preference")),
+    ]
+    kept = list(dict.fromkeys(kept))[:MAX_RECALLED]
+    waiting = list(chat.pending if chat else ())[:MAX_RECALLED]
+    here = [t for t in told_here(history) if t not in kept][:MAX_RECALLED]
+    if scope in ("kept", "waiting", "this_chat"):
+        only = {"kept": kept, "waiting": waiting, "this_chat": here}[scope]
+        kept, waiting, here = (
+            only if scope == name else [] for name in ("kept", "waiting", "this_chat")
+        )
+        if not only:
+            return {
+                # Now, not ever: after a deletion, "nothing has been approved" was untrue.
+                "kept": "Nothing is kept about you right now.",
+                "waiting": "No card is waiting for your tap.",
+                "this_chat": "You haven't told me anything about yourself in this chat yet.",
+            }[scope]
+    parts = []
+    if kept:
+        parts.append("Kept (you approved these):\n" + "\n".join(f"- {t}" for t in kept))
+    if waiting:
+        parts.append(
+            "Waiting for your tap on a card, not kept yet:\n" + "\n".join(f"- {t}" for t in waiting)
+        )
+    if here:
+        parts.append("You mentioned in this chat, not kept:\n" + "\n".join(f"- {t}" for t in here))
+    if not parts:
+        return "I haven't kept anything about you yet, and nothing is waiting for your approval."
+    return (
+        "\n\n".join(parts)
+        + "\n\nYou can remove anything kept in Settings, under What Patterns knows."
+    )
+
+
 # Said kindly, with something it can do instead: one fixed sentence for everything read as cold.
 MEDICAL_REFUSAL = (
     "That one's a medical question, so it isn't something I can answer. What I can do is show "
@@ -287,11 +368,50 @@ CAUSE_FOLLOW_UP = re.compile(
     re.IGNORECASE,
 )
 ASSOCIATION_REPLY = (
-    "No. What your data shows is that these go together, not that one causes the other. That "
-    "doesn't rule a cause out either: other things that changed at the same time could explain "
-    "both. Trying a change for a couple of weeks and watching what follows is the closest your "
-    "own data can get."
+    "These observational records cannot establish or rule out a cause. Whether the measurements "
+    "move together needs a relationship test with enough paired data; a missing measurement or "
+    "an inconclusive test does not establish an association."
 )
+
+
+NOTHING_WAITING = (
+    "There's nothing waiting to log right now. Tell me what you ate or did and I'll prepare a "
+    "card; it's only added when you tap Log it."
+)
+# The agent never logs or sends anything itself: a tap on the card does. So in a logging turn a
+# reply saying it did is never true ("Saved.", "I've logged it"). Checked only in logging turns,
+# only for a logging object, and not when it describes what happens later ("when it's saved").
+_DONE = r"(?:saved|logged|added|sent|recorded|stored|submitted)"
+_ENTRY = (
+    r"(?:it|that|this|them|your (?:\w+ ){0,2}(?:walk|run|ride|swim|workout|meal|food|snack|"
+    r"breakfast|lunch|dinner|entry|log|session|exercise)|the (?:\w+ )?(?:entry|card|log|walk|"
+    r"run|workout|meal))"
+)
+FALSE_SUCCESS = re.compile(
+    rf"^\s*(?:saved|logged|done|added|all set)\s*[.!]|"
+    rf"\bI(?:'ve| have)? (?:now |just |already )?{_DONE} {_ENTRY}|"
+    rf"\b{_ENTRY} (?:is|was|has been|'s) (?:now |already )?{_DONE}\b|"
+    rf"\b(?:it|that)'s (?:now |already )?{_DONE}\b",
+    re.IGNORECASE,
+)
+CONDITIONAL = re.compile(r"\b(?:when|once|after|if|until|unless|before)\b", re.IGNORECASE)
+
+
+def claims_false_success(summary: str) -> bool:
+    plain = summary.replace("\u2019", "'").replace("\u2018", "'")
+    for sentence in re.split(r"(?<=[.!?])\s+", plain):
+        found = FALSE_SUCCESS.search(sentence)
+        if found and not CONDITIONAL.search(sentence[: found.start() + 1]):
+            return True
+    return False
+
+
+def no_false_success(result: AgentResult, after_draft: bool, logging: bool = True) -> AgentResult:
+    """In a logging turn, a reply claiming it logged something is replaced by what is true."""
+    if logging and result.summary and claims_false_success(result.summary):
+        result.trace.append({"type": "false_success", "summary": result.summary[:200]})
+        result.summary = CONFIRM_ON_CARD if after_draft else NOTHING_WAITING
+    return result
 
 
 def plain_reply(said: str, frame: pd.DataFrame, today: date, after_draft: bool) -> str | None:
@@ -315,7 +435,7 @@ def told_here(history: Sequence[Turn]) -> list[str]:
     said = []
     for turn in reversed(history[-TOLD_HERE_TURNS:]):
         text = clean(turn.question, 200)
-        if worth_listening(text) and text not in said:
+        if about_them(text) and text not in said:
             said.append(text)
     return said[:MAX_TOLD]
 
@@ -384,9 +504,62 @@ def _food_lines(record: Evidence) -> str:
     )
 
 
-def _fill_points(llm: LLM, result: AgentResult, question: str, wanted: int, guard) -> None:
+def coaching_query(typed, records: Iterable[Evidence]) -> str | None:
+    """What a coaching answer's public guidance is searched for: the resolved request's own
+    measures, or those its habits were tested for. The person's words in a follow-up are about
+    the answer's form ("three options here, labelled personal or general"), and searched for
+    themselves they found no passage at all, so no general option was given (the 689fa7c audit,
+    all twelve option requests). None for anything but an investigation."""
+    if typed is None or typed.kind != "investigate":
+        return None
+    named = [m for p in typed.parts for m in p.metrics]
+    tested = [r.metrics[0] for r in records if r.tool == "habit_options" and r.metrics]
+    metrics = list(dict.fromkeys(m for m in (named or tested) if m in METRICS))[:MAX_TOPICS]
+    if not metrics:
+        return None
+    return "Everyday habits that support better " + " and ".join(label(m) for m in metrics)
+
+
+MAX_TOPICS = 3
+FROM_CODE_STOPS = ("limits", "urgent", "refused", "noted", "chatted", "chat_fallback")
+
+
+def said_by_claims(result: AgentResult) -> None:
+    """An explanation says only what its verified claims say: the model's own prose around
+    them, checked by nothing, added "feeling more run down", an outcome nobody reported or
+    measured, beside four valid claims (the review of 40baaee). What it cannot tell is said by
+    code (WHY_LIMIT). A reply code wrote already, or one with no claim, is left as it is."""
+    texts = [c.text.strip() for c in result.claims if c.text.strip()]
+    if not texts or result.stop_reason in FROM_CODE_STOPS:
+        return
+    result.summary = " ".join(texts)
+    result.trace.append({"type": "summary_from_claims", "claims": len(texts)})
+
+
+def _options_without_data(llm: LLM, result: AgentResult, typed, wanted: int, guard) -> None:
+    """Coaching asked for on days with no data: no personal option can be tested, so none is
+    given; general points come from vetted sources on the measures asked about, labelled, and
+    a shortfall is said. With no measure to look them up for, that is said instead."""
+    result.notes.append(
+        "With no data for those days, no option can be tested on your own days, so none of "
+        "these is personal."
+    )
+    topic = coaching_query(typed, [])
+    if topic is None:
+        result.notes.append(
+            "There is no measure named to look up general guidance for, so I haven't given any "
+            "options rather than make them up."
+        )
+        return
+    _fill_points(llm, result, topic, wanted, guard, lead=True)
+
+
+def _fill_points(
+    llm: LLM, result: AgentResult, question: str, wanted: int, guard, lead: bool = False
+) -> None:
     """When an answer falls short of the points asked for, the rest come straight from the sources
-    it retrieved, marked as general and linked."""
+    it retrieved, each marked as general with its source. Fewer than asked is said, never
+    filled with invented tips."""
     points = [c for c in result.claims if c.kind in ("suggestion", "guidance")]
     if len(points) >= wanted:
         result.summary = as_points(result.summary)
@@ -405,13 +578,24 @@ def _fill_points(llm: LLM, result: AgentResult, question: str, wanted: int, guar
         except GuardError:
             return
         added = [a for a, bad in zip(added, flags, strict=True) if not bad]
-    lines = [as_points(base)] if base else []
-    lines += [f"- {a.tip.lstrip('- ').strip()}" for a in added]
+    # `lead`: the summary is a lead-in (a data limit), said as it is above the points.
+    lines = [(base + "\n") if lead else as_points(base)] if base else []
+    lines += [
+        f"- General ({a.record.stats.get('source') or 'public guidance'}): "
+        f"{a.tip.lstrip('- ').strip()}"
+        for a in added
+    ]
     if added:
-        closing = "The last points are general guidance from the sources."
+        closing = "The points marked General are public guidance, not from your own data."
         result.summary = "\n".join(lines) + f"\n\n{closing}"
-    elif base:
+    elif base and not lead:
         result.summary = as_points(base)
+    if len(points) + len(added) < wanted:
+        found = len(points) + len(added)
+        result.notes.append(
+            f"You asked for {wanted}; the evidence and sources I have support {found}, so that is "
+            "all I've given rather than make one up."
+        )
     for item in added:
         result.evidence[item.record.id] = item.record
         result.claims.append(
@@ -510,6 +694,430 @@ def _context_step(context: Context) -> dict:
     return {"type": "context", **context.included, "dropped": context.dropped}
 
 
+def described_days(result, typed, frame, day, food_logs, now) -> None:
+    """When an investigation's own run gives no verified answer, its named metrics over its named
+    days are described by code, rather than "ask it another way" ("what stands out about my sleep
+    strictly on September 9 and 10?" got that, the v5 audit). Nothing is inferred from them."""
+    parts = []
+    for part in typed.parts:
+        metrics = [m for m in part.metrics if m in frame.columns][:8]
+        if not metrics or not part.windows:
+            continue
+        parts += [
+            part.model_copy(update={"metrics": metrics, "operation": "mean", "windows": [w]})
+            for w in part.windows
+        ]
+    if not parts:
+        return
+    read = execute_request(
+        typed.model_copy(update={"kind": "data", "parts": parts}),
+        frame,
+        day,
+        food_logs=food_logs,
+        zone=(now.tzinfo if now else None),
+    )
+    if not read.summary:
+        return
+    result.summary, result.claims = read.summary, list(read.claims)
+    result.evidence |= read.evidence
+    result.trace.append({"type": "described_days", "parts": len(parts)})
+
+
+def _with_reads(result, typed, frame, day, food_logs, now) -> None:
+    """The precise reads asked beside another request, answered by code as a note: it stays when
+    the card's note replaces the reply ("repeat the step count and say whether it's saved")."""
+    if not typed.reads:
+        return
+    read = execute_request(
+        typed.model_copy(update={"kind": "data", "parts": typed.reads}),
+        frame,
+        day,
+        food_logs=food_logs,
+        zone=(now.tzinfo if now else None),
+    )
+    if read.summary and read.summary not in result.notes:
+        result.notes.append(read.summary)
+    result.evidence |= read.evidence
+    result.side_claims += read.claims  # what makes the side read's numbers inspectable
+
+
+WHY_LIMIT = (
+    "What this can't tell apart: these are changes seen over the same days, not a tested cause, "
+    "so your data alone can't say which of them, if any, explains it."
+)
+
+
+NO_CHANGE_TO_EXPLAIN = "So there is no change here to explain."
+
+
+def nothing_to_explain(result: AgentResult, typed, today: date) -> bool:
+    """An explanation of a look across measures where none changed clearly is said by code: that
+    nothing changed clearly, cited, and so nothing to explain. The model's prose said the
+    measures "held steady", with the limit line about "changes seen over the same days" below it
+    (the b730 audit, both flat-profile explanations)."""
+    if any(p.metrics for p in typed.parts):
+        return False  # about named measures: the model's answer about them stands
+    if any(c.kind in ("change", "association") for c in result.claims):
+        return False
+    tests = {
+        e.id: e
+        for e in [*result.cited_evidence.values(), *result.evidence.values()]
+        if e.tool == "compare_windows"
+        and (e.id in result.cited_evidence or e.stats.get("overview"))
+    }
+    if not tests or any(_significant(e) for e in tests.values()):
+        return False
+    scope = next(iter(tests.values())).windows
+    tests = {i: e for i, e in tests.items() if e.windows == scope}
+    text, claims = render_overview(list(tests.values()), today)
+    if not text:
+        return False
+    result.summary, result.claims = f"{text} {NO_CHANGE_TO_EXPLAIN}", claims
+    result.evidence |= tests
+    result.trace.append({"type": "nothing_to_explain", "tests": len(tests)})
+    return True
+
+
+SOURCE_NAMES = {"takeout": "your Fitbit export (Takeout)", "api": "the live Google Health sync"}
+
+
+def one_source(source: str | None) -> str:
+    """Why two sources are never joined, and which one this history is: said by code, so no
+    answer can claim a combined series that no tool read."""
+    reply = (
+        "I don't join your Fitbit export and the live Google sync into one series: they measure "
+        "differently (the sync's sleep comes from a newer algorithm), so a joined history would "
+        "show a change that is only the switch between them."
+    )
+    if source in SOURCE_NAMES:
+        reply += (
+            f" Your history here comes from {SOURCE_NAMES[source]} only; ask about it on its "
+            "own and I'll analyze it."
+        )
+    return reply
+
+
+NO_FABRICATION = (
+    "I can't make up a value, a piece of evidence or a citation. I only report what your records "
+    "show, and every figure I give cites the computation behind it. I can look up what was "
+    "actually recorded instead."
+)
+
+
+def unresolved_follow_up(history: Sequence[Turn], today: date) -> str:
+    """One concrete question about the last result, for a message the reader could not place."""
+    from app.agent.requests import ResolvedPart
+
+    parts = [ResolvedPart.model_validate(p) for p in previous_state(history).get("data", [])]
+    if not parts:
+        return "I'm not sure what you'd like me to look at. Which measure and which days?"
+    last = parts[-1]
+    names = " and ".join(label(m) for m in last.metrics) or "every measure"
+    days = " against ".join(_when(w, today) for w in last.windows) or "all of your data"
+    return (
+        f"I'm not sure what to change in the last result ({names}, {days}). Tell me the "
+        "measure or the days to use and I'll work it out."
+    )
+
+
+def coaching_habits(found) -> list[Evidence]:
+    """The habit tests among the evidence a coaching run was given."""
+    return [e for records, _ in found for e in records if e.tool == "habit_options"]
+
+
+def coaching_fallback(habits: Sequence[Evidence]) -> str:
+    """One option the person's own days support, said by code, or why there is none."""
+    return coaching_outcome(habits)[0]
+
+
+def coaching_outcome(habits: Sequence[Evidence]) -> tuple[str, Claim | None]:
+    """The one coaching conclusion the tested habits support, with the claim citing them: an
+    option, none among those tested, or too little data (no claim then: nothing was tested)."""
+    text = _outcome_text(habits)
+    for record in habits:
+        supported = [lv for lv in record.stats.get("levers", []) if lv.get("supported")]
+        if supported:
+            metric = record.metrics[0] if record.metrics else None
+            claim = Claim(
+                text=text,
+                kind="suggestion",
+                evidence_ids=[record.id],
+                metric=metric,
+                option=supported[0].get("lever"),
+            )
+            return text, claim
+    if habits:
+        metric = habits[0].metrics[0] if habits[0].metrics else None
+        claim = Claim(
+            text=text, kind="no_change", evidence_ids=[r.id for r in habits], metric=metric
+        )
+        return text, claim
+    return text, None
+
+
+OBSERVATIONS = ("change", "no_change", "value", "day", "data_quality", "association")
+
+
+def option_sentence(record: Evidence, key: str) -> str:
+    """The option a record tested, said by code from the record: what the person sees is the
+    habit the evidence is about, whatever the model wrote beside it."""
+    stats = record.stats
+    if record.tool == "habit_options":
+        lever = next(lv for lv in stats["levers"] if lv["lever"] == key)
+        if lever.get("permits") == "watch":  # a pattern seen, not a routine tested
+            return (
+                f"One thing your own days point to, if you'd like: keeping an eye on "
+                f"{lever['habit']}. On your {lever['group']}, your {label(record.metrics[0])} "
+                "was better; that describes your days, it does not test a routine."
+            )
+        return (
+            f"One option your own days support, if you'd like to try it: {lever['habit']}. On "
+            f"your {lever['group']}, your {label(record.metrics[0])} was better."
+        )
+    if record.tool == "personal_options":
+        option = next(o for o in stats["options"] if o["key"] == key)
+        note = option["note"][:1].upper() + option["note"][1:]
+        return (
+            f"One option from your own routine, if you'd like to try it: {option['try']}. "
+            f"{note}; that is worth trying, not something tested."
+        )
+    # An association or a weekday split tests no action: it supports watching the two together,
+    # never a change to one ("an earlier bedtime" needs a test of bedtime timing; review of the
+    # binding, 2026-11-20).
+    habit = label(record.metrics[0])
+    if record.tool == "correlate":
+        target = label(record.metrics[1]) if len(record.metrics) > 1 else "the other measure"
+        way = "together" if (stats.get("rho") or 0) > 0 else "in opposite directions"
+        return (
+            f"One thing your own days point to, if you'd like: keeping an eye on your {habit} "
+            f"and {target} together. Over these days they tended to move {way}; that shows they "
+            "go together, not that changing one would change the other."
+        )
+    return (
+        f"One thing your own days point to, if you'd like: keeping an eye on your {habit} on "
+        "weekdays against weekends, where it differs clearly. That describes when it differs, "
+        "not what would change it."
+    )
+
+
+def bound_option(claim: Claim, evidence: dict[str, Evidence]) -> tuple[str, Claim] | None:
+    """A verified suggestion's option, said by code from the record that tested it."""
+    for i in claim.evidence_ids:
+        record = evidence.get(i)
+        if record is not None and claim.option in supported_options(record):
+            text, ids = option_sentence(record, claim.option), [record.id]
+            # What they told the app says how the option fits them, in their own words; it adds
+            # no action of its own.
+            for told in (evidence.get(j) for j in claim.evidence_ids):
+                if told is not None and told.tool == MEMORY and told.stats.get("text"):
+                    text += f' That fits what you told me: "{told.stats["text"]}".'
+                    ids.append(told.id)
+                    break
+            return text, claim.model_copy(update={"text": text, "evidence_ids": ids})
+    return None
+
+
+def said_observations(claims: Sequence[Claim], evidence: dict[str, Evidence]) -> list[Claim]:
+    """A coaching answer's observations, each said by code from the test it cites; one code
+    cannot say from its record is left out. A model's observation could carry advice of its own
+    ("steps rose, so you could spread your walks")."""
+    said: dict[str, Claim] = {}
+    for claim in claims:
+        if claim.kind not in OBSERVATIONS:
+            continue
+        for i in claim.evidence_ids:
+            record = evidence.get(i)
+            if record is not None and record.metrics and "difference" in record.stats:
+                said.setdefault(record.id, finding_claim(record))
+                break
+    return list(said.values())
+
+
+def coaching_by_code(
+    result: AgentResult,
+    habits: Sequence[Evidence],
+    wanted: int = 1,
+    observations: bool = True,
+) -> None:
+    """A coaching answer is said by code: every option the person reads is one a cited record
+    tested, in that record's words. The verified suggestions the model chose (each bound by its
+    option key) are said from their records, up to the number asked for; with none, the one
+    conclusion the tested habits support. The model's prose and its other advice claims are not
+    kept, whatever their wording: advice beside a tested option need not be about it ("spread
+    your walks" stood on bedtime evidence, a breakfast entry and an NHS passage; "an earlier
+    bedtime is the best move" beside "there isn't enough data", review of 1e29f3a)."""
+    chosen: dict[str, Claim] = {}
+    for claim in result.claims:
+        if claim.kind == "suggestion" and (bound := bound_option(claim, result.evidence)):
+            chosen.setdefault(bound[0], bound[1])
+    options = list(chosen.items())[: max(wanted, 1)]
+    if not options:
+        text, claim = coaching_outcome(habits)
+        options = [(text, claim)]
+    seen = said_observations(result.claims, result.evidence) if observations else []
+    said = [text for text, _ in options]
+    if len(said) > 1:
+        result.summary = "\n".join(f"- {text}" for text in said)
+    else:
+        result.summary = " ".join(dict.fromkeys([*(c.text for c in seen), *said]))
+    result.claims = seen + [claim for _, claim in options if claim is not None]
+    result.notes = [n for n in result.notes if n not in said]
+    result.trace.append(
+        {"type": "coaching_by_code", "observations": len(seen), "options": len(chosen)}
+    )
+    for record in habits:
+        result.evidence.setdefault(record.id, record)
+
+
+def one_coaching_conclusion(
+    result: AgentResult, habits: Sequence[Evidence], wanted: int = 1
+) -> None:
+    """An investigation's coaching answer: its observations, then its options said by code,
+    as many as were asked for and are bound to a tested habit."""
+    coaching_by_code(result, habits, wanted)
+
+
+def _outcome_text(habits: Sequence[Evidence]) -> str:
+    for record in habits:
+        for lever in record.stats.get("levers", []):
+            if lever.get("supported") and "lever" in lever:
+                return option_sentence(record, lever["lever"])
+            if lever.get("supported"):
+                return (
+                    f"One option your own days support, if you'd like to try it: "
+                    f"{lever['habit']}. On your days with it, your {label(record.metrics[0])} "
+                    "was better."
+                )
+    if habits:
+        names = ", ".join(label(r.metrics[0]) for r in habits)
+        return (
+            f"None of the everyday habits I tested on your own days went with better {names}, "
+            "so your data doesn't point to one to try yet."
+        )
+    return "Your data over those days isn't enough to point to one everyday habit to try yet."
+
+
+STATUS_WAITING = (
+    "Not yet. The entry is on a card waiting for your tap: nothing is written to your tracker "
+    "until you tap Log it."
+)
+STATUS_SAVED = "Yes: the entry was written to your tracker when you tapped Log it."
+STATUS_FAILED = "No: the entry couldn't be written to your tracker. You can try again on its card."
+STATUS_NONE = "Nothing from this chat has been written to your tracker, and no card is waiting."
+
+
+def status_reply(states: Sequence[str], card: str | None = None) -> str:
+    """Whether an entry was saved, from the store: the latest entry of this chat decides. With a
+    card waiting, what it holds, from its stored values: "tell me exactly what is still waiting"
+    got only "a card is waiting" (the 689fa7c audit)."""
+    latest = states[-1] if states else None
+    if latest in ("draft", "executing"):
+        return f"{STATUS_WAITING} On the card: {card}" if card else STATUS_WAITING
+    if latest == "succeeded":
+        return STATUS_SAVED
+    if latest in ("failed", "unknown"):
+        return STATUS_FAILED
+    return STATUS_NONE
+
+
+def _days_with(frame: pd.DataFrame, metrics: Sequence[str], window: Window) -> int:
+    """Days in the window with any of these metrics recorded."""
+    present = [m for m in metrics if m in frame.columns] if metrics else list(frame.columns)
+    if not present:
+        return 0
+    rows = frame.loc[pd.Timestamp(window.start) : pd.Timestamp(window.end), present]
+    return int(rows.notna().any(axis=1).sum())
+
+
+def _names(metrics: Sequence[str]) -> str:
+    return " or ".join(label(m) for m in metrics) if metrics else "records"
+
+
+def outside_data(typed, frame: pd.DataFrame, today: date) -> str | None:
+    """An investigation whose named days have none of what it asks about is answered so by code:
+    "what changed from Dec 1 to 14?" was answered with October (Codex's review, 2026-11-19), and
+    January 2027 with November (the v5 audit). Checked per metric and per period: the frame
+    reaching other days, or other metrics, is no answer for these."""
+    parts = [p for p in typed.parts if p.windows]
+    if not parts or frame.empty:
+        return None
+    have = _when(Window(start=frame.index.min().date(), end=frame.index.max().date()), today)
+    first, last = frame.index.min().date(), frame.index.max().date()
+    for part in parts:
+        focal = part.windows[0]
+        if _days_with(frame, part.metrics, focal):
+            continue
+        missing = [m for m in part.metrics if m not in frame.columns]
+        if missing and len(missing) == len(part.metrics):
+            return f"Your data doesn't include {_names(missing)}, so I can't look into it."
+        when = _when(focal, today)
+        if focal.start > last or focal.end < first:
+            future = " Those days haven't happened yet." if focal.start > today else ""
+            return (
+                f"Your data has no days {when}, so I can't say what happened then.{future} "
+                f"It runs {have}."
+            )
+        return (
+            f"Your data has no {_names(part.metrics)} {when}, so I can't say what happened "
+            f"then. It runs {have}."
+        )
+    return None
+
+
+def coverage_notes(typed, frame: pd.DataFrame, today: date) -> list[str]:
+    """What an investigation's named days are missing, per metric, said rather than filled: a
+    metric with no readings beside one that has them (steps hid missing HRV when days were counted
+    for any metric, review of 1e29f3a), a baseline with nothing, partial coverage, and for several
+    metrics the days they were recorded together, which is all a relationship can rest on."""
+    notes = []
+    for part in (p for p in typed.parts if p.windows):
+        metrics = [m for m in part.metrics if m in frame.columns]
+        for index, window in enumerate(part.windows):
+            when = _when(window, today)
+            each = {m: _days_with(frame, [m], window) for m in metrics}
+            if not metrics:
+                days = _days_with(frame, [], window)
+                if index and not days:
+                    notes.append(f"There's no data {when} to compare with.")
+                continue
+            empty = [m for m, n in each.items() if not n]
+            if index and empty:
+                notes.append(
+                    f"There's no {_names(empty)} {when} to compare with, so that side of the "
+                    "comparison is missing."
+                )
+            elif empty and len(empty) < len(metrics):
+                found = [m for m in metrics if m not in empty]
+                notes.append(
+                    f"There's no {_names(empty)} {when}, so only {_names(found)} can be looked "
+                    "at there."
+                )
+            for metric, days in each.items():
+                if 0 < days < window.days:
+                    notes.append(
+                        f"Your data has {label(metric)} on {days} of the {window.days} days "
+                        f"{when}; the other days are left out, not filled in."
+                    )
+            if len(metrics) >= 2 and not empty:
+                rows = frame.loc[pd.Timestamp(window.start) : pd.Timestamp(window.end), metrics]
+                paired = int(rows.notna().all(axis=1).sum())
+                if paired < min(each.values()) or paired < window.days:
+                    notes.append(
+                        f"{_first_up(_and(metrics))} were recorded together on {paired} of the "
+                        f"{window.days} days {when}; any link between them rests on those days."
+                    )
+    return list(dict.fromkeys(notes))
+
+
+def _and(metrics: Sequence[str]) -> str:
+    names = [label(m) for m in metrics]
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _first_up(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
 def ask(
     llm: LLM,
     router: Router,
@@ -536,6 +1144,11 @@ def ask(
     made_a_draft: Callable[[], bool] | None = None,
     guidance_mode: str = "picked",  # "none" and "all" exist to compare them (eval/advice_compare)
     after_draft: bool = False,  # the last answer prepared a logging draft
+    fixed_reply: str | None = None,  # said by code already (a card edit code applied)
+    request_bundle: tuple | None = None,  # the API may interpret before preparing action tools
+    action_states: Sequence[str] = (),  # this chat's recent entries' statuses, oldest first
+    waiting_card: str | None = None,  # the card waiting for a tap, described from its values
+    data_source: str | None = None,  # where this person's history comes from: takeout or api
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -545,13 +1158,65 @@ def ask(
     reply_text = question.rsplit("Their reply: ", 1)[-1]
     said = question  # their own words: small talk is judged on these, never on a rewrite
     rewrite_cost = 0.0
+    typed, request_state, reading_budget = (None, {}, Budget())
+    if urgent_free(question):
+        typed, request_state, reading_budget = request_bundle or interpret(
+            llm, reply_text, history, _day(today or now), pending_draft=after_draft
+        )
     # "Yes" to the offer the last answer ended on takes it up, rather than reading as small talk.
     offer = offer_in(history[-1].answer) if history and AFFIRM.match(question) else None
     if offer:
         question = said = as_request(offer)
     fixed = plain_reply(said, frame, _day(today or now), after_draft)
+    # A turn about logging: a card waiting, or a message read as logging, a correction or a yes.
+    logging_turn = after_draft or (
+        typed is not None and typed.kind in ("logging", "correction", "confirmation")
+    )
+    gap = None  # days an investigation named that the data does not have
+    if typed is not None:
+        # Wearable bounds do not bound confirmed food or public guidance. Precise requests
+        # determine availability per source/part, including mixed food and wearable questions.
+        if typed.subject != "other" and typed.kind in ("data", "causality", "guidance"):
+            fixed = None
+        # The reader resolves subjects semantically; a metric noun is not somebody's name.
+        if typed.subject == "self" and other_person(said):
+            fixed = None
+        if typed.subject == "other" and typed.kind != "guidance":
+            fixed = "I can only see your own data, not another person's records."
+        elif typed.medical:
+            fixed = MEDICAL_REFUSAL  # a diagnosis or a condition asked about: no data is read
+        elif typed.fabricate:
+            fixed = NO_FABRICATION
+        elif typed.mix_sources:
+            fixed = one_source(data_source)
+        elif typed.clarification:
+            fixed = typed.clarification
+        elif (
+            typed.kind == "memory"
+            and typed.memory == "deny"
+            and typed.memory_action in (None, "remember")
+        ):
+            fixed = NOT_KEPT_ASKED  # "don't save this" wins over "remember", even beside it
+        elif typed.kind == "memory" and typed.memory_action == "recall":
+            fixed = recalled(memory, chat, history, typed.recall)
+        elif typed.kind == "memory" and typed.memory_action is None:
+            fixed = MEMORY_WHICH
+        elif typed.kind == "investigate" and (
+            gap := outside_data(typed, frame, _day(today or now))
+        ):
+            fixed = gap  # never another period's days in place of the ones named
+        elif typed.kind == "status":
+            fixed = status_reply(action_states, waiting_card)  # from the store, never a write
+        elif typed.kind == "confirmation":
+            # Only a tap on the card logs anything: "Yes, go ahead and save that" was answered
+            # "Saved." while the card stayed a draft (the audit of 2026-11-19).
+            fixed = CONFIRM_ON_CARD if after_draft else NOTHING_WAITING
+        question = typed.question(question)
+    if fixed_reply:
+        fixed = fixed_reply
     if (
-        not fixed
+        typed is None
+        and not fixed
         and history
         and history[-1].claims
         and CAUSE_FOLLOW_UP.search(said)
@@ -561,26 +1226,141 @@ def ask(
     # What a follow-up refers to, before routing or an expert sees it.
     if (
         urgent_free(question)
+        and typed is None
         and not fixed
         and not _certain_talk(question)
         and not is_statement(question)
     ):
+        # Only without the request reader (a scripted model that has none): in the app every
+        # message is read by requests.interpret, which resolves references and dates itself.
         day = today.date() if isinstance(today, datetime) else today or date.today()
-        # Which days and metrics "those dates" or "and the median?" mean, by code (scope.py).
-        resolved = with_scope(question, history, day)
-        if resolved.ask:
-            fixed = resolved.ask
-        elif resolved.inherited:
-            first = frame.index.min().date() if len(frame.index) else None
-            question = f"{question} {scope_note(resolved, first, day)}"
-        else:
-            means = with_period(with_relative_day(question, history, day), history)
-            question, rewrite_cost = standalone(
-                llm, question, history, means if means != question else None
-            )
+        means = with_period(with_relative_day(question, history, day), history)
+        question, rewrite_cost = standalone(
+            llm, question, history, means if means != question else None
+        )
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)
+    # Medical words keep the router's say: an investigation never overrides its refusal.
+    investigating = (
+        typed is not None and typed.kind == "investigate" and not fixed and not MEDICAL.search(said)
+    )
+    if investigating:
+        # "Why am I tired?", "investigate my sleep last month": the agent's own loop, with the
+        # metrics and days the question named, not a web lookup or a clarification (5 of 16
+        # passed in the audit of 2026-11-19, as the reader had no such kind).
+        kind = {"coaching": "coaching", "why": "why"}.get(typed.focus or "", "change")
+        route = Route(
+            "general",
+            None,
+            (),
+            route.routed,
+            replace(
+                route.classification,
+                question_types={kind: 1.0},
+                intent_probabilities={str(i): float(i == Intent.READ) for i in Intent},
+            ),
+        )
+    # "Remember that I prefer walking", "forget that I run on Mondays": the card the listener
+    # raises is the answer, whatever the reader thought the rest of the message was about.
+    # "Don't save" stops a new fact, never a forget: "remove my fun-run goal" was read as both,
+    # and got "Okay, I won't keep that" while the goal stayed (Codex's audit of 84db5f5).
+    remembering = (
+        typed is not None
+        and not fixed
+        and (
+            (typed.kind == "memory" and typed.memory_action == "forget")
+            or (
+                typed.memory != "deny"
+                and (
+                    (typed.kind == "memory" and typed.memory_action == "remember")
+                    or (is_explicit(said) and "?" not in said)
+                )
+            )
+        )
+    )
+    if remembering:
+        context = build(history, stored_evidence or {}, attachment, memory=memory, now=now)
+        result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="noted", summary=NOTED)
+        _with_reads(result, typed, frame, _day(today or now), food_logs, now)
+        # The reader's call is paid for and traced here too (Codex's review, 2026-11-19).
+        _with_reading(result, context, route, typed, request_state, reading_budget)
+        return Answer(route, no_false_success(result, after_draft, logging_turn), context)
+    if (
+        typed is not None
+        and (
+            typed.kind in ("data", "causality", "clarify", "guidance", "memory", "status")
+            or (typed.kind in ("investigate", "confirmation") and fixed)
+        )
+        and (
+            urgent_free(said)
+            and not MEDICAL.search(said)
+            and not typed.medical  # answered as a refusal below, not as a fixed note
+            and (typed.kind != "guidance" or outside is not None)
+        )
+    ):
+        # A precise validated request does not need a second model to choose statistics
+        # and a third to restate them. Guidance still uses retrieved public passages.
+        classification = replace(
+            route.classification,
+            question_types={"world" if typed.kind == "guidance" else "lookup": 1.0},
+            intent_probabilities={str(i): float(i == Intent.READ) for i in Intent},
+        )
+        route = Route("general", None, (), choice == "auto", classification)
+        context = build(
+            history,
+            stored_evidence or {},
+            attachment,
+            memory=memory,
+            scope=set(),
+            now=now,
+            chat=chat,
+        )
+        if fixed:
+            result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="limits", summary=fixed)
+            if gap and typed.focus == "coaching":
+                # Options asked for on days with no data: the limit stands, and the options
+                # asked for are still answered, from vetted general sources when there is a
+                # measure to look them up for, or said to be impossible (the review of 40baaee).
+                _options_without_data(
+                    llm, result, typed, max(asked_count(said), typed.points or 1), guard
+                )
+        elif typed.kind == "guidance":
+            # The passages the last answer used, when this one is about the same movement.
+            before = previous_state(history)
+            same_topic = typed.topics and before.get("guidance") == typed.topics
+            result = answer_world(
+                llm,
+                question,
+                outside,
+                guard=guard,
+                topic=typed.topics[0] if len(typed.topics) == 1 else None,
+                active=before.get("guidance_passages", []) if same_topic else (),
+            )
+            known = {link["url"] for link in result.sources}
+            result.sources += [s for s in cited_sources(result) if s["url"] not in known]
+            used = next(
+                (
+                    step["passage_ids"]
+                    for step in reversed(result.trace)  # the last: those the reply cites
+                    if step.get("type") == "guidance_passages" and step["passage_ids"]
+                ),
+                None,
+            )
+            if used and result.stop_reason == "looked_up":
+                request_state = {**request_state, "guidance_passages": used}
+        else:
+            result = execute_request(
+                typed,
+                frame,
+                _day(today or now),
+                food_logs=food_logs,
+                zone=(now.tzinfo if now else None),
+            )
+        if typed.kind not in ("data", "causality"):
+            _with_reads(result, typed, frame, _day(today or now), food_logs, now)
+        _with_reading(result, context, route, typed, request_state, reading_budget)
+        return Answer(route, no_false_success(result, after_draft, logging_turn), context)
     # "Am I ok?" asks how their data looks, not for a diagnosis: answered, as an overall look.
     if route.action == "refuse" and OVERALL.match(said) and not MEDICAL.search(said):
         overall = replace(route.classification, question_types={"lookup": 1.0})
@@ -597,6 +1377,39 @@ def ask(
     # and, measured, changed nothing. Questions linking areas (why, change, pattern) keep them.
     if route.classification.question_type in NO_CONSULT and route.consult:
         route = replace(route, consult=())
+    # A validated log clause is prepared on a card, whatever the router made of the rest: "read
+    # my Nov 15 steps and draft a 12-minute walk" was routed as a question and no card was made
+    # (the v5 audit). Its side read is answered by code, below.
+    logging_clause = (
+        typed is not None
+        and typed.kind == "logging"
+        and not fixed
+        and typed.entry in LOG_EXPERT
+        and LOG_EXPERT[typed.entry] in (action_tools or {})
+    )
+    if logging_clause:
+        route = Route(
+            "expert",
+            LOG_EXPERT[typed.entry],
+            (),
+            choice == "auto",
+            replace(
+                route.classification,
+                intent_probabilities={str(i): float(i == Intent.LOG) for i in Intent},
+            ),
+        )
+    correcting_draft = typed is not None and typed.kind == "correction" and continuing_log
+    if correcting_draft:
+        route = Route(
+            "expert",
+            continuing_log,
+            (),
+            True,
+            replace(
+                route.classification,
+                intent_probabilities={str(i): float(i == Intent.LOG) for i in Intent},
+            ),
+        )
     continuing = (
         (continuing_log in (action_tools or {}) or continuing_log == "general")
         and (
@@ -604,7 +1417,8 @@ def ask(
             or (continuing_log == "general" and choice in (action_tools or {}))
         )
         and (
-            route.classification.intent == Intent.CLARIFY
+            correcting_draft
+            or route.classification.intent == Intent.CLARIFY
             # "40 minutes, no wait 50" reads as a statement about data; a new question does not.
             or (route.classification.intent == Intent.READ and _just_a_reply(reply_text))
         )
@@ -705,6 +1519,17 @@ def ask(
             )
         )
     )
+    if (
+        typed is not None
+        and typed.kind == "other"
+        and not typed.told
+        and not fixed
+        and not (acting or continuing or reminding or logging_tools or world or chatting)
+    ):
+        # A reading that is neither small talk nor something about them, and no request the
+        # app can run, is asked about, never answered with defaults: "use days +1 through +4"
+        # read as other got recent steps (the b3d64ca audit).
+        fixed = unresolved_follow_up(history, _day(today or now))
     plan = (
         None
         if acting or continuing or reminding or logging_tools or world or chatting or fixed
@@ -814,6 +1639,8 @@ def ask(
         )
         and (
             OVERALL.match(said)
+            # An investigation naming no metric looks at every metric, over the days it named.
+            or (investigating and not any(p.metrics for p in typed.parts))
             or (
                 route.classification.question_type in BROAD_TYPES
                 and not asked_metrics(question, list(frame.columns))
@@ -825,8 +1652,14 @@ def ask(
             )
         )
     )
+    # The days an investigation named, and a second period it compares them with.
+    named = [w for p in typed.parts for w in p.windows][:2] if investigating else []
+    overview_records: list[Evidence] = []  # every finding the answer states is cited from these
     if broad:
-        records, text = overview_evidence(frame, question, _day(today or now))
+        records, text = overview_evidence(frame, question, _day(today or now), *named)
+        overview_records = list(records)
+        if not records and named:
+            block = "\n\n".join(part for part in (block, text) if part)  # what is missing, said
         if records:
             for record in records:
                 evidence[record.id] = record
@@ -839,17 +1672,34 @@ def ask(
             broad = False
     if plan and not plan.coaching and (said_before := told_here(history)):
         block = "\n\n".join(part for part in (block, told_block(said_before)) if part)
+    tested_habits: list = []
     if plan:
         visible = sorted(_scope(route) or frame.columns)
+        asked: tuple[str, ...] = ()
+        if investigating:
+            asked = tuple(dict.fromkeys(m for p in typed.parts for m in p.metrics))
+            visible = [m for m in visible if m in asked] or visible
         found: list[tuple[list[Evidence], str]] = []
-        if plan.snapshot and (lead_on_no_data or route.expert) != "nutrition":
+        tested_habits = found  # read again after the answer: did coaching give an option?
+        # The latest day is another day than the ones an investigation named.
+        if plan.snapshot and not named and (lead_on_no_data or route.expert) != "nutrition":
             found.append(snapshot(frame, visible, asked_day(question, today, frame), question))
         if plan.coaching:
             lead = lead_on_no_data or route.expert
             eating = lead == "nutrition"
             skip_levers = fit.levers | (NOT_ABOUT_EATING_LEVERS if eating else frozenset())
             skip_options = fit.options | (NOT_ABOUT_EATING_OPTIONS if eating else frozenset())
-            found.append(coaching_evidence(frame, lead, visible, skip_levers, skip_options))
+            found.append(
+                coaching_evidence(
+                    frame,
+                    lead,
+                    visible,
+                    skip_levers,
+                    skip_options,
+                    named[0] if named else None,
+                    asked,
+                )
+            )
             if food := food_log_summary(food_logs, _day(today or now), _zone(today)):
                 found.append(([food], _food_lines(food)))
             if lead == "nutrition":
@@ -871,8 +1721,13 @@ def ask(
             if guidance_mode != "picked":
                 guidance = list(load_cards()) if guidance_mode == "all" else []
             if guidance_mode == "picked":
+                tested = [e for records, _ in found for e in records]
                 retrieved = guidance_for(
-                    question, picked, llm, " ".join(r.text for r in relevant), area=topics
+                    coaching_query(typed, tested) or question,
+                    picked,
+                    llm,
+                    " ".join(r.text for r in relevant),
+                    area=topics,
                 )
                 evidence |= {record.id: record for record in retrieved.evidence}
                 block = "\n\n".join(part for part in (block, retrieved.text) if part)
@@ -901,7 +1756,9 @@ def ask(
     if relevant or fit.notes:
         what = "; ".join([*(r.text for r in relevant), *fit.notes])
         asked = f"{asked}\n(What they told you, which the advice has to fit: {what})"
-    wanted = asked_count(question) if plan and plan.coaching else 0
+    # The points asked for, by number in the message or by a redo of the last answer.
+    asked_points = (typed.points or 0) if typed is not None else 0
+    wanted = max(asked_count(question), asked_points) if plan and plan.coaching else 0
     passage_ids = frozenset(e.id for e in retrieved.evidence) if retrieved else frozenset()
     check = (
         personal_check(personal_ids, fit, wanted, passage_ids) if plan and plan.coaching else None
@@ -936,6 +1793,9 @@ def ask(
     if urgent:  # before anything else, and no model: this reply must not be able to go wrong
         route = replace(route, action="refuse")
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="urgent", summary=urgent)
+    elif fixed == MEDICAL_REFUSAL:  # an explicit request for a diagnosis: a refusal
+        route = replace(route, action="refuse")
+        result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=fixed)
     elif fixed:
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="limits", summary=fixed)
     elif route.action == "refuse":
@@ -1035,6 +1895,7 @@ def ask(
             allow_logging=bool(logging_tools),
             action_prompt=REMINDER_PROMPT if reminding else "",
             answer_check=check,
+            food_logged=bool(food_logs),
         )
         result.notes += _notes(frame, route, result)
     stopped_early = result.stop_reason in (
@@ -1045,9 +1906,25 @@ def ask(
         "chat_fallback",
         "limits",
     )
+    # An overview is its tested results: said by code, each cited, whatever the model wrote. An
+    # explanation or a coaching answer stays the model's, checked as before.
+    explaining = investigating and typed.focus in ("why", "coaching")
+    # Not for something the data doesn't track ("my menstrual cycle"): that answer is the limit.
+    if broad and overview_records and not stopped_early and not explaining and not missing:
+        text, claims = render_overview(overview_records, _day(today or now))
+        if text:
+            result.summary, result.claims = text, claims
+            result.evidence |= {r.id: r for r in overview_records}
+            result.trace.append({"type": "overview_by_code", "claims": len(claims)})
+    if plan and plan.coaching and not stopped_early and not investigating and not missing:
+        # Every coaching option is said from the record that tested it, as in an investigation.
+        coaching_by_code(result, coaching_habits(tested_habits), wanted, observations=False)
     if plan and plan.coaching:
         result.summary = without_filler(result.summary)
-        if wanted and not stopped_early:
+        # An investigation's coaching is rebuilt from its options below, then topped up: topped
+        # up here first, its general points were dropped by that rebuild (the review of
+        # b3d64ca).
+        if wanted and not stopped_early and not investigating:
             _fill_points(llm, result, question, wanted, guard)
     if plan and plan.coaching and result.summary in (NO_ANSWER, ""):
         result.summary = COACHING_NO_ANSWER
@@ -1062,6 +1939,36 @@ def ask(
         and not OFFERED.search(result.summary)
     ):
         result.notes.append(COACHING_OFFER)  # coaching ends with something to do
+    if investigating and not stopped_early:
+        # The answer must do what was asked: one option for coaching, the limits for a "why".
+        # A coaching answer gave only a recap, and an explanation was never tested (the v4 audit).
+        habits = coaching_habits(tested_habits if plan else [])
+        if result.summary in (NO_ANSWER, ""):
+            described_days(result, typed, frame, _day(today or now), food_logs, now)
+        if typed.focus == "coaching":
+            one_coaching_conclusion(result, habits, max(wanted, 1))
+            if wanted:
+                topic = coaching_query(typed, result.evidence.values()) or question
+                _fill_points(llm, result, topic, wanted, guard)
+            if len(named) == 2 and habits:
+                # The habit tests take one period: the later one of the comparison, said so,
+                # never the enclosing range (Sep 2-Oct 31 was cited for Oct 2-15 against Sep
+                # 1-14, the 9228fe6 audit).
+                result.notes.append(
+                    f"The habits were tested on {_when(named[0], _day(today or now))} only, the "
+                    "later of the two periods compared."
+                )
+        result.notes += [
+            n for n in coverage_notes(typed, frame, _day(today or now)) if n not in result.notes
+        ]
+        if typed.focus == "why":
+            said_by_claims(result)
+        cited = {e.tool for e in result.cited_evidence.values()}
+        explained = typed.focus == "why" and not nothing_to_explain(
+            result, typed, _day(today or now)
+        )
+        if explained and "correlate" not in cited:
+            result.notes.append(WHY_LIMIT)
     if plan and plan.coaching and not stopped_early:
         result.budget.cost_usd += memory_cost.cost_usd
         result.trace.append(
@@ -1083,10 +1990,24 @@ def ask(
     # A lookup has already said where its answer comes from.
     if not stopped_early and not world and (note := source_note(result)):
         result.notes.append(note)
+    if typed is not None and not stopped_early:
+        _with_reads(result, typed, frame, _day(today or now), food_logs, now)
     result.budget.cost_usd += rewrite_cost
+    result.budget.cost_usd += reading_budget.cost_usd
+    result.budget.calls += reading_budget.calls
+    if typed is not None:
+        result.trace.append(
+            {
+                "type": "request",
+                "request": typed.model_dump(mode="json"),
+                "state": request_state,
+                "cost_usd": reading_budget.cost_usd,
+                "model_calls": reading_budget.calls,
+            }
+        )
     result.trace[:0] = [_context_step(context), _route_step(route)]
     if continuing:
         result.trace[1]["continuing_log_expert"] = continuing_log
     if reminding:
         result.trace[1]["reminding"] = True
-    return Answer(route, result, context)
+    return Answer(route, no_false_success(result, after_draft, logging_turn), context)

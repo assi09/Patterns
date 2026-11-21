@@ -99,7 +99,8 @@ JUST_NOW = re.compile(r"\bjust (?:now|did|finished|ended|got back)\b", re.IGNORE
 CORRECTION = re.compile(r"\b(?:no wait|actually|sorry|i mean|make that|correction)\b", re.I)
 OWN_OFFSET = re.compile(r"\b(?:utc|gmt)\b|[+-]\d{2}:\d{2}\b", re.IGNORECASE)
 NAMED_DAY = re.compile(
-    r"\b(?:yesterday|last (?:night|week)|\d+ days? ago|(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|"
+    r"\b(?:today|tomorrow|yesterday|next \w+|last (?:night|week)|\d+ days? ago|"
+    r"(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|"
     r"sat(?:ur)?|sun)(?:day)?|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|"
     r"aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2}(?:st|nd|rd|th)|"
     r"\d{1,2}[/-]\d{1,2})\b",
@@ -154,16 +155,19 @@ def _shifted(value: object, days: int) -> object:
     return (datetime.fromisoformat(str(value)) - timedelta(days=days)).isoformat()
 
 
-def latest_past(given: dict, said: Sequence[str], local_now: datetime) -> dict:
+def latest_past(
+    given: dict, said: Sequence[str], local_now: datetime, day_known: bool = False
+) -> dict:
     """A clock time with no day that has not come yet today means yesterday: at 1 am, "at 7 am"
-    is the morning that has gone. Corrected here, so an answer does not depend on the model."""
+    is the morning that has gone. Corrected here, so an answer does not depend on the model.
+    `day_known`: the request reader already read the day, which then stands."""
     key = "startTime" if "startTime" in given else "consumedAt"
     try:
         start = datetime.fromisoformat(str(given[key]))
     except (KeyError, ValueError):
         return given
     words = "\n".join(said)
-    named = NAMED_DAY.search(words)
+    named = day_known or NAMED_DAY.search(words)
     if start.tzinfo is None:
         return given
     if "endTime" in given and JUST_NOW.search(words):
@@ -202,13 +206,22 @@ def _corrected(said: Sequence[str]) -> set[int]:
     return set()
 
 
-def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime) -> str | None:
+def mismatch(
+    log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime, day_known: bool = False
+) -> str | None:
     """What the draft gets wrong against the person's words, for the model to put right; None if
-    nothing contradicts them."""
+    nothing contradicts them. `day_known`: the day was read and checked already (the request
+    reader's), so the words' own day pattern does not judge it again; clock times and durations
+    are still checked."""
     text = "\n".join(said)
     zone = local_now.tzinfo
     start = (log.start_time if isinstance(log, WorkoutLog) else log.consumed_at).astimezone(zone)
     moments = [start]
+    if (
+        re.search(r"\btomorrow\b", text, re.I)
+        and start.date() != (local_now + timedelta(days=1)).date()
+    ):
+        return "The person named tomorrow. Do not move a future entry to today or yesterday."
     if isinstance(log, WorkoutLog):
         moments.append(log.end_time.astimezone(zone))
         stated = _corrected(said) or durations(text)
@@ -216,10 +229,19 @@ def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime
             return "The person did not say how long it lasted. Ask them; never make up a duration."
         if log.exercise_type in GENERIC_TYPES and not _names_an_activity(text):
             return "The person did not say what kind of workout it was. Ask them."
-        lengths = (log.active_seconds, (log.end_time - log.start_time).total_seconds())
-        if stated and not any(abs(s - t) <= TOLERANCE_S for s in stated for t in lengths):
+        # Elapsed time, active time and a pause are separate facts, and a stated duration may be
+        # any of them: "15:00 until 15:40, 10 minutes paused" stated the pause, which matched
+        # neither of the other two and refused a right draft (the b730 audit).
+        elapsed = (log.end_time - log.start_time).total_seconds()
+        lengths = {"active time": log.active_seconds, "elapsed time": elapsed}
+        if elapsed - log.active_seconds > TOLERANCE_S:
+            lengths["paused time"] = elapsed - log.active_seconds
+        if stated and not any(abs(s - t) <= TOLERANCE_S for s in stated for t in lengths.values()):
+            has = ", ".join(f"{name} {t / 60:g} min" for name, t in lengths.items())
+            said_minutes = ", ".join(f"{s / 60:g} min" for s in sorted(stated))
             return (
-                "The duration does not match what the person said. Use the duration in their "
+                f"The duration does not match what the person said ({said_minutes}); the draft "
+                f"has {has}. Set the active time, the elapsed time and any pause from their "
                 "words, unchanged."
             )
     # With an offset of their own ("12:00, UTC+3") the time is theirs to place, not ours to check.
@@ -229,9 +251,28 @@ def mismatch(log: FoodLog | WorkoutLog, said: Sequence[str], local_now: datetime
             "The time does not match what the person said. Use the time in their words, in their "
             "local time at the top of the task."
         )
-    if not NAMED_DAY.search(text) and local_now - start > RECENT:
+    if not day_known and not NAMED_DAY.search(text) and local_now - start > RECENT:
         return (
             "The person did not name another day, so this must be within the last 24 hours. Do "
             "not move it to an earlier day."
         )
     return None
+
+
+PAUSED = re.compile(
+    r"\b(?:paus(?:e|ed|es|ing)|breaks?|rested|stopp?ed for|interrupted|on and off)\b", re.I
+)
+
+
+def with_stated_interval(log: WorkoutLog, said: Sequence[str]) -> WorkoutLog:
+    """A workout ends its duration after it starts, worked out by code: a 34-minute run was carded
+    from 17:20 to 18:54, an hour nobody mentioned, and a check of the active time alone passed it
+    (the audit of 2026-11-19). Only both clock times said, or a pause said, leave the model's end,
+    which `mismatch` then checks against their words."""
+    text = "\n".join(said)
+    if len(clock_times(text)) >= 2 or PAUSED.search(text):
+        return log
+    end = log.start_time + timedelta(seconds=log.active_seconds)
+    if end == log.end_time:
+        return log
+    return WorkoutLog.model_validate(log.model_dump() | {"end_time": end})

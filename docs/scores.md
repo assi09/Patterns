@@ -144,6 +144,4 @@ Minute heart rate is never stored, only the daily values.
 
 - Whether stress also uses skin temperature, as Oura does. It is nightly only in the API.
 - The constants rest on one person's 60 days; revisit them with more people.
-- **Not validated yet.** The scores look plausible on the owner's data, but nothing has shown
-  they are correct: strain needs a comparison with workouts and perceived effort, stress with the
-  evening check-in. Both belong in the evaluation.
+- **Validation is incomplete.** The PMData evaluation found median within-person correlation of −0.03 between the physical stress score and reported stress. Strain versus perceived effort and validation against pilot check-ins remain open. See [the team evaluation](evaluation.md#the-team-agent-privacy-attacks-planted-changes-real-people-2026-11-12).

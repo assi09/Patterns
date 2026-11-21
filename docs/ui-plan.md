@@ -186,7 +186,5 @@ through with Playwright; empty and error states.
 
 ## Trade-offs to keep in mind
 
-- The course grades the agent and its evaluation most (40%), and deployment and the evaluation
-  are still to do before the demo at the end of November. The UI steps should not crowd them out;
-  steps 1 and 2 are the ones the demo needs most.
+- The course gives the agent and evaluation the largest weight (40%). The app has since deployed and the benchmark has results. Current work focuses on conversational reliability ahead of the December 5 presentations. See the [plan](plan.md).
 - Types the owner never did, and fitness age's fallback, are estimates; each is labeled as such.

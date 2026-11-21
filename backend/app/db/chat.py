@@ -5,6 +5,8 @@ shared by all of them. A turn is stored only after it is complete: the question,
 with its verified claims and the evidence they cite. Every query filters on the user.
 """
 
+import hashlib
+import json
 import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
@@ -31,6 +33,8 @@ SEARCHED_MESSAGES = 500
 SEARCH_FOUND = 5
 SEARCH_TEXT_CHARS = 240
 TITLE_LENGTH = 60
+VERSION = "~"  # between an evidence id and the digest of a later version's contents
+VERSION_DIGEST = 8
 
 
 def title_from(question: str) -> str:
@@ -174,9 +178,17 @@ def add_answer(
     reminder_ids: list[str] | None = None,
     sources: list[dict] | None = None,
 ) -> ChatMessage:
-    """Stores an answer, its verified claims, and the evidence they cite (once per id)."""
+    """Stores an answer, its verified claims, and the evidence they cite, each as it was when
+    the answer used it."""
     cited = {i for claim in claims for i in claim.get("evidence_ids", [])}
-    store_evidence(session, user_id, run_id, evidence, cited)
+    stored_as = store_evidence(session, user_id, run_id, evidence, cited)
+    claims = [
+        {**claim, "evidence_ids": [stored_as.get(i, i) for i in claim["evidence_ids"]]}
+        if "evidence_ids" in claim
+        else claim
+        for claim in claims
+    ]
+    cited = {stored_as.get(i, i) for i in cited}
     message = ChatMessage(
         user_id=user_id,
         role="assistant",
@@ -202,37 +214,64 @@ def add_answer(
     return message
 
 
+def _contents(payload: dict) -> str:
+    return hashlib.sha256(
+        json.dumps({k: v for k, v in payload.items() if k != "id"}, sort_keys=True).encode()
+    ).hexdigest()
+
+
 def store_evidence(
     session: Session,
     user_id: uuid.UUID,
     run_id: str | None,
     evidence: Iterable[Evidence],
     cited: set[str],
-) -> None:
-    """Stores the cited evidence, once per id; raises `ValueError` if any of it was not given."""
+) -> dict[str, str]:
+    """Stores the cited evidence and returns the id each record is stored under; raises
+    `ValueError` if any of it was not given.
+
+    A stored record never changes: an answer reopened later shows what it used. The same test
+    cited again with other contents (its p-value adjusted for another run's tests) is stored as a
+    version of its own, under its id and a digest of its contents, and the answer cites that.
+    Overwriting would change the earlier answer's evidence; keeping only the first showed seven
+    citations of the b730 audit with another run's p-values."""
     records = [e for e in evidence if e.id in cited]
     if missing := cited - {e.id for e in records}:
         raise ValueError(f"claims cite evidence that was not given: {', '.join(sorted(missing))}")
     if not records:
-        return
-    stored = set(
-        session.scalars(
-            select(EvidenceRecord.id).where(
-                EvidenceRecord.user_id == user_id, EvidenceRecord.id.in_(cited)
+        return {}
+    payloads = {e.id: e.model_dump(mode="json") for e in records}
+    digests = {i: _contents(p) for i, p in payloads.items()}
+    versions = {
+        i: f"{i.split(VERSION)[0]}{VERSION}{d[:VERSION_DIGEST]}" for i, d in digests.items()
+    }
+    stored = {
+        row.id: _contents(row.payload)
+        for row in session.scalars(
+            select(EvidenceRecord).where(
+                EvidenceRecord.user_id == user_id,
+                EvidenceRecord.id.in_([*cited, *versions.values()]),
             )
         )
-    )
-    session.add_all(
-        EvidenceRecord(
-            user_id=user_id,
-            id=e.id,
-            run_id=run_id,
-            tool=e.tool,
-            payload=e.model_dump(mode="json"),
+    }
+    stored_as: dict[str, str] = {}
+    for e in records:
+        same = stored.get(e.id)
+        stored_as[e.id] = e.id if same in (None, digests[e.id]) else versions[e.id]
+        chosen = stored_as[e.id]
+        if chosen in stored:
+            continue
+        session.add(
+            EvidenceRecord(
+                user_id=user_id,
+                id=chosen,
+                run_id=run_id,
+                tool=e.tool,
+                payload={**payloads[e.id], "id": chosen},
+            )
         )
-        for e in records
-        if e.id not in stored
-    )
+        stored[chosen] = digests[e.id]
+    return stored_as
 
 
 def history(

@@ -152,7 +152,7 @@ def test_the_prompt_says_who_owns_the_metrics_the_expert_cannot_see(frame):
 def test_claims_about_another_experts_metric_are_sent_back_then_dropped(frame):
     def about_steps(messages):
         evidence = evidence_from(messages, "describe")
-        return submit([claim(evidence, "steps", "Your steps held steady.")])
+        return submit([claim(evidence, "steps", "Your steps values were recorded.", "value")])
 
     llm = ScriptedLLM(
         [
@@ -209,7 +209,7 @@ def test_wear_time_and_data_quality_claims_are_open_to_every_expert(frame):
 def test_a_claim_must_name_its_metric(frame):
     def unnamed(messages):
         evidence = evidence_from(messages, "describe")
-        return submit([claim(evidence, None, "Your HRV held steady.")])
+        return submit([claim(evidence, None, "Your HRV values were recorded.", "value")])
 
     llm = ScriptedLLM(
         [

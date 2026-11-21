@@ -116,6 +116,8 @@ def save_findings(
             if isinstance(v, int | float)
         ]
         metric = claim["metric"]
+        stored_as = store_evidence(session, user_id, run_id, cited, set(ids))
+        ids = [stored_as.get(i, i) for i in ids]
         session.execute(
             update(Finding)
             .where(
@@ -141,7 +143,6 @@ def save_findings(
         )
         session.add(finding)
         saved.append(finding)
-        store_evidence(session, user_id, run_id, cited, set(ids))
     session.flush()
     return saved
 
@@ -365,14 +366,70 @@ def propose_fact(
 
 def held_facts(session: Session, user_id: uuid.UUID) -> list[MemoryFact]:
     """What the listener compares a new message with, newest first; declined ones too, so that
-    what the person said no to is recognised however it is worded."""
+    what the person said no to is recognised however it is worded. A card asking to forget
+    something is a question about a fact, not one, and is left out."""
     return list(
         session.scalars(
             select(MemoryFact)
-            .where(MemoryFact.user_id == user_id)
+            .where(MemoryFact.user_id == user_id, MemoryFact.forgets_id.is_(None))
             .order_by(MemoryFact.created_at.desc())
         )
     )
+
+
+def kept_facts(session: Session, user_id: uuid.UUID) -> list[MemoryFact]:
+    """What the person approved, newest first: the only things that can be forgotten."""
+    return [fact for fact in held_facts(session, user_id) if fact.status == "approved"]
+
+
+def propose_forget(
+    session: Session,
+    user_id: uuid.UUID,
+    fact_id: uuid.UUID,
+    *,
+    message_id: uuid.UUID | None = None,
+    now: datetime | None = None,
+) -> MemoryFact:
+    """A card asking to forget something kept: nothing is deleted without their tap ("please
+    forget my old running goal" had no path that deleted anything, Codex's review 2026-11-19)."""
+    target = _fact(session, user_id, fact_id)
+    if target.status != "approved" or target.forgets_id is not None:
+        raise MemoryRejected("Only something kept can be forgotten.")
+    waiting = session.scalar(
+        select(MemoryFact).where(
+            MemoryFact.user_id == user_id,
+            MemoryFact.forgets_id == target.id,
+            MemoryFact.status == "proposed",
+        )
+    )
+    if waiting is not None:
+        return waiting
+    card = MemoryFact(
+        user_id=user_id,
+        kind=target.kind,
+        text=target.text,
+        metrics=list(target.metrics),
+        status="proposed",
+        source_message_id=message_id,
+        start_day=target.start_day,
+        end_day=target.end_day,
+        last_seen_at=now or _now(),
+        forgets_id=target.id,
+    )
+    session.add(card)
+    session.flush()
+    session.add(
+        Notification(
+            user_id=user_id,
+            kind="memory",
+            title="Forget this?",
+            body=target.text,
+            link="/memory",
+            fact_id=card.id,
+        )
+    )
+    session.flush()
+    return card
 
 
 def decide_fact(
@@ -392,6 +449,15 @@ def decide_fact(
     )
     fact.status = "approved" if approve else "declined"
     fact.decided_at = now or _now()
+    if fact.forgets_id is not None:
+        # Forget: the kept fact goes. Keep it: only the question goes; it never counts as a
+        # declined fact, which would stop the same words from being kept again.
+        old = session.get(MemoryFact, fact.forgets_id)
+        if approve and old is not None and old.user_id == user_id:
+            session.delete(old)
+        session.delete(fact)
+        session.flush()
+        return fact
     if approve and fact.replaces_id and (old := session.get(MemoryFact, fact.replaces_id)):
         if old.user_id == user_id:  # kept the new version: the old one is no longer true
             session.delete(old)

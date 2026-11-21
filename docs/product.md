@@ -17,20 +17,22 @@ to a computed statistic.
 
 | Screen | What the user does |
 |---|---|
-| **Welcome, sign up, sign in** | Learns what Patterns does, creates an account, and waits for the owner's approval (the app is in testing). |
+| **Welcome, sign up, sign in** | Learns what Patterns does, creates an account, and gets access through a configured pilot invitation or the owner's approval. |
 | **Today** | Sees today's recovery score with its breakdown, last night's sleep, activity compared with their usual, and the morning check-in. |
 | **Findings** | Reads what changed recently and why, each finding with its evidence. Answers the agent's context questions. |
 | **Ask** | Asks questions about their data; answers come from the expert that owns the topic and cite evidence. |
 | **Reminders** | Approves, mutes or declines reminders the agent proposes. Nothing is sent without approval. |
-| **Data** | Connects their Google Health account (whole history, then kept synced), sees data coverage, picks light or dark, signs out; the owner also approves sign-ups. Takeout upload and deleting data are planned. |
+| **Data** | Connects their Google Health account (whole history, then kept synced), sees data coverage, picks light or dark, signs out; the owner also approves sign-ups. Takeout upload is planned. An owner handles account deletion requests through the CLI. |
 
-## Agent-assisted logging (core planned capability)
+<a id="agent-assisted-logging-core-planned-capability"></a>
+
+## Agent-assisted logging
 
 The agent helps the person record workouts and food through conversation, alongside analysing
 patterns. Activity owns workout proposals; Nutrition owns food proposals. The first local
 implementation supports supplied-value food/workout drafts through Auto, review/edit/confirm
 cards, cancellation and undo, plus saved entries on Data. Real Google writes are off by
-default; one real food entry was created and undone on 2026-10-25. Food lookup, telemetry summaries and photos remain planned.
+default; one real food entry was created and undone on 2026-10-25. Food lookup scales nutrient values to supplied grams, and workout drafts can include tracker roll-ups for their interval. Photo input remains planned.
 
 The shared flow is **collect missing details → propose → review/edit → confirm → execute → undo**.
 The agent cannot grant approval or write to Google directly. Each confirmation applies to one
@@ -268,7 +270,9 @@ All four experts (sleep, recovery, activity, nutrition) are part of the demo.
 - **Experts:** the same evaluation suite run on the expert system and on a single general agent,
   to show whether the split is worth it.
 
-## Teams (planned)
+<a id="teams-planned"></a>
+
+## Teams
 
 A supervisor can invite employees into a team and receives a weekly report on the team's
 patterns: aggregates of each member's change against their own baseline, never anyone's own

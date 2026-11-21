@@ -131,9 +131,13 @@ def test_the_notes_quote_only_numbers_the_evidence_holds(seed):
             assert text_problems(f"You could try this: {option['note']}.", [evidence]) == []
 
 
-def suggestion(text: str, evidence) -> Claim:
+def suggestion(text: str, evidence, option: str = "weekend_shift") -> Claim:
     return Claim(
-        text=text, kind="suggestion", evidence_ids=[evidence.id], metric=evidence.metrics[0]
+        text=text,
+        kind="suggestion",
+        evidence_ids=[evidence.id],
+        metric=evidence.metrics[0],
+        option=option,
     )
 
 

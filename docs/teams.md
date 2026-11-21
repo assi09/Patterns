@@ -9,8 +9,7 @@ This sends health data toward an employer, so the design starts from what the su
 **not** see. There are two layers. Joining a team shares only team aggregates. Showing your own
 named levels is a separate switch that each person turns on and off themselves. Status: roles,
 teams, joining, leaving, the levels switch, team statistics, weekly reports (templated or
-model-written, checked), the app screens and the weekly email are built; the Monday schedule
-comes with deployment.
+model-written, checked), the app screens and the weekly email are built; the Railway cron runs `python -m app.teams weekly --agent` on Mondays at 06:00 UTC.
 
 ## What the supervisor sees, and what they never see
 
@@ -214,10 +213,12 @@ Small PRs, each green and verified:
 8. App, supervisor side: Team tab, report, named levels, team settings. **Done**: a Team tab
    after Today, shown to supervisors only; create a team, copy or renew the code, make last
    week's report, the headline with the checked prose and the figures, shared levels, past
-   weeks. One team per supervisor in the app for now.
+   weeks. Supervisors with multiple teams use the team switcher.
 9. Scheduling, with the deployment.
 
-## Next
+## November 11 backlog (historical)
+
+The team evaluation, backend screen checks and agent-written weekly briefing were completed after this list was recorded. See [results](evaluation.md#the-team-agent-privacy-attacks-planted-changes-real-people-2026-11-12) and the later implementation sections below.
 
 Built since: the check across every area, daily alerts, and the team agent with chat, notes and
 challenges or messages that wait for approval (sections below). Left, as of 2026-11-11:
@@ -247,7 +248,9 @@ agent, and the reason at the top of the Team tab. With 10 people, the safe layou
 - A verified sending domain for Resend, so reports can reach any supervisor's address.
 - Whether 5 is the right floor for a demo team; it can only go up, never down.
 
-## The Monday check across every area (built, no agent on it yet)
+## The Monday check across every area
+
+The weekly report and the team agent both call `team_scan`.
 
 `team_scan` in `backend/app/analysis/team.py` looks at every team metric for the last four weeks, each
 against one fixed baseline, the 28 days before those weeks, so a lasting change is not absorbed by its

@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_small_model: str = "gpt-5.4-mini"
     openai_large_model: str = "gpt-5.5"
+    # Reads each resolved request back against the message (app.agent.readback). Off: measured
+    # on 2026-11-20, gpt-5.4-nano sent back correct readings in at least 6 of about 20 checked
+    # turns, while the reader's first reading was right on 162 of 163 data turns in the v7 run.
+    read_back_enabled: bool = False
+    openai_check_model: str = "gpt-5.4-nano"
     # The data agent's tool loop, tuned apart from the small jobs (C4: configuration per role).
     # None keeps the small model and the API's defaults (no reasoning, temperature 1).
     openai_agent_model: str | None = None

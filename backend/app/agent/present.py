@@ -91,6 +91,29 @@ SUFFIXES = {
 }
 
 
+# Other names people and the app use for a metric. The app shows the stress score as "physical
+# stress signs", and "stress-signs score" was read as strain (the v6 audit). Read by the request
+# reader's registry, by the checks on what the words name, and by the overview's finding checks.
+ALIASES: dict[str, tuple[str, ...]] = {
+    "stress_score": (
+        "physical stress signs",
+        "physical stress-signs score",
+        "stress-signs score",
+        "stress signs",
+    ),
+    "hrv_ms": ("hrv", "heart rate variability"),
+    "resting_hr": ("resting pulse", "resting heart-rate", "rhr"),
+    "rem_sleep_minutes": ("rem",),
+    "awake_in_bed_minutes": ("time awake", "awake time in bed"),
+    "checkin_rating": ("check-in rating", "check-in"),
+    "steps": ("step count", "step total"),
+    "active_zone_minutes": ("azm", "zone minutes"),
+    "sleep_minutes": ("sleep duration", "total sleep"),
+    "calories": ("energy burned", "calorie burn", "energy expenditure"),
+    "distance_km": ("distance walked",),
+}
+
+
 def label(metric: str) -> str:
     info = METRICS.get(metric)
     return info.label if info else metric.replace("_", " ")

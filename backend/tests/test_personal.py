@@ -66,21 +66,14 @@ def test_night_work_rules_out_clock_time_bedtimes():
     assert fit_to_life(["They no longer work night shifts"]).levers == frozenset()
 
 
-def test_memory_can_back_a_suggestion_but_not_a_number():
+def test_memory_alone_backs_no_suggestion_and_no_number():
+    """What they told the app tests no action: it can shape how a tested option is said, never
+    be the option (a saved fact backed any advice at all, the review of the binding)."""
     record = memory_evidence(Relevant("Works night shifts", "kept", 1.0))
     held = {record.id: record}
-    fine = Claim(
-        text="You could try sleeping right after a shift.",
-        kind="suggestion",
-        evidence_ids=[record.id],
-    )
-    assert check_claim(fine, held) == []
-    invented = Claim(
-        text="You could try sleeping 9 hours after a shift.",
-        kind="suggestion",
-        evidence_ids=[record.id],
-    )
-    assert check_claim(invented, held)
+    for text in ("You could try sleeping right after a shift.", "You could try 9 hours."):
+        claim = Claim(text=text, kind="suggestion", evidence_ids=[record.id])
+        assert any("tests no habit" in r for r in check_claim(claim, held))
 
 
 def test_an_answer_must_use_what_is_known_about_them():

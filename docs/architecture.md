@@ -19,7 +19,7 @@ verifier rejects statements it cannot match to one.
  Google Health API     Takeout export          Agent                       Postgres
  (live sync) ──┐       (offline import) ─┐     router → experts            users, daily metrics,
                ▼                         ▼     over analysis tools         sync runs, accounts,
-          daily table (same columns from either source)                    chat, memory; later traces
+          daily table (same columns from either source)                    chat, memory, stored traces
                │                                   │
                ▼                                   ▼
         Analysis tools (deterministic) ──► Evidence ──► Verifier ──► report / answer
@@ -37,15 +37,15 @@ verifier rejects statements it cannot match to one.
 | Screen and templated report (the no-LLM baseline) | `backend/app/analysis/screen.py`, `report.py` | done |
 | Synthetic data with planted effects | `backend/app/synthetic.py` | done |
 | General agent, verifier, readable findings | `backend/app/agent/` | done |
-| Experts and consult | `backend/app/agent/experts.py` | sleep, recovery, activity; nutrition defined, waiting for its columns |
-| Recovery score | `backend/app/analysis/` | planned, see [product.md](product.md#recovery-score) |
+| Experts and consult | `backend/app/agent/experts.py` | sleep, recovery, activity and nutrition; nutrition can propose food logs and use food lookup |
+| Recovery score | `backend/app/analysis/` | implemented in `day.py` (`recovery_score`, `with_scores`); validation against user check-ins remains open |
 | Router and the ask flow | `backend/app/agent/router.py`, `ask.py` | Jev with keyword fallback; LLM router for the evaluation |
-| Context builder | `backend/app/agent/context.py` | conversation and attachments; other memory planned |
-| Accounts | `backend/app/auth/`, `backend/app/api/auth.py` | email and password (scrypt), sessions as hashed tokens, approval of each sign-up by the owner, `python -m app.auth` |
+| Context builder | `backend/app/agent/context.py` | conversation history, attachments, cited evidence and selected memory |
+| Accounts | `backend/app/auth/`, `backend/app/api/auth.py` | email and password (scrypt), sessions as hashed tokens, owner approval or a configured pilot invitation, `python -m app.auth` |
 | API | `backend/app/api/` | auth, `/data/status`, `/reports/latest`, `/evidence/{id}`, `/chat`, `/google/*`; every data endpoint serves the signed-in person's own data |
-| Mobile app | `mobile/` | landing, sign-up and sign-in, waiting for approval, Access requests (owner); Today, Ask (real agent), Reminders (mock), Data (Connect Google Health) |
+| Mobile app | `mobile/` | landing, sign-up and sign-in, waiting for approval, Access requests (owner); Today, Ask (real agent), Reminders (API), Data (Connect Google Health) |
 | Advice guard and the Jev client | `backend/app/agent/guard.py`, `jev.py` | checks shown text by meaning |
-| Evaluation suite | `eval/` | started: the advice sentence set; the rest planned |
+| Evaluation suite | `eval/` | PHIA and baselines, planted-effect tests, router, RAG, verifier, team and conversation evaluations; [results](evaluation.md) |
 
 ### Ingestion
 
@@ -79,13 +79,12 @@ tests. Daily metrics are stored one row per user, source, day and metric, so new
 nutrition) need no migration. Every table holding a person's data has a `user_id`, and every query
 filters on it. Tables for later features are added by migration when the feature is built.
 
-The conversation is one thread per person (`chat_messages`): each question with its attachment,
+A person can have multiple conversations. Each chat message belongs to its user, and messages in a thread carry its conversation ID. The thread stores each question with its attachment,
 and each answer with its verified claims, who answered, whether the router chose them, whom they
 consulted, whether it was refused, and the run id that links it to its trace. **Only evidence a
 verified claim cites is stored** (`evidence`, once per id), so the app can show it and a follow-up
 can cite it without recomputing; everything else a run computed can be recomputed from the data.
-Both are deleted with the person. Each answer also stores its cost, which the daily spending caps
-add up.
+Both are deleted with the person. Each answer also stores its cost. The spend ledger preserves charges when someone deletes a conversation.
 
 Accounts are `users` (email, scrypt password hash, `pending`/`approved`/`rejected`) and
 `auth_sessions` (only a SHA-256 hash of each session token). A person's Google token is in
@@ -248,7 +247,7 @@ never treated as a test of a change.
 
 The following requirements also cover the remaining capabilities:
 
-Workout and nutrition logging are a core planned extension; see
+Workout and nutrition logging are implemented. The original executor design follows; see
 [product.md](product.md#agent-assisted-logging-core-planned-capability). Reuse accounts, expert
 routing, chat and encrypted Google connections. The current analysis toolbox remains read-only;
 add proposal tools and a separate deterministic executor, never unrestricted model write access.
@@ -371,10 +370,15 @@ measurement: where it and their data disagree, the data wins and the answer says
 what is known about them, recall starts from the profile; another chat's older wording is out of
 date, and if a reply fails its checks the fallback lists what was kept, never an old chat.
 
-**Time in follow-ups.** "The day before that" is turned into a date by code, from the day the last
-answer was about, before the follow-up is rewritten; a question naming a day ("around Aug 15") is
-checked and answered on that day, and an event the person kept that overlaps it is put in front of
-the agent, to be said in their words as something that lined up, never as a cause or a statistic.
+**Time in follow-ups (local update, 2026-11-18).** A constrained small-model reader interprets
+the request into typed metrics, operations, comparisons and date expressions. Code performs
+calendar arithmetic, validates references/capabilities and retains data scope separately from
+guidance subjects in the owned conversation's existing answer trace. Precise supported data
+questions execute and render directly from deterministic evidence; broad investigations retain
+the expert loop. The former phrase-based scope path remains for legacy adapters/scripted fixtures,
+not the normal OpenAI reader path. An event the person kept that overlaps a question's dates can
+still be described as something that lined up, never as a cause or a statistic. See
+[the request contract, validation and limits](typed-requests.md).
 
 ### Searching
 
@@ -546,7 +550,7 @@ The repository is public. Personal exports live under `data/` or `Takeout/`, bot
 are never committed; so are `.env` (the OAuth client ID and secret, the token encryption key) and
 the owner's Google sign-in token in `data/`. Passwords are stored as scrypt hashes, session tokens
 as hashes, Google tokens encrypted; no request returns another person's data or chat. The analysis
-LLM receives aggregated statistics, never raw sensor rows or account data. The planned logging
+LLM receives aggregated statistics, never raw sensor rows or account data. The logging
 flow also needs user-supplied entry details; optional photo estimation has the separate consent
 and retention requirements above. Tests and evaluation use the synthetic generator, whose
 baselines are generic values, not taken from any real export.

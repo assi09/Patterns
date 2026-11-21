@@ -1,7 +1,7 @@
 # Roadmap
 
-The approved plan from here to the demo (around the end of November 2026), agreed on 2026-10-21
-after a 20-question planning session. Current state: [status.md](status.md). Each item ships as
+The original October roadmap, agreed on 2026-10-21
+after a 20-question planning session. The current [plan](plan.md) targets November 23 for readiness and December 5 for presentations. Shipped work is recorded in [status.md](status.md). Each item ships as
 its own pull request ([AGENTS.md](../AGENTS.md)).
 
 **Most of the build happens in the next two weeks**; the rest of November is buffer and

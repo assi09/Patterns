@@ -406,6 +406,17 @@ describe('memory', () => {
     await expect(mockClient.decideMemory(fact.id, true)).rejects.toMatchObject({ status: 422 });
   });
 
+  it('deletes a kept fact only when its forget card is tapped', async () => {
+    const card = (await mockClient.getMemory()).waiting.find((f) => f.action === 'forget');
+    expect(card?.forgets).toBeTruthy();
+    const target = card!.forgets!;
+    expect((await mockClient.getMemory()).kept.map((f) => f.id)).toContain(target);
+    await mockClient.decideMemory(card!.id, true);
+    const after = await mockClient.getMemory();
+    expect(after.kept.map((f) => f.id)).not.toContain(target);
+    expect(after.waiting.map((f) => f.id)).not.toContain(card!.id);
+  });
+
   it('refuses a medical rewording, and forgets on request', async () => {
     const [fact] = (await mockClient.getMemory()).kept;
     await expect(mockClient.rewordMemory(fact.id, 'Has insomnia')).rejects.toMatchObject({

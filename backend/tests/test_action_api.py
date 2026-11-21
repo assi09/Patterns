@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from alembic import command
@@ -402,6 +403,89 @@ def test_without_google_a_workout_draft_is_kept_unmeasured(setup):
     created = propose(client, headers, workout)
     assert created.status_code == 201
     assert created.json()["log"]["measured"]["status"] == "unavailable"
+
+
+def test_semantic_correction_replaces_the_card_and_confirmation_cannot_write(setup):
+    client, _, agent = setup
+    headers = sign_in(setup)
+    start = datetime.now(UTC) - timedelta(hours=3)
+    original = {
+        "kind": "workout",
+        "exerciseType": "WALKING",
+        "startTime": start.isoformat(),
+        "endTime": (start + timedelta(minutes=42)).isoformat(),
+        "activeSeconds": 2520,
+    }
+    corrected = original | {
+        "endTime": (start + timedelta(minutes=48)).isoformat(),
+        "activeSeconds": 2880,
+    }
+    moved_start = start - timedelta(days=1)
+    moved_day = moved_start.astimezone(ZoneInfo(settings.timezone)).date().isoformat()
+    moved = corrected | {
+        "startTime": moved_start.isoformat(),
+        "endTime": (moved_start + timedelta(minutes=48)).isoformat(),
+    }
+    agent.llm.request_turns = [
+        ScriptedLLM.call("read_request", kind="logging"),
+        ScriptedLLM.call("read_request", kind="correction", duration_minutes=48),
+        ScriptedLLM.call(
+            "read_request",
+            kind="correction",
+            log_day={"kind": "explicit", "start": moved_day, "end": moved_day},
+        ),
+        ScriptedLLM.call("read_request", kind="confirmation"),
+    ]
+    agent.llm.turns = [
+        ScriptedLLM.call("propose_workout_log", **original),
+        ScriptedLLM.call(SUBMIT, summary="Draft ready for review.", claims=[]),
+        ScriptedLLM.call("propose_workout_log", **corrected),
+        ScriptedLLM.call(SUBMIT, summary="Corrected draft ready for review.", claims=[]),
+        ScriptedLLM.call("propose_workout_log", **moved),
+        ScriptedLLM.call(SUBMIT, summary="Date corrected on the new card.", claims=[]),
+    ]
+    response = client.post("/chat", headers=headers, json={"text": "Log a 42-minute walk today."})
+    assert response.status_code == 200
+    first = response.json()[-1]
+    assert first["actionIds"]
+    response = client.post(
+        "/chat",
+        headers=headers,
+        json={
+            "text": "Small correction: duration 48 not 42, everything else unchanged.",
+            "conversationId": first["conversationId"],
+        },
+    )
+    second = response.json()[-1]
+    assert second["actionIds"] and second["actionIds"] != first["actionIds"]
+    entries = client.get("/actions", headers=headers).json()
+    old = next(e for e in entries if e["id"] == first["actionIds"][0])
+    new = next(e for e in entries if e["id"] == second["actionIds"][0])
+    assert old["status"] == "cancelled" and new["status"] == "draft"
+    assert new["log"]["activeSeconds"] == 2880
+    assert datetime.fromisoformat(new["log"]["startTime"]) == start
+    response = client.post(
+        "/chat",
+        headers=headers,
+        json={
+            "text": f"Keep the duration; move it to {moved_day} instead.",
+            "conversationId": first["conversationId"],
+        },
+    )
+    third = response.json()[-1]
+    assert third["actionIds"] and third["actionIds"] != second["actionIds"]
+    entries = client.get("/actions", headers=headers).json()
+    moved_card = next(e for e in entries if e["id"] == third["actionIds"][0])
+    assert moved_card["log"]["activeSeconds"] == 2880
+    assert datetime.fromisoformat(moved_card["log"]["startTime"]) == moved_start
+    assert next(e for e in entries if e["id"] == second["actionIds"][0])["status"] == "cancelled"
+    response = client.post(
+        "/chat",
+        headers=headers,
+        json={"text": "Yep, log it.", "conversationId": first["conversationId"]},
+    )
+    assert "card" in response.json()[-1]["text"].lower()
+    assert all(e["status"] != "succeeded" for e in client.get("/actions", headers=headers).json())
 
 
 def test_a_log_only_workout_request_is_not_told_it_left_activity_uncovered(setup):
