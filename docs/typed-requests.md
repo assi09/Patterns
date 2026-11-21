@@ -551,6 +551,24 @@ tested with the review's reproduction and contrasting controls (`tests/test_40ba
 | 7 | An explanation ("why") says only what its verified claims say: its shown text is assembled from them, and what cannot be told is code's note. The model's surrounding prose had added "feeling more run down", which nobody reported and no tool measured. A reply written by code, or one with no verified claim, is left as it is. |
 
 Codex's probes (`data/eval/40baaee_review/probes.py`) now give the expected result for every case
-but the direct verifier replay of the old "run down" answer. That class is closed in assembly
-(§7), not by the claim and summary checks, which are unchanged. The reader schema itself is
-still unmeasured live.
+but the direct verifier replay of the old "run down" answer, whose checks are unchanged. The
+reader schema itself is still unmeasured live.
+
+## After the offline review of `462f700` (2026-11-21)
+
+Codex's next review ([findings](pr-195-462f700-offline-review.md)) found that §7 above was not
+enough. The joined claim texts were still the model's: an unreported outcome ("You have been
+feeling more run down", "You have been walking to work") written inside a valid steps-change
+claim was accepted and published. It also found two replay boundaries. Fixes, tested with the
+review's reproductions and controls (`tests/test_462f700_review.py`):
+
+| Finding | Contract now enforced |
+|---|---|
+| 1 | An explanation's shown text is stated by code from the records its claims cite (`findings.code_claim`): each record once, in citation order, as a fixed sentence of its own statistic. That covers a change or no change with its figures, a trend, or an association with its correlation. A record says nothing beyond its metric and statistic, so no claim text the model wrote is published. A computed check-in result is said as its rating, and an association as the test, never a cause. When nothing cited is a finding code can state, the reply says it can't tie an explanation to a tested result. The verifier's claim checks are unchanged and still accept such claim text, so the guarantee comes from assembly. |
+| 2 | A state saved before whole answers were kept replays a kept result beside guidance, a recall or a status only when the last turn's own verified claims name its metric. A plank answer no longer reopens an older resting heart rate. Older results stay addressable by index. New states keep their exact components. |
+| 3 | The saved answer keeps its point count. An unchanged or edited repeat inherits it, and a new count wins. A new question starts with its own. |
+
+What this costs: explanation answers now read as code's statements of the tested results plus
+the limits note. Model-written linking or attribution ("you said you've been tired") is not
+shown. The reader schema and these assembly changes are still unmeasured live; the next step is
+the capped matched-reader comparison.
