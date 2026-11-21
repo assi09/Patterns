@@ -295,3 +295,18 @@ within the existing cap. That gate ran once: **23/24**, one regression within th
 allowance. See the [689fa7c handoff](independent-audit-689fa7c-handoff.md): HOLD; 504 full,
 33 partial and 55 failed fresh turns, with every delivered answer reviewed and messages/citations
 reopened. The PHIA result does not clear the fresh audit's named-period and other release blockers.
+
+### November 22, 2026 — e1c1eec matched-reader development comparison
+
+Frozen candidate `e1c1eec0535c013b103ad33088bf41492ef24f1c` versus baseline `689fa7c` on
+152 exposed synthetic inputs per arm. The baseline cost **$0.227755200** and candidate
+**$0.343948800**: combined **$0.571704000**, entirely OpenAI reader calls, below the predeclared
+combined $0.75 ceiling. No paid judge, embeddings, web lookup, PHIA or Google traffic/writes.
+Offline tests, renderer probes and counterfactual/fixture checks cost $0.
+
+Shared new-$5 cumulative spend is **$2.101757752** (OpenAI $2.044401460, Jev $0.057356292),
+with **$0 unresolved reservations**, leaving **$2.898242248**. Common-field request matches
+improved 103/150 → 133/150 (42 improved, 12 spoiled); the two new duration-basis cases are
+reported separately. These are development extraction checks, not held-out answer accuracy.
+The successor-block category regressed 12/12 → 3/12, and a deterministic renderer issue remains.
+No fresh release audit ran. See the [e1c1eec handoff](independent-audit-e1c1eec-handoff.md).

@@ -572,3 +572,27 @@ What this costs: explanation answers now read as code's statements of the tested
 the limits note. Model-written linking or attribution ("you said you've been tired") is not
 shown. The reader schema and these assembly changes are still unmeasured live; the next step is
 the capped matched-reader comparison.
+
+## After the review and matched-reader comparison of `e1c1eec` (2026-11-22)
+
+Codex's matched comparison ([handoff](independent-audit-e1c1eec-handoff.md)) put the new reader
+at 133/150 against 103/150 on exposed development inputs, with 42 improved and 12 spoiled. Most
+of the spoiled cases were one regression: "the next four days after that block" fell from
+12/12 to 3/12, because the reader placed the new last day where the first belonged. The review
+also found renderer and target-scope gaps. Fixes, tested with the review's reproductions and
+controls (`tests/test_e1c1eec_review.py`):
+
+| § | Contract now enforced |
+|---|---|
+| A | A record is stated by its own tool's meaning, with the figures that tool holds. A window comparison is "went up: X against Y" and a change point is "went up around <date>: X after against Y before". A weekday split compares weekend days with weekdays, and a tag effect compares tagged days with untagged ones, as a value claim, never a change. Each stated claim passes the verifier again. A record with too little data or a figure missing is not stated, and the reply notes the omission. The renderer never writes an empty sentence and never falls back to the model's words. |
+| B | A block right after or before an earlier period (`block_after`, `block_before`) or the whole period moved (`whole_shifted`) is its own period kind. The reader says the relation and the count, and code works out the boundary, or keeps the width for a shift. Placed endpoints (`from_earlier`) stay for anchored ranges inside or ending on the period. Neither the arithmetic nor the placed form changed. |
+| C | A repeat says its target (`same`, `named`, `every_metric`) apart from its statistic. Every measure asked for is every measure. A broad look edited to a comparison keeps its breadth, and either way the result is the existing overview. Measures a repeat states are the ones used. A target that contradicts its metrics goes back. A repeat beside a status, a recall or guidance is resolved too, and what it repeats becomes that answer's reads. |
+
+Checked offline, at no cost: replaying the candidate arm's 152 recorded readings through this
+code and scoring them with Codex's frozen `score` changes nothing that passed (135 of 135). It
+turns one failure into a pass (`main_side_scope-01/t3`), and with its stored full claims
+`mixed_log-01/t3` passes too. The successor-block regression and the other reader-choice misses
+cannot be fixed by replaying old readings: the new period kinds and `target` need the matched
+reader step again, with the protected before, ending, trailing and calendar controls. Not
+addressed: the chat-only recall miss (`memory_chatonly-01/t2`, D). The provenance guard stays,
+and the retry still reads the recall as unsure.
