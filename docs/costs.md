@@ -280,3 +280,18 @@ planning/code review cost **$0**, leaving the new **$5.00** unspent. Proposed al
 $0.75 matched development diagnosis, $3.50 fresh broad conversations, $0.25 PHIA B1 and $0.50
 uncertainty/confirmation reserve, all under one combined meter. No paid run started. See
 [the general repair and expanded audit plan](pr-195-general-repair-plan.md).
+
+### November 21, 2026 — expanded independent audit of 689fa7c
+
+Against the user's new shared **$5** authorization: the 22-input matched reader development
+comparison cost **$0.074579400**; 592 fresh synthetic API turns in 234 conversations cost
+**$1.409913034**; the frozen 24-item PHIA B1 gate cost **$0.045561318**. Combined
+**$1.530053752** (OpenAI $1.472697460, Jev $0.057356292), with **$0 unresolved reservations**,
+leaving **$3.469946248** for subsequent audits. The prior balance is not added. Backend/failure
+tests, source-row checks, adapter probes and reopening cost $0. No paid judge or Google
+traffic/writes. Automatic approval review initially rejected the PHIA invocation before any
+calls; the user then specifically approved the public health-derived payload transfer to OpenAI
+within the existing cap. That gate ran once: **23/24**, one regression within the predeclared
+allowance. See the [689fa7c handoff](independent-audit-689fa7c-handoff.md): HOLD; 504 full,
+33 partial and 55 failed fresh turns, with every delivered answer reviewed and messages/citations
+reopened. The PHIA result does not clear the fresh audit's named-period and other release blockers.

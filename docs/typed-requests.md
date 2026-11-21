@@ -503,3 +503,33 @@ the plan's reproduction and its contrasting control (`tests/test_b3_reliability.
 
 The C and B reader changes, and `points`, are prompt and schema changes with no live measurement
 yet. The plan's matched-reader step and Codex's unseen paired deck decide whether they help.
+
+## After the independent audit of `689fa7c` (2026-11-21)
+
+Codex's expanded audit ([handoff](independent-audit-689fa7c-handoff.md)) of 592 fresh turns held
+the merge: 504 full, 33 partial, 55 failed, with direct metric openings at 68/68 and date
+follow-ups at 44/68. Grouped by first wrong decision, most failures share a few causes. Twenty
+were a redo that could not carry an edit, and seven were a date edit's offset given for the
+wrong end. Three were a dated follow-up with no metric read as every measure. The rest were
+actions, memory, option assembly and reply wording. Each change below enforces one contract
+across question families, tested with the audit's reproduction and a contrasting control
+(`tests/test_689_reliability.py`):
+
+| Handoff § | Contract now enforced |
+|---|---|
+| 1 | A redo says the request it repeats, field by field, as a data clause does: its periods (required, `same_as_earlier` to keep them), statistic (`inherit` keeps it), measures, comparison, threshold and lag (null keeps them). The `keeps_the_data` flag is gone: it was the same reader judging its own choice. Changed, the redo is the earlier request with what it keeps inherited, resolved as that request's own kind. Unchanged, it is the last answer as it was (guidance, a status with its figure, a look). |
+| 1 | A date edit places the new period's first day, its last day or both, each named for the day it is, plus a length. The single offset with a starts/ends flag was misread one way every time: the offset given was always the start. Code checks that two placed days and a length agree, and sends back a period with nothing placed or no length. Recorded readings in the old form still parse as the day their boundary named. |
+| 1 | Naming no metric keeps the earlier result's metric when there is one. Only a cold question, or an explicit `every_metric`, is every measure. |
+| 2 | The reader sees each earlier result's comparison, threshold, lag, meal and scope. A follow-up's lag left null keeps the earlier lag. Older results stay addressable by index after the last answer's ("return to the steps result" after other answers). |
+| 3 | A paused card's duration edit says which duration it is (`duration_is`) and any pause stated. Code works out active and elapsed time from the card, and the draft must match both. One duration on a paused card with no basis gets one question naming the pause. The reader's validated day binds the action's day checks, so the day pattern no longer refuses "Oct31", and its exercise type replaces a generic one. A status question reads the waiting card's values. |
+| 4 | A clause counts as copied when an earlier message holds nearly all its words and holds more of them than the current message does. Such a clause is dropped when the remaining clauses cover the current message, and sent back otherwise. Remember and forget get only the memory clause's own words. The forget picker sees the turns just before. "Nothing is kept right now" replaces "nothing has been approved". |
+| 5 | A coaching answer's public guidance is searched for the resolved request's measures, or the ones its habits were tested for, never for the follow-up's words about form. General points are labelled with their source. A count the evidence and sources cannot reach is said. |
+| 6 | A food read carries the nutrients it asks about. An unrecorded one is said unknown, never repeated away or given as zero. A food-scope retry keeps the fields its error was not about (`RetryReading.keeps`). A request to join two sources, or to invent a value or evidence, is a typed field with a reply in code. A constant series and a too-few-days association cite the records that show them. A guidance topic keeps its base movement. An exercise with no vetted passage is said so, never answered from another exercise or the web. A medical flag needs its words from the current message. |
+| Unplaced | An `other` clause that is neither small talk nor about the person, or a reading with no clause, goes back once with what a follow-up can be, before anyone is asked. |
+
+The redo, date-edit, `duration_is`/`paused_minutes`, `exercise_type`, `movement`, `nutrients`,
+`fabricate`, `mix_sources`, `medical_said` and `message` fields change the reader's schema and
+prompt, and none has been measured live: no paid call was made for this round. The awake-time
+wording for PHIA B1-021 is a prompt change of the same kind. Not addressed here: the
+investigation prose that calls a measure steady or "run down" without a test (handoff §6) needs
+the verifier to check adjacent prose, a larger change.
