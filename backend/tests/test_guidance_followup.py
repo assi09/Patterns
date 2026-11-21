@@ -67,7 +67,8 @@ def test_matching_variants_are_selected_without_a_list_of_exercise_names():
     regular, qualified = map(found, ["Plank", "RKC Plank"])
     assert for_topic([qualified, regular], "plank form") == [regular]
     assert for_topic([regular, qualified], "RKC plank form") == [qualified]
-    assert for_topic([weighted], "unmatched exercise") == [weighted]
+    # Nothing named word for word and no pick: no variant is offered in its place.
+    assert for_topic([weighted], "unmatched exercise") == []
 
 
 def test_a_failed_grounded_reply_cannot_fall_back_to_the_first_exercise_variant():
@@ -82,8 +83,10 @@ def test_a_failed_grounded_reply_cannot_fall_back_to_the_first_exercise_variant(
     )
     outside = SimpleNamespace(web=lambda *args: {"error": "disabled"})
     result = answer_world(llm, "Where do my feet go in the bridge?", outside, topic="glute bridge")
-    assert any(s.get("type") == "reply" and s.get("problems") for s in result.trace)
-    assert result.stop_reason == "lookup_failed" and "couldn't confirm" in result.summary
+    # The pick failed (the scripted turn was no pick), so no variant was chosen in its place.
+    chosen = [s for s in result.trace if s.get("type") == "guidance_passages"]
+    assert chosen and not chosen[0]["passage_ids"]
+    assert result.stop_reason == "lookup_failed" and "99999" not in result.summary
 
 
 # ---- the same variant by meaning, and the passages already shown (the audit of 2026-11-19) ----
@@ -93,10 +96,19 @@ def exercise(title, kind="exercise"):
     return SimpleNamespace(passage=SimpleNamespace(title=title, kind=kind, id=title))
 
 
-def picker(*items):
+def picker(*titles):
+    """A variant pick that chooses titles by name, whatever order the titles are shown in."""
+    import json
+
     from app.agent.world import PICK_VARIANT
 
-    return ScriptedLLM([ScriptedLLM.call(PICK_VARIANT, items=list(items))])
+    def pick(messages):
+        task = messages[1]["content"]
+        numbered = json.loads(task.split("Titles: ", 1)[1].strip().strip("`").strip())
+        items = [int(n) for n, title in numbered.items() if title in titles]
+        return ScriptedLLM.call(PICK_VARIANT, items=items)
+
+    return ScriptedLLM([pick])
 
 
 def test_an_unweighted_squat_is_the_bodyweight_squat_by_meaning():
@@ -106,7 +118,7 @@ def test_an_unweighted_squat_is_the_bodyweight_squat_by_meaning():
         exercise, ["Weighted Squat", "Bodyweight Squat", "Olympic Squat"]
     )
     guideline = exercise("Muscle-strengthening activity", kind="guideline")
-    llm = picker(2)
+    llm = picker("Bodyweight Squat")
     kept = for_topic([weighted, bodyweight, barbell, guideline], "unweighted squat", llm, Budget())
     assert kept == [bodyweight, guideline]
     assert "Bodyweight Squat" in llm.requests[0]["messages"][1]["content"]
@@ -119,12 +131,17 @@ def test_no_matching_variant_leaves_out_every_other_exercise():
     assert for_topic([weighted, guideline], "unweighted squat", picker(), Budget()) == [guideline]
 
 
-def test_a_failed_pick_changes_nothing():
+def test_a_failed_pick_authorizes_no_other_variant():
+    """A failed pick kept every candidate, so a variant nobody asked for could answer (feet
+    elevated for a plain floor push-up, the 9228fe6 audit); a passage already shown stays."""
     from app.agent.llm import Budget
 
-    weighted = exercise("Weighted Squat")
+    weighted, shown = exercise("Weighted Squat"), exercise("Butt Lift (Bridge)")
     llm = ScriptedLLM([says("not a tool call")])
-    assert for_topic([weighted], "unweighted squat", llm, Budget()) == [weighted]
+    assert for_topic([weighted], "unweighted squat", llm, Budget()) == []
+    llm = ScriptedLLM([says("not a tool call")])
+    kept = for_topic([shown, weighted], "bridge", llm, Budget(), established=[shown.passage.id])
+    assert kept == [shown]
 
 
 def test_a_word_for_word_title_is_the_fallback_without_a_model():

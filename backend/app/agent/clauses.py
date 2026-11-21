@@ -53,14 +53,25 @@ class DaysEnding(Fields):
     offset: int = Field(ge=-3660, le=366)
 
 
+class SameAsEarlier(Fields):
+    """All of an earlier result's periods, unchanged: the same days, or the same comparison of
+    two periods ("why did that happen?", "what could I try, given those findings?", a new
+    threshold on the same days). Reusing a whole comparison is this, never an edit of each of
+    its periods (both wordings of "why" after a two-period look came back as two edits, the
+    9228fe6 audit)."""
+
+    kind: Literal["same_as_earlier"]
+
+
 class FromEarlier(Fields):
     """Days placed against an earlier period, every part of the edit said, and one computation
     for all of them: from the earlier period's first or last day (`landmark`), move `offset`
     days (+1 the day after, -1 the day before, 0 that day); the new period starts there or ends
     there (`boundary`); it is `length` days long: the number said, or the earlier period's own
     number of days when none is said.
-    After a five-day period: the same days again: its_first_day, 0, starts_there, 5. The whole
-    period two days earlier: its_first_day, -2, starts_there, 5. The next four days:
+    The same days, or a whole comparison, unchanged, is same_as_earlier. After a five-day
+    period: the whole period two days earlier: its_first_day, -2, starts_there, 5. The next four
+    days:
     its_last_day, +1, starts_there, 4. Four days ending the day before it began: its_first_day,
     -1, ends_there, 4. Its last three days: its_last_day, 0, ends_there, 3. Four days starting on
     its second day: its_first_day, +1, starts_there, 4."""
@@ -100,7 +111,7 @@ class AllHistory(Fields):
 
 
 Span = Annotated[
-    Dates | CalendarPeriod | Month | FromEarlier | DaysEnding | AllHistory,
+    Dates | CalendarPeriod | Month | SameAsEarlier | FromEarlier | DaysEnding | AllHistory,
     Field(discriminator="kind"),
 ]
 
@@ -111,6 +122,8 @@ def period_of(span: Span) -> Period:
         return Period(kind="explicit", start=span.start, end=span.end)
     if isinstance(span, CalendarPeriod):
         return Period(kind="calendar", unit=span.unit, offset_units=span.offset)
+    if isinstance(span, SameAsEarlier):
+        return Period(kind="inherit")
     if isinstance(span, FromEarlier):
         return Period(
             kind="beside",
@@ -237,6 +250,19 @@ class CorrectClause(Fields):
     )
 
 
+class RedoClause(Fields):
+    """The last answer again, in another form, with nothing new asked: more or fewer options,
+    which are personal and which general, shorter, another unit. "Give me up to three options
+    here, saying which are personal" after a look at their data was read as small talk, and the
+    look was lost (the 9228fe6 audit)."""
+
+    type: Literal["redo"]
+    said: str = SAID
+    options: int | None = Field(
+        default=None, ge=1, le=5, description="How many options or points they ask for."
+    )
+
+
 class StatusClause(Fields):
     """Asks whether something has been saved. Read-only."""
 
@@ -290,7 +316,8 @@ class OtherClause(Fields):
 
 
 Clause = Annotated[
-    DataClause
+    RedoClause
+    | DataClause
     | InvestigateClause
     | GuidanceClause
     | LogClause
@@ -328,7 +355,17 @@ class Said(Fields):
 # ---- into the internal reading ----
 
 # Which clause decides how the message is answered; the data clauses beside it are answered too.
-PRIMARY = ("log", "correct", "confirm", "status", "memory", "investigate", "guidance", "data")
+PRIMARY = (
+    "log",
+    "correct",
+    "confirm",
+    "status",
+    "memory",
+    "investigate",
+    "guidance",
+    "data",
+    "redo",
+)
 KIND = {
     "log": "logging",
     "correct": "correction",
@@ -338,6 +375,7 @@ KIND = {
     "investigate": "investigate",
     "guidance": "guidance",
     "data": "data",
+    "redo": "redo",
 }
 
 
@@ -385,12 +423,54 @@ def from_this_message(clause, question: str) -> bool:
 MIN_OWN_WORDS = 0.6
 
 
+def _whole_registry(clause) -> bool:
+    """A data clause about every measure they have: said so, or a tracker read over named days
+    that names no metric and no earlier result."""
+    return (
+        isinstance(clause, DataClause)
+        and clause.source == "tracker"
+        and clause.meal_type is None
+        and not clause.metrics
+        and (clause.every_metric or (bool(clause.periods) and clause.earlier_result is None))
+    )
+
+
 def _every_metric_looked_into(clauses: list) -> list:
     """Data clauses about every measure ("contrast my full set of measurements for Oct 11-31
     with Sep 20-Oct 10") are one look across every metric over their days: read as data, the
-    question got eight metrics' averages and no comparison (v8, and the b730 audit)."""
-    wide = [c for c in clauses if isinstance(c, DataClause) and c.every_metric]
-    if not wide or any(isinstance(c, InvestigateClause) for c in clauses):
+    question got eight metrics' averages and no comparison (v8, and the b730 audit).
+
+    Beside an investigation, the message has one look, written twice or split: an investigation
+    that names no days takes the one scope its data clauses share, and a whole-registry clause
+    over the investigation's own days is the same look, so it goes. Read as a side read, it
+    named no metric and asked for an earlier result on a cold question (the 9228fe6 review). A
+    side read of named metrics stays, and so does a whole-registry clause over other days."""
+    wide = [c for c in clauses if _whole_registry(c)]
+    looks = [c for c in clauses if isinstance(c, InvestigateClause)]
+    if looks:
+        scoped = [
+            c.periods
+            for c in clauses
+            if isinstance(c, DataClause) and c.periods and c.earlier_result is None
+        ]
+        if scoped and all(periods == scoped[0] for periods in scoped):
+            scope = scoped[0]
+            clauses = [
+                c.model_copy(update={"periods": list(scope)})
+                if isinstance(c, InvestigateClause) and not c.periods and c.earlier_result is None
+                else c
+                for c in clauses
+            ]
+        looks = [c for c in clauses if isinstance(c, InvestigateClause)]
+        same = [c for c in wide if any(c.periods == look.periods for look in looks)]
+        return [
+            c.model_copy(update={"every_metric": True})
+            if isinstance(c, InvestigateClause) and not c.metrics and same
+            else c
+            for c in clauses
+            if c not in same
+        ]
+    if not wide:
         return clauses
     widest = max(wide, key=lambda c: len(c.periods))
     looked = InvestigateClause(
@@ -475,6 +555,9 @@ def reading_from(said: Said, question: str = "") -> Reading:
             "recall": memory.recall,
             "states_new_fact": memory.states_new_fact,
         }
+    redo = next((c for c in clauses if isinstance(c, RedoClause)), None)
+    if redo is not None:
+        fields["redo_options"] = redo.options
     fields["status"] = "status" in types
     fields["clause_count"] = len(clauses)
     fields["told"] = any(

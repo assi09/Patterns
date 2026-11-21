@@ -1800,6 +1800,14 @@ def ask(
             described_days(result, typed, frame, _day(today or now), food_logs, now)
         if typed.focus == "coaching":
             one_coaching_conclusion(result, habits)
+            if len(named) == 2 and habits:
+                # The habit tests take one period: the later one of the comparison, said so,
+                # never the enclosing range (Sep 2-Oct 31 was cited for Oct 2-15 against Sep
+                # 1-14, the 9228fe6 audit).
+                result.notes.append(
+                    f"The habits were tested on {_when(named[0], _day(today or now))} only, the "
+                    "later of the two periods compared."
+                )
         result.notes += [
             n for n in coverage_notes(typed, frame, _day(today or now)) if n not in result.notes
         ]

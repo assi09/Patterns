@@ -508,7 +508,14 @@ def found(title, kind="exercise"):
 def test_the_variant_pick_decides_even_when_a_title_matches():
     """A word-for-word title match no longer bypasses the pick: "regular push-up" matched no
     title but got plyo and single-arm; "bodyweight bridge" got the physioball one (v7)."""
-    llm = ScriptedLLM([ScriptedLLM.call("same_exercise", items=[2])])
+
+    def pick(messages):  # by title: the titles are shown closest first
+        task = messages[1]["content"]
+        numbered = json.loads(task.split("Titles: ", 1)[1].strip().strip("`").strip())
+        items = [int(n) for n, title in numbered.items() if title == "Butt Lift (Bridge)"]
+        return ScriptedLLM.call("same_exercise", items=items)
+
+    llm = ScriptedLLM([pick])
     picked = for_topic(
         [found("Physioball Hip Bridge"), found("Butt Lift (Bridge)"), found("Sleep", "guideline")],
         "bodyweight bridge",

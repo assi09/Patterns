@@ -367,7 +367,9 @@ def answer_world(
                 # pick to choose from: "floor glute bridge" found only the barbell one by meaning,
                 # while the bodyweight "Butt Lift (Bridge)" was in the corpus (the v6 audit).
                 candidates += title_neighbours(topic)
-            selected = for_topic(_unique(candidates), topic, llm, budget)[:MAX_PASSAGES]
+            selected = for_topic(_unique(candidates), topic, llm, budget, established=active)[
+                :MAX_PASSAGES
+            ]
             records = [passage_evidence(f.passage) for f in selected]
             # Narrowed to the passages behind the reply once it is written (`supporting`).
             chosen = {"type": "guidance_passages", "passage_ids": [f.passage.id for f in selected]}
@@ -463,25 +465,35 @@ MAX_PASSAGES = 5
 MAX_NEIGHBOURS = 20
 
 
+def title_words(text: str) -> set[str]:
+    """A title's or a topic's words, one way for every use: "push-up", "pushups" and "Pushups"
+    are one word (the fallback split "push-up" in two and never matched "Pushups")."""
+    return {w.removesuffix("s") for w in re.findall(r"[a-z0-9]+", text.casefold().replace("-", ""))}
+
+
+def _closeness(topic: str):
+    """How near a title is to the movement named: most shared words, then fewest extra ones,
+    so the plain entry ("Pushups") comes before its variants ("Push-Ups With Feet Elevated"),
+    which corpus order put first among equal scores (the 9228fe6 audit)."""
+    wanted = title_words(topic)
+
+    def key(title: str):
+        have = title_words(title)
+        return (-len(wanted & have), len(have - wanted), title)
+
+    return key
+
+
 def title_neighbours(topic: str) -> list[Found]:
     """Exercise passages whose titles share the most words with the movement named: recall for
     the variant pick, which judges by meaning. Words, not a list of exercises or variants."""
-
-    def words(text: str) -> set[str]:
-        return {
-            w.removesuffix("s") for w in re.findall(r"[a-z]+", text.casefold().replace("-", ""))
-        }
-
-    wanted = {w for w in words(topic) if len(w) > 3}
-    scored = []
-    for passage in load_index().passages:
-        if passage.kind != "exercise":
-            continue
-        shared = len(wanted & words(passage.title))
-        if shared:
-            scored.append((shared, passage))
-    scored.sort(key=lambda item: -item[0])
-    return [Found(p, 0.0) for _, p in scored[:MAX_NEIGHBOURS]]
+    wanted = {w for w in title_words(topic) if len(w) > 3}
+    key = _closeness(topic)
+    scored = [
+        p for p in load_index().passages if p.kind == "exercise" and wanted & title_words(p.title)
+    ]
+    scored.sort(key=lambda p: key(p.title))
+    return [Found(p, 0.0) for p in scored[:MAX_NEIGHBOURS]]
 
 
 PICK_VARIANT = "same_exercise"
@@ -543,27 +555,37 @@ def _same_variant(llm: LLM, topic: str, titles: list[str], budget: Budget) -> se
     return None
 
 
-def for_topic(found, topic: str | None, llm: LLM | None = None, budget: Budget | None = None):
+def for_topic(
+    found,
+    topic: str | None,
+    llm: LLM | None = None,
+    budget: Budget | None = None,
+    established: Sequence[str] = (),
+):
     """The exercise passages for the variant the person named, chosen by a small model by meaning
     ("unweighted squat" is the bodyweight squat; a regular push-up is not a clock push-up); other
     passages (sleep, eating, routines) stay. Without a model, or if its pick fails, titles that
-    match the topic word for word, the most specific first; with none, everything stays.
+    match the topic word for word, the most specific first; with none, no exercise passage.
     """
     if not topic:
         return found
     exercises = [f for f in found if f.passage.kind == "exercise"]
     if exercises and llm is not None and budget is not None:
-        titles = list(dict.fromkeys(f.passage.title for f in exercises))[:25]
-        same = _same_variant(llm, topic, titles, budget)
+        # The closest titles first, so the plain entry is inside what the selector sees.
+        titles = sorted(dict.fromkeys(f.passage.title for f in exercises), key=_closeness(topic))
+        same = _same_variant(llm, topic, titles[:25], budget)
         if same is not None:
             return [f for f in found if f.passage.kind != "exercise" or f.passage.title in same]
-
-    def words(text):
-        return {word.removesuffix("s") for word in re.findall(r"[a-z0-9]+", text.casefold())}
-
-    wanted = words(topic)
-    matched = [f for f in exercises if words(f.passage.title) and words(f.passage.title) <= wanted]
-    if not matched:
+    # No pick: the passages an earlier answer already established for this movement, and titles
+    # the topic names word for word, the most specific; with neither, no exercise passage.
+    # Keeping every candidate let a variant nobody asked for answer (feet elevated for a plain
+    # floor push-up, the 9228fe6 audit).
+    if not exercises:
         return found
-    specificity = max(len(words(f.passage.title)) for f in matched)
-    return [f for f in matched if len(words(f.passage.title)) == specificity]
+    wanted = title_words(topic)
+    matched = [f for f in exercises if title_words(f.passage.title) <= wanted]
+    if matched:
+        specificity = max(len(title_words(f.passage.title)) for f in matched)
+        matched = [f for f in matched if len(title_words(f.passage.title)) == specificity]
+    kept = [f for f in exercises if getattr(f.passage, "id", None) in established or f in matched]
+    return [f for f in found if f.passage.kind != "exercise" or f in kept]

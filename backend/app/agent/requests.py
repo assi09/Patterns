@@ -93,9 +93,11 @@ class Reading(Fields):
         "status",
         "other",
         "clarify",
+        "redo",
     ]
     subject: Literal["self", "other", "general"] = "self"
     medical: bool = False  # asks for a diagnosis, a condition, treatment or medication
+    redo_options: int | None = None  # the last answer again, with this many options
     parts: list[Part] = Field(default_factory=list, max_length=8)
     topics: list[str] = Field(
         default_factory=list,
@@ -392,6 +394,22 @@ def _prior(part: Part, previous: list[ResolvedPart], inherited: bool) -> Resolve
     return previous[0]
 
 
+def _redo(request: Request, reading: Reading, state: dict) -> Request:
+    """The last answer again, in another form: the same request, its scope untouched. After a
+    look at their data, options asked for are coaching on that same look."""
+    previous = [ResolvedPart.model_validate(p) for p in state.get("data", [])]
+    if not previous:
+        raise Ambiguous("Which earlier answer should I give again?")
+    looked = all(p.operation == "describe" for p in previous)
+    request.parts = previous
+    if looked:
+        request.kind = "investigate"
+        request.focus = "coaching" if reading.redo_options else state.get("focus", "overview")
+    else:
+        request.kind = "data"
+    return request
+
+
 def _investigation(request: Request, reading: Reading, state: dict, today: date) -> Request:
     """A "why" or "what changed" keeps what it names: its metrics and its days, or those of the
     earlier result it points at ("why did that happen?" keeps that metric). Nothing named means
@@ -493,6 +511,8 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
             # Retrieval must still receive the concrete movement, including after other turns.
             request.guidance_question = f"About {request.topics[0]}: {reading.guidance_question}"
         return request
+    if reading.kind == "redo":
+        return _redo(request, reading, state)
     if reading.kind == "investigate":
         return _investigation(request, reading, state, today)
     if reading.kind not in ("data", "causality"):
@@ -508,10 +528,22 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
         raise Ambiguous("Which measurements and dates should I check?")
     for part in parts:
         # A food-log clause names no metric by design; any other clause without one inherits.
-        unnamed = not part.metrics and part.source != "food_log"
+        unnamed = (
+            not part.metrics
+            and part.source != "food_log"
+            and part.meal_type is None
+            and part.operation != "food"
+        )
         inherited = part.operation == "inherit" or unnamed or _needs_earlier(part)
         prior = _prior(part, previous, inherited)
         metrics = part.metrics or (prior.metrics if prior else [])
+        # A part that points at an earlier result and names no new days keeps that result's
+        # days, before anything is derived from them: "keep the date, burned energy now" read the
+        # empty period list as all history and summed 150 days (the 9228fe6 audit). A new
+        # question with its own metric and operation still reads all their data.
+        points_back = part.reference is not None or part.operation == "inherit" or unnamed
+        if not part.periods and prior is not None and points_back:
+            part = part.model_copy(update={"periods": [Period(kind="inherit")]})
         operation = part.operation if part.operation != "inherit" else prior.operation
         if (
             part.operation == "inherit"
@@ -694,7 +726,9 @@ Clause types:
   still_minutes is awake but still, not awake_in_bed_minutes; checkin_rating is not
   recovery_score. source food_log reads the meals they logged (food eaten: energy and nutrients),
   with no metrics; source tracker is everything the wearable records, calories burned included.
-  A message asking about both is one clause per source. meal_type only for a named meal.
+  Intake, meals and what they ate are source food_log. A message asking about both is one
+  clause per source. meal_type whenever this message keeps to one meal, by its name or its time
+  of day ("that morning only" is BREAKFAST); absent means every meal they logged.
   value is one day's value; mean, median, sum, min, max are distinct; count
   needs comparison and threshold (above/over/more than >, at least >=, under/below <, at most/no
   more than/no higher than <=, exactly/equal to ==); coverage counts days recorded. Never invent
@@ -710,7 +744,7 @@ Clause types:
   "why"), what_changed, overview, coaching for something to try. metrics and periods are what it
   names; with earlier_result and no metrics it keeps that result's metric; every_metric to look
   across all metrics over those days. A follow-up on earlier findings ("based on those findings")
-  keeps their days: earlier_result 0 with from_earlier on the same days. Suggesting a habit
+  keeps their days: earlier_result 0 with same_as_earlier. Suggesting a habit
   from their own data is investigate coaching, never guidance.
 - guidance: public how-to, about no one's data. topics: the one movement, variant or routine,
   qualifiers in the same phrase; refers_back when it is about the previous guidance answer's
@@ -733,6 +767,9 @@ Clause types:
   forget (remove something already kept; states_new_fact when they also say what is true now).
   "Keep this out of my profile" about something said now is store_nothing, not forget.
 - confirm or correct only act on a card: with no pending_draft, "submit that one" is other.
+- redo: the last answer again in another form, with nothing new asked (more or fewer options,
+  which are personal and which general, shorter, another unit); options: how many they ask for.
+  Code keeps the last request's scope.
 - other: small talk, thanks, or nothing the app does; also anything they tell about themselves
   ("I'm training for a 10k"), as its own clause even beside a question, with about_them true.
   An instruction for this answer ("give me three options", "label the general tips") is
@@ -747,6 +784,9 @@ Periods, for data and investigate clauses; pick the kind that means what was sai
 - calendar: this week (week, 0), last month (month, -1), the week before last (week, -2).
 - month: a month named with its year, past or future ("January 2027"); a month named alone is
   its latest occurrence up to today.
+- same_as_earlier: all of an earlier result's periods, unchanged: the same days, or the same
+  comparison of two periods. Explaining it, coaching on it, or a new threshold, meal, source or
+  statistic on the same days is this; an edit of the days is from_earlier.
 - from_earlier: days placed against an earlier result's period, which earlier_results lists
   with its first and last day. Every edit is the same four answers: which of its days the new
   period hangs on (landmark: its_first_day or its_last_day); how many days from that day
@@ -754,9 +794,8 @@ Periods, for data and investigate clauses; pick the kind that means what was sai
   there or ends there (boundary); and how many days it has (length: the number of days said,
   or the earlier period's own days from earlier_results when none is said). The offset only
   moves to the day the new period hangs on; the number of days is always the length. After a
-  five-day period: the same days again (a new threshold, meal, source or statistic on them):
-  its_first_day, 0, starts_there, 5. The whole period moved two days earlier: its_first_day,
-  -2, starts_there, 5. The next four days: its_last_day, +1,
+  five-day period: the whole period moved two days earlier: its_first_day, -2, starts_there, 5.
+  The next four days: its_last_day, +1,
   starts_there, 4. Four days ending the day before it began: its_first_day, -1, ends_there, 4.
   Its last three days: its_last_day, 0, ends_there, 3. Four days starting on its second day:
   its_first_day, +1, starts_there, 4. relative_to: earlier_result (a result computed before this
@@ -1046,6 +1085,8 @@ def interpret(
     answered = request.parts or request.reads
     if answered and request.subject == "self":
         next_state["data"] = [p.model_dump(mode="json") for p in answered]
+        if request.kind == "investigate" and request.focus:
+            next_state["focus"] = request.focus  # what a redo of this answer asks again
     if request.kind == "guidance" and request.topics:
         if request.topics != state.get("guidance"):
             next_state.pop("guidance_passages", None)  # another movement's passages
