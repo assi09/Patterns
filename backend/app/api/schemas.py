@@ -437,6 +437,14 @@ class TeamChatMessage(ApiModel):
     created_at: datetime
 
 
+class ChangeResult(ApiModel):
+    """How the team's metric went during an ended change, against the 28 days before it."""
+
+    verdict: Literal["better", "worse", "changed", "no_change", "unclear"]
+    text: str
+    evidence: Evidence
+
+
 class TeamAction(ApiModel):
     id: str
     kind: Literal["challenge", "message"]
@@ -446,8 +454,30 @@ class TeamAction(ApiModel):
     starts_on: date | None = None
     ends_on: date | None = None
     status: Literal["proposed", "approved", "declined"]
+    source: Literal["agent", "supervisor"] = "agent"
+    play: str | None = None  # the playbook change it came from, or "custom"
+    result: ChangeResult | None = None  # once an approved change has ended
     proposed_at: datetime
     decided_at: datetime | None = None
+
+
+class TeamActionIn(ApiModel):
+    """A change the supervisor plans: one from the playbook, or their own ("custom")."""
+
+    play: str = Field(min_length=1, max_length=32)
+    title: str | None = Field(default=None, max_length=80)
+    body: str | None = Field(default=None, max_length=400)
+    metric: str | None = None
+    starts_on: date | None = None  # tomorrow when left out
+    days: int | None = Field(default=None, ge=7, le=28)
+
+
+class TeamPlay(ApiModel):
+    id: str
+    title: str
+    body: str
+    metrics: list[str]  # what it is meant for, the first measured by default
+    days: int
 
 
 class TeamNoteIn(ApiModel):

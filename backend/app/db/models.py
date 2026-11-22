@@ -659,6 +659,10 @@ class TeamAction(Base):
     starts_on: Mapped[date | None] = mapped_column(Date, default=None)
     ends_on: Mapped[date | None] = mapped_column(Date, default=None)
     status: Mapped[str] = mapped_column(String(16), default="proposed")
+    # Who planned it: the agent (waits for approval) or the supervisor (approved as made).
+    source: Mapped[str] = mapped_column(String(16), default="agent", server_default="agent")
+    # Which change from the playbook (`app.teams.playbook`), "custom", or None from the old chat.
+    play: Mapped[str | None] = mapped_column(String(32), default=None)
     proposed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 

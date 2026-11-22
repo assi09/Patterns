@@ -1,4 +1,12 @@
-import { DEMO_SUPERVISOR, isoDate, mockClient, mockDay, mockNight, mockTeamPulse, routeQuestion } from '../mock';
+import {
+  DEMO_SUPERVISOR,
+  isoDate,
+  mockClient,
+  mockDay,
+  mockNight,
+  mockTeamPulse,
+  routeQuestion,
+} from '../mock';
 import { saveToken } from '../token';
 import type { SendOptions } from '../types';
 
@@ -439,7 +447,6 @@ describe('memory', () => {
   });
 });
 
-
 describe('the team agent in the mock', () => {
   async function teamId(): Promise<string> {
     const signed = await mockClient.logIn(DEMO_SUPERVISOR);
@@ -455,6 +462,44 @@ describe('the team agent in the mock', () => {
     await expect(mockClient.addTeamNote(id, 'She is off sick')).rejects.toThrow(/Not saved/);
     await mockClient.deleteTeamNote(id, note.id);
     expect((await mockClient.getTeamNotes(id)).map((n) => n.id)).not.toContain(note.id);
+  });
+
+  it('starts a change from the playbook, approved as made, and lists it first', async () => {
+    const id = await teamId();
+    const plays = await mockClient.getTeamPlaybook(id);
+    expect(plays.map((p) => p.id)).toContain('no_late_meetings');
+    const { action, membersTold } = await mockClient.planTeamChange(id, { play: 'lighter_week' });
+    expect(action).toMatchObject({
+      status: 'approved',
+      source: 'supervisor',
+      metric: 'recovery_score',
+    });
+    expect(membersTold).toBeGreaterThan(0);
+    expect((await mockClient.getTeamActions(id))[0].id).toBe(action.id);
+  });
+
+  it('refuses a change of their own that is incomplete, personal or too long', async () => {
+    const id = await teamId();
+    await expect(mockClient.planTeamChange(id, { play: 'custom', title: 'Rest' })).rejects.toThrow(
+      /needs a title/,
+    );
+    await expect(
+      mockClient.planTeamChange(id, {
+        play: 'custom',
+        title: 'Rest',
+        body: 'She takes Friday off',
+        metric: 'strain',
+      }),
+    ).rejects.toThrow(/Not planned/);
+    await expect(mockClient.planTeamChange(id, { play: 'step_goal', days: 60 })).rejects.toThrow(
+      /7 to 28 days/,
+    );
+  });
+
+  it('shows how an ended change went', async () => {
+    const id = await teamId();
+    const ended = (await mockClient.getTeamActions(id)).find((a) => a.result);
+    expect(ended?.result?.verdict).toBe('better');
   });
 });
 
@@ -516,7 +561,10 @@ describe('mock team pulse', () => {
 
 describe('mock feedback', () => {
   it('refuses an empty note, keeps a real one, and lists it for the owner', async () => {
-    const signed = await mockClient.logIn({ email: 'demo@patterns.app', password: 'demo-password' });
+    const signed = await mockClient.logIn({
+      email: 'demo@patterns.app',
+      password: 'demo-password',
+    });
     await saveToken(signed.token);
     await expect(mockClient.sendFeedback({ kind: 'feedback', text: '   ' })).rejects.toThrow(
       'Write a few words',

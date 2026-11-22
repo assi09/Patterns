@@ -369,6 +369,39 @@ planted time series and scripted model decisions. These verify the selection rul
 note matching, privacy floor and report delivery. Model judgement on natural event descriptions
 needs its own independently labelled examples.
 
+## Planned team changes (2026-11-22)
+
+With the chat retired nothing proposed team changes any more, so changes now come from a fixed
+playbook (`app/teams/playbook.py`). Each one is a team-level lever measured on one metric:
+
+| Change | Days | Meant for (first is measured by default) |
+|---|---|---|
+| No meetings after 5 pm | 14 | sleep, bedtime, recovery, HRV, resting heart rate, physical stress signs |
+| A lighter week | 7 | recovery, sleep, physical stress signs, strain, HRV, resting heart rate |
+| Quiet evenings (no messages after 7 pm) | 14 | bedtime, sleep, physical stress signs |
+| Protected focus mornings (no meetings before 11) | 14 | physical stress signs, strain, recovery |
+| Walking meetings | 14 | steps, Active Zone Minutes |
+| A team step goal (nobody ranked) | 14 | steps, Active Zone Minutes |
+
+**The supervisor** starts one from the Team tab (`POST /teams/{id}/actions`): a playbook change or
+their own (`play: "custom"` with a title, what it is and the metric to measure), 7 to 28 days,
+starting between today and 60 days ahead. It is approved as made and every member is told. Their
+own words are checked like a note, and naming a member (from their email) or anyone else is
+refused.
+
+**The weekly briefing** suggests at most one change a week, for approval, only with a reason: an
+event coming up like a past one that was followed by a concern (it starts on the event's day), or
+a concern that has lasted two weeks or more (it starts tomorrow). Code picks it, never the model:
+among the changes meant for that metric, one that went better for this team before comes first,
+untried ones next, then ones that made no difference, and ones that went worse last. A change
+declined in the last 28 days is not suggested again, and nothing is suggested while a suggestion
+waits or a change on the same metric is running.
+
+**How it went:** once an approved change ends, `GET /teams/{id}/actions` gives its result:
+the team's metric during it against the 28 days before, read like a weekly change (better, worse,
+changed for a metric with no good direction, no clear change, or too few people to tell). It is
+what happened during the change, not proof the change caused it.
+
 ## Historical supervisor chat (retired)
 
 The supervisor talks to an agent about the team (`app/teams/agent.py`; `POST /teams/{id}/chat`). It

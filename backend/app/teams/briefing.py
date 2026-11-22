@@ -10,9 +10,10 @@ from app.agent.llm import LLM, Budget, LLMError
 from app.agent.trace import team_trace
 from app.analysis.evidence import Evidence
 from app.analysis.report import change_text
-from app.analysis.team import team_info
+from app.analysis.team import kind_of, team_info
 from app.db.chat import add_trace
 from app.db.models import Team, TeamChatMessage, TeamReport
+from app.teams import playbook
 from app.teams.agent import TeamClaim, TeamReply, TeamTools, _team_change_moved
 from app.teams.memberships import overlap_problem
 
@@ -38,9 +39,7 @@ def same_kind(llm: LLM, budget: Budget, coming: str, past: str, trace: list[dict
     return (done.text or "").strip().lower().rstrip(".") == "yes"
 
 
-def heads_up(
-    llm: LLM, box: TeamTools, budget: Budget, trace: list[dict]
-) -> list[tuple[str, list[str]]]:
+def heads_up(llm: LLM, box: TeamTools, budget: Budget, trace: list[dict]) -> list[dict]:
     """What a coming note may bring, from what a past note of the same kind was followed by.
 
     Code finds the pairs (a coming note, a past one followed by a real change by the alerts' rule)
@@ -77,7 +76,21 @@ def heads_up(
                 f"{past['note']['note']}, {changes}. Watch for a similar pattern this time."
             )
             cited = [coming["evidence_id"], past["note"]["evidence_id"], *(e.id for e in moved)]
-            warnings.append((sentence, cited))
+            concerns = [
+                e.metrics[0]
+                for e in moved
+                if kind_of(e.metrics[0], "up" if e.stats["median_change"] > 0 else "down")
+                == "concern"
+            ]
+            warnings.append(
+                {
+                    "text": sentence,
+                    "evidence_ids": cited,
+                    "on": when,
+                    "note": coming["note"],
+                    "concerns": concerns,
+                }
+            )
             break  # one past note of its kind is enough for one warning
     return warnings
 
@@ -142,8 +155,28 @@ def brief(
         for row in selected
     ]
     items.extend(
-        {"text": text, "kind": "ahead", "metric": None, "evidence_ids": ids} for text, ids in ahead
+        {"text": w["text"], "kind": "ahead", "metric": None, "evidence_ids": w["evidence_ids"]}
+        for w in ahead
     )
+    # One change suggested for approval when there is a reason: chosen by code from the playbook
+    # and this team's own results, never by the model.
+    results = {key: r["verdict"] for key, r in playbook.results_of(db, team, today).items()}
+    suggested = playbook.suggest(db, team, candidates, ahead, results, today, now)
+    if suggested:
+        action, reason = suggested
+        label = team_info(action.metric).label.lower()
+        items.append(
+            {
+                "text": (
+                    f"Suggested, {reason['why']}: {action.title.lower()}, "
+                    f"{action.starts_on:%b %-d} to {action.ends_on:%b %-d}, measured on {label}. "
+                    "It waits for your approval."
+                ),
+                "kind": "proposal",
+                "metric": action.metric,
+                "evidence_ids": reason["evidence_ids"],
+            }
+        )
     summary = (
         " ".join(item["text"] for item in items)
         or "No team change met the reporting threshold this week."
@@ -160,7 +193,7 @@ def brief(
         "briefing": {
             "summary": summary,
             "items": items,
-            "proposals": 0,
+            "proposals": 1 if suggested else 0,
             "made_at": now.isoformat(),
         },
     }
