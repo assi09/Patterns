@@ -327,3 +327,23 @@ workout mismatch is action-equivalent in an independent actual-edit control; the
 retained. This is development extraction coverage, not held-out answer accuracy. HOLD: coaching
 renderer, compound dispatch, duplicate state and semantic reader misses remain. No fresh release
 audit ran. See the [bcdb0ff independent handoff](independent-audit-bcdb0ff-handoff.md).
+
+### November 22, 2026 — final paid audit of 910da27
+
+At the user's request to finish this audit cycle, frozen
+`910da27c912486dac18c7901ce6548df91a258fe` ran **592 exposed synthetic regression turns + 48
+newly frozen wording turns**, followed by the same approved **24-item PHIA gate**. Synthetic
+cost **$1.782488472**. Initial PHIA cost **$0.047878746**; a conservative reservation blocked
+four OpenAI readings after only router charges. The first completion launcher stopped at a
+pre-call assertion and cost $0. Only those four blocked readings were then completed once for
+**$0.014146464**, using a $0.15 conservative reserve within the existing shared cap. No completed
+answer was rerun. Total new spend: **$1.844513682**. No paid judge or Google traffic/writes.
+
+Shared new-$5 cumulative usage is **$4.558264384** (OpenAI $4.437424630, Jev $0.120839754),
+with **$0 unresolved reservations**, leaving **$0.441735616**. Same-592 full results improve
+504/592 → 563/592; 48 new turns are 42 full, two partial, four failed; PHIA is 24/24 after the
+four infrastructure completions. Development/regression and new-wording scores stay separate.
+All offline review and verification cost $0. Recommendation: stop repeated audit cycles and
+record remaining limitations; this is not a clean pass of the original zero-wrong-period gate.
+See the [final audit report](independent-audit-910da27-final.md) and
+[deferred issues](pr-195-followup-issues.md). No further paid audit is planned.
