@@ -1,0 +1,189 @@
+{
+ "requests": 180,
+ "all_fields_right": 166,
+ "by_kind": {
+  "food": [
+   59,
+   60
+  ],
+  "workout": [
+   47,
+   60
+  ],
+  "none": [
+   60,
+   60
+  ]
+ },
+ "fields": {
+  "food.day": [
+   59,
+   59
+  ],
+  "food.drafted": [
+   59,
+   60
+  ],
+  "food.kcal": [
+   36,
+   36
+  ],
+  "food.meal": [
+   59,
+   59
+  ],
+  "food.name": [
+   59,
+   59
+  ],
+  "food.time": [
+   59,
+   59
+  ],
+  "none.no_draft": [
+   60,
+   60
+  ],
+  "workout.day": [
+   48,
+   48
+  ],
+  "workout.drafted": [
+   48,
+   60
+  ],
+  "workout.km": [
+   4,
+   4
+  ],
+  "workout.minutes": [
+   47,
+   48
+  ],
+  "workout.time": [
+   48,
+   48
+  ],
+  "workout.type": [
+   48,
+   48
+  ]
+ },
+ "cost_usd": 0.8589,
+ "wrong": [
+  {
+   "m": "I want to log a chicken shawarma plate I ate three days ago at 3:15pm (a snack)",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "please log a kickboxing class yesterday at 8:20am, it lasted an hour and three quarters",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "A volleyball game 2 days ago from 10:50, 1h10, add it",
+   "fields": {
+    "drafted": true,
+    "type": true,
+    "day": true,
+    "time": true,
+    "minutes": false
+   }
+  },
+  {
+   "m": "note down a stair climber session: started 7:50am 2 days ago, went for an hour and ten minutes",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "please log a tennis match yesterday at 11:40am, it lasted an hour and ten minutes",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "A volleyball game 2 days ago from 14:10, thirty-five minutes, add it",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "please log a kickboxing class yesterday at 6:40pm, it lasted an hour and ten minutes",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "A trail run 2 days ago from 8:20pm, an hour and ten minutes and covered 10 km, add it",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "A volleyball game 2 days ago from 15:50, 1h10, add it",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "note down a table tennis game: started 12:10pm three days ago, went for an hour and three quarters",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "A trail run 2 days ago from 8:50pm, an hour and three quarters and covered 15 km, add it",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "I want to log a weightlifting session from three days ago, 1:40pm, an hour and three quarters",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "note down a table tennis game: started 1:50pm three days ago, went for an hour and three quarters",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "I want to log a weightlifting session from three days ago, 7:10pm, an hour and three quarters",
+   "fields": {
+    "drafted": false
+   }
+  }
+ ],
+ "generic_replies": {
+  "no length: ask for it": [
+   0,
+   10
+  ],
+  "not happened yet": [
+   2,
+   10
+  ],
+  "a statement: ask what they want": [
+   0,
+   10
+  ],
+  "a question, not a log": [
+   0,
+   10
+  ],
+  "a question about data": [
+   0,
+   10
+  ],
+  "negated or not yet: nothing to log": [
+   0,
+   10
+  ]
+ }
+}

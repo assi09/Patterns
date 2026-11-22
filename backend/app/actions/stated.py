@@ -31,6 +31,7 @@ DURATION = re.compile(
     r"\b(?:"
     r"(?P<three_quarters>three" + JOIN + r"quarters of an hour)"
     r"|(?P<quarter>(?:a )?quarter of an hour)"
+    r"|(?P<and_three_quarters>(?:(?:an?|one|1) )?hour and three" + JOIN + r"quarters)"
     r"|(?P<and_quarter>(?:(?:an?|one|1) )?hour and a quarter)"
     r"|(?P<and_half>(?P<and_half_of>\d+|one|two|three) and a half hours?)"
     r"|(?P<run_hours>\d+)h(?P<run_minutes>\d{1,2})(?:m|mins?)?\b"
@@ -41,6 +42,20 @@ DURATION = re.compile(
     r"(?:\s*(?:and\s*)?(?P<and_minutes>\d+)" + JOIN + r"(?:minutes?|mins?)\b)?"
     r"|(?P<minutes>\d+)" + JOIN + r"(?:minutes?|mins?)\b"
     r")",
+    re.IGNORECASE,
+)
+_UNITS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+_TEENS = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen"]
+_TEENS += ["eighteen", "nineteen"]
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50}
+SPOKEN = {word: n for n, word in enumerate(_UNITS, 1)} | {w: n for n, w in enumerate(_TEENS, 10)}
+SPOKEN |= _TENS | {f"{t}{j}{u}": v + n for t, v in _TENS.items() for n, u in enumerate(_UNITS, 1)
+                   for j in ("-", " ")}  # fmt: skip
+# A number said in words before its unit ("ten minutes", "thirty-five minutes"), read as digits:
+# "an hour and ten minutes" was read as an hour (the second held-out logging run, 2026-11-22).
+SPOKEN_COUNT = re.compile(
+    r"\b(" + "|".join(sorted(map(re.escape, SPOKEN), key=len, reverse=True)) + r")"
+    r"(?=" + JOIN + r"(?:minutes?|mins?|hours?|hrs?)\b)",
     re.IGNORECASE,
 )
 CLOCK = re.compile(
@@ -124,12 +139,15 @@ def _names_an_activity(text: str) -> bool:
 
 def durations(text: str) -> set[int]:
     """Every duration named in the text, in seconds."""
+    text = SPOKEN_COUNT.sub(lambda m: str(SPOKEN[m[1].lower()]), text)
     found = set()
     for match in DURATION.finditer(text):
         if match["three_quarters"]:
             found.add(2700)
         elif match["quarter"]:
             found.add(900)
+        elif match["and_three_quarters"]:
+            found.add(6300)
         elif match["and_quarter"]:
             found.add(4500)
         elif match["and_half"]:
@@ -163,6 +181,13 @@ def clock_times(text: str) -> set[tuple[int, int]]:
             if 1 <= hour <= 12:  # "at 3:30" with no am or pm can be either
                 found.add(((hour % 12) + 12, int(match["minute24"])))
     return {(h, m) for h, m in found if h < 24 and m < 60}
+
+
+def clock_mentions(text: str) -> int:
+    """How many times of day the text says: "at 10:50" is one, though it reads as 10:50 or 22:50.
+    Counted from the readings, one said time looked like a start and an end, and a draft of 7
+    minutes active in 70 was kept (the second held-out logging run, 2026-11-22)."""
+    return sum(1 for _ in CLOCK.finditer(text))
 
 
 def _on_the_clock(moment: datetime, times: set[tuple[int, int]]) -> bool:
@@ -213,7 +238,7 @@ def latest_past(
 def lacks_a_duration(said: Sequence[str]) -> bool:
     """Nothing in their words says how long it lasted, so there is no point drafting it yet."""
     text = "\n".join(said)
-    return not durations(text) and len(clock_times(text)) < 2 and not UNTIL_NOW.search(text)
+    return not durations(text) and clock_mentions(text) < 2 and not UNTIL_NOW.search(text)
 
 
 def _corrected(said: Sequence[str]) -> set[int]:
@@ -244,7 +269,7 @@ def mismatch(
     if isinstance(log, WorkoutLog):
         moments.append(log.end_time.astimezone(zone))
         stated = _corrected(said) or durations(text)
-        if not stated and len(clock_times(text)) < 2 and not UNTIL_NOW.search(text):
+        if not stated and clock_mentions(text) < 2 and not UNTIL_NOW.search(text):
             return "The person did not say how long it lasted. Ask them; never make up a duration."
         if log.exercise_type in GENERIC_TYPES and not _names_an_activity(text):
             return "The person did not say what kind of workout it was. Ask them."
@@ -289,7 +314,7 @@ def with_stated_interval(log: WorkoutLog, said: Sequence[str]) -> WorkoutLog:
     (the audit of 2026-11-19). Only both clock times said, or a pause said, leave the model's end,
     which `mismatch` then checks against their words."""
     text = "\n".join(said)
-    if len(clock_times(text)) >= 2 or PAUSED.search(text):
+    if clock_mentions(text) >= 2 or PAUSED.search(text):
         return log
     end = log.start_time + timedelta(seconds=log.active_seconds)
     if end == log.end_time:
