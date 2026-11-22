@@ -359,3 +359,11 @@ one corrected food fixture. Authorized maximum $6.50. Recorded usage: OpenAI $3.
 Jev $0.060678534, total **$3.465013894**. Outstanding provider reservations **$0.120245250**
 give an upper bound of **$3.585259144**. Reported usage is metered cost, pending provider billing
 reconciliation. Local statistics and phone-width rendering cost $0. [Results](fitbit-replay-results.md).
+
+### November 23, 2026 — reader-only check of picks by order
+
+`eval/reference_pick.py` on branch `fix/reference-by-order` (`1d39a87`): only the reader, on the
+third turn of the replay's 66 step-total conversations, twice each (132 readings). Jobs frozen and
+hashed before reading (`0364b979…`), cap $0.55, approved by Karim. Recorded usage
+**$0.423755**, all 132 read, nothing rerun. No paid judge, no Google traffic.
+[Results](experiments.md#picking-an-earlier-week-by-order-2026-11-23).
