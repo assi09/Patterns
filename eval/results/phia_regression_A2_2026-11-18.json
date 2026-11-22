@@ -1,0 +1,310 @@
+{
+ "batch": "A2",
+ "questions": 50,
+ "right_before": 45,
+ "right_now": 49,
+ "same_grade": 46,
+ "cost_usd": 0.0673,
+ "rows": [
+  {
+   "id": "A2-000",
+   "q": "What were the total minutes awake yesterday?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-001",
+   "q": "What is the lowest light sleep minutes last 14 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-002",
+   "q": "What is my median minutes awake last 7 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-003",
+   "q": "What was my mean time awake last 7 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-004",
+   "q": "What is the highest awake minutes last 7 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-005",
+   "q": "How many days did I sleep minutes at least 431?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-006",
+   "q": "What is my mean minutes awake yesterday?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-007",
+   "q": "How many days did I had fewer than 7 hours of sleep last 14 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-008",
+   "q": "What is the average of my active zone minutes today",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-009",
+   "q": "What is the total awake minutes last 7 days?",
+   "before": false,
+   "now": true
+  },
+  {
+   "id": "A2-010",
+   "q": "What were my median deep sleep minutes last 7 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-011",
+   "q": "What is my lowest heart rate variability last 7 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-012",
+   "q": "What were the total steps I took?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-013",
+   "q": "What was the sum of the time slept",
+   "before": false,
+   "now": true
+  },
+  {
+   "id": "A2-014",
+   "q": "What were the lowest heart rate today?",
+   "before": false,
+   "now": true
+  },
+  {
+   "id": "A2-015",
+   "q": "What was the lowest heart rate variability last 21 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-016",
+   "q": "What were the sum of the minutes I slept yesterday?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-017",
+   "q": "What are my lowest REM sleep minutes today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-018",
+   "q": "What is the median heart rate last 14 days?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-019",
+   "q": "What was my highest heart rate variability last 14 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-020",
+   "q": "What is the median deep sleep minutes",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-021",
+   "q": "What were the sum of the REM sleep minutes yesterday",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-022",
+   "q": "What is the median REM sleep minutes today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-023",
+   "q": "What is the highest time slept last 30 days?",
+   "before": false,
+   "now": false
+  },
+  {
+   "id": "A2-024",
+   "q": "What were the sum of the REM sleep minutes last 30 days?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-025",
+   "q": "What were my highest time awake",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-026",
+   "q": "What were my mean minutes awake last 30 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-027",
+   "q": "What were the sum of the sleep last 7 days?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-028",
+   "q": "What were my highest steps I took last 7 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-029",
+   "q": "What are the lowest heart rate variability",
+   "before": false,
+   "now": true
+  },
+  {
+   "id": "A2-030",
+   "q": "What is the total REM sleep minutes last 21 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-031",
+   "q": "What are my lowest time awake today",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-032",
+   "q": "What is the total minutes slept today",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-033",
+   "q": "What are the median time awake last 30 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-034",
+   "q": "What was my median resting heart rate today",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-035",
+   "q": "What were my average light sleep minutes yesterday",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-036",
+   "q": "What are my average minutes I slept last 21 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-037",
+   "q": "What is my average REM sleep minutes today",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-038",
+   "q": "What is my lowest deep sleep minutes today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-039",
+   "q": "What is my highest time I slept last 14 days?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-040",
+   "q": "What are my lowest heart rate last 14 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-041",
+   "q": "What were my highest REM sleep minutes yesterday?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-042",
+   "q": "What were the median of my steps I walked?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-043",
+   "q": "What were my median REM sleep minutes last 30 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-044",
+   "q": "What was the mean of my awake minutes last 14 days?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-045",
+   "q": "What are the average of my deep sleep minutes today?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-046",
+   "q": "What were my mean heart rate variability last 14 days?",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-047",
+   "q": "How many days did I slept less than 4 hours last 21 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-048",
+   "q": "How many days did I had less than or equal to 668 minutes of sleep last 21 days",
+   "before": true,
+   "now": true
+  },
+  {
+   "id": "A2-049",
+   "q": "What was my highest resting heart rate last 14 days",
+   "before": true,
+   "now": true
+  }
+ ]
+}

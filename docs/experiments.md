@@ -998,3 +998,45 @@ where it disagrees with the reading model; LifeSnaps has no stages; the counting
 threshold, and Patterns then answered the count questions it had missed. Final sets: 675 questions
 on 58 real people in 2 batches, 1,411 on PHIA's 4 users in 5. No batch has run yet.
 
+## Structured requests after the follow-up audit (2026-11-18)
+
+**Question:** can interpretation be separated from arithmetic without just adding more phrases?
+The local implementation reads typed requests, calculates dates and statistics in code, persists
+data and guidance scope separately, and renders precise data answers from their evidence.
+
+**Observed:** the first fresh synthetic set exposed malformed/invalid interpretations and a
+wrong-date follow-up. Constrained decoding then passed every one of the 34 metric/date-shift
+pairs in a second fresh set, while multipart requests, guidance attributes and confirmed food
+exposed further failures. Direct passage review caught a cue borrowed from a weighted squat;
+named-variant selection and a conservative failed-grounding fallback now prevent that path.
+Capability checks and one bounded interpretation repair handle impossible totals, threshold
+counts confused with overlapping window tests, absent pending drafts and food/wearable metric
+mixing. Four new probes passed; two remaining replay failures were repaired and their final
+four-turn count/food regression passed. The full backend suite passes 1,920 tests.
+
+**Limits:** this is development evidence on synthetic rows, not an independent final accuracy
+score or proof about all why/coaching questions. Every intermediate score remains recorded in
+[typed-requests.md](typed-requests.md). Reported API cost across the implementation checks:
+$0.254653954. No real Google write or paid judge was used.
+
+
+## Agent reliability from November 17 to 19
+
+| Date | What led to the change | What the result established |
+|---|---|---|
+| Nov 17 | The real-person PHIA comparison exposed a total being read as an average and a missing period being treated as last night. Fixes followed the development batch. | The earlier implementation reached 97.0% fair accuracy on the separate 337-question batch. This established a baseline for precise wearable-data questions. |
+| Nov 18 | Follow-ups such as asking about the previous day lost their metric or period when the wording changed. In the 369-turn conversation audit, 201 answers passed fully, even though 14,937 numerical checks agreed. A wrong day can have a perfectly correct step count. | A typed reader started identifying metrics, operations and periods. Code resolved dates, computed statistics and rendered precise answers from evidence. A PHIA regression exposed a separate mistake: standalone “yesterday” sought an earlier turn, and rolling windows ended a day early. Repairing the anchor and inclusive end brought A1 from 19/50 to 50/50 on its development sample. The separate A2 sample reached 49/50, compared with 45/50 before the redesign. |
+| Nov 19 | The API audits exposed problems that a numerical score misses: stale draft durations, confirmed food that could not be read back, and guidance that switched exercise variant. The changes bound workout end time to start and duration, read confirmed food records, retained guidance passages and routed deletion through a confirmation card. | On `84db5f5`, both tested mixed walk/run requests returned the correct draft and step count, the four food-readback turns passed, and an actual forget card deleted only its target after an owner tap. All 102 simple metric turns passed. Complex follow-ups passed 8/12, investigations/coaching 6/15, memory 8/17, logging 2/18 and guidance 17/21. These are strict passes in different-sized groups, with partial answers excluded from the numerator. |
+
+The November 19 audit used 211 fresh turns across 78 conversations. Its 6,200 numerical field
+checks agreed with the independent oracle; three final answers still silently changed the period.
+The 24-question B1 PHIA regression sample also passed (four infrastructure-blocked items completed
+separately). These scores belong to the audited revision. The earlier conversation sets differ in
+wording and task mix, so their overall rates cannot measure a controlled before/after gain.
+
+Later on November 19, `2be6a76` added private, value-free diagnostics and replayed the reader
+on 47 failed or partial turns and 11 passing controls. The replay exposed placeholder data parts
+on action/memory requests and period fields that the resolver ignores. Those are development
+observations from newly generated readings. They help locate defects; a final user answer and
+database state were outside that replay. See the [audit](test-results.md#later-pr-195-checks-and-outstanding-results),
+[implementation plan](plan.md#agent-reliability-priorities-as-of-november-19) and [spend record](costs.md).

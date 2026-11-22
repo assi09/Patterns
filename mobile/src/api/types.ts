@@ -399,6 +399,9 @@ export interface MemoryFact {
   kind: 'routine' | 'goal' | 'preference' | 'context' | 'event' | 'commitment';
   text: string;
   status: 'candidate' | 'proposed' | 'approved';
+  // 'forget': a card asking to forget the kept fact `forgets`; keeping the card deletes that fact.
+  action: 'keep' | 'forget';
+  forgets: string | null;
   start: ISODate | null; // an event's dates
   end: ISODate | null;
   createdAt: ISODateTime;

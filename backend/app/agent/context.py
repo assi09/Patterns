@@ -62,6 +62,7 @@ class Turn:
     answered_by: str | None = None  # an expert, "general", or None for a refusal
     refused: bool = False
     at: datetime | None = None  # when it was answered
+    request_state: dict = field(default_factory=dict)  # validated private trace, never prose
 
     @property
     def evidence_ids(self) -> list[str]:
@@ -100,6 +101,8 @@ class ChatState:
     until: datetime | None = None  # the last answer the summary reaches
     waiting: tuple[str, ...] = ()  # drafts and reminders not yet confirmed
     profile: tuple[str, ...] = ()  # the person's, the same in every chat
+    pending: tuple[str, ...] = ()  # memory cards waiting for their tap, not yet kept
+    kept: tuple[str, ...] = ()  # facts they approved; the profile also has inferred interests
     interests: dict[str, float] = field(default_factory=dict)  # metric -> score
 
     @property
@@ -119,7 +122,7 @@ class Context:
     dropped: list[dict] = field(default_factory=list)  # for the trace
 
 
-def turns_from(messages: Iterable) -> list[Turn]:
+def turns_from(messages: Iterable, states: dict | None = None) -> list[Turn]:
     """Pairs stored messages (oldest first) into turns; a question still without answer is left."""
     turns, question = [], None
     for message in messages:
@@ -134,6 +137,7 @@ def turns_from(messages: Iterable) -> list[Turn]:
                     answered_by=message.answered_by,
                     refused=bool(message.refused),
                     at=getattr(message, "created_at", None),
+                    request_state=(states or {}).get(getattr(message, "id", None), {}),
                 )
             )
             question = None

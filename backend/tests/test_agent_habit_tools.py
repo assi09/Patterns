@@ -47,6 +47,7 @@ def test_habit_options_finds_a_real_bedtime_link_and_claims_can_cite_it():
         kind="suggestion",
         evidence_ids=[evidence.id],
         metric="sleep_efficiency",
+        option="earlier_bedtime",
     )
     assert check_claim(claim, {evidence.id: evidence}) == []
 

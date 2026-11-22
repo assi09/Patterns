@@ -6,7 +6,7 @@ import pytest
 
 from app.actions import schemas
 from app.actions.schemas import FoodLog, WorkoutLog
-from app.actions.stated import clock_times, durations, mismatch
+from app.actions.stated import clock_times, durations, mismatch, with_stated_interval
 
 BEIRUT = timezone(timedelta(hours=2))
 NOW = datetime(2026, 11, 8, 18, 30, tzinfo=BEIRUT)
@@ -180,3 +180,39 @@ def test_a_workout_just_finished_ends_now_not_later():
     moved = latest_past(given, ["Log a 20 minute walk just now"], NOW)
     assert datetime.fromisoformat(moved["endTime"]) == NOW
     assert datetime.fromisoformat(moved["startTime"]) == NOW - timedelta(minutes=20)
+
+
+# ---- a workout's end is its start plus its duration, unless they said otherwise ----
+
+
+def padded(start: datetime, active: int, elapsed: int) -> WorkoutLog:
+    return WorkoutLog(
+        exercise_type="RUNNING",
+        start_time=start,
+        end_time=start + timedelta(minutes=elapsed),
+        active_seconds=active * 60,
+    )
+
+
+def test_an_invented_extra_hour_is_taken_off_by_code():
+    """A 34-minute run was carded 17:20 to 18:54 (the audit of 2026-11-19); here an hour
+    earlier, so the padded card is not in the future of this file's clock."""
+    start = datetime(2026, 11, 8, 16, 20, tzinfo=BEIRUT)
+    fixed = with_stated_interval(padded(start, 34, 94), ["I ran for 34 minutes at 4:20pm"])
+    assert fixed.end_time == start + timedelta(minutes=34) and fixed.active_seconds == 34 * 60
+
+
+def test_a_pause_they_mention_keeps_the_longer_interval():
+    start = datetime(2026, 11, 8, 17, 0, tzinfo=BEIRUT)
+    said = ["Ran 30 minutes from 5pm with a 10 minute break in the middle"]
+    assert with_stated_interval(padded(start, 30, 40), said).end_time == start + timedelta(
+        minutes=40
+    )
+
+
+def test_both_clock_times_said_are_kept_as_said():
+    start = datetime(2026, 11, 8, 17, 0, tzinfo=BEIRUT)
+    said = ["Walked from 5pm to 6pm, about 45 minutes of actual walking"]
+    assert with_stated_interval(padded(start, 45, 60), said).end_time == start + timedelta(
+        minutes=60
+    )

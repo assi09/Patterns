@@ -67,6 +67,8 @@ def test_the_answer_saying_no_change_over_a_clear_drop_is_turned_back(sleep_fell
     right = submit("Time asleep went down.")
     llm = ScriptedLLM([wrong, right])
     reply = ask(llm, Router("change"), sleep_fell, "Anything different lately?", today=END)
-    assert reply.result.summary == "Time asleep went down."
     sent_back = llm.requests[1]["messages"][-1]["content"]
     assert "time asleep (called steady)" in sent_back
+    # An overview's answer is then said by code from its tests, each cited (findings.py).
+    assert "Time asleep went down" in reply.result.summary
+    assert "no clear change" not in reply.result.summary.split("Time asleep")[1].split(".")[0]

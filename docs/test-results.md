@@ -5,7 +5,7 @@ per test; the method behind each is in [evaluation-plan.md](evaluation-plan.md),
 [testing-plan.md](testing-plan.md), the full write-ups in [evaluation.md](evaluation.md) and
 [experiments.md](experiments.md), and the cost of each run in [costs.md](costs.md). Results files are
 in `eval/results/` (totals only; anything holding a real person's values stays in the git-ignored
-`data/eval/results`). Updated 2026-11-17. **Which results are final accuracy and which are
+`data/eval/results`). Updated 2026-11-19. **Which results are final accuracy and which are
 development, and what is left: [progress-2026-11-17.md](progress-2026-11-17.md).**
 
 ## At a glance
@@ -112,7 +112,42 @@ questions are refused by the router before any search.
   as values; the old real-data run is restated on PMData alone, and its LifeSnaps half needs a
   rerun before it is quoted.
 
-## To be filled in
+## Structured request implementation (2026-11-18, local)
 
-- Logging: each field's accuracy, and the requests that must not become a draft.
-- PHIA mode A; the judge against Karim's and Jad's blind grades; the pilot.
+**PHIA check on the new path (2026-11-19).** Precise questions now go through the request reader
+and code, so the earlier PHIA scores no longer described the path. Patterns re-asked the first 50
+questions of two batches, graded as before:
+
+| | Before (old path) | New path as first built | After two fixes |
+|---|---:|---:|---:|
+| A1 (the fixes were made on these) | 49 / 50 | **19 / 50** | 50 / 50 |
+| A2 (not looked at while fixing) | 45 / 50 | not run | **49 / 50** (4 better, none worse) |
+
+The drop to 19 was the reader anchoring "yesterday" and "last 7 days" to a previous request that
+did not exist, then asking "which earlier period?"; and reading "the last 7 days" as ending
+yesterday where the rest of the app ends it today. Code now reads both itself (a period counted
+from today is anchored to today; "last N days" ends today unless "complete days" or "ending
+yesterday" is said). A2 is the figure to quote; A1 was used to find the fixes.
+
+The complete backend suite passes **1,920 tests**, 95 more than the starting revision; Ruff and
+format checks pass. The new tests cover structured output, calendars and reference ambiguity,
+all registered metrics, missing versus zero, threshold equality/units, multiple operations and
+multiple-testing correction, confirmed food readback, real local draft replacement, ownership,
+persistent scope, memory opt-out and grounded guidance fallback.
+
+Paid checks are intentionally separate from the main benchmark: 15 smoke checks, a fresh 83-turn
+set, a second fresh 78-turn set, four additional new probes with the 78-turn regression set, and
+four final regressions. Their original scores and failures remain in
+[typed-requests.md](typed-requests.md); final regressions pass, but are not held-out accuracy.
+All responses were directly inspected as well as checked against the synthetic frame and
+evidence. Total reported API cost: **$0.254653954**. No real health values, Google writes, or
+paid judge were used. The earlier 369-turn real-history audit has not been replayed on this path.
+
+## Later PR #195 checks and outstanding results
+
+The [November 19 audit](experiments.md#agent-reliability-from-november-17-to-19) covers 211 fresh turns at `84db5f5`,
+including 18 logging turns graded on both the reply and actual card state. The small B1
+regression gate passed 24/24. A subsequent [reader replay](reader-replay-2026-11-19.md) inspected
+58 exposed turns for diagnosis. Fresh end-to-end scores after the next implementation changes,
+the human blind-grading comparison and pilot usage results remain outstanding. The mode A
+benchmark and the 250-request logging development run are recorded in the table above.

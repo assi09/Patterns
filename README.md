@@ -14,7 +14,7 @@ with every insight backed by a computed statistic the user can inspect.
 |---|---|
 | `backend/` | FastAPI service: data ingestion, analysis tools, agent, API |
 | `mobile/` | Expo (React Native) app for iOS, Android and web |
-| `eval/` | Evaluation scripts that call paid APIs on purpose (advice guard, logging smoke check, multiple testing); the full suite with baselines and attacks is planned |
+| `eval/` | Benchmark and evaluation scripts for PHIA, baselines, routing, retrieval, verifier checks, logging and team privacy. See [evaluation results](docs/evaluation.md) before running paid scripts |
 | `docs/` | [Status](docs/status.md) (start here), product, architecture, metrics, [roadmap](docs/roadmap.md); later API, failure matrix, threat model |
 
 ## Contributing
@@ -36,7 +36,7 @@ Personal Fitbit exports (Google Takeout) are **never committed**. Unzip an expor
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e "backend[dev]"
-pytest backend
+(cd backend && pytest -q)
 ```
 
 Run the API on a local export. Run it **from the repository root** with the virtual environment
@@ -53,7 +53,7 @@ Google endpoints need a signed-in, approved account (see *Accounts* below).
 
 ### Accounts
 
-People sign up in the app with an email and password and wait until the owner approves them.
+People sign up with an email and password. Addresses on the configured pilot invite list are approved at sign-up. Other sign-ups wait for the owner.
 Put the owner's email in `.env` as `FA_ADMIN_EMAILS=["you@example.com"]`, then:
 
 ```bash

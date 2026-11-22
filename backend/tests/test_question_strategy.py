@@ -123,6 +123,7 @@ def test_coaching_gets_tested_habits_up_front_and_an_offer_after(frame):
             "kind": "suggestion",
             "evidence_ids": [evidence_id_for(task, "sleep efficiency", "Habits tested")],
             "metric": "sleep_efficiency",
+            "option": "earlier_bedtime",
         }
         return submit("Your data points to one habit.", [claim])
 

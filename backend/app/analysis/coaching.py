@@ -53,11 +53,22 @@ class _Test:
     other_group: str
     better: pd.Series
     other: pd.Series
+    # What the comparison may be said as. "action": the days differ in the habit itself
+    # (bedtime, activity, a late meal), so doing more of it is the option. "watch": the days
+    # differ in something else (a stress tag, a hard day before), which tests no routine: it can
+    # be described and watched, never offered as a tested habit (a stress-tag split was offered
+    # as "a wind-down routine", the a196 audit).
+    permits: str = "action"
 
 
-def _split(values: pd.Series, mask: pd.Series) -> tuple[pd.Series, pd.Series]:
+def _split(values: pd.Series, exposure: pd.Series, mask: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """The days with the habit and the days without it, among days where the habit is known.
+    An unknown exposure is neither: a missing bedtime made `bed <= median` false, so ten nights
+    with no bedtime joined the "later nights" and supported an earlier bedtime that the known
+    nights did not (the review of b3d64ca)."""
+    known = exposure.reindex(values.index).notna()
     mask = mask.reindex(values.index).fillna(False).astype(bool)
-    return values[mask], values[~mask]
+    return values[known & mask], values[known & ~mask]
 
 
 def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_Test], float | None]:
@@ -67,7 +78,7 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
         bed = frame["bedtime_hour"].reindex(values.index)
         if bed.notna().sum() >= 2 * MIN_GROUP:
             split_at = float(bed.median())
-            early, late = _split(values, bed <= split_at)
+            early, late = _split(values, bed, bed <= split_at)
             tests.append(
                 _Test(
                     "earlier_bedtime",
@@ -78,7 +89,7 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
                     late,
                 )
             )
-            regular, irregular = _split(values, (bed - split_at).abs() * 60 <= REGULAR_MINUTES)
+            regular, irregular = _split(values, bed, (bed - split_at).abs() * 60 <= REGULAR_MINUTES)
             tests.append(
                 _Test(
                     "regular_bedtime",
@@ -91,25 +102,27 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
             )
     if "strain" in frame.columns and metric in MORNING:
         strain = frame["strain"]
-        hard_day = strain >= strain.quantile(HARD_QUANTILE)
+        # 1 a hard day, 0 an ordinary one, unknown with no strain recorded: a missing day is not
+        # an ordinary day.
+        hard_day = (strain >= strain.quantile(HARD_QUANTILE)).astype(float).where(strain.notna())
         # The morning after: the target on day d against strain on day d - 1.
         after_hard = hard_day.shift(1).reindex(values.index)
-        rest, hard = _split(values, after_hard == False)  # noqa: E712 (NaN is neither)
-        hard = values[after_hard == True]  # noqa: E712
+        rest, hard = _split(values, after_hard, after_hard == 0)
         tests.append(
             _Test(
                 "rest_after_hard_day",
-                "an easier day after your hardest training days",
+                "how your mornings go after your hardest training days",
                 "mornings after an ordinary day",
                 "mornings after a hard day",
                 rest,
                 hard,
+                permits="watch",
             )
         )
     if "active_zone_minutes" in frame.columns and metric in SLEEP:
         azm = frame["active_zone_minutes"].reindex(values.index)
         if azm.notna().sum() >= 2 * MIN_GROUP:
-            active, quiet = _split(values, azm >= azm.median())
+            active, quiet = _split(values, azm, azm >= azm.median())
             tests.append(
                 _Test(
                     "active_days",
@@ -120,9 +133,9 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
                     quiet,
                 )
             )
-    for tag, lever, label in (
-        ("late_meal", "earlier_dinner", "an earlier dinner"),
-        ("stress", "wind_down", "a wind-down routine on stressful days"),
+    for tag, lever, label, permits in (
+        ("late_meal", "earlier_dinner", "an earlier dinner", "action"),
+        ("stress", "wind_down", "how your stressful days line up with your sleep", "watch"),
     ):
         column = f"{TAG_PREFIX}{tag}"
         if column in frame.columns and metric in SLEEP + MORNING:
@@ -136,6 +149,7 @@ def _tests(frame: pd.DataFrame, metric: str, values: pd.Series) -> tuple[list[_T
                     "days with it",
                     without,
                     with_tag,
+                    permits=permits,
                 )
             )
     return tests, split_at
@@ -158,6 +172,7 @@ def habit_options(frame: pd.DataFrame, metric: str, window: Window) -> Evidence:
             {
                 "lever": test.lever,
                 "habit": test.label,
+                "permits": test.permits,
                 "supported": bool(q < ALPHA and helpful),
                 "q_value": _round(q, 4),
                 "group": test.better_group,

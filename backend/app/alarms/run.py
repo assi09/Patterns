@@ -153,8 +153,9 @@ def check(
         )
         if recent is not None:
             continue
-        cited = {e.id for e in candidate.evidence}
-        store_evidence(db, user.id, None, candidate.evidence, cited)
+        given = {e.id for e in candidate.evidence}
+        stored_as = store_evidence(db, user.id, None, candidate.evidence, given)
+        cited = {stored_as.get(i, i) for i in given}
         title, body = text(candidate)
         alarm = Alarm(
             user_id=user.id,

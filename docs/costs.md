@@ -119,6 +119,7 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-16 | PHIA benchmark checks before any batch (`eval/phia_bench.py`): the four systems live on two questions ($0.05) and four real-people questions ($0.09), three count questions after the counting-tool fix ($0.01) | about $0.15 |
 | 2026-11-16 | PHIA real people: batch 1 first 20 ($0.37), traces of two misses ($0.02), the rest of batch 1 ($3.96); the totals fix checked on 8 failures and 40 regressions ($0.15); the team agent's Monday run on made-up teams, eight runs ($0.08) | about $4.58 |
 | 2026-11-18 | PHIA mode A, batch 3 on PHIA's 4 users: first 20 ($0.22), then the rest ($2.95) | about $3.16 |
+| 2026-11-19 | Structured requests on PHIA: A1 50 questions three times ($0.06, $0.07, $0.07), A2 50 once ($0.07), three spot checks ($0.02) | about $0.29 |
 | 2026-11-18 | Follow-ups after the audit fixes: the audit's conversations ($0.06), held out once ($0.08) | about $0.14 |
 | 2026-11-18 | Broad questions: a 10-answer trial ($0.06), one replay ($0.01), development before and after fixes ($0.35, $0.39), held out once ($0.47); PHIA regression, 50 questions ($0.14) | about $1.42 |
 | 2026-11-18 | PHIA mode A, batch 2 on PHIA's 4 users: first 20 ($0.24), then the rest ($2.88) | about $3.13 |
@@ -128,4 +129,221 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-17 | Meal logging fix: replays of Karim's chicken-and-rice conversation (six, $0.07), food ranking on 45 and 25 held-out foods with embeddings and the model's choice (about $0.03) | about $0.10 |
 | 2026-11-17 | Team warning before a noted crunch: about 30 Monday runs on made-up teams while measuring and fixing it | about $0.35 |
 | 2026-11-16 | Router on 152 held-out questions, Jev twice ($0.0124, $0.0125); RAG on the second held-out set and ten borderline queries (embeddings, under $0.01) | about $0.03 |
+| 2026-11-18 | Structured requests, synthetic smoke: 10 answers and 5 reader-only checks; 14/15 checks, one access-limit miss fixed | $0.011193492 |
+| 2026-11-18 | Structured requests, first fresh synthetic set: 83 turns, 72 automated passes; direct source review also found a variant mismatch. No paid judge or Google writes | $0.061797732 |
+| 2026-11-18 | Constrained reader and variant selection, fresh 78-turn set: 75 strict passes, all 34 metric/date-shift pairs correct | $0.081097904 |
+| 2026-11-18 | Request-capability repair: 4 fresh probes plus 78 regression turns, 80/82 strict passes; two remaining contract failures fixed | $0.094112192 |
+| 2026-11-18 | Final threshold/food contract regressions: 4/4 passes; no new overall accuracy claim | $0.006452634 |
 
+These implementation checks total **$0.254653954** (OpenAI $0.232608700, Jev $0.022045254).
+Including the earlier independently requested audits (about $0.4588 and $1.330020434), the shared
+$3 request is at about $2.04. See [methods, failures and limits](typed-requests.md). All new data
+is made up; provider-reported usage is logged and raw runs remain under ignored `data/eval/`.
+
+
+## Independent candidate audit — November 19, 2026
+
+Karim authorized a new, separate **$2 maximum** for testing Claude's latest PR #195 head
+(`fa15f4a`), including direct review and a local Markdown handoff.
+
+| Date | Run | Metered upper estimate |
+|---|---|---:|
+| 2026-11-19 | Independent candidate audit v3 on Claude’s PHIA-fixed `fa15f4a`: 463 turns in 183 conversations, 347 fresh / 116 exposed regressions, all 34 metrics and four public histories; every answer directly reviewed | $0.855184784 |
+| 2026-11-19 | Additional coverage diagnostics, frozen separately before execution: 25 turns; null/positive/constant/disjoint associations, same-night references, two windows, hour/minute thresholds, mixed read/log and source boundaries | $0.055229928 |
+
+Combined recorded estimate **$0.909444218** (OpenAI **$0.866389430**, Jev **$0.043054788**),
+plus **$0.000970494** held for uncertain failed-call charges: conservative upper total
+**$0.910414712**, leaving **$1.089585288** of this allowance. The supplement ran only after
+the main process finished and was capped at the unused portion including main uncertainty.
+The initial usage-limit approval-review block did not execute the command and cost $0.
+No paid model judge or Google traffic/writes. Scripted offline preflights cost $0 and are
+excluded from accuracy. All 488 actual replies were reviewed; all raw artifacts remain under
+ignored `data/eval/`. See [the completed local handoff](independent-audit-v3-handoff.md) for
+cohort scores, independent recalculations, grading corrections and limitations.
+
+
+## Independent post-redesign audit — November 19, 2026
+
+Within the unused portion of Karim's separate $2 allowance, tested PR #195 head `84db5f5`.
+
+| Run | OpenAI | Jev | Total estimate |
+|---|---:|---:|---:|
+| Fresh frozen synthetic API conversations, 211 turns / 78 conversations; direct answer, independent row/evidence and state review | $0.386967800 | $0.019739496 | $0.406707296 |
+| Frozen 24-item PHIA B1 regression gate, including four conservative-reservation blocks and their later completion; no completed answer repeated, no paid judge | $0.048681150 | $0.002340660 | $0.051021810 |
+
+New total **$0.457729106**, no uncertain reservations outstanding. Together with the earlier
+$0.910414712 conservative upper estimate: **$1.368143818 of $2**, leaving **$0.631856182**.
+The user explicitly approved the PHIA public-health-derived data transfer after automatic review
+initially blocked it; the rejected command made no paid calls. Shared-budget reallocation and all
+original blocked outputs are retained. Offline tests, preflight and memory API diagnostics cost $0.
+No Google traffic/writes, merge, deploy or full PHIA batches. See
+[independent-audit-v4-handoff.md](independent-audit-v4-handoff.md) for per-area grades, failures,
+methods and limitations; raw inputs/outputs remain under ignored `data/eval/`.
+
+### 2026-11-19: request-reader replay of the v4 audit's misses
+
+Within the same $2 allowance, approved with a hard $0.07 cap. Only the request reader (`gpt-5.4-mini`),
+on the 47 failed/partial turns of the v4 audit and 11 passing controls, with each turn's original
+question, profile date, earlier turns, saved request state and waiting-card flag
+(`eval/reader_replay.py`). Readings kept under ignored `data/eval/reader_replay_2026-11-19/`.
+
+| Run | OpenAI | Total |
+|---|---:|---:|
+| 58 reader-only turns (the 59th stopped at the cap) | $0.0675 | **$0.0675** |
+
+Allowance: $1.368143818 + $0.0675 = **$1.4356 of $2**, leaving **about $0.564**.
+
+### 2026-11-19: smoke run of the clause reader
+
+Approved with a hard $0.03 cap. Request reader only, 20 turns ([reader-smoke-2026-11-19.md](reader-smoke-2026-11-19.md)),
+then a recheck of one stop-rule turn after its fix.
+
+| Run | OpenAI | Total |
+|---|---:|---:|
+| 20 reader-only turns, one call each | $0.0249 | $0.0249 |
+| Recheck of `calendar_rollover-02/t3` (sent back once, then right) | $0.0050 | $0.0050 |
+| **Smoke total** | | **$0.0299** |
+
+Allowance: $1.4356 + $0.0299 = **$1.4655 of $2**, leaving **about $0.534**.
+
+### 2026-11-19: live re-check of the two smoke fixes
+
+Approved with a hard $0.007 cap. Request reader only, two turns, each run once.
+
+| Run | OpenAI | Total |
+|---|---:|---:|
+| `privacy_memory-01/t2` and `calendar_rollover-01/t3`, two calls each (one retry) | $0.0062 | **$0.0062** |
+
+Allowance: $1.4655 + $0.0062 = **$1.4717 of $2**, leaving **about $0.528**.
+
+### November 20, 2026 — PR 195 independent conversation audit and PHIA gate
+
+Frozen candidate `7ef95c7`. Upper-bound spend was $0.192801780 for the initial conversation run, $0.028625010 to complete the 22 budget-blocked turns and $0.031907418 for the 24-question B1 gate. Total **$0.253334208**. Cumulative spend is approximately **$1.7250 of $2**, leaving **$0.2750**. Results and limitations are in [the audit handoff](independent-audit-v5-handoff.md).
+
+### November 20, 2026 — PR 195 v6 fresh audit and PHIA gate
+
+Frozen candidate `9684d77`. The first 36 conversation turns cost $0.122029424 and the 24-question PHIA B1 run cost $0.038393718. Four expansion shards cost $0.105157540, $0.135743342, $0.099541266 and $0.072930334. Replacing six meal turns after correcting the evaluation fixture cost $0.008667570. Total **$0.582463194**. With the approved additional $2, cumulative spend is approximately **$2.3075 of $4**, leaving **$1.6925**. Results are in the [v6 audit handoff](independent-audit-v6-handoff.md).
+
+### November 20, 2026 — Claude's own live checks while Codex was away (v7, v8)
+
+Same harness, oracle and grading rules as v6; graded by Claude, who wrote the code, so not
+independent. v7 on `4582185` (226 turns): $0.381964. v8 on `5f51a36` with the gpt-5.4-nano
+read-back, stopped after 34 turns when it rejected correct readings: $0.093391. The same frozen
+v8 deck on `0d858a0` with the read-back off (94 turns): $0.256848. Total **$0.732203**. Cumulative
+spend is approximately **$3.0397 of $4**, leaving **$0.9603**. Results are in
+[typed-requests.md](typed-requests.md#explicit-anchors-instead-of-word-checks-2026-11-20).
+
+### November 20, 2026 — independent audit of the frozen redesigned reader
+
+On `b730fda`, 110 fresh synthetic conversation turns cost $0.325881382. The separate 24-question B1 gate cost $0.034121418. Total **$0.360002800** against the predeclared $0.935 ceiling. Cumulative spend is approximately **$3.3997 of $4**, leaving **$0.6003**. See the [independent audit handoff](independent-audit-b730fda-handoff.md).
+
+### November 21, 2026 — focused independent live audit on a196c6d
+
+86 fresh turns in 36 synthetic chats cost **$0.286983744** ($0.278319480 OpenAI and $0.008664264 Jev), within the $0.59 cap. The reopen checks incurred no paid calls. Cumulative audit spend is approximately **$3.6867 of $4**, leaving **$0.3133**. See the [audit handoff](independent-audit-a196c6d-handoff.md).
+
+### November 21, 2026 — matched reader comparison on the edit slice (Claude)
+
+Reader-only calls (gpt-5.4-mini, no agent run) on the 48 historical date follow-ups and 6 workout
+edits: two price probes $0.009252, the edit reader $0.066747, the current reader at `a196c6d`
+$0.091011 (stopped at its $0.09 cap after 36 cases), and the edit reader with a required length
+$0.080902 (stopped at its $0.08 cap after 41 cases). Total **$0.247912**. Cumulative spend is
+approximately **$3.9346 of $4**, leaving **$0.0654**. Results are in
+[typed-requests.md](typed-requests.md#edits-to-an-earlier-result-or-card-2026-11-21).
+
+### November 21, 2026 — independent audit on 9228fe6
+
+88 fresh synthetic chat turns cost $0.232728534 and 24 frozen PHIA B1 questions cost $0.036339018. Total **$0.269067552** of this audit's $2 authorization. Offline grading and reopening incurred no API charges. See the [audit handoff](independent-audit-9228fe6-handoff.md).
+
+### November 21, 2026 — post-audit diagnostic probes on 9228fe6
+
+Matched reader, calendar and exercise-selector probes recorded $0.248385800 in returned usage. Combined with the preceding audit, confirmed spend is $0.517453352 against the same $2 cap. Two diagnostic meters retain $0.603452250 in unresolved reservations, including a reproduced HTTP 400 for unsupported reasoning effort with function tools. These reservations are an upper bound, not confirmed charges. Conservative remaining allowance is $0.879094. No paid diagnostic result is a release score.
+
+### November 21, 2026 — independent audit of b3d64ca
+
+Frozen candidate `b3d64ca33f7da5992890b20dd290c6bace660955`: 90 fresh synthetic API turns
+cost **$0.308799922** (OpenAI $0.299549590, Jev $0.009250332); the frozen 24-item PHIA B1
+regression gate cost **$0.043868418** (OpenAI $0.041856450, Jev $0.002011968). Combined
+**$0.352668340**, within the user's explicit $0.65 approval and the existing shared $2 allowance.
+The initial automatic approval rejection did not execute and cost $0. New unresolved reservations:
+$0. Including the earlier $0.603452250 unresolved reservations, conservative cumulative usage
+is **$1.473573942 of $2**, leaving **$0.526426058**. No paid judge, Google traffic or writes;
+offline replays/tests/preflight/reopening cost $0. Results and limitations are in the
+[b3d64ca independent handoff](independent-audit-b3d64ca-handoff.md): HOLD; 83 full, 1 partial,
+6 failed of 90 fresh turns; PHIA 24/24. The prior diagnostic runs remain development results.
+
+### November 21, 2026 — next-audit authorization and planning
+
+The user authorized a **new $5 maximum across the next audits**, with broader question coverage.
+This is a forward-looking shared cap, not $5 per run; the previous approximately $0.526 remaining
+is not added to it. Earlier usage and unresolved reservations remain recorded above. This
+planning/code review cost **$0**, leaving the new **$5.00** unspent. Proposed allocations:
+$0.75 matched development diagnosis, $3.50 fresh broad conversations, $0.25 PHIA B1 and $0.50
+uncertainty/confirmation reserve, all under one combined meter. No paid run started. See
+[the general repair and expanded audit plan](pr-195-general-repair-plan.md).
+
+### November 21, 2026 — expanded independent audit of 689fa7c
+
+Against the user's new shared **$5** authorization: the 22-input matched reader development
+comparison cost **$0.074579400**; 592 fresh synthetic API turns in 234 conversations cost
+**$1.409913034**; the frozen 24-item PHIA B1 gate cost **$0.045561318**. Combined
+**$1.530053752** (OpenAI $1.472697460, Jev $0.057356292), with **$0 unresolved reservations**,
+leaving **$3.469946248** for subsequent audits. The prior balance is not added. Backend/failure
+tests, source-row checks, adapter probes and reopening cost $0. No paid judge or Google
+traffic/writes. Automatic approval review initially rejected the PHIA invocation before any
+calls; the user then specifically approved the public health-derived payload transfer to OpenAI
+within the existing cap. That gate ran once: **23/24**, one regression within the predeclared
+allowance. See the [689fa7c handoff](independent-audit-689fa7c-handoff.md): HOLD; 504 full,
+33 partial and 55 failed fresh turns, with every delivered answer reviewed and messages/citations
+reopened. The PHIA result does not clear the fresh audit's named-period and other release blockers.
+
+### November 22, 2026 — e1c1eec matched-reader development comparison
+
+Frozen candidate `e1c1eec0535c013b103ad33088bf41492ef24f1c` versus baseline `689fa7c` on
+152 exposed synthetic inputs per arm. The baseline cost **$0.227755200** and candidate
+**$0.343948800**: combined **$0.571704000**, entirely OpenAI reader calls, below the predeclared
+combined $0.75 ceiling. No paid judge, embeddings, web lookup, PHIA or Google traffic/writes.
+Offline tests, renderer probes and counterfactual/fixture checks cost $0.
+
+Shared new-$5 cumulative spend is **$2.101757752** (OpenAI $2.044401460, Jev $0.057356292),
+with **$0 unresolved reservations**, leaving **$2.898242248**. Common-field request matches
+improved 103/150 → 133/150 (42 improved, 12 spoiled); the two new duration-basis cases are
+reported separately. These are development extraction checks, not held-out answer accuracy.
+The successor-block category regressed 12/12 → 3/12, and a deterministic renderer issue remains.
+No fresh release audit ran. See the [e1c1eec handoff](independent-audit-e1c1eec-handoff.md).
+
+### November 22, 2026 — bcdb0ff matched-reader development comparison
+
+Frozen `bcdb0ffb205effdc4e3145d89400a0454eab2482` versus `e1c1eec` on the same 152 exposed
+synthetic inputs per arm, with complete stored claims attached to both arms before freezing.
+Baseline **$0.339550950**, candidate **$0.272442000**: combined **$0.611992950**, under the
+predeclared combined $0.75 ceiling. All 304 inputs completed, with 324 reader completions including
+interpretation retries. No paid judge, embeddings, web lookup, PHIA or Google traffic/writes.
+Offline review, probes and 2,685 backend tests cost $0.
+
+Shared new-$5 cumulative usage is **$2.713750702** (OpenAI $2.656394410, Jev $0.057356292),
+with **$0 unresolved reservations**, leaving **$2.286249298**. Strict request matches improve
+138/152 → 146/152 (common fields 136/150 → 144/150; 11 improved, three spoiled). One strict
+workout mismatch is action-equivalent in an independent actual-edit control; the frozen score is
+retained. This is development extraction coverage, not held-out answer accuracy. HOLD: coaching
+renderer, compound dispatch, duplicate state and semantic reader misses remain. No fresh release
+audit ran. See the [bcdb0ff independent handoff](independent-audit-bcdb0ff-handoff.md).
+
+### November 22, 2026 — final paid audit of 910da27
+
+At the user's request to finish this audit cycle, frozen
+`910da27c912486dac18c7901ce6548df91a258fe` ran **592 exposed synthetic regression turns + 48
+newly frozen wording turns**, followed by the same approved **24-item PHIA gate**. Synthetic
+cost **$1.782488472**. Initial PHIA cost **$0.047878746**; a conservative reservation blocked
+four OpenAI readings after only router charges. The first completion launcher stopped at a
+pre-call assertion and cost $0. Only those four blocked readings were then completed once for
+**$0.014146464**, using a $0.15 conservative reserve within the existing shared cap. No completed
+answer was rerun. Total new spend: **$1.844513682**. No paid judge or Google traffic/writes.
+
+Shared new-$5 cumulative usage is **$4.558264384** (OpenAI $4.437424630, Jev $0.120839754),
+with **$0 unresolved reservations**, leaving **$0.441735616**. Same-592 full results improve
+504/592 → 563/592; 48 new turns are 42 full, two partial, four failed; PHIA is 24/24 after the
+four infrastructure completions. Development/regression and new-wording scores stay separate.
+All offline review and verification cost $0. Recommendation: stop repeated audit cycles and
+record remaining limitations; this is not a clean pass of the original zero-wrong-period gate.
+See the [final audit report](independent-audit-910da27-final.md) and
+[deferred issues](pr-195-followup-issues.md). No further paid audit is planned.

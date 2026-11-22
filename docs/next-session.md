@@ -1,9 +1,8 @@
-# Next session (written 2026-11-11, not pushed)
+# Archived handoff from November 11
 
-A hand-off for the next working session. Read [AGENTS.md](../AGENTS.md), then
-[status.md](status.md#where-we-are-2026-11-11) and
-[plan.md](plan.md#where-we-are-and-what-is-left-2026-11-11) first; this page adds what was agreed
-after them. `main` is at `fa845eb` (#150), clean.
+This records the pilot proposal at commit `fa845eb`. For current work use the [open issues](status.md#open-issues)
+and [plan](plan.md). Stored traces, thumbs, the aggregate pilot report and owner-operated account deletion
+shipped after this handoff. The November 17 [pilot record](progress-2026-11-17.md) supersedes the proposed dates and caps below.
 
 ## Agreed with Karim on 2026-11-11
 
@@ -48,7 +47,7 @@ service, which already has the database. Never copy their health data to a lapto
    and scores may not be explained by their own inputs in `compare_windows`. Retest on the same 33
    why questions plus no-cause controls, about $1, with the rule in plan.md set before the run.
 
-Account deletion is not built: either add it, or delete testers' data by hand at the end.
+Account deletion was outstanding at the time of this proposal. The owner CLI now handles deletion requests.
 
 ## Still open with Karim
 

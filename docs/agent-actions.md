@@ -55,8 +55,7 @@ submitting in two calls. On 2026-10-25 one real food entry was created from the 
 from Google and deleted by undo (see [experiments.md](experiments.md#first-real-google-write-and-answers-that-read-like-one-reply-2026-10-25));
 one real workout (no distance) was created and undone the same way after PR #57. Reconciliation of pending operations or process crashes
 remains a prerequisite to leaving writes on. A refresh reads the saved status;
-it does not currently poll Google operations. Nutrition history/mapping, food lookup, serving
-arithmetic, photo input and hydration are still planned.
+it does not currently poll Google operations. Food lookup and gram-based serving arithmetic are implemented in `app/outside.py`. PR #195 reads confirmed meal entries. External nutrition-history mapping and deduplication, photo input and hydration are separate work.
 
 **What the tracker recorded is added to a workout** (built after the first real workout write).
 When a workout draft is created or saved again, the server reads Google's roll-ups for exactly

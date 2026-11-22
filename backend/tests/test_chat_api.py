@@ -56,7 +56,7 @@ def describe_then_claim(text: str, cost: float = 0.004, metric: str = "sleep_min
         )
         claim = {
             "text": text,
-            "kind": "no_change",
+            "kind": "value",
             "evidence_ids": [payload["evidence_id"]],
             "metric": metric,
         }
@@ -113,6 +113,78 @@ def ask(client, headers, text: str = "How did I sleep?", **options):
     return client.post("/chat", json={"text": text, **options}, headers=headers)
 
 
+def test_typed_request_survives_a_new_agent_instance_and_stays_account_scoped(
+    client, engine, agent
+):
+    headers = signed_in(client, engine)
+    agent.llm.request_turns = [
+        ScriptedLLM.call(
+            "read_request",
+            kind="data",
+            parts=[
+                {
+                    "metrics": ["steps"],
+                    "operation": "value",
+                    "periods": [{"kind": "explicit", "start": "2026-07-15", "end": "2026-07-15"}],
+                }
+            ],
+        )
+    ]
+    response = ask(client, headers, "My steps on July 15 2026?")
+    assert response.status_code == 200
+    conversation = response.json()[-1]["conversationId"]
+    following = ScriptedLLM(
+        request_turns=[
+            ScriptedLLM.call(
+                "read_request",
+                kind="data",
+                parts=[
+                    {"periods": [{"kind": "relative", "anchor": "previous", "offset_days": -1}]}
+                ],
+            )
+        ]
+    )
+    client.app.dependency_overrides[chat.get_agent] = lambda: AgentParts(
+        following, agent.router, None
+    )
+    response = ask(client, headers, "And 24 hours earlier?", conversationId=conversation)
+    assert response.status_code == 200
+    answer = response.json()[-1]
+    with session_scope(engine) as db:
+        trace = db.scalar(
+            select(AnswerTrace).where(AnswerTrace.message_id == uuid.UUID(answer["id"]))
+        )
+        typed = next(s for s in trace.steps if s["type"] == "request")
+        part = typed["request"]["parts"][0]
+        assert part["metrics"] == ["steps"] and part["operation"] == "value"
+        assert part["windows"] == [{"start": "2026-07-14", "end": "2026-07-14"}]
+    other = signed_in(client, engine, "another@example.com")
+    other_reader = ScriptedLLM(
+        request_turns=[
+            ScriptedLLM.call(
+                "read_request", kind="data", parts=[{"periods": [{"kind": "inherit"}]}]
+            )
+        ]
+        * 2  # sent back once (nothing earlier in this account), then asked
+    )
+    client.app.dependency_overrides[chat.get_agent] = lambda: AgentParts(
+        other_reader, agent.router, None
+    )
+    response = ask(client, other, "Same measure for those dates?")
+    assert "Which earlier" in response.json()[-1]["text"]
+
+
+def test_explicit_memory_opt_out_is_respected_even_without_a_known_phrase(client, engine, agent):
+    headers = signed_in(client, engine)
+    agent.llm.request_turns = [ScriptedLLM.call("read_request", kind="other", memory="deny")]
+    agent.llm.turns = [ScriptedLLM.say("Understood.")]
+    response = ask(
+        client, headers, "I work nights. Keep this outside anything you retain about me."
+    )
+    assert response.status_code == 200
+    assert not any("record_memories" in request["tools"] for request in agent.llm.requests)
+
+
 # Access
 
 
@@ -132,7 +204,7 @@ def test_a_new_person_has_an_empty_chat(client, engine):
 
 def test_the_apps_own_scores_can_be_asked_about(client, engine):
     # The daily table holds no scores; the chat adds them, and strain belongs to activity.
-    llm = ScriptedLLM(describe_then_claim("Your strain held steady.", metric="strain"))
+    llm = ScriptedLLM(describe_then_claim("Your strain values were recorded.", metric="strain"))
     activity = AgentParts(llm, FixedRouter(activity=0.9), None)
     client.app.dependency_overrides[chat.get_agent] = lambda: activity
     response = ask(client, signed_in(client, engine), "How was my strain?")
@@ -142,7 +214,7 @@ def test_the_apps_own_scores_can_be_asked_about(client, engine):
 
 
 def test_a_question_is_answered_with_verified_claims_and_stored(client, engine, agent):
-    agent.llm.turns.extend(describe_then_claim("Your time asleep held steady."))
+    agent.llm.turns.extend(describe_then_claim("Your time asleep values were recorded."))
     headers = signed_in(client, engine)
 
     response = ask(client, headers)
@@ -287,7 +359,7 @@ def test_a_plain_question_costs_no_listening_call(client, engine, agent):
     headers = signed_in(client, engine)
     parts = listening(agent)
     client.app.dependency_overrides[chat.get_agent] = lambda: parts
-    agent.llm.turns.extend(describe_then_claim("Your time asleep held steady."))
+    agent.llm.turns.extend(describe_then_claim("Your time asleep values were recorded."))
     ask(client, headers, "How did I sleep last month?")
     time.sleep(0.1)  # the job would have run by now
     assert not [r for r in agent.llm.requests if r["tools"] == ["record_memories"]]
@@ -640,14 +712,43 @@ def test_only_an_idle_chats_episode_reaches_another_chat(client, engine, agent):
     from app.db import memory
 
     headers = signed_in(client, engine)
-    agent.llm.turns.extend(describe_then_claim("Your time asleep held steady."))
+
+    def tested_stability(messages):
+        record = json.loads(next(m["content"] for m in reversed(messages) if m["role"] == "tool"))
+        return submission(
+            "No clear change in time asleep was detected.",
+            claims=[
+                {
+                    "text": "No clear change in time asleep was detected.",
+                    "kind": "no_change",
+                    "metric": "sleep_minutes",
+                    "evidence_ids": [record["evidence_id"]],
+                }
+            ],
+        )
+
+    agent.llm.turns.extend(
+        [
+            ScriptedLLM.call(
+                "compare_windows",
+                metric="sleep_minutes",
+                recent_start="2026-08-01",
+                recent_end="2026-08-29",
+                baseline_start="2026-07-01",
+                baseline_end="2026-07-31",
+            ),
+            tested_stability,
+        ]
+    )
     sleep_chat = ask(client, headers).json()[0]["conversationId"]
     other = client.post("/conversations", headers=headers).json()["id"]
 
     # Still in use: nothing from it crosses over.
     agent.llm.turns.append(submission("Nothing to add."))
     ask(client, headers, "How is my sleep lately?", conversationId=other)
-    assert "Your time asleep held steady." not in json.dumps(agent.llm.requests[-1]["messages"])
+    assert "No clear change in time asleep was detected." not in json.dumps(
+        agent.llm.requests[-1]["messages"]
+    )
 
     later = datetime.now(UTC) + memory.EPISODE_IDLE + timedelta(minutes=1)
     with session_scope(engine) as session:
@@ -656,13 +757,15 @@ def test_only_an_idle_chats_episode_reaches_another_chat(client, engine, agent):
         from_other = memory.memory_items(session, user.id, later, uuid.UUID(other))
         from_same = memory.memory_items(session, user.id, later, uuid.UUID(sleep_chat))
     [episode] = [item for item in from_other if item.kind == "episode"]
-    assert episode.metrics == ("sleep_minutes",) and episode.evidence[0].tool == "describe"
-    assert "Your time asleep held steady." in episode.text
+    assert episode.metrics == ("sleep_minutes",) and episode.evidence[0].tool == "compare_windows"
+    assert "No clear change in time asleep was detected." in episode.text
     assert not [item for item in from_same if item.kind == "episode"]  # its own turns are history
 
     agent.llm.turns.append(submission("As you saw before, sleep held steady."))
     ask(client, headers, "How is my sleep now?", conversationId=other)
-    assert "Your time asleep held steady." in json.dumps(agent.llm.requests[-1]["messages"])
+    assert "No clear change in time asleep was detected." in json.dumps(
+        agent.llm.requests[-1]["messages"]
+    )
 
 
 def test_deleting_a_chat_deletes_its_episode(client, engine, agent):
@@ -670,7 +773,7 @@ def test_deleting_a_chat_deletes_its_episode(client, engine, agent):
     from app.db.models import MemoryEpisode
 
     headers = signed_in(client, engine)
-    agent.llm.turns.extend(describe_then_claim("Your time asleep held steady."))
+    agent.llm.turns.extend(describe_then_claim("Your time asleep values were recorded."))
     chat_id = ask(client, headers).json()[0]["conversationId"]
     later = datetime.now(UTC) + memory.EPISODE_IDLE + timedelta(minutes=1)
     with session_scope(engine) as session:
@@ -835,7 +938,7 @@ def test_a_correction_read_as_data_still_continues_the_logging_request():
 
 
 def test_every_answer_keeps_its_trace(client, engine, agent):
-    agent.llm.turns.extend(describe_then_claim("Your time asleep held steady."))
+    agent.llm.turns.extend(describe_then_claim("Your time asleep values were recorded."))
     headers = signed_in(client, engine)
     answer = ask(client, headers).json()[1]
     with session_scope(engine) as session:

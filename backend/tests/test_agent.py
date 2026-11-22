@@ -290,8 +290,8 @@ def test_an_unsupported_summary_is_repaired_then_replaced(frame):
             return submit(
                 [
                     {
-                        "text": "Your sleep stayed about the same.",
-                        "kind": "no_change",
+                        "text": "Your sleep values were recorded.",
+                        "kind": "value",
                         "evidence_ids": [evidence["evidence_id"]],
                         "metric": "sleep_minutes",
                     }
@@ -311,4 +311,4 @@ def test_an_unsupported_summary_is_repaired_then_replaced(frame):
     result = answer(llm, frame, "How is my sleep?")
     repair = json.loads(llm.requests[2]["messages"][-1]["content"])
     assert "durations not found" in " ".join(repair["summary_problems"])
-    assert result.summary == "Your sleep stayed about the same."  # the verified claim instead
+    assert result.summary == "Your sleep values were recorded."  # the verified claim instead

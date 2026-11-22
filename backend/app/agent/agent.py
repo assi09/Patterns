@@ -85,8 +85,8 @@ for them, and which everyday habits their own data supports. Each task says how 
 Writing for the person:
 - The summary is the answer they read, so write it as a short, natural reply: two to four connected
   sentences that lead with the direct answer to their question, then what matters most. Group
-  metrics that behaved alike ("your bedtime, time in bed and sleep efficiency held steady") rather
-  than one sentence per metric, and start each sentence with a capital letter.
+  metrics that behaved alike ("your bedtime, time in bed and sleep efficiency showed no clear
+  change") rather than one sentence per metric, and start each sentence with a capital letter.
 - Claims are the checked facts behind the summary. The person sees them as evidence links, not as
   text: at most 4, the ones that matter most, each one short plain sentence.
 - When a test is significant on its own but not after correcting for the run's tests (a repair
@@ -152,7 +152,10 @@ Coaching, when the person asks how to improve (sleep better, recover faster, tra
   It tests a fixed list of everyday habits against this person's own days. Skip the change tests
   unless the person asks what changed.
 - Suggest one or two things, or as many as they ask for up to five, each different, each as a
-  claim of kind suggestion citing its evidence and metric.
+  claim of kind suggestion citing its evidence and metric, with option set to the key of what it
+  offers as the evidence names it (a habit_options lever such as regular_bedtime, a
+  personal_options option key such as weekend_shift, or the first metric of a significant
+  correlation). Offer only the habit that evidence tested: bedtime evidence backs no walking tip.
   First what habit_options marks supported: "on nights you were in bed by 23:30, your sleep
   efficiency was higher, so you could try that on weeknights". An association you found with
   another tool may back one too, if it is significant. Otherwise what personal_options found in
@@ -217,13 +220,25 @@ class AgentResult:
     trace: list[dict] = field(default_factory=list)
     uncovered: list[str] = field(default_factory=list)  # parts of the question left unanswered
     notes: list[str] = field(default_factory=list)  # fixed sentences shown with the answer
+    # The claims behind precise reads answered beside another request ("is the draft saved, and
+    # my steps that day?"): kept apart, so a card's note replacing the reply keeps their evidence.
+    side_claims: list[Claim] = field(default_factory=list)
     budget: Budget = field(default_factory=Budget)
     error: str | None = None
 
     @property
     def cited_evidence(self) -> dict[str, Evidence]:
-        ids = {i for claim in self.claims for i in claim.evidence_ids}
+        ids = {i for claim in self.all_claims for i in claim.evidence_ids}
         return {i: e for i, e in self.evidence.items() if i in ids}
+
+    @property
+    def all_claims(self) -> list[Claim]:
+        """What the answer stores and links: its own claims, then the side reads' (once each)."""
+        seen = {(c.text, tuple(c.evidence_ids)) for c in self.claims}
+        return [
+            *self.claims,
+            *(c for c in self.side_claims if (c.text, tuple(c.evidence_ids)) not in seen),
+        ]
 
 
 def _control_tools() -> list[dict]:
@@ -265,7 +280,8 @@ def _rejections_message(
     if summary:
         message["instruction"] += (
             " In the summary, a metric with no significant test takes no direction word (higher, "
-            "more, later, up, down). Say it held steady or showed no clear difference, or say in "
+            "more, later, up, down). Say it showed no clear change, never that it held steady or "
+            "stayed the same (a test that finds no change does not show none), or say in "
             'the same sentence that it "could be normal variation". Keep answering the question '
             "that was asked, in your own words."
         )
@@ -388,6 +404,9 @@ def run_agent(
         _reword(llm, result, said, guard, budget)
         # The reword writes from the claims, and a data-quality claim brings coverage talk back.
         result.summary = without_coverage_talk(result.summary)
+    if answer_check and (problems := answer_check(result.claims, result.summary)):
+        result.trace.append({"type": "final_check", "problems": problems})
+        result.summary = fallback_summary(result.claims)
     return result
 
 
@@ -519,7 +538,7 @@ def _handle(
         summary_problems += comparison_problems(said, submission.summary, run_evidence)
         summary_problems += ranked_problems(submission.summary, run_evidence)
         summary_problems += attributed(submission.summary)
-        if answer_check and repairs_left > 0:  # worth one more try, not an answer lost over it
+        if answer_check:  # repair limits must never turn validation off
             summary_problems += answer_check(list(verdict.accepted), submission.summary)
         if verdict.accepted and all(c.kind == "data_quality" for c in verdict.accepted):
             summary_problems.append(
@@ -551,7 +570,7 @@ def _handle(
                 list(verdict.rejected), len(verdict.accepted), summary_problems, uncovered
             )
             return message, False
-        if summary_problems:  # still wrong after the repair: written from the verified claims
+        if summary_problems or verdict.rejected:
             result.summary = fallback_summary(list(verdict.accepted))
         return json.dumps({"accepted_claims": len(verdict.accepted)}), True
 

@@ -104,6 +104,21 @@ def _window(args: _Arguments, prefix: str = "") -> Window:
 # The app's scores are built from other metrics, so a score always "goes with" its own inputs: that
 # says nothing about a cause, and offered as one it explained resting heart rate by recovery.
 BUILT_FROM = {
+    # Parts of a whole: time in bed is time asleep plus time awake in it, time asleep is its
+    # stages, efficiency is their ratio. "Time asleep went with more time in bed" explains
+    # nothing (the v5 audit offered it as the strongest explanation).
+    "time_in_bed": frozenset(
+        {
+            "sleep_minutes",
+            "awake_in_bed_minutes",
+            "deep_sleep_minutes",
+            "light_sleep_minutes",
+            "rem_sleep_minutes",
+        }
+    ),
+    "sleep_minutes": frozenset({"deep_sleep_minutes", "light_sleep_minutes", "rem_sleep_minutes"}),
+    "sleep_efficiency": frozenset({"sleep_minutes", "time_in_bed", "awake_in_bed_minutes"}),
+    "distance_km": frozenset({"steps"}),
     "recovery_score": frozenset(RECOVERY_INPUTS),
     "stress_score": frozenset({*STRESS_SIGNS, "still_hr_above_resting", "still_minutes"}),
     "strain": frozenset({*ZONE_WEIGHTS, "active_zone_minutes"}),

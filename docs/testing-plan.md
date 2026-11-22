@@ -9,6 +9,8 @@ The PHIA benchmark is one part of this plan. It defends the data answers end to 
 have a job of their own (the verifier, RAG, logging, the router, "why", memory, safety) are also
 tested on their own, and the pilot then tests everything on real users.
 
+The schedule below records the November 16 plan. Results for the real-person batches and PHIA-user batches A1–A3 are in the [test results](test-results.md). PR #195 has its own [release criteria](acceptance-structured-requests.md).
+
 ## What was done on 2026-11-16
 
 - **Tuning round merged** (#163, #164): the agent's failures were in the harness, not the model.
@@ -191,3 +193,13 @@ and which are final: [progress-2026-11-17.md](progress-2026-11-17.md).
    totals.
 
 Total before the pilot: about $35, nearly all of it PHIA.
+
+## Structured request follow-up (2026-11-18)
+
+The new local request path has deterministic tests and targeted synthetic development checks;
+see [the complete record](typed-requests.md). `eval/typed_request_check.py` calls paid services
+only when explicitly run, freezes its plan first and refuses to overwrite results. It is not a
+CI test. Its fresh probes, regression turns and reader-only checks must be reported separately.
+Before a new final reliability claim, prepare a fresh independent conversation set on real
+histories and grade request identity, actual tool arguments, numerical ground truth, final prose,
+source/variant relevance and side effects. The old audit is now development material.

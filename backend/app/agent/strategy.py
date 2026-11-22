@@ -33,7 +33,7 @@ from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
 from app.analysis.habits import BETTER
 from app.analysis.screen import BASELINE_DAYS, NOT_SCREENED, screen_windows, without_low_wear
-from app.analysis.tools import change_point, compare_windows, correlate
+from app.analysis.tools import change_point, compare_windows, correlate, describe
 
 EXPAND = "expand_tools"
 YESTERDAY = re.compile(r"\byesterday\b", re.IGNORECASE)
@@ -177,7 +177,9 @@ STRATEGIES: dict[str, Strategy] = {
         ),
         guide="How to work: below are the habits tested on this person's days and what stands out "
         "in their own routine, as evidence you may cite. Give one or two suggestions, or as many "
-        "as they ask for up to five, as claims of kind suggestion: first what tested as supported, "
+        "as they ask for up to five, as claims of kind suggestion, each with option set to the "
+        "key of the lever or option it offers and offering only the habit its evidence tested: "
+        "first what tested as supported, "
         "then what stands out, said as worth trying, not as something proven. Use everything "
         "different below before stopping, and never the same point twice. Each must use their own "
         "numbers, say concretely what to do (the passages below say how: cite the one you use "
@@ -333,15 +335,20 @@ def coaching_evidence(
     metrics: list[str],
     skip_levers: frozenset[str] = frozenset(),
     skip_options: frozenset[str] = frozenset(),
+    window: Window | None = None,
+    goals: tuple[str, ...] = (),
 ) -> tuple[list[Evidence], str]:
-    """habit_options and personal_options on the goal's metrics over the last 60 days, run before
-    the model starts."""
+    """habit_options and personal_options on the goal's metrics over the last 60 days, or over the
+    days the request named ("my short sleep in September" is September), run before the model
+    starts."""
     if frame.empty:
         return [], ""
-    end = frame.index.max().date()
-    window = Window(start=end - timedelta(days=COACHING_DAYS - 1), end=end)
+    if window is None:
+        end = frame.index.max().date()
+        window = Window(start=end - timedelta(days=COACHING_DAYS - 1), end=end)
     found, lines, stands_out = [], [], []
-    for metric in GOALS.get(expert, GOALS[None]):
+    # The metrics an investigation names are its goals, whichever area it was routed to.
+    for metric in goals or GOALS.get(expert, GOALS[None]):
         if metric not in metrics or metric not in frame.columns:
             continue
         try:
@@ -349,7 +356,13 @@ def coaching_evidence(
         except ToolError:
             continue
         found.append(evidence)
-        supported = [lever["habit"] for lever in evidence.stats["levers"] if lever["supported"]]
+        # A "watch" lever is a pattern seen on their days, not a habit tested: named as one.
+        watch = " (a pattern to watch, not a tested habit)"
+        supported = [
+            lever["habit"] + (watch if lever.get("permits") == "watch" else "")
+            for lever in evidence.stats["levers"]
+            if lever["supported"]
+        ]
         lines.append(
             f"- {label(metric)} (evidence_id {evidence.id}): "
             + (f"supported: {'; '.join(supported)}" if supported else "no habit clearly supported")
@@ -571,7 +584,8 @@ BROAD_GUIDE = (
     "corrected for testing them all at once, and ranks the clear changes by size. Answer from it "
     "and cite its evidence_ids. Lead with the clear changes in that order, across areas, not only "
     "one area; call a change the biggest, the main or the most only if it is first in the list. "
-    "Say in one sentence which areas held steady, backing it with a no_change claim on one of that "
+    "Say in one sentence which areas showed no clear change (not that they held steady: no clear "
+    "change does not show they stayed the same), backing it with a no_change claim on one of that "
     "area's listed metrics. If nothing changed clearly, open with that ('Nothing has changed "
     "clearly over Oct 5 to Oct 18') and only then, if at all, a possible change with a hedge in "
     "the same sentence. Never write about the method (how many metrics or comparisons were "
@@ -590,7 +604,11 @@ def size_of(delta: float) -> str:
 
 
 def overview_evidence(
-    frame: pd.DataFrame, question: str, today: date | None
+    frame: pd.DataFrame,
+    question: str,
+    today: date | None,
+    window: Window | None = None,
+    baseline: Window | None = None,
 ) -> tuple[list[Evidence], str]:
     """Every metric compared over the period a broad question means (the last 14 days against the
     28 before when it names none), corrected for testing them all at once, the clear changes
@@ -600,6 +618,11 @@ def overview_evidence(
     if frame.empty:
         return [], ""
     cleaned = without_low_wear(frame)
+    if window is not None:
+        # Days the request named, resolved by code, are the days answered: never swapped for the
+        # latest data (Sept 1-3 and Dec 1-14 were answered with October, Codex's review).
+        return _named_overview(cleaned, window, baseline)
+    # The period phrase in the question, if any.
     asked = asked_period(question, today) if today else None
     last = min(asked[1], cleaned.index.max().date()) if asked else None
     # The period they named, if their data covers enough of it; otherwise their latest data (data
@@ -610,6 +633,59 @@ def overview_evidence(
         baseline = Window(start=baseline_end - timedelta(days=BASELINE_DAYS - 1), end=baseline_end)
     else:
         recent, baseline = screen_windows(cleaned)
+    return _compared(cleaned, recent, baseline)
+
+
+def _named_overview(
+    frame: pd.DataFrame, window: Window, baseline: Window | None
+) -> tuple[list[Evidence], str]:
+    """Every metric over exactly the named days: compared with the days before them (or with the
+    second named period) when there are enough, else described; days with no data at all say so."""
+    if frame.empty:
+        return [], ""
+    first, last = frame.index.min().date(), frame.index.max().date()
+    start, end = max(window.start, first), min(window.end, last)
+    if start > end:
+        return [], (
+            f"The person asked about {window.start} to {window.end}; their data has no days "
+            f"in it (it runs from {first} to {last}). Say so plainly; describe no other days."
+        )
+    recent = Window(start=start, end=end)
+    if baseline is None and (end - start).days + 1 >= MIN_OVERVIEW_DAYS:
+        before = recent.start - timedelta(days=1)
+        baseline = Window(start=before - timedelta(days=BASELINE_DAYS - 1), end=before)
+    if baseline is not None:
+        records, text = _compared(frame, recent, baseline)
+        if records:
+            return records, text
+    described = []
+    for metric in frame.columns:
+        if metric in NOT_SCREENED:
+            continue
+        try:
+            record = describe(frame, metric, recent)
+        except ToolError:
+            continue
+        if record.n:
+            described.append(record)
+    if not described:
+        return [], (
+            f"The person asked about {window.start} to {window.end}; no metric has data on "
+            "those days. Say so plainly; describe no other days."
+        )
+    lines = [
+        f"- {label(e.metrics[0])} (evidence_id {e.id}): "
+        f"{evidence_payload(e)['display'].get('mean', '')} on average"
+        for e in described
+    ]
+    return described, (
+        f"Too few days ({recent.start} to {recent.end}) to test a change: what each metric was on "
+        "exactly those days (describe), nothing outside them:\n" + "\n".join(lines)
+    )
+
+
+def _compared(frame: pd.DataFrame, recent: Window, baseline: Window) -> tuple[list[Evidence], str]:
+    cleaned = frame
     tests = []
     for metric in cleaned.columns:
         if metric in NOT_SCREENED:
@@ -698,7 +774,7 @@ def overview_evidence(
         )
     if steady:
         parts.append(
-            "No clear change (cite one of these to say an area held steady): "
+            "No clear change (cite one of these to say an area showed no clear change): "
             + "; ".join(f"{area}: {', '.join(names)}" for area, names in sorted(steady.items()))
             + "."
         )
