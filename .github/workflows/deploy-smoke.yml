@@ -24,5 +24,5 @@ jobs:
        github.event.deployment.environment == 'patterns / production')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: scripts/smoke_test.sh "$API_URL" "$WEB_URL"
