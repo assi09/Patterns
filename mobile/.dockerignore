@@ -1,0 +1,8 @@
+# The web image needs the app's source and lockfile only.
+node_modules
+dist
+.expo
+coverage
+.env
+.env.*
+*.log
