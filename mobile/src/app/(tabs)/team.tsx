@@ -235,7 +235,11 @@ function TeamView({ team }: { team: SupervisedTeam }) {
   const side = (
     <>
       <NotesSection teamId={team.id} style={card} />
-      <AlertsSection teamId={team.id} style={card} endedOnly={Boolean(team.paused) || !latest.data?.briefing} />
+      <AlertsSection
+        teamId={team.id}
+        style={card}
+        endedOnly={Boolean(team.paused) || !latest.data?.briefing}
+      />
       {report.data ? <LevelsSection levels={report.data.levels} card={card} /> : null}
       <InviteSection team={team} card={card} />
       <PastWeeks

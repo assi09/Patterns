@@ -215,7 +215,10 @@ export function NotesSection({
           placeholder="Event date · YYYY-MM-DD"
           placeholderTextColor={colors.faint}
           onSubmitEditing={save}
-          style={[styles.input, { color: colors.text, borderColor: colors.border }]}
+          style={[
+            styles.input,
+            { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+          ]}
         />
         <Button label="Add" disabled={!validDate || !text.trim() || add.isPending} onPress={save} />
       </View>
