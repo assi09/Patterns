@@ -563,11 +563,6 @@ export interface TeamAction {
   decidedAt: ISODateTime | null;
 }
 
-export interface TeamChatReply {
-  messages: TeamChatMessage[]; // the question and its answer
-  proposed: TeamAction[];
-}
-
 /** Something the supervisor told the agent about the team's work, such as a deadline. */
 export interface TeamNote {
   id: string;
@@ -602,7 +597,7 @@ export interface ReportFinding {
 /** What the team agent found on its own Monday run, every claim checked against team evidence. */
 export interface TeamBriefing {
   summary: string;
-  items: { text: string; kind: string; metric?: string | null }[];
+  items: { text: string; kind: string; metric?: string | null; evidenceIds: string[] }[];
   proposals: number; // team actions it proposed, waiting for approval
   madeAt: ISODateTime;
 }
@@ -701,7 +696,6 @@ export interface ApiClient {
   getTeamReport(teamId: string, week: ISODate): Promise<TeamReport>;
   makeTeamReport(teamId: string, week?: ISODate): Promise<TeamReport>; // the last full week
   getTeamChat(teamId: string): Promise<TeamChatMessage[]>; // oldest first
-  askTeamAgent(teamId: string, text: string): Promise<TeamChatReply>;
   rateTeamAnswer(
     teamId: string,
     messageId: string,

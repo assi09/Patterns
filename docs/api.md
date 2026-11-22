@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-85 operations, grouped by area.
+84 operations, grouped by area.
 
 ### meta
 
@@ -240,7 +240,6 @@ Besides the codes listed under [Error codes](#error-codes):
 | `GET` | `/teams/{team_id}/reports/{week}` | supervisor | `team_id`, `week` |  | [TeamReport](#teamreport) |  |
 | `POST` | `/teams/{team_id}/reports` | supervisor | `team_id` | [GenerateReport](#generatereport) | [TeamReport](#teamreport) | The report for a full week, made now if it was not made yet; never for a week in progress. |
 | `GET` | `/teams/{team_id}/chat` | supervisor | `team_id` |  | list[[TeamChatMessage](#teamchatmessage)] |  |
-| `POST` | `/teams/{team_id}/chat` | supervisor | `team_id` | [TeamChatIn](#teamchatin) | [TeamChatReply](#teamchatreply) |  |
 | `PUT` | `/teams/{team_id}/chat/{message_id}/rating` | supervisor | `team_id`, `message_id` | [RatingIn](#ratingin) | [TeamChatMessage](#teamchatmessage) | The supervisor's thumbs up or down on one of the team agent's answers. |
 | `GET` | `/teams/{team_id}/notes` | supervisor | `team_id` |  | list[[TeamNote](#teamnote)] |  |
 | `POST` | `/teams/{team_id}/notes` | supervisor | `team_id` | [TeamNoteIn](#teamnotein) | 201: [TeamNote](#teamnote) |  |
@@ -388,6 +387,7 @@ A field not marked required may be left out.
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
+| `evidenceIds` | list[string] |  |  |
 | `text` | string | yes |  |
 | `kind` | string | yes |  |
 | `metric` | string or null |  |  |
@@ -1048,7 +1048,7 @@ One member who chose to share, with their week against their own usual.
 
 ### TeamBriefing
 
-What the team agent found on its Monday run, checked like its chat answers.
+Weekly highlights and upcoming event warnings, each linked to the report evidence.
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
@@ -1056,12 +1056,6 @@ What the team agent found on its Monday run, checked like its chat answers.
 | `items` | list[[BriefingItem](#briefingitem)] | yes |  |
 | `proposals` | integer |  | default `0` |
 | `madeAt` | string (date-time) | yes |  |
-
-### TeamChatIn
-
-| Field | Type | Required | Limits |
-|---|---|---|---|
-| `text` | string | yes | min length 1, max length 600 |
 
 ### TeamChatMessage
 
@@ -1073,13 +1067,6 @@ What the team agent found on its Monday run, checked like its chat answers.
 | `evidence` | list[[Evidence](#evidence)] |  |  |
 | `rating` | `up` \| `down` or null |  |  |
 | `createdAt` | string (date-time) | yes |  |
-
-### TeamChatReply
-
-| Field | Type | Required | Limits |
-|---|---|---|---|
-| `messages` | list[[TeamChatMessage](#teamchatmessage)] | yes |  |
-| `proposed` | list[[TeamAction](#teamaction)] |  |  |
 
 ### TeamCode
 

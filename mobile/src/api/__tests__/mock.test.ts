@@ -448,37 +448,6 @@ describe('the team agent in the mock', () => {
     return (teams[0] ?? (await mockClient.createTeam('Design'))).id;
   }
 
-  it('never answers about one person', async () => {
-    const id = await teamId();
-    const reply = await mockClient.askTeamAgent(id, 'Who is sleeping the worst?');
-    expect(reply.messages.map((m) => m.role)).toEqual(['supervisor', 'agent']);
-    expect(reply.messages[1].text).toMatch(/as a whole/);
-    expect(reply.proposed).toEqual([]);
-  });
-
-  it('proposes an action that waits for approval and is decided once', async () => {
-    const id = await teamId();
-    const { proposed } = await mockClient.askTeamAgent(id, 'What could we try?');
-    expect(proposed[0].status).toBe('proposed');
-    const done = await mockClient.decideTeamAction(id, proposed[0].id, true);
-    expect(done.action.status).toBe('approved');
-    await expect(mockClient.decideTeamAction(id, proposed[0].id, false)).rejects.toThrow(
-      /already decided/,
-    );
-  });
-
-  it('lets the supervisor rate an answer, never their own question', async () => {
-    const id = await teamId();
-    const { messages } = await mockClient.askTeamAgent(id, 'How is the team?');
-    const [asked, said] = messages;
-    expect(said.rating).toBeNull();
-    expect((await mockClient.rateTeamAnswer(id, said.id, 'down')).rating).toBe('down');
-    const stored = (await mockClient.getTeamChat(id)).find((m) => m.id === said.id);
-    expect(stored?.rating).toBe('down');
-    expect((await mockClient.rateTeamAnswer(id, said.id, null)).rating).toBeNull();
-    await expect(mockClient.rateTeamAnswer(id, asked.id, 'up')).rejects.toThrow(/no longer/);
-  });
-
   it('keeps notes about the team and refuses ones about a person', async () => {
     const id = await teamId();
     const note = await mockClient.addTeamNote(id, 'Release deadline', '2026-11-03');

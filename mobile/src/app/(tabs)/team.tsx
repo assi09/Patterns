@@ -31,7 +31,7 @@ import type {
 import { Row, Section } from '@/components/list';
 import { AlertsSection, NotesSection, ProposalsSection } from '@/components/teamAgent';
 import { TeamPulseTile } from '@/components/pulse';
-import { AreaChips, AskBar, BriefingCard } from '@/components/teamBrief';
+import { AreaChips, BriefingCard } from '@/components/teamBrief';
 import { TILE_RADIUS } from '@/components/widgets';
 import { ChangeChart, KeyFigures, LevelsTable, WeekdayChart } from '@/components/teamReport';
 import { QueryState, Screen } from '@/components/Screen';
@@ -215,7 +215,6 @@ function TeamView({ team }: { team: SupervisedTeam }) {
       <Section title="Figures paused" style={card}>
         <Text color="muted">{team.paused}</Text>
       </Section>
-      <AskBar teamId={team.id} />
     </>
   ) : (
     <>
@@ -226,19 +225,21 @@ function TeamView({ team }: { team: SupervisedTeam }) {
       <BriefingCard
         status={status}
         items={briefingItems(alerts.data, latest.data)}
-        teamId={team.id}
         briefing={latest.data?.briefing}
       />
       <TeamPulseTile teamId={team.id} />
       <ProposalsSection teamId={team.id} style={card} />
-      <AskBar teamId={team.id} />
       <ReportSection team={team} reports={reports.data} report={report.data} card={card} />
     </>
   );
   const side = (
     <>
       <NotesSection teamId={team.id} style={card} />
-      <AlertsSection teamId={team.id} style={card} endedOnly />
+      <AlertsSection
+        teamId={team.id}
+        style={card}
+        endedOnly={Boolean(team.paused) || !latest.data?.briefing}
+      />
       {report.data ? <LevelsSection levels={report.data.levels} card={card} /> : null}
       <InviteSection team={team} card={card} />
       <PastWeeks

@@ -17,7 +17,6 @@ import type {
   Rating,
   ReminderChange,
   SendOptions,
-  TeamChatMessage,
 } from './types';
 
 const LISTENER_MS = 4000;
@@ -611,40 +610,6 @@ export function useMakeTeamReport() {
 
 // The supervisor's team agent
 
-export function useTeamChat(teamId: string) {
-  return useQuery({
-    queryKey: [...keys.teams, teamId, 'chat'],
-    queryFn: () => api.getTeamChat(teamId),
-  });
-}
-
-export function useAskTeamAgent(teamId: string) {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (text: string) => api.askTeamAgent(teamId, text),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'chat'] });
-      client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'actions'] });
-      client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'notes'] });
-    },
-  });
-}
-
-export function useRateTeamAnswer(teamId: string) {
-  const client = useQueryClient();
-  const key = [...keys.teams, teamId, 'chat'];
-  return useMutation({
-    mutationFn: ({ id, rating }: { id: string; rating: Rating | null }) =>
-      api.rateTeamAnswer(teamId, id, rating),
-    onMutate: ({ id, rating }) => {
-      const before = client.getQueryData<TeamChatMessage[]>(key);
-      client.setQueryData<TeamChatMessage[]>(key, (old) => withRating(old, id, rating));
-      return { before };
-    },
-    onError: (_error, _rated, context) => client.setQueryData(key, context?.before),
-  });
-}
-
 export function useTeamNotes(teamId: string) {
   return useQuery({
     queryKey: [...keys.teams, teamId, 'notes'],
@@ -655,7 +620,8 @@ export function useTeamNotes(teamId: string) {
 export function useAddTeamNote(teamId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (text: string) => api.addTeamNote(teamId, text),
+    mutationFn: ({ text, date }: { text: string; date?: string }) =>
+      api.addTeamNote(teamId, text, date),
     onSuccess: () => client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'notes'] }),
   });
 }

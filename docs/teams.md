@@ -347,7 +347,29 @@ So stress is never presented as how stressed a team feels: supervisors read "phy
 "no steps" standing in for Fitbit's still minutes; which end of the rating means stressed is inferred
 from its link with mood.
 
-## The team agent (built: backend and Team tab)
+## The supervisor’s weekly briefing
+
+The Team tab shows a standalone briefing each week. Supervisors enter events under Team notes
+and can supply an event date directly. The personal agent still supports conversations.
+
+Code computes and ranks the weekly changes. With several qualifying findings, the model can
+choose up to three for the briefing. The highest-priority finding always leads. Every displayed
+sentence, figure and citation comes directly from a selected report finding. An invalid choice or
+model outage uses the first three ranked findings. Quiet weeks use fixed wording. The scheduled
+job reads no conversation and creates no proposals. Existing proposals, challenges, daily alerts
+and weekly emails retain their own flows.
+
+The job independently checks upcoming dated notes against earlier events followed by a qualifying
+team change. The model judges whether the events are alike. Each warning cites the two notes and
+its measured outcomes. This is a reminder to watch for recurrence. Forecast accuracy would require
+following future events and comparing their observed outcomes with the warnings.
+
+Run `cd backend && ../.venv/bin/pytest -q tests/test_team_briefing.py` for repeatable checks with
+planted time series and scripted model decisions. These verify the selection rules, fallbacks,
+note matching, privacy floor and report delivery. Model judgement on natural event descriptions
+needs its own independently labelled examples.
+
+## Historical supervisor chat (retired)
 
 The supervisor talks to an agent about the team (`app/teams/agent.py`; `POST /teams/{id}/chat`). It
 has its own tools, all over the whole team and never a chosen subset, with the floor of 5 in code:
@@ -394,7 +416,7 @@ Each decision is made once.
   answers from the chat, and may repeat their own numbers. **Alerts** are listed for the app at
 `GET /teams/{id}/alerts`. The team agent shares the chat's daily cap per supervisor.
 
-## The dashboard's layout (2026-11-16)
+## Historical dashboard layout (2026-11-16)
 
 Redesigned as Karim chose from mockups: the five areas as chips, tinted where something moved; the
 team agent's briefing (where the team stands, then each open alert and the week's priorities on
@@ -403,7 +425,7 @@ waiting for approval; an ask box; the weekly report and its charts as tiles. On 
 earlier alerts, shared levels, the invite and past weeks sit in a column beside it. Open alerts
 appear once, in the briefing.
 
-## The agent's Monday run (2026-11-16)
+## Historical Monday investigation (2026-11-16)
 
 Until now the team agent only answered when asked, and the weekly report was written by code. The
 weekly job now runs the agent too (`python -m app.teams weekly --agent`, `app/teams/briefing.py`).
@@ -422,7 +444,7 @@ was briefed right in 3 of 3 runs once the instructions said what counts as a cha
 round, and a steady team was told it held steady; about $0.01 a team a week. Next: warnings before a
 noted crunch from what similar notes did before, and a one-question anonymous pulse.
 
-## Warning before a noted crunch (2026-11-17)
+## Original warning evaluation (2026-11-17)
 
 Supervisors note deadlines and releases. What each past dated note was followed by is measured by
 code (`note_aftermath`): the team's two weeks from its start against the four weeks before, on

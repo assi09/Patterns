@@ -154,12 +154,27 @@ export function NotesSection({
   const add = useAddTeamNote(teamId);
   const remove = useDeleteTeamNote(teamId);
   const [text, setText] = useState('');
-  const save = () => text.trim() && add.mutate(text.trim(), { onSuccess: () => setText('') });
+  const [date, setDate] = useState('');
+  const parsed = new Date(date + 'T00:00:00Z');
+  const validDate =
+    !date || (!Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date);
+  const save = () => {
+    if (!text.trim() || !validDate || add.isPending) return;
+    add.mutate(
+      { text: text.trim(), date: date || undefined },
+      {
+        onSuccess: () => {
+          setText('');
+          setDate('');
+        },
+      },
+    );
+  };
   return (
     <Section
       style={style}
       title="Team notes"
-      footer="Deadlines, releases or travel help the agent line changes up with what the team was doing. Nothing about one person."
+      footer="Add an event date to compare past releases or deadlines with upcoming ones. Keep notes about the whole team."
     >
       {(notes.data ?? []).map((note) => (
         <Row
@@ -180,7 +195,7 @@ export function NotesSection({
         <TextInput
           value={text}
           onChangeText={setText}
-          placeholder="e.g. Release deadline Nov 3"
+          placeholder="e.g. Product release"
           placeholderTextColor={colors.faint}
           maxLength={300}
           onSubmitEditing={save}
@@ -190,8 +205,24 @@ export function NotesSection({
             { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
           ]}
         />
-        <Button label="Add" disabled={!text.trim() || add.isPending} onPress={save} />
       </View>
+      <View style={styles.field}>
+        <TextInput
+          value={date}
+          onChangeText={setDate}
+          maxLength={10}
+          accessibilityLabel="Event date, YYYY-MM-DD"
+          placeholder="Event date · YYYY-MM-DD"
+          placeholderTextColor={colors.faint}
+          onSubmitEditing={save}
+          style={[
+            styles.input,
+            { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+          ]}
+        />
+        <Button label="Add" disabled={!validDate || !text.trim() || add.isPending} onPress={save} />
+      </View>
+      {!validDate ? <Text color="danger">Enter a valid date as YYYY-MM-DD.</Text> : null}
       {add.error ? <ErrorLine error={add.error} /> : null}
     </Section>
   );

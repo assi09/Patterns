@@ -38,7 +38,7 @@ from app.agent.ask import default_guard, default_router
 from app.agent.context import TOKEN_BUDGET
 from app.agent.llm import OpenAILLM, ScriptedLLM
 from app.agent.router import KeywordRouter
-from app.api import auth, chat, teams
+from app.api import auth, chat
 from app.api.chat import AgentParts
 from app.api.main import create_app
 from app.api.store import analyze, get_data
@@ -246,7 +246,6 @@ class Run:
             llm, router, None if dry else default_guard(settings), background=True
         )
         app.dependency_overrides[chat.get_agent] = lambda: agent
-        app.dependency_overrides[teams.team_agent_llm] = lambda: llm
         chat._pool = Inline()
         self.client = TestClient(app)
         signed = self.client.post(
@@ -998,7 +997,7 @@ def summarise(r: Run, spent: float) -> dict:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--only", default="", help="scenario names, e.g. P3,T1 (needs included)"
+        "--only", default="", help="personal scenario names, e.g. P3,P4 (needs included)"
     )
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--stop", type=float, default=3.0)
@@ -1007,7 +1006,9 @@ def main():
         "--dry", action="store_true", help="no paid calls: checks the harness"
     )
     args = parser.parse_args()
-    wanted = [n for n in args.only.split(",") if n] or list(SCENARIOS)
+    wanted = [n for n in args.only.split(",") if n] or [n for n in SCENARIOS if n.startswith("P")]
+    if any(n.startswith("T") for n in wanted):
+        parser.error("Team chat retired. Run backend/tests/test_team_briefing.py for weekly team cases.")
     settings.chat_daily_cap_per_user_usd = settings.chat_daily_cap_total_usd = 100.0
     if (
         args.dry

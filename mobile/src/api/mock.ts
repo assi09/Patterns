@@ -1015,9 +1015,6 @@ const teamActions = new Map<string, TeamAction[]>();
 // proposal that waits for approval, as the real one behaves (docs/teams.md).
 const ABOUT_A_PERSON =
   /\b(who|whom|which (person|member|employee)|names?|individual|someone|anyone|he|she)\b/i;
-const PERSON_REPLY =
-  "I only ever see the team as a whole, from at least five people, so I can't say anything about one person. If you're worried about someone, the best step is a conversation with them.";
-
 function mockTeamAlerts(teamId: string): TeamAlert[] {
   const day = new Date(Date.now() - 2 * 86_400_000).toISOString();
   return [
@@ -1042,37 +1039,6 @@ function mockTeamAlerts(teamId: string): TeamAlert[] {
       resolvedAt: null,
     },
   ];
-}
-
-function mockTeamAnswer(teamId: string, text: string): { reply: string; proposed: TeamAction[] } {
-  if (ABOUT_A_PERSON.test(text)) return { reply: PERSON_REPLY, proposed: [] };
-  if (/\b(try|do|change|help|suggest|improve)\b/i.test(text)) {
-    const start = new Date(Date.now() + 86_400_000);
-    const end = new Date(start.getTime() + 13 * 86_400_000);
-    const action: TeamAction = {
-      id: `${teamId}-action${(teamActions.get(teamId)?.length ?? 0) + 1}`,
-      kind: 'challenge',
-      title: 'Lights out by 23:00',
-      body: 'For two weeks, try to be in bed by 23:00 on weeknights, and keep evenings after 21:30 free of meetings.',
-      metric: 'sleep_minutes',
-      startsOn: start.toISOString().slice(0, 10),
-      endsOn: end.toISOString().slice(0, 10),
-      status: 'proposed',
-      proposedAt: new Date().toISOString(),
-      decidedAt: null,
-    };
-    teamActions.set(teamId, [action, ...(teamActions.get(teamId) ?? [])]);
-    return {
-      reply:
-        'Time asleep has been lower across the team for three weeks, so a two-week sleep challenge could help. I proposed one under Proposals: nothing reaches the team until you approve it.',
-      proposed: [action],
-    };
-  }
-  return {
-    reply:
-      'Time asleep has been lower across the team for the past three weeks (median -38 min, 6 of 8 people lower), and resting heart rate is up a little. Activity and load look steady.',
-    proposed: [],
-  };
 }
 
 function supervisorAccount(): MockAccount {
@@ -1214,16 +1180,11 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
     createdAt: new Date().toISOString(),
     generatedBy: 'model',
     briefing: {
-      summary:
-        'Time asleep fell across the team for the third week running, by a median of 38 min for 6 of 8 people. It lined up with your note on the release deadline. Steps rose by 1,400 a day, and recovery, load and physical stress signs held steady.',
+      summary: 'Time asleep has been lower for 3 weeks running. Steps rose this week.',
       items: [
-        {
-          text: 'Time asleep fell by a median of 38 min for 6 of 8 people.',
-          kind: 'change',
-          metric: 'sleep_minutes',
-        },
-        { text: 'It lined up with the release deadline.', kind: 'note', metric: null },
-        { text: 'Steps rose by 1,400 a day.', kind: 'change', metric: 'steps' },
+        { text: 'Time asleep has been lower for 3 weeks running.', kind: 'change',
+          metric: 'sleep_minutes', evidenceIds: ['e_sleep_minutes'] },
+        { text: 'Steps rose this week.', kind: 'change', metric: 'steps', evidenceIds: ['e_steps'] },
       ],
       proposals: 0,
       madeAt: new Date().toISOString(),
@@ -1351,32 +1312,6 @@ export const mockClient: ApiClient = {
     later(() => {
       ownTeam(teamId);
       return teamChats.get(teamId) ?? [];
-    }),
-  askTeamAgent: (teamId, text) =>
-    later(() => {
-      ownTeam(teamId);
-      const now = new Date().toISOString();
-      const { reply, proposed } = mockTeamAnswer(teamId, text);
-      const count = teamChats.get(teamId)?.length ?? 0;
-      const pair: TeamChatMessage[] = [
-        {
-          id: `${teamId}-m${count + 1}`,
-          role: 'supervisor',
-          text: text.trim(),
-          evidence: [],
-          createdAt: now,
-        },
-        {
-          id: `${teamId}-m${count + 2}`,
-          role: 'agent',
-          text: reply,
-          evidence: [],
-          rating: null,
-          createdAt: now,
-        },
-      ];
-      teamChats.set(teamId, [...(teamChats.get(teamId) ?? []), ...pair]);
-      return { messages: pair, proposed };
     }),
   rateTeamAnswer: (teamId, messageId, rating) =>
     later(() => {

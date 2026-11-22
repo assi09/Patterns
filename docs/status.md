@@ -70,7 +70,7 @@ as buffer. What is left, what still has to be tested and the order of work are i
 | RAG | 1,083 public lifestyle passages, cited as evidence. The evaluated default now ranks by embeddings, with word search available when embeddings are unavailable | #130-#133 |
 | Experts | after three comparisons, the **hybrid**: experts answer inside their own area, and "why" questions go to the general agent with the experts' notes | #144, #147, #149 |
 | Evaluation | real public data (PMData, LifeSnaps; 46 people), an independent oracle, a plain chatbot baseline, the PHIA benchmark, planted causes, decisions with rules set in advance | #141, #143, #147, #149, [evaluation.md](evaluation.md) |
-| Teams | a check across every area (`team_scan`), daily alerts when the team's aggregate changes, and the **team agent**: supervisor chat, team notes, proposals that wait for approval, all on the Team tab | #145, #146, #148, [teams.md](teams.md) |
+| Teams | a check across every area (`team_scan`), daily alerts when the team's aggregate changes, team notes with event dates, proposals that wait for approval, and a weekly briefing: code-ranked findings, highlights picked by the model, warnings before a noted event like a past one; the supervisor chat was retired in #213 | #145, #146, #148, #213, [teams.md](teams.md) |
 
 **Headline results** (details and limits in [evaluation.md](evaluation.md)):
 

@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     weekly.add_argument(
         "--agent",
         action="store_true",
-        help="the team agent investigates the week and writes a briefing (paid; checked)",
+        help="select weekly highlights and match upcoming events to past changes (paid)",
     )
     demo = commands.add_parser(
         "demo-members", help="fill a team with made-up members (local database only)"

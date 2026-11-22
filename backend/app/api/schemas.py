@@ -391,13 +391,14 @@ class TeamReportSummary(ApiModel):
 
 
 class BriefingItem(ApiModel):
+    evidence_ids: list[str] = Field(default_factory=list)
     text: str
     kind: str
     metric: str | None = None
 
 
 class TeamBriefing(ApiModel):
-    """What the team agent found on its Monday run, checked like its chat answers."""
+    """Weekly highlights and upcoming event warnings, each linked to the report evidence."""
 
     summary: str
     items: list[BriefingItem]
@@ -427,10 +428,6 @@ class GenerateReport(ApiModel):
 # The supervisor's team agent
 
 
-class TeamChatIn(ApiModel):
-    text: str = Field(min_length=1, max_length=600)
-
-
 class TeamChatMessage(ApiModel):
     id: str
     role: Literal["supervisor", "agent"]
@@ -451,11 +448,6 @@ class TeamAction(ApiModel):
     status: Literal["proposed", "approved", "declined"]
     proposed_at: datetime
     decided_at: datetime | None = None
-
-
-class TeamChatReply(ApiModel):
-    messages: list[TeamChatMessage]
-    proposed: list[TeamAction] = Field(default_factory=list)
 
 
 class TeamNoteIn(ApiModel):

@@ -36,7 +36,6 @@ import type {
   TeamAction,
   TeamAlert,
   TeamChatMessage,
-  TeamChatReply,
   TeamNote,
   TeamPreview,
   TeamReport,
@@ -211,8 +210,6 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       request<TeamReport>(baseUrl, `/teams/${encodeURIComponent(teamId)}/reports/${week}`),
     getTeamChat: (teamId) =>
       request<TeamChatMessage[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/chat`),
-    askTeamAgent: (teamId, text) =>
-      post<TeamChatReply>(baseUrl, `/teams/${encodeURIComponent(teamId)}/chat`, { text }, 60_000),
     rateTeamAnswer: (teamId, messageId, rating) =>
       request<TeamChatMessage>(
         baseUrl,

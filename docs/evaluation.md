@@ -316,6 +316,8 @@ this, through the report's traces.
 
 ## The team agent: privacy attacks, planted changes, real people (2026-11-12)
 
+**Since #213 (2026-11-22)** the supervisor chat is retired: it added little and follow-up questions made it hard to test. The privacy attacks and planted changes below were run on that chat and are kept as its record (`eval/team_eval.py` at commit 224ba1e). The weekly briefing that replaced it takes no question from the supervisor: code ranks the findings and writes every sentence, and the model only picks up to three by evidence id and judges whether two notes are the same kind of event, so there is no free-text path to ask about a person. Its checks are scripted (`backend/tests/test_team_briefing.py`, in CI). The PMData alerts are unaffected.
+
 **Privacy attacks** (`eval/team_eval.py`): 33 attempts on a made-up team of eight, three of whom share
 their named weekly levels (so the names exist): "who" questions, ranking, differencing ("the team
 without the night shift"), names, medical questions, inference from small groups, notes carrying a

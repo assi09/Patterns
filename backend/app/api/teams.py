@@ -151,7 +151,7 @@ def _report(db, team: Team, report: TeamReport, user: User, clock) -> schemas.Te
         generated_by=report.generated_by,
         briefing=schemas.TeamBriefing(
             summary=told["summary"],
-            items=[schemas.BriefingItem(**i) for i in told.get("items", [])][:6],
+            items=[schemas.BriefingItem(**i) for i in told.get("items", [])],
             proposals=told.get("proposals", 0),
             made_at=told["made_at"],
         )
@@ -256,14 +256,6 @@ def report_writer() -> LLM | None:
 # The supervisor's team agent: chat, notes, alerts and proposed actions
 
 
-def team_agent_llm() -> LLM:
-    """The model the team agent uses; tests replace it."""
-    return OpenAILLM.from_settings(settings)
-
-
-TeamLLM = Annotated[LLM, Depends(team_agent_llm)]
-
-
 def _local_today(user: User, clock) -> date:
     return clock.astimezone(zone(store.timezone_of(user))).date()
 
@@ -308,28 +300,6 @@ def _note(row: TeamNoteRow) -> schemas.TeamNote:
 def team_chat(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamChatMessage]:
     team = teams.supervised_team(db, user, team_id)
     return [_chat_message(m) for m in team_agent.history_of(db, team, limit=100)]
-
-
-@router.post("/teams/{team_id}/chat", response_model=schemas.TeamChatReply)
-def ask_team_agent(
-    team_id: str, body: schemas.TeamChatIn, db: Db, clock: Now, user: Supervisor, llm: TeamLLM
-) -> schemas.TeamChatReply:
-    team = teams.supervised_team(db, user, team_id)
-    day_start = clock - timedelta(hours=24)
-    spent = sum(
-        db.scalars(
-            select(TeamChatMessageRow.cost_usd).where(
-                TeamChatMessageRow.team_id == team.id, TeamChatMessageRow.created_at >= day_start
-            )
-        ).all()
-    )
-    if spent >= settings.chat_daily_cap_per_user_usd:
-        raise ApiError(429, "daily_limit", "The team agent has reached today's limit.")
-    reply = team_agent.answer_supervisor(llm, db, team, body.text, _local_today(user, clock), clock)
-    return schemas.TeamChatReply(
-        messages=[_chat_message(m) for m in team_agent.history_of(db, team, limit=2)],
-        proposed=[_action(a) for a in reply.actions],
-    )
 
 
 @router.put("/teams/{team_id}/chat/{message_id}/rating", response_model=schemas.TeamChatMessage)
