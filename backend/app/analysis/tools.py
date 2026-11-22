@@ -90,8 +90,14 @@ def describe(frame: pd.DataFrame, metric: str, window: Window) -> Evidence:
     )
 
 
-def coverage(frame: pd.DataFrame, window: Window) -> Evidence:
-    """How complete each metric is over a window, and how many days had low wear time."""
+def coverage(frame: pd.DataFrame, window: Window, *, dates: bool = False) -> Evidence:
+    """How complete each metric is over a window, and how many days had low wear time.
+
+    `dates` also lists, per metric, the exact calendar dates in the window with no value: every
+    date of the window, not only the frame's rows, so a date absent from the data is missing
+    too, and a recorded zero is a value. Asked for on its own, since a list over all history
+    for every metric would be large: a count could not answer "which dates?" (the Fitbit replay
+    of 2026-11-22, 0 of 43 conversations)."""
     rows = frame.loc[pd.Timestamp(window.start) : pd.Timestamp(window.end)]
     present = {metric: int(rows[metric].notna().sum()) for metric in frame.columns}
     summary: dict = {
@@ -99,6 +105,15 @@ def coverage(frame: pd.DataFrame, window: Window) -> Evidence:
         "fraction_present": {m: _round(count / window.days, 3) for m, count in present.items()},
         "days_present": present,
     }
+    if dates:
+        calendar = pd.date_range(window.start, window.end, freq="D")
+        summary["missing_dates"] = {
+            metric: [
+                day.date().isoformat()
+                for day in calendar.difference(rows.index[rows[metric].notna()])
+            ]
+            for metric in frame.columns
+        }
     if len(frame.columns) > 1:  # several metrics asked about together: the days with all
         summary["days_all_present"] = int(rows.notna().all(axis=1).sum())
     if "wear_minutes" in frame.columns:
