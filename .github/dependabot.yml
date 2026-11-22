@@ -36,6 +36,10 @@ updates:
       - dependency-name: "@shopify/flash-list"
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # eslint-config-expo's plugins support ESLint only up to the major the SDK ships with
+      # (ESLint 10 broke npm ci in #204); minor and patch updates still come.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
     groups:
       javascript:
         patterns: ["*"]
