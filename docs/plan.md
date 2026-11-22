@@ -2,14 +2,42 @@
 
 The working plan from 2026-10-27 to the end of the project. **Everything planned is built and
 evidenced by Monday 2026-11-23**; the two weeks after (Nov 24 – Dec 7) are kept free for surprises,
-rehearsal and only small fixes. The poster pitch is done; this plan covers the final submission:
-live demo and presentation (with a final poster if the instructor asks for one), the repository with
+rehearsal and only small fixes. The poster session is done and closed with the instructor; this
+plan covers the rest of the final submission: live demo and presentation, the repository with
 setup and reproducibility, the evaluation and its results, traces and operational metrics, failure
 and threat analysis, architecture and API documentation, and the final technical report. Every
 applicable bonus practice is in it.
 
 Each item is its own small PR, per [AGENTS.md](../AGENTS.md). Open issues are the numbered list in
 [status.md](status.md#open-issues); they are referred to here as "issue n".
+
+## Where we are (2026-11-22)
+
+**This section replaces the earlier ones below**, which are kept for the record. Presentations
+are on 2026-12-05; Nov 24 to Dec 4 stays buffer and rehearsal.
+
+**Done since November 19:**
+- **The agent:** PR #195 (structured requests) merged after its final audit: 563/592 fully
+  correct on the same regression turns (from 504), 42/48 on new wordings, PHIA gate 24/24. The
+  repair cycle is closed; what is left is the [deferred backlog](pr-195-followup-issues.md).
+- **Documents:** `docs/api.md` generated from the code, a README quickstart (#196).
+- **Bonus practices:** Dependabot, CodeQL, pip-audit and npm audit (#199); coverage with a floor
+  (#201); a full-stack `docker compose` (#198); a smoke test of production after each deploy
+  (#200); Sentry for the API (#202, waiting for its DSN); Expo packages current for SDK 58 (#197).
+- **The poster:** the poster session is done and closed with the instructor; no further poster.
+
+**Left, in order:**
+
+| What | Who | Notes |
+|---|---|---|
+| Failure Matrix, threat model, red-team set, chaos, load and contract tests | Jad | 15% of the grade; none in the repository yet |
+| Blind grading of 51 answers (issue 38), judge calibration | Karim and Jad | free |
+| A fresh conversation set written by someone else; the 52-request logging test | Jad or the TA writes; Karim runs | about $1.30 |
+| The pilot: Monday briefing (Nov 23), sign-ups, spend, then report, survey, interviews | Karim | live caps ($50) |
+| Final technical report (results chapter from [evaluation.md](evaluation.md)), demo script with failure cases, presentation, a `v1.0-demo` tag | Karim, with Jad's sections | |
+| Sentry DSN on Railway; Dependabot alerts setting; whether the brief asks for a project board | Karim | settings and sign-ups only |
+
+The deferred agent issues are fixed only if the demo or the pilot shows one matters.
 
 ## Agent reliability priorities as of November 19
 
@@ -62,7 +90,7 @@ and the fresh agent release decision remain relevant. See [pilot progress](progr
 | G. Evaluation | real data, PHIA, three systems, experts decided ([evaluation.md](evaluation.md)) | blind grading; the "why" retest; the team agent; the router on a held-out set (issue 5) |
 | H. Reliability and security | not in the repo yet | Failure Matrix, threat model, red-team set, chaos, load and contract tests (Jad) |
 | I. AgentOps and bonus | cost, trace and thumbs per answer stored (#151); CI and auto-deploy | a metrics page (the pilot report, `python -m app.pilot_report`, is in #152); Dependabot, CodeQL, audits, coverage, Sentry (Jad) |
-| J. Documents | status, evaluation, teams, costs and experiments current | `docs/api.md`, README quickstart, the final report, poster, demo script |
+| J. Documents | status, evaluation, teams, costs and experiments current | `docs/api.md`, README quickstart (both done 2026-11-22, #196), the final report, demo script |
 
 ### What still has to be tested
 
@@ -104,8 +132,8 @@ Each test has its rule written before it runs, like the expert decisions in
 
 **Nov 24 - Dec 4: buffer**
 - Pilot results; small fixes only; demo script with failure cases (Jev down, over budget, an
-  injection, a medical question, someone else's data, a question about one team member); poster;
-  two full rehearsals.
+  injection, a medical question, someone else's data, a question about one team member); two full
+  rehearsals. (The poster session is already done.)
 
 **Dec 5: presentations.**
 
@@ -389,26 +417,26 @@ before week 3**.
 
 ### I. AgentOps and observability (15%) and the bonus practices
 
-| Bonus practice | Now | To do |
+| Bonus practice | Now (2026-11-22) | To do |
 |---|---|---|
-| Engineering workflow | PRs, protected `main`, ~100 merged PRs | GitHub Project with weekly sprints, an owner per issue, one required review |
-| CI/CD and deployment | Actions; Railway and Vercel deploy after CI | a smoke test after each deploy, a release tag per week |
-| Code quality | ruff | coverage (pytest-cov, jest) to Codecov, SonarCloud, coverage floor in CI |
-| Agent evaluation in CI | none | a free gate on every PR (scripted model, deterministic suites, red-team set); a paid suite by hand with stored thresholds |
-| Advanced AgentOps | cost per answer, a trace in memory | traces stored and sent to Langfuse (or OpenTelemetry), per call: latency, tokens, cost, tool failures, retries; a metrics page |
-| DevSecOps | secret scanning and push protection | Dependabot, CodeQL, pip-audit and npm audit, Trivy on the image, Semgrep |
-| Reproducible deployment | Dockerfile, automatic migrations, Railway config | a full-stack `docker compose up`, the cron config as code |
-| Advanced testing | unit and scenario tests | contract, load, chaos and red-team suites (H) |
-| Production monitoring | Railway's metrics | Sentry on the API and the web app, with alerts |
-| Controlled evolution | feature flags such as Google writes | prompt and model versions on traces, comparisons between versions in the evaluation, flags for new features in the pilot |
+| Engineering workflow | PRs, protected `main`, ~200 merged PRs | a GitHub Project board only if the brief asks for one; one required review |
+| CI/CD and deployment | Actions; Railway and Vercel deploy after CI; a production smoke test after each Railway deploy (#200) | a release tag (`v1.0-demo`) |
+| Code quality | ruff; coverage with a floor in CI: backend 94% (floor 92%), mobile 35% of `src/` (#201) | raise the floors as tests are added |
+| Agent evaluation in CI | scripted-model suites and the API reference check in every PR | the paid suite stays by hand, with stored thresholds |
+| Advanced AgentOps | stored traces with cost, latency, tool errors and thumbs; Prometheus, Grafana and alerts; the Operations page | |
+| DevSecOps | secret scanning and push protection; Dependabot, CodeQL, pip-audit and npm audit (#199) | Dependabot alerts setting; Trivy or Semgrep only if time allows |
+| Reproducible deployment | Dockerfile, automatic migrations, Railway config, cron config; `docker compose --profile app up` (#198) | |
+| Advanced testing | unit, scenario, privacy-isolation tests | contract, load, chaos and red-team suites (H, Jad) |
+| Production monitoring | Grafana with alerts; Sentry for the API (#202) | the Sentry DSN on Railway |
+| Controlled evolution | feature flags such as Google writes; versions in evaluation runs | |
 
 ### J. Documentation and the final deliverables
 
 README quickstart (local and Docker), [deployment.md](deployment.md) kept current,
 `docs/api.md` (endpoints, schemas, authentication, errors, from FastAPI's OpenAPI), the
 architecture diagram updated, reproduction commands for every number in the report, the final
-technical report, the presentation and demo script (with the failure cases in H), and a final
-poster if the instructor asks for one (the pitch poster updated with results).
+technical report, and the presentation and demo script (with the failure cases in H). The poster
+session is done and closed with the instructor.
 
 ## Week by week (original, 2026-10-27)
 

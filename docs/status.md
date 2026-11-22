@@ -1,17 +1,35 @@
 # Project status
 
-The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Agent reliability updated 2026-11-19.
+The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-11-22.
 
-**Local agent changes, 2026-11-18:** structured request interpretation now separates metric,
-operation, threshold and dates from statistical computation, with persistent conversation scope,
-direct evidence-bound data answers, food readback, corrected drafts and guidance variant selection.
-The implementation, development failures, costs and remaining evaluation limits are recorded in
-[typed-requests.md](typed-requests.md). This is local work on `feat/structured-requests`; earlier
-benchmark results are historical and must not be presented as measurements of this new path.
+**PR #195 merged on 2026-11-22** (structured request interpretation: metric, operation, threshold
+and dates kept apart from the statistics, persistent conversation scope, food readback, corrected
+drafts, guidance variants; see [typed-requests.md](typed-requests.md)). Its final independent audit
+of `910da27` ([report](independent-audit-910da27-final.md)): on the same 592 regression turns,
+fully correct rose from 504 (85.1%) to 563 (95.1%); 42 of 48 newly worded turns were fully
+correct; the small PHIA gate passed 24/24. It does **not** meet every original release gate: two
+silent relative-period errors remain, and memory and food follow-ups are weaker. The audit cycle
+ended there by decision; what is left is the [deferred backlog](pr-195-followup-issues.md).
 
 **The pilot started on 2026-11-17**: 10 testers invited for about two weeks, all listed as Google
 test users, one team with Karim as supervisor. What was built and checked for it, and what is
 left, is in [progress-2026-11-17.md](progress-2026-11-17.md).
+
+## 2026-11-22: deliverables and DevSecOps
+
+| PR | Change |
+|---|---|
+| #196 | `docs/api.md`, generated from the API's own OpenAPI schema by `python -m app.api.reference` (85 operations with their access level, 42 error codes, every schema); a test fails when it drifts. README quickstart: mock app, whole stack, CI checks, evaluation |
+| #197 | Expo packages brought to SDK 58's expected versions: `expo-doctor` 20/20, no high npm advisory left |
+| #198 | `docker compose --profile app up --build`: Postgres, the API (the Railway image) and the web app (the Vercel export) |
+| #199 | Dependabot (weekly, grouped; Expo SDK packages left alone), CodeQL (Python and TypeScript, security-extended: 0 alerts), pip-audit and npm audit (fail on high) |
+| #200 | A smoke test of production after each Railway deploy (`scripts/smoke_test.sh`, no sign-in or data) |
+| #201 | Coverage in CI with a floor: backend 94% (floor 92%), mobile 35% of all of `src/` (floors just under) |
+| #202 | Sentry error reports for the API, off until `FA_SENTRY_DSN` is set; no message, value, body or person leaves ([monitoring.md](monitoring.md#errors-sentry)) |
+
+Left for Karim: a Sentry project and its DSN on Railway; whether to turn on Dependabot alerts in
+the repository settings; whether the course brief asks for a GitHub Project board (paused until
+checked).
 
 ## Since 2026-11-11
 
@@ -246,7 +264,17 @@ To let someone else sign in, add their Google account as a test user in the cons
 
 ## Next
 
-See the [agent priorities](plan.md#agent-reliability-priorities-as-of-november-19) and [open issues](#open-issues). The remaining submission work includes blind grading, pilot usage results and the report and demo. The pilot-report tool, Operations page and team evaluation are available.
+What is left to the presentations on 2026-12-05, in order ([plan.md](plan.md#where-we-are-2026-11-22)):
+
+1. **Jad's reliability and security deliverables** (15% of the grade, none in the repository yet):
+   the Failure Matrix, the threat model, the red-team set, chaos, load and contract tests.
+2. **Evaluation still open:** blind grading of `eval/results/phia_blind_2026-11-10.csv` by Karim
+   and Jad (issue 38), a fresh conversation set written by someone else, and the 52-request
+   logging test (about $0.30).
+3. **The pilot** (since 2026-11-17): the first real Monday team briefing (2026-11-23, 06:00 UTC),
+   sign-ups, spend against the $50 cap, then the pilot report, survey and interviews.
+4. **The final technical report, the demo script with its failure cases, and the presentation.**
+   The poster session is done and closed with the instructor; no further poster is planned.
 
 Earlier: **the smarter chat was built** (2026-10-28 to 11-05, #112-#122): coaching that stays
 non-medical, seven new tools, a way of working per question type, a running summary per chat,
@@ -340,25 +368,21 @@ OpenAI ([costs.md](costs.md) has every run).
 
 ## Open issues
 
-### Agent reliability on PR #195 · November 19
+### Agent reliability after PR #195 · November 22
 
-The last independently audited revision is `84db5f5`. All 34 metrics passed a dated lookup,
-a one-day shift and a new-range maximum (102/102). Three more complex requests silently used
-different days. A later diagnostic commit, `2be6a76`, records where interpretations fail.
-Its reader replay has no new end-to-end score.
+PR #195 is merged; its final audit is summarised at the top of this page. The remaining agent
+issues are recorded, with examples, in the [deferred backlog](pr-195-followup-issues.md); no new
+repair round is planned. The most important:
 
-| Open issue | What a person experienced | Work still needed |
-|---|---|---|
-| Bind dates and operators to each part of the question | A four-day mean became the earliest day alone. In an offline probe, swapping the two metrics’ date ranges passed validation because every date still appeared somewhere. | Validate each metric with its own operator, window and prior result. Check both endpoints and which days the user included. |
-| Complete mixed requests and corrections | Asking for the step count and whether a walk was saved returned only the card instruction. A standalone workout could prompt a question about an earlier measurement. | Keep an ordered operation per clause. Read status from the store, answer the data clause independently and verify the actual corrected card. |
-| Carry memory intent through the API | A polite request to remember an exercise preference reached the memory path but produced no approval card. Requests to remove an existing fact could get a no-save acknowledgement. | Pass action, target and consent through to the store. Test same-chat recall, approved recall, replacement, cancel and confirmed deletion separately. |
-| Complete explanations and coaching | One request for a manageable habit was correctly classified as coaching but received only a statistical recap. | Require the final answer to deliver a supported option or explain the evidence limit. An explanation needs an appropriate test of the proposed relationship. |
-| Recover from a failed guidance answer | The push-up and Superman requests retrieved passages. The generated wording failed a safety check and the app reported it could not confirm the detail. | Retain the passage and requested detail, attempt a bounded safe rewrite, and check its support before showing it. |
+| Open issue | What a person can experience |
+|---|---|
+| Relative-period boundary roles | A block of days "ending on" or "starting after" an earlier window can be read with the wrong endpoint: a consistent but wrong window, answered without a question (2 silent cases in the final audit). |
+| Whole-message policy after composition | When an overview is combined with a status or recall reply, a medical, fabrication or source-mixing flag can be dropped (found offline). |
+| Protected retry counts | A retry can replace a requested length of days with a different one. |
+| Food source, nutrient and filter edits | After a correct breakfast answer, asking for protein or all meals can get a false "unavailable" question. |
+| Memory replacement | "After dinner now, rather than before breakfast" is treated as already kept; the explicit "replace ... with ..." works. No unconfirmed deletion happens. |
 
-The release decision depends on fresh conversations, checked against the source rows, cited evidence,
-final reply and resulting state. The older numbered issues below retain their original IDs.
-See the [three-day record](experiments.md#agent-reliability-from-november-17-to-19) and
-[predeclared release criteria](acceptance-structured-requests.md).
+The older numbered issues below keep their original numbers.
 
 1. ~~Text can mention a metric no evidence covers.~~ Fixed in PR #30: the verifier rejects a claim
    or summary that names a metric its evidence does not cover (distinctive terms only, such as
