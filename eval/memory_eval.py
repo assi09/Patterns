@@ -227,6 +227,7 @@ class Run:
         config.set_main_option("sqlalchemy.url", url)
         command.upgrade(config, "head")
         self.engine = create_engine(url)
+        settings.sentry_dsn = None  # an evaluation's errors are not the app's
         app = create_app()
 
         def db():

@@ -98,6 +98,7 @@ def person():
 
 
 def app_for(engine, llm):
+    settings.sentry_dsn = None  # an evaluation's errors are not the app's
     app = create_app()
 
     def db():
