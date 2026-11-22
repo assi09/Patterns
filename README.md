@@ -45,6 +45,18 @@ after the [Google sign-in setup](#google-health-sign-in-live-data)) or a Takeout
 `FA_EXPORT_DIR`. Without an OpenAI key, Ask answers `503 agent_unavailable`; everything else
 works.
 
+**Or the whole stack in containers**, with nothing installed but Docker:
+
+```bash
+cp .env.example .env        # as above; optional, the stack starts without it
+docker compose --profile app up --build
+```
+
+Postgres, the API on `http://localhost:8000` (the image Railway runs: migrations, then Uvicorn)
+and the web app on `http://localhost:8081` (the export Vercel serves). Approve the first sign-up
+with `docker compose exec api python -m app.auth approve you@example.com`. Stop it with
+`docker compose --profile app down` (add `-v` to delete the database too).
+
 **3. The checks CI runs** (no keys, no paid calls; tests build their own SQLite database):
 
 ```bash

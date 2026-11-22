@@ -15,7 +15,7 @@ server.
 
 | Where | Address |
 |---|---|
-| Local | `http://127.0.0.1:8000` (`uvicorn app.api.main:app --app-dir backend --reload`, see the [README](../README.md#quickstart)) |
+| Local | `http://127.0.0.1:8000` (`uvicorn app.api.main:app --app-dir backend --reload`, or `docker compose --profile app up`; see the [README](../README.md#quickstart)) |
 | Deployed | `https://<api>`, the Railway service's address (see [deployment.md](deployment.md)) |
 
 Browsers may call the API only from the origins in `FA_CORS_ORIGINS` (by default
