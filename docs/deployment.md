@@ -147,6 +147,13 @@ send notifications yet anyway.
 
 ## Checks after each deploy
 
+**Automatic:** when Railway reports a production deploy as successful, the `deploy smoke test`
+workflow runs `scripts/smoke_test.sh` against the live API and web app: health, the error shape
+for a missing session and a bad body, the schema, `/metrics` closed without its token, CORS for
+the web origin, the web app and a direct app route loading, and the web bundle pointing at this
+API. No sign-in, data or model call. It can also be run from the Actions tab, or locally with
+`scripts/smoke_test.sh https://<api> https://<web>`. By hand, after a change that matters:
+
 - `https://<api>/health` answers; the Railway log has no tracebacks.
 - Sign in on `https://<web>` on a phone; Today loads; Ask answers one question (a real model call,
   within the daily caps).
