@@ -351,3 +351,11 @@ All offline review and verification cost $0. Recommendation: stop repeated audit
 record remaining limitations; this is not a clean pass of the original zero-wrong-period gate.
 See the [final audit report](independent-audit-910da27-final.md) and
 [deferred issues](pr-195-followup-issues.md). No further paid audit is planned.
+
+### November 22, 2026 — Fitbit core scenario replay
+
+492 frozen public-Fitbit scenarios, 16 scripted controls, 11 separate supervisor wording probes and
+one corrected food fixture. Authorized maximum $6.50. Recorded usage: OpenAI $3.404335360 and
+Jev $0.060678534, total **$3.465013894**. Outstanding provider reservations **$0.120245250**
+give an upper bound of **$3.585259144**. Reported usage is metered cost, pending provider billing
+reconciliation. Local statistics and phone-width rendering cost $0. [Results](fitbit-replay-results.md).
