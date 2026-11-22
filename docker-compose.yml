@@ -1,5 +1,10 @@
-# Local development services. `docker compose up -d db` starts Postgres on localhost:5433
-# (5433 so it does not clash with a Postgres already installed on 5432).
+# Local services. `docker compose up -d db` starts Postgres on localhost:5433 (5433 so it does
+# not clash with a Postgres already installed on 5432), for running the API with uvicorn.
+#
+# The whole stack in containers: `docker compose --profile app up --build`. Postgres, the API
+# on http://localhost:8000 (the same image Railway runs: migrations, then Uvicorn) and the web
+# app on http://localhost:8081 (the same export Vercel serves). Settings and keys come from
+# .env when it exists (see .env.example); the database address and URLs below replace its own.
 services:
   db:
     image: postgres:16
@@ -16,6 +21,38 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+
+  api:
+    build: .
+    profiles: ["app"]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      FA_DATABASE_URL: postgresql+psycopg://fitbit_agent:local-dev-only@db:5432/fitbit_agent
+      FA_PUBLIC_URL: http://localhost:8000
+      FA_APP_URL: http://localhost:8081
+      FA_CORS_ORIGINS: '["http://localhost:8081"]'
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build:
+      context: mobile
+      args:
+        EXPO_PUBLIC_API_URL: http://localhost:8000
+    profiles: ["app"]
+    depends_on: [api]
+    ports:
+      - "127.0.0.1:8081:80"
 
   # Monitoring the deployed API from this machine (docs/monitoring.md): put METRICS_TOKEN and
   # GF_SECURITY_ADMIN_PASSWORD in monitoring/monitoring.env (git-ignored), then
