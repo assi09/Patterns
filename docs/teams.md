@@ -402,6 +402,9 @@ the team's metric during it against the 28 days before, read like a weekly chang
 changed for a metric with no good direction, no clear change, or too few people to tell). It is
 what happened during the change, not proof the change caused it.
 
+Ideas for later (an anonymous team voice, which note explains which change, the team's week) are in
+[future-plans.md](future-plans.md).
+
 ## Historical supervisor chat (retired)
 
 The supervisor talks to an agent about the team (`app/teams/agent.py`; `POST /teams/{id}/chat`). It
