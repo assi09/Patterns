@@ -279,18 +279,24 @@ def main() -> None:
             print(f"{item['kind']:8s} {item['m']}")
         print(len(items), "requests")
         return
+    run(items, OUT, SUMMARY, STOP_AT_USD)
+
+
+def run(items: list[dict], out: Path, summary_path: Path, stop_at_usd: float) -> dict:
+    """Each request in a fresh chat; the drafts graded and written to `out` and `summary_path`."""
+    zone = ZoneInfo(settings.timezone)
     engine = database()
     settings.chat_daily_cap_per_user_usd = settings.chat_daily_cap_total_usd = (
-        STOP_AT_USD + 0.2
+        stop_at_usd + 0.2
     )
-    spend = SpendLedger(cap_usd=STOP_AT_USD + 0.2)
+    spend = SpendLedger(cap_usd=stop_at_usd + 0.2)
     client = app_for(engine, OpenAILLM.from_settings(settings, spend))
     headers = sign_in(client, engine)
-    OUT.parent.mkdir(exist_ok=True)
-    OUT.write_text("")
+    out.parent.mkdir(exist_ok=True)
+    out.write_text("")
     rows = []
     for item in items:
-        if spend.spent_usd >= STOP_AT_USD:
+        if spend.spent_usd >= stop_at_usd:
             print("Stopped at the spending limit.")
             break
         chat_id = client.post("/conversations", headers=headers).json()["id"]
@@ -327,7 +333,7 @@ def main() -> None:
             "seconds": round(time.monotonic() - started, 1),
         }
         rows.append(row)
-        with OUT.open("a") as f:
+        with out.open("a") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
         mark = "ok " if all(row["fields"].values()) else "BAD"
         print(f"{mark} {item['kind']:8s} {json.dumps(row['fields'])} | {item['m']}")
@@ -345,6 +351,7 @@ def main() -> None:
                 sum(r["kind"] == k for r in rows),
             ]
             for k in ("food", "workout", "none")
+            if any(r["kind"] == k for r in rows)
         },
         "fields": {k: [c[True], c[True] + c[False]] for k, c in sorted(fields.items())},
         "cost_usd": round(spend.spent_usd, 4),
@@ -354,8 +361,9 @@ def main() -> None:
             if not all(r["fields"].values())
         ],
     }
-    SUMMARY.write_text(json.dumps(summary, indent=1, ensure_ascii=False) + "\n")
+    summary_path.write_text(json.dumps(summary, indent=1, ensure_ascii=False) + "\n")
     print(json.dumps({k: v for k, v in summary.items() if k != "wrong"}, indent=1))
+    return summary
 
 
 if __name__ == "__main__":
