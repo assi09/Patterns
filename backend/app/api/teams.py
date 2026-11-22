@@ -29,7 +29,7 @@ from app.reminders.schedule import zone
 from app.teams import actions as team_actions
 from app.teams import agent as team_agent
 from app.teams import memberships as teams
-from app.teams import pulse, reports
+from app.teams import playbook, pulse, reports
 
 router = APIRouter(tags=["teams"])
 # Wrong codes count like wrong passwords, so codes cannot be guessed one after another.
@@ -271,7 +271,7 @@ def _chat_message(row: TeamChatMessageRow) -> schemas.TeamChatMessage:
     )
 
 
-def _action(row: TeamActionRow) -> schemas.TeamAction:
+def _action(row: TeamActionRow, result: dict | None = None) -> schemas.TeamAction:
     return schemas.TeamAction(
         id=str(row.id),
         kind=row.kind,
@@ -281,6 +281,15 @@ def _action(row: TeamActionRow) -> schemas.TeamAction:
         starts_on=row.starts_on,
         ends_on=row.ends_on,
         status=row.status,
+        source=row.source,
+        play=row.play,
+        result=schemas.ChangeResult(
+            verdict=result["verdict"],
+            text=result["text"],
+            evidence=_evidence(result["evidence"].model_dump(mode="json")),
+        )
+        if result
+        else None,
         proposed_at=row.proposed_at,
         decided_at=row.decided_at,
     )
@@ -380,14 +389,61 @@ def list_alerts(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamAler
 
 
 @router.get("/teams/{team_id}/actions", response_model=list[schemas.TeamAction])
-def list_actions(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamAction]:
+def list_actions(team_id: str, db: Db, clock: Now, user: Supervisor) -> list[schemas.TeamAction]:
     team = teams.supervised_team(db, user, team_id)
     rows = db.scalars(
         select(TeamActionRow)
         .where(TeamActionRow.team_id == team.id)
         .order_by(TeamActionRow.proposed_at.desc())
     ).all()
-    return [_action(a) for a in rows]
+    results = playbook.results_of(db, team, _local_today(user, clock))
+    return [_action(a, results.get(str(a.id))) for a in rows]
+
+
+@router.get("/teams/{team_id}/playbook", response_model=list[schemas.TeamPlay])
+def list_plays(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamPlay]:
+    """The changes a supervisor can start; their own is also possible (play "custom")."""
+    teams.supervised_team(db, user, team_id)
+    return [
+        schemas.TeamPlay(id=p.id, title=p.title, body=p.body, metrics=list(p.fits), days=p.days)
+        for p in playbook.PLAYS
+    ]
+
+
+@router.post("/teams/{team_id}/actions", response_model=schemas.TeamActionDecision, status_code=201)
+def plan_change(
+    team_id: str, body: schemas.TeamActionIn, db: Db, clock: Now, user: Supervisor
+) -> schemas.TeamActionDecision:
+    """A change the supervisor starts: approved as made, and every member is told."""
+    team = teams.supervised_team(db, user, team_id)
+    today = _local_today(user, clock)
+    starts_on = body.starts_on or today + timedelta(days=1)
+    if not today <= starts_on <= today + timedelta(days=60):
+        raise ApiError(422, "bad_start", "A change starts between today and 60 days from now.")
+    own = " ".join(part for part in (body.title, body.body) if part)
+    problem = own and team_agent._unsafe(own)
+    if own and not problem and team_agent.names_asked(db, team, own):
+        problem = "it names someone; keep it about the whole team."
+    if problem:
+        raise ApiError(422, "unsafe_change", f"Not planned: {problem}")
+    try:
+        action = playbook.start_change(
+            db,
+            team,
+            play=body.play,
+            metric=body.metric,
+            title=body.title,
+            body=body.body,
+            starts_on=starts_on,
+            days=body.days,
+            source="supervisor",
+            status="proposed",
+            now=clock,
+        )
+    except ValueError as error:
+        raise ApiError(422, "bad_change", str(error)) from error
+    told = team_actions.decide(db, team, action, True, clock)
+    return schemas.TeamActionDecision(members_told=told, action=_action(action))
 
 
 @router.post(

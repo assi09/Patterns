@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-84 operations, grouped by area.
+86 operations, grouped by area.
 
 ### meta
 
@@ -246,6 +246,8 @@ Besides the codes listed under [Error codes](#error-codes):
 | `DELETE` | `/teams/{team_id}/notes/{note_id}` | supervisor | `team_id`, `note_id` |  | 204, no body |  |
 | `GET` | `/teams/{team_id}/alerts` | supervisor | `team_id` |  | list[[TeamAlert](#teamalert)] |  |
 | `GET` | `/teams/{team_id}/actions` | supervisor | `team_id` |  | list[[TeamAction](#teamaction)] |  |
+| `GET` | `/teams/{team_id}/playbook` | supervisor | `team_id` |  | list[[TeamPlay](#teamplay)] | The changes a supervisor can start; their own is also possible (play "custom"). |
+| `POST` | `/teams/{team_id}/actions` | supervisor | `team_id` | [TeamActionIn](#teamactionin) | 201: [TeamActionDecision](#teamactiondecision) | A change the supervisor starts: approved as made, and every member is told. |
 | `POST` | `/teams/{team_id}/actions/{action_id}/{decision}` | supervisor | `team_id`, `action_id`, `decision` |  | [TeamActionDecision](#teamactiondecision) |  |
 | `POST` | `/teams/preview` | approved |  | [TeamCode](#teamcode) | [TeamPreview](#teampreview) | What joining the team means, for the person to read before agreeing. |
 | `POST` | `/teams/join` | approved |  | [JoinTeam](#jointeam) | 201: [Membership](#membership) |  |
@@ -284,6 +286,8 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 409 | `stale_action` |
 | 409 | `version_conflict` |
 | 409 | `week_not_over` |
+| 422 | `bad_change` |
+| 422 | `bad_start` |
 | 422 | `in_the_past` |
 | 422 | `invalid_checkin` |
 | 422 | `invalid_email` |
@@ -292,6 +296,7 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 422 | `invalid_reminder` |
 | 422 | `invalid_request` |
 | 422 | `invalid_timezone` |
+| 422 | `unsafe_change` |
 | 422 | `unsafe_note` |
 | 422 | `weak_password` |
 | 429 | `app_daily_limit` |
@@ -391,6 +396,16 @@ A field not marked required may be left out.
 | `text` | string | yes |  |
 | `kind` | string | yes |  |
 | `metric` | string or null |  |  |
+
+### ChangeResult
+
+How the team's metric went during an ended change, against the 28 days before it.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `verdict` | `better` \| `worse` \| `changed` \| `no_change` \| `unclear` | yes |  |
+| `text` | string | yes |  |
+| `evidence` | [Evidence](#evidence) | yes |  |
 
 ### ChatMessage
 
@@ -1023,6 +1038,9 @@ One member who chose to share, with their week against their own usual.
 | `startsOn` | string (date) or null |  |  |
 | `endsOn` | string (date) or null |  |  |
 | `status` | `proposed` \| `approved` \| `declined` | yes |  |
+| `source` | `agent` \| `supervisor` |  | default `agent` |
+| `play` | string or null |  |  |
+| `result` | [ChangeResult](#changeresult) or null |  |  |
 | `proposedAt` | string (date-time) | yes |  |
 | `decidedAt` | string (date-time) or null |  |  |
 
@@ -1032,6 +1050,19 @@ One member who chose to share, with their week against their own usual.
 |---|---|---|---|
 | `membersTold` | integer | yes |  |
 | `action` | [TeamAction](#teamaction) | yes |  |
+
+### TeamActionIn
+
+A change the supervisor plans: one from the playbook, or their own ("custom").
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `play` | string | yes | min length 1, max length 32 |
+| `title` | string or null |  |  |
+| `body` | string or null |  |  |
+| `metric` | string or null |  |  |
+| `startsOn` | string (date) or null |  |  |
+| `days` | integer or null |  |  |
 
 ### TeamAlert
 
@@ -1091,6 +1122,16 @@ Weekly highlights and upcoming event warnings, each linked to the report evidenc
 | `text` | string | yes | min length 1, max length 300 |
 | `startsOn` | string (date) or null |  |  |
 | `endsOn` | string (date) or null |  |  |
+
+### TeamPlay
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `id` | string | yes |  |
+| `title` | string | yes |  |
+| `body` | string | yes |  |
+| `metrics` | list[string] | yes |  |
+| `days` | integer | yes |  |
 
 ### TeamPreview
 

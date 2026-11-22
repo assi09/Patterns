@@ -99,8 +99,9 @@ def test_weekly_highlights_only_use_this_reports_evidence(engine, mode):
         expected = report.body["priorities"][: 1 if mode == "valid" else 3]
         summary = " ".join(row["text"] for row in expected)
         briefing = report.body["briefing"]
-        assert briefing["summary"] == summary
-        assert [item["evidence_ids"] for item in briefing["items"]] == [
+        assert briefing["summary"].startswith(summary)
+        changes = [item for item in briefing["items"] if item["kind"] == "change"]
+        assert [item["evidence_ids"] for item in changes] == [
             [row["evidence_id"]] for row in expected
         ]
         assert all(row["evidence_id"] in report.evidence for row in expected)
@@ -201,7 +202,7 @@ def test_the_supervisor_reads_the_briefing_with_the_report(engine, monkeypatch):
     ).json()
     assert body["briefing"]["summary"].startswith("Time asleep has been lower")
     assert body["briefing"]["items"][0]["metric"] == "sleep_minutes"
-    assert body["briefing"]["proposals"] == 0
+    assert body["briefing"]["proposals"] == 1  # the lasting drop in sleep: a change suggested
     for item in body["briefing"]["items"]:
         assert item["evidenceIds"] and all(key in body["evidence"] for key in item["evidenceIds"])
 
