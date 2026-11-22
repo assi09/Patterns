@@ -157,7 +157,10 @@ def proposal_tools(
                 if model is WorkoutLog and checked_said and lacks_a_duration(checked_said):
                     problem = "The person did not say how long it lasted. Ask them, kindly."
                     content = {"error": "This draft was not prepared.", "problems": [problem]}
-                    return json.dumps(content | {"note": REFUSED_NOTE}), {"error": "not_as_said"}
+                    return json.dumps(content | {"note": REFUSED_NOTE}), {
+                        "error": "not_as_said",
+                        "problem": problem,  # why, for the trace: the code alone said nothing
+                    }
                 day_known = expected_day is not None
                 if said and local_now:
                     given = latest_past(given, checked_said, local_now, day_known=day_known)
@@ -213,7 +216,10 @@ def proposal_tools(
                     and (problem := mismatch(log, checked_said, local_now, day_known=day_known))
                 ):
                     content = {"error": "This draft was not prepared.", "problems": [problem]}
-                    return json.dumps(content | {"note": REFUSED_NOTE}), {"error": "not_as_said"}
+                    return json.dumps(content | {"note": REFUSED_NOTE}), {
+                        "error": "not_as_said",
+                        "problem": problem,  # why, for the trace: the code alone said nothing
+                    }
                 payload = with_measurement(
                     log.model_dump(mode="json", by_alias=True, exclude_none=True), measurer
                 )
