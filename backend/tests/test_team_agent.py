@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, select
 from app.agent.llm import ScriptedLLM
 from app.analysis.evidence import Evidence
 from app.analysis.team import team_info
-from app.api import auth, teams
+from app.api import auth
 from app.api.main import create_app
 from app.auth import accounts
 from app.db.daily import save_daily
@@ -283,14 +283,14 @@ def test_only_the_teams_supervisor_reaches_its_agent(engine, client):
     with session_scope(engine) as db:
         other = User(email="other@example.com", status="approved", role="supervisor")
         db.add(other)
-    app.dependency_overrides[teams.team_agent_llm] = lambda: ScriptedLLM([answer("Hi.", [])])
     boss = signed_in(client, engine, "boss@example.com")
     stranger = signed_in(client, engine, "other@example.com")
     member = signed_in(client, engine, "member00@example.com")
     assert client.get(f"/teams/{team_id}/chat", headers=stranger).status_code == 404
     assert client.get(f"/teams/{team_id}/alerts", headers=member).status_code == 403
-    reply = client.post(f"/teams/{team_id}/chat", headers=boss, json={"text": "Hello"}).json()
-    assert [m["role"] for m in reply["messages"]] == ["supervisor", "agent"]
+    reply = client.post(f"/teams/{team_id}/chat", headers=boss, json={"text": "Hello"})
+    assert reply.status_code == 405
+    assert client.get(f"/teams/{team_id}/chat", headers=boss).json() == []
     note = client.post(
         f"/teams/{team_id}/notes", headers=boss, json={"text": "Offsite", "startsOn": "2026-10-20"}
     )
@@ -339,12 +339,10 @@ def test_the_supervisor_rates_the_team_agents_answers_only(engine, client):
     team_id = make_team(engine)
     with session_scope(engine) as db:
         db.add(User(email="other@example.com", status="approved", role="supervisor"))
-    app.dependency_overrides[teams.team_agent_llm] = lambda: ScriptedLLM([answer("Hi.", [])])
     boss = signed_in(client, engine, "boss@example.com")
     stranger = signed_in(client, engine, "other@example.com")
-    asked, said = client.post(
-        f"/teams/{team_id}/chat", headers=boss, json={"text": "Hello"}
-    ).json()["messages"]
+    ask(engine, team_id, "Hello", [answer("Hi.", [])])  # pre-retirement history
+    asked, said = client.get(f"/teams/{team_id}/chat", headers=boss).json()
     url = f"/teams/{team_id}/chat/{said['id']}/rating"
 
     rated = client.put(url, headers=boss, json={"rating": "down"})
@@ -478,11 +476,9 @@ def test_deleting_a_note_forgets_the_message_it_came_from(engine, client):
     client, app = client
     team_id = make_team(engine)
     save = ScriptedLLM.call("save_team_note", text="Release deadline", starts_on="2026-10-20")
-    app.dependency_overrides[teams.team_agent_llm] = lambda: ScriptedLLM([save])
     boss = signed_in(client, engine, "boss@example.com")
-    client.post(f"/teams/{team_id}/chat", headers=boss, json={"text": "Release on Oct 20."})
-    app.dependency_overrides[teams.team_agent_llm] = lambda: ScriptedLLM([ScriptedLLM.say("Ok.")])
-    client.post(f"/teams/{team_id}/chat", headers=boss, json={"text": "Offsite is in May."})
+    ask(engine, team_id, "Release on Oct 20.", [save])
+    ask(engine, team_id, "Offsite is in May.", [ScriptedLLM.say("Ok.")])
     (note,) = client.get(f"/teams/{team_id}/notes", headers=boss).json()
     assert client.delete(f"/teams/{team_id}/notes/{note['id']}", headers=boss).status_code == 204
     left = [m["text"] for m in client.get(f"/teams/{team_id}/chat", headers=boss).json()]

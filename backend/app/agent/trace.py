@@ -104,6 +104,9 @@ def failed_trace(latency_s: float) -> dict:
 
 # The team agent's stop reasons (`TeamReply.stop`) and what they mean for the supervisor.
 _TEAM_OUTCOMES = {
+    "ranked": "answered",
+    "selected": "answered",
+    "ranked_fallback": "answered",
     "answered": "answered",
     "answered_in_part": "answered_in_part",
     "about_a_person": "refused",
@@ -136,7 +139,7 @@ def team_trace(stop: str, trace: list[dict], cost_usd: float, latency_s: float) 
         "tool_errors": sum(1 for s in errors if "tool" in s),
         "repair_rounds": max(0, len(checks) - 1),
         "rejected_claims": sum(len(s.get("rejected") or ()) for s in trace),
-        "summary_fell_back": False,
+        "summary_fell_back": stop == "ranked_fallback",
         "guard_down": False,
         "cost_usd": round(cost_usd, 6),
         "steps": trace,

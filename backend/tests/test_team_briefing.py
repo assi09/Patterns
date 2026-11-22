@@ -1,5 +1,4 @@
-"""The team agent's Monday run: it investigates the week by itself, and what it finds is checked,
-kept with the report, emailed and posted to the team chat; when it fails, the report stands."""
+"""Standalone weekly briefing, dated event warnings, privacy and delivery."""
 
 import json
 import uuid
@@ -13,11 +12,11 @@ from sqlalchemy import create_engine, select
 from app.agent.llm import ScriptedLLM
 from app.analysis.team import team_info
 from app.db.daily import save_daily
-from app.db.models import Team, TeamAction, TeamChatMessage, TeamReport, User
+from app.db.models import Team, TeamAction, TeamChatMessage, TeamNote, TeamReport, User
 from app.db.session import session_scope
 from app.synthetic import Step, generate
 from app.teams import memberships, reports
-from app.teams.agent import ANSWER, TeamTools
+from app.teams.agent import TeamTools
 from app.teams.briefing import brief
 from app.teams.email import compose
 
@@ -53,20 +52,6 @@ def make_team(engine, size: int = 7, effects=LATE) -> str:
         return str(team.id)
 
 
-def sleep_claim(messages: list[dict]) -> dict:
-    for message in reversed(messages):
-        if message["role"] == "tool" and "metrics" in (found := json.loads(message["content"])):
-            sleep = next(e for e in found["metrics"] if e["metric"] == SLEEP)
-            return {
-                "text": "Time asleep fell across the team.",
-                "kind": "change",
-                "metric": "sleep_minutes",
-                "direction": "down",
-                "evidence_ids": [sleep["evidence_id"]],
-            }
-    raise AssertionError("no overview in the conversation")
-
-
 def run(engine, team_id: str, turns: list):
     llm = ScriptedLLM(turns)
     with session_scope(engine) as db:
@@ -77,60 +62,55 @@ def run(engine, team_id: str, turns: list):
     return found, llm
 
 
-def good_briefing(messages):
-    return ScriptedLLM.call(
-        ANSWER,
-        summary="Time asleep has been lower across the team for the past few weeks.",
-        claims=[sleep_claim(messages)],
-    )
+@pytest.mark.parametrize("mode", ["valid", "unknown_id", "free_text", "offline"])
+def test_weekly_highlights_only_use_this_reports_evidence(engine, mode):
+    team_id = make_team(engine, effects=LATE + (Step("steps", TODAY - timedelta(days=22), -5000),))
+    with session_scope(engine) as db:
+        db.add(
+            TeamChatMessage(
+                team_id=uuid.UUID(team_id),
+                role="supervisor",
+                text="followup sentinel",
+                created_at=NOW,
+            )
+        )
 
+    def choose(messages):
+        assert len(messages) == 2 and "followup sentinel" not in str(messages)
+        findings = json.loads(messages[1]["content"])
+        first = findings[0]["evidence_id"]
+        answer = {
+            "valid": json.dumps([first]),
+            "unknown_id": json.dumps([first, "bad"]),
+            "free_text": "Can you clarify?",
+        }[mode]
+        return ScriptedLLM.say(answer)
 
-def test_the_monday_briefing_is_kept_emailed_and_posted_to_the_chat(engine):
-    team_id = make_team(engine)
-    found, llm = run(
-        engine,
-        team_id,
-        [ScriptedLLM.call("team_overview"), ScriptedLLM.call("team_actions"), good_briefing],
-    )
-    assert found is not None and found.stop == "answered"
-    assert "nobody asked a question" in llm.requests[0]["messages"][1]["content"].lower()
+    found, llm = run(engine, team_id, [] if mode == "offline" else [choose])
+    assert len(llm.requests) == 1 and llm.requests[0]["tools"] == []
+    assert found.stop == ("selected" if mode == "valid" else "ranked_fallback")
     with session_scope(engine) as db:
         report = db.scalar(select(TeamReport))
+        planted = {
+            row["metric"]: report.evidence[row["evidence_id"]]["stats"]["direction"]
+            for row in report.body["priorities"]
+        }
+        assert planted["sleep_minutes"] == planted["steps"] == "down"
+        expected = report.body["priorities"][: 1 if mode == "valid" else 3]
+        summary = " ".join(row["text"] for row in expected)
         briefing = report.body["briefing"]
-        assert briefing["summary"].startswith("Time asleep has been lower")
-        assert briefing["items"][0]["metric"] == "sleep_minutes"
-        assert all(i in report.evidence for i in briefing["items"][0]["evidence_ids"])
-        (posted,) = db.scalars(select(TeamChatMessage)).all()
-        assert posted.role == "agent" and posted.text == briefing["summary"]
+        assert briefing["summary"] == summary
+        assert [item["evidence_ids"] for item in briefing["items"]] == [
+            [row["evidence_id"]] for row in expected
+        ]
+        assert all(row["evidence_id"] in report.evidence for row in expected)
         team = db.get(Team, uuid.UUID(team_id))
-        email = compose(team, report, "boss@example.com", "https://app.example")
-        assert "From your team agent" in email.text and briefing["summary"] in email.text
-        assert "From your team agent" in email.html
-
-
-def test_a_briefing_that_does_not_check_out_leaves_the_report_alone(engine):
-    team_id = make_team(engine)
-    wrong = {
-        "text": "Time asleep rose across the team.",
-        "kind": "change",
-        "metric": "sleep_minutes",
-        "direction": "up",
-        "evidence_ids": ["nonexistent"],
-    }
-    bad = ScriptedLLM.call(ANSWER, summary="Sleep went up.", claims=[wrong])
-    found, _ = run(engine, team_id, [ScriptedLLM.call("team_overview"), bad, bad])
-    with session_scope(engine) as db:
-        report = db.scalar(select(TeamReport))
-        assert "briefing" not in report.body
-        assert db.scalars(select(TeamChatMessage)).all() == []
-        team = db.get(Team, uuid.UUID(team_id))
-        assert "From your team agent" not in compose(team, report, "b@x.co", "https://a").text
-    assert found is None
+        assert summary in compose(team, report, "boss@example.com", "https://app.example").text
 
 
 def test_once_a_week_and_never_for_a_withheld_report(engine):
     team_id = make_team(engine)
-    turns = [ScriptedLLM.call("team_overview"), good_briefing]
+    turns = []
     run(engine, team_id, turns)
     again, llm = run(engine, team_id, turns)
     assert again is None and llm.requests == []
@@ -174,23 +154,22 @@ def test_the_agent_can_find_a_challenge_that_ended_and_how_it_went(engine):
         assert result["result"][0]["tool"] == "team_change"
 
 
-@pytest.mark.parametrize("agent_works", [True, False])
 def test_the_weekly_command_briefs_and_still_emails_when_the_agent_fails(
-    engine, monkeypatch, capsys, tmp_path, agent_works
+    engine, monkeypatch, capsys, tmp_path
 ):
     import app.teams.__main__ as cli
 
     make_team(engine)
-    turns = [ScriptedLLM.call("team_overview"), good_briefing] if agent_works else []
+    turns = []
     monkeypatch.setattr(cli, "session_scope", lambda: session_scope(engine))
     monkeypatch.setattr(cli.settings, "data_dir", tmp_path)
     monkeypatch.setattr(cli.settings, "email_backend", "outbox")
     monkeypatch.setattr(cli.OpenAILLM, "from_settings", lambda *a, **k: ScriptedLLM(turns))
     assert cli.main(["weekly", "--week", WEEK.start.isoformat(), "--agent"]) == 0
     out = capsys.readouterr()
-    assert f"{int(agent_works)} briefed by the team agent" in out.out
+    assert "1 briefed by the team agent" in out.out
     (email,) = (tmp_path / "outbox").glob("*.html")
-    assert ("From your team agent" in email.read_text()) is agent_works
+    assert "From your team agent" in email.read_text()
 
 
 def test_the_supervisor_reads_the_briefing_with_the_report(engine, monkeypatch):
@@ -201,7 +180,7 @@ def test_the_supervisor_reads_the_briefing_with_the_report(engine, monkeypatch):
     from app.auth import accounts
 
     team_id = make_team(engine)
-    run(engine, team_id, [ScriptedLLM.call("team_overview"), good_briefing])
+    run(engine, team_id, [])
     app = create_app()
 
     def db():
@@ -223,10 +202,11 @@ def test_the_supervisor_reads_the_briefing_with_the_report(engine, monkeypatch):
     assert body["briefing"]["summary"].startswith("Time asleep has been lower")
     assert body["briefing"]["items"][0]["metric"] == "sleep_minutes"
     assert body["briefing"]["proposals"] == 0
+    for item in body["briefing"]["items"]:
+        assert item["evidenceIds"] and all(key in body["evidence"] for key in item["evidenceIds"])
 
 
 def test_what_past_notes_were_followed_by_and_which_are_coming_up(engine):
-    from app.db.models import TeamNote
     from app.teams.agent import _team_change_moved
 
     release = TODAY - timedelta(days=40)
@@ -254,7 +234,6 @@ def test_what_past_notes_were_followed_by_and_which_are_coming_up(engine):
 
 
 def _crunch_team(engine, moved: bool) -> str:
-    from app.db.models import TeamNote
 
     release = TODAY - timedelta(days=40)
     effects = (
@@ -280,19 +259,11 @@ def _crunch_team(engine, moved: bool) -> str:
     return team_id
 
 
-def steady_briefing(messages):
-    return ScriptedLLM.call(
-        ANSWER,
-        summary="The team held steady last week.",
-        claims=[sleep_claim(messages) | {"kind": "no_change", "direction": None}],
-    )
-
-
 @pytest.mark.parametrize("judged_alike", [True, False])
 def test_a_coming_note_is_warned_about_from_what_a_past_one_was_followed_by(engine, judged_alike):
     team_id = _crunch_team(engine, moved=True)
     alike = ScriptedLLM.say("yes" if judged_alike else "no")
-    found, llm = run(engine, team_id, [ScriptedLLM.call("team_overview"), steady_briefing, alike])
+    found, llm = run(engine, team_id, [alike])
     with session_scope(engine) as db:
         briefing = db.scalar(select(TeamReport)).body.get("briefing")
     assert found is not None
@@ -308,56 +279,36 @@ def test_a_coming_note_is_warned_about_from_what_a_past_one_was_followed_by(engi
 
 def test_no_warning_and_no_question_when_nothing_followed_the_past_note(engine):
     team_id = _crunch_team(engine, moved=False)
-    found, llm = run(engine, team_id, [ScriptedLLM.call("team_overview"), steady_briefing])
+    found, llm = run(engine, team_id, [])
     assert found is not None and "Release 2.0" not in found.text
     assert not any("Coming:" in str(r["messages"]) for r in llm.requests)
 
 
-def test_the_look_ahead_still_goes_when_the_agents_briefing_fails(engine):
+def test_note_matcher_outage_leaves_the_weekly_report_readable(engine):
     team_id = _crunch_team(engine, moved=True)
-    wrong = {
-        "text": "Time asleep rose across the team.",
-        "kind": "change",
-        "metric": "sleep_minutes",
-        "direction": "up",
-        "evidence_ids": ["nonexistent"],
-    }
-    bad = ScriptedLLM.call(ANSWER, summary="Sleep went up.", claims=[wrong])
-    found, _ = run(
-        engine,
-        team_id,
-        [ScriptedLLM.call("team_overview"), bad, bad, bad, ScriptedLLM.say("yes")],
-    )
-    assert found is not None and found.stop == "ahead_only"
+    found, llm = run(engine, team_id, [])
+    assert found and "Release 2.0" not in found.text
+    assert any("Coming:" in str(r["messages"]) for r in llm.requests)
+
+
+def test_completed_event_warning_survives_a_later_matcher_outage(engine):
+    team_id = _crunch_team(engine, moved=True)
     with session_scope(engine) as db:
-        report = db.scalar(select(TeamReport))
-        briefing = report.body["briefing"]
-        assert briefing["summary"].startswith("Release 2.0 is on")
-        assert "Sleep went up" not in briefing["summary"]
-        assert [i["kind"] for i in briefing["items"]] == ["ahead"]
-        assert "briefing_failed" in report.body  # why the agent's part was left out
-
-
-def test_when_one_claim_fails_only_the_checked_claims_are_told_in_their_own_words(engine):
-    team_id = make_team(engine)
-    wrong = {
-        "text": "Steps doubled across the team.",
-        "kind": "change",
-        "metric": "steps",
-        "direction": "up",
-        "evidence_ids": ["nonexistent"],
-    }
-
-    def mixed(messages):
-        return ScriptedLLM.call(
-            ANSWER,
-            summary="Sleep fell and steps doubled.",
-            claims=[sleep_claim(messages), wrong],
+        db.add(
+            TeamNote(
+                team_id=uuid.UUID(team_id),
+                text="Another release",
+                starts_on=TODAY + timedelta(days=16),
+                created_at=NOW,
+            )
         )
-
-    found, _ = run(engine, team_id, [ScriptedLLM.call("team_overview"), mixed, mixed, mixed])
+    found, _ = run(engine, team_id, [ScriptedLLM.say("yes")])
     assert found is not None
     with session_scope(engine) as db:
         report = db.scalar(select(TeamReport))
-        assert report.body["briefing"]["summary"] == "Time asleep fell across the team."
-        assert "briefing_partial" in report.body
+        warnings = [item for item in report.body["briefing"]["items"] if item["kind"] == "ahead"]
+        assert len(warnings) == 1
+        cited = [report.evidence[key] for key in warnings[0]["evidence_ids"]]
+        assert sum(e["tool"] == "team_note" for e in cited) == 2
+        assert any(e["tool"] == "team_change" for e in cited)
+        assert any(step.get("error") == "LLMError" for step in found.trace)
