@@ -28,5 +28,6 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test -- --ci
+      # Coverage of all of src/ with a floor (package.json's coverageThreshold).
+      - run: npm test -- --ci --coverage
       - run: npx expo export --platform web
