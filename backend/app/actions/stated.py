@@ -24,9 +24,17 @@ _NUMBER_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3}
 # Between a number and its unit: a space or a hyphen ("35-minute walk", "a 1-hour run"), which
 # went unread and asked for a duration already given (the audit of 2026-11-18).
 JOIN = r"[\s\-\u2010\u2011\u2013]*"
+# Said in quarters ("three quarters of an hour", "an hour and a quarter") or run together
+# ("1h15"), a duration was read as an hour or not at all, and a right draft was refused (the
+# held-out logging run of 2026-11-22).
 DURATION = re.compile(
     r"\b(?:"
-    r"(?P<half>half (?:an? )?hour)"
+    r"(?P<three_quarters>three" + JOIN + r"quarters of an hour)"
+    r"|(?P<quarter>(?:a )?quarter of an hour)"
+    r"|(?P<and_quarter>(?:(?:an?|one|1) )?hour and a quarter)"
+    r"|(?P<and_half>(?P<and_half_of>\d+|one|two|three) and a half hours?)"
+    r"|(?P<run_hours>\d+)h(?P<run_minutes>\d{1,2})(?:m|mins?)?\b"
+    r"|(?P<half>half (?:an? )?hour)"
     r"|(?P<one_half>(?:(?:an?|one|1) )?hour and (?:a )?half)"
     r"|(?:(?P<hours>\d+(?:\.\d+)?)" + JOIN + r"(?:hours?|hrs?|h)\b"
     r"|(?P<word>an?|one|two|three)" + JOIN + r"hours?\b)"
@@ -118,7 +126,18 @@ def durations(text: str) -> set[int]:
     """Every duration named in the text, in seconds."""
     found = set()
     for match in DURATION.finditer(text):
-        if match["half"]:
+        if match["three_quarters"]:
+            found.add(2700)
+        elif match["quarter"]:
+            found.add(900)
+        elif match["and_quarter"]:
+            found.add(4500)
+        elif match["and_half"]:
+            whole = match["and_half_of"].lower()
+            found.add(round((_NUMBER_WORDS.get(whole) or int(whole)) * 3600) + 1800)
+        elif match["run_hours"]:
+            found.add(int(match["run_hours"]) * 3600 + int(match["run_minutes"]) * 60)
+        elif match["half"]:
             found.add(1800)
         elif match["one_half"]:
             found.add(5400)

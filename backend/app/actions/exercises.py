@@ -8,6 +8,7 @@ neither. Types the owner has not done are placed by the same rule (on foot, a co
 sport, step-based, swimming, or neither); docs/agent-actions.md lists which were verified.
 """
 
+import re
 from enum import StrEnum
 
 
@@ -116,6 +117,13 @@ def name(exercise_type: str) -> str:
     return words[0].upper() + words[1:]
 
 
+def in_sentence(exercise_type: str) -> str:
+    """The name inside a sentence: lower case, but an acronym stays one ("ready to log: HIIT",
+    not "hiit")."""
+    words = name(exercise_type).split()
+    return " ".join(w if w.isupper() and len(w) > 1 else w.lower() for w in words)
+
+
 def max_speed_kmh(exercise_type: str) -> float | None:
     if exercise_type in _RUN:
         return 25
@@ -130,3 +138,36 @@ def max_speed_kmh(exercise_type: str) -> float | None:
     if exercise_type in _SKATE:
         return 60
     return None
+
+
+# Names too general to say which workout it was ("a sport", "my workout").
+_TOO_GENERAL = {"OTHER", "WORKOUT", "SPORT"}
+# Every way a type is named here: its own words ("strength training", "hiit") and the name the
+# app shows ("Run", "Pool swim"). Longest first, so "rowing machine" is not read as "rowing".
+_PHRASES = sorted(
+    {
+        (phrase, exercise_type)
+        for exercise_type in TYPES
+        if exercise_type not in _TOO_GENERAL
+        for phrase in (exercise_type.lower().replace("_", " "), name(exercise_type).lower())
+    },
+    key=lambda item: -len(item[0]),
+)
+_PHRASE = {phrase: re.compile(rf"\b{re.escape(phrase)}\b", re.IGNORECASE) for phrase, _ in _PHRASES}
+
+
+def named_type(text: str) -> str | None:
+    """The one workout type the person's words name, or None if they name none or several.
+
+    The model chose "strength training" for "a HIIT workout", "a boxing session" and "a squash
+    game", which Google has types for (the held-out logging run of 2026-11-22): the person's own
+    word is the type. "After squash I walked home" names two, and is left to the model."""
+    taken: list[tuple[int, int]] = []
+    found = set()
+    for phrase, exercise_type in _PHRASES:
+        for match in _PHRASE[phrase].finditer(text):
+            if any(match.start() < end and start < match.end() for start, end in taken):
+                continue
+            taken.append(match.span())
+            found.add(exercise_type)
+    return found.pop() if len(found) == 1 else None

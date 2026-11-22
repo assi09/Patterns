@@ -521,7 +521,7 @@ def card_described(payload: dict, zone) -> str:
     if fields["kind"] == "food":
         eaten = datetime.fromisoformat(payload["consumedAt"]).astimezone(zone)
         return f"{payload.get('foodName', 'food')}, {when} at {eaten:%H:%M}."
-    name = exercises.name(payload["exerciseType"]).lower()
+    name = exercises.in_sentence(payload["exerciseType"])
     held = f"{fields['active_minutes']:g} min active"
     if fields["paused_minutes"] >= 0.5:
         held += (
