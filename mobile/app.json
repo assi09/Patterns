@@ -26,7 +26,8 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-status-bar"
     ],
     "scheme": "patterns",
     "experiments": {
