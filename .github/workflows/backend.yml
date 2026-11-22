@@ -28,4 +28,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
-      - run: pytest -q
+      # Coverage with a floor (pyproject.toml); sys.monitoring keeps the overhead small.
+      - run: pytest -q --cov --cov-report=term
+        env:
+          COVERAGE_CORE: sysmon

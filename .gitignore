@@ -20,3 +20,8 @@ build/
 .vscode/
 .idea/
 monitoring/monitoring.env
+
+# Python test coverage
+.coverage
+.coverage.*
+htmlcov/
