@@ -16,6 +16,7 @@ from datetime import UTC, date, datetime
 
 import pandas as pd
 
+from app.actions.stated import lacks_a_duration
 from app.agent.agent import (
     DEFAULT_GUIDE,
     NO_ANSWER,
@@ -379,6 +380,14 @@ NOTHING_WAITING = (
     "There's nothing waiting to log right now. Tell me what you ate or did and I'll prepare a "
     "card; it's only added when you tap Log it."
 )
+# A log for a day still to come, and a workout with no length, were answered "I couldn't pin that
+# down" in 16 of 60 held-out requests (2026-11-22): the model's own "that hasn't happened yet" had
+# no draft and no question mark, so the draft check sent it back until it gave up. Said by code.
+NOT_YET_LOGGABLE = (
+    "That hasn't happened yet, so there's nothing to log. Once it's done, tell me and I'll "
+    "prepare the card."
+)
+HOW_LONG = "How long did it last? Once I know, I'll prepare the card for you to check."
 # The agent never logs or sends anything itself: a tap on the card does. So in a logging turn a
 # reply saying it did is never true ("Saved.", "I've logged it"). Checked only in logging turns,
 # only for a logging object, and not when it describes what happens later ("when it's saved").
@@ -1269,6 +1278,15 @@ def ask(
             # Only a tap on the card logs anything: "Yes, go ahead and save that" was answered
             # "Saved." while the card stayed a draft (the audit of 2026-11-19).
             fixed = CONFIRM_ON_CARD if after_draft else NOTHING_WAITING
+        elif typed.kind == "logging" and not after_draft and continuing_log is None:
+            if typed.log_day is not None and typed.log_day > _day(today or now):
+                fixed = NOT_YET_LOGGABLE
+            elif (
+                typed.entry == "workout"
+                and typed.duration_minutes is None
+                and lacks_a_duration([reply_text])
+            ):
+                fixed = HOW_LONG
         question = typed.question(question)
     if fixed_reply:
         fixed = fixed_reply
@@ -1855,6 +1873,10 @@ def ask(
     elif fixed == MEDICAL_REFUSAL:  # an explicit request for a diagnosis: a refusal
         route = replace(route, action="refuse")
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=fixed)
+    elif fixed == HOW_LONG:  # a question: their answer continues the request
+        result = AgentResult(
+            run_id=uuid.uuid4().hex[:12], stop_reason="clarification", summary=fixed
+        )
     elif fixed:
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="limits", summary=fixed)
     elif route.action == "refuse":

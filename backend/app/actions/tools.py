@@ -33,7 +33,7 @@ def draft_sentence(payload: dict, local_now: datetime) -> str:
         minutes = round(payload["activeSeconds"] / 60)
         length = f"{minutes // 60} h {minutes % 60} min" if minutes >= 60 else f"{minutes} min"
         start = datetime.fromisoformat(payload["startTime"])
-        name = exercises.name(payload["exerciseType"]).lower()
+        name = exercises.in_sentence(payload["exerciseType"])
         return f"Ready to log: {name}, {_when(start, local_now)} for {length}. {check}"
     when = _when(datetime.fromisoformat(payload["consumedAt"]), local_now)
     estimate = (
@@ -148,6 +148,12 @@ def proposal_tools(
                     and given.get("exerciseType") != required_exercise
                 ):
                     given["exerciseType"] = required_exercise
+                if (
+                    model is WorkoutLog
+                    and prior_draft is None
+                    and (named := exercises.named_type("\n".join(said)))
+                ):
+                    given["exerciseType"] = named  # their own word, over the model's choice
                 if model is WorkoutLog and checked_said and lacks_a_duration(checked_said):
                     problem = "The person did not say how long it lasted. Ask them, kindly."
                     content = {"error": "This draft was not prepared.", "problems": [problem]}
