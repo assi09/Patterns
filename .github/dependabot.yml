@@ -1,0 +1,60 @@
+# Weekly dependency updates, one grouped pull request per ecosystem, so they arrive as a few
+# reviewable PRs rather than a stream. Each still goes through the required backend and mobile
+# checks before it can merge.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      python:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /mobile
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    # Expo pins these to the SDK, and testers use Expo Go, which runs only the newest SDK
+    # (AGENTS.md): they move together with `npx expo install --fix` or an SDK upgrade, never
+    # one by one.
+    ignore:
+      - dependency-name: "expo"
+      - dependency-name: "expo-*"
+      - dependency-name: "@expo/*"
+      - dependency-name: "jest-expo"
+      - dependency-name: "eslint-config-expo"
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "@types/react"
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
+      - dependency-name: "@shopify/flash-list"
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+    groups:
+      javascript:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # Python 3.12 is the version the API is deployed on; a new minor version is a decision.
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor"]

@@ -1,0 +1,55 @@
+name: security
+
+# Known vulnerabilities in the dependencies: pip-audit for the API, npm audit for the app.
+# Fails on a known vulnerability in a Python dependency, or a high or critical one in npm.
+# Runs when the dependencies change, weekly (advisories appear without any change here) and on
+# demand. Not a required check, so a newly published advisory can't block unrelated work.
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/pyproject.toml
+      - mobile/package.json
+      - mobile/package-lock.json
+      - .github/workflows/security.yml
+  pull_request:
+    paths:
+      - backend/pyproject.toml
+      - mobile/package.json
+      - mobile/package-lock.json
+      - .github/workflows/security.yml
+  schedule:
+    - cron: "43 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # pip itself is audited too; the image's copy is not what the API runs on.
+      - run: python -m pip install --upgrade pip
+      - run: pip install ./backend pip-audit
+      # Audits what the API installs; the project itself is not on PyPI and is skipped.
+      - run: pip-audit --progress-spinner off --desc on
+
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # Reads the lockfile; nothing is installed.
+      - run: npm audit --audit-level=high
