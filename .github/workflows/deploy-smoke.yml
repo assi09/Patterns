@@ -1,0 +1,28 @@
+name: deploy smoke test
+
+# After each Railway deploy of the API reaches production: is the API up and wired, and does
+# the web app load and point at it? No sign-in, no data, no model calls (scripts/smoke_test.sh).
+# A failure here means the live service is broken: check Railway's logs and roll back there.
+on:
+  deployment_status:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Both addresses are public (docs/monitoring.md, the app's own links).
+  API_URL: https://api-production-eccff.up.railway.app
+  WEB_URL: https://patterns-nu.vercel.app
+
+jobs:
+  smoke:
+    name: smoke test
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment.environment == 'patterns / production')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: scripts/smoke_test.sh "$API_URL" "$WEB_URL"
