@@ -269,8 +269,8 @@ What is left to the presentations on 2026-12-05, in order ([plan.md](plan.md#whe
 1. **Jad's reliability and security deliverables** (15% of the grade, none in the repository yet):
    the Failure Matrix, the threat model, the red-team set, chaos, load and contract tests.
 2. **Evaluation still open:** blind grading of `eval/results/phia_blind_2026-11-10.csv` by Karim
-   and Jad (issue 38), a fresh conversation set written by someone else, and the 52-request
-   logging test (about $0.30).
+   and Jad (issue 38) and a fresh conversation set written by someone else. The held-out logging
+   test ran on 2026-11-22: 167 / 180 ([test-results.md](test-results.md)).
 3. **The pilot** (since 2026-11-17): the first real Monday team briefing (2026-11-23, 06:00 UTC),
    sign-ups, spend against the $50 cap, then the pilot report, survey and interviews.
 4. **The final technical report, the demo script with its failure cases, and the presentation.**

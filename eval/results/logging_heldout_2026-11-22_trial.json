@@ -1,0 +1,91 @@
+{
+ "requests": 21,
+ "all_fields_right": 19,
+ "by_kind": {
+  "food": [
+   7,
+   7
+  ],
+  "workout": [
+   5,
+   7
+  ],
+  "none": [
+   7,
+   7
+  ]
+ },
+ "fields": {
+  "food.day": [
+   7,
+   7
+  ],
+  "food.drafted": [
+   7,
+   7
+  ],
+  "food.kcal": [
+   5,
+   5
+  ],
+  "food.meal": [
+   7,
+   7
+  ],
+  "food.name": [
+   7,
+   7
+  ],
+  "food.time": [
+   7,
+   7
+  ],
+  "none.no_draft": [
+   7,
+   7
+  ],
+  "workout.day": [
+   6,
+   6
+  ],
+  "workout.drafted": [
+   6,
+   7
+  ],
+  "workout.km": [
+   1,
+   1
+  ],
+  "workout.minutes": [
+   6,
+   6
+  ],
+  "workout.time": [
+   6,
+   6
+  ],
+  "workout.type": [
+   5,
+   6
+  ]
+ },
+ "cost_usd": 0.1477,
+ "wrong": [
+  {
+   "m": "record a HIIT workout: yesterday, 6:45pm, 1.5 hours",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "log a rowing machine session from two days ago, started 5:30pm, lasted three quarters of an hour",
+   "fields": {
+    "drafted": false
+   }
+  }
+ ]
+}

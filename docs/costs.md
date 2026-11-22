@@ -124,6 +124,7 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-18 | Broad questions: a 10-answer trial ($0.06), one replay ($0.01), development before and after fixes ($0.35, $0.39), held out once ($0.47); PHIA regression, 50 questions ($0.14) | about $1.42 |
 | 2026-11-18 | PHIA mode A, batch 2 on PHIA's 4 users: first 20 ($0.24), then the rest ($2.88) | about $3.13 |
 | 2026-11-18 | Logging test at scale: 250 generated requests through the chat API | about $0.81 |
+| 2026-11-22 | Held-out logging test (`eval/logging_heldout.py`): a 21-request trial to price it ($0.15), then 180 requests once ($0.93) | about $1.07 |
 | 2026-11-17 | PHIA mode A, batch 1 on PHIA's 4 synthetic users: first 20 ($0.21), then the rest ($2.78); grader's reading timed apart | about $2.99 |
 | 2026-11-17 | PHIA real people, batch 2: 39 questions on the code before the totals fix ($0.45, stopped), then the batch on the fixed code with Patterns asked again on those 39 ($3.79) | about $4.24 |
 | 2026-11-17 | Meal logging fix: replays of Karim's chicken-and-rice conversation (six, $0.07), food ranking on 45 and 25 held-out foods with embeddings and the model's choice (about $0.03) | about $0.10 |

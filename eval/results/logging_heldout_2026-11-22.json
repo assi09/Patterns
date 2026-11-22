@@ -1,0 +1,169 @@
+{
+ "requests": 180,
+ "all_fields_right": 167,
+ "by_kind": {
+  "food": [
+   59,
+   60
+  ],
+  "workout": [
+   51,
+   60
+  ],
+  "none": [
+   57,
+   60
+  ]
+ },
+ "fields": {
+  "food.day": [
+   59,
+   59
+  ],
+  "food.drafted": [
+   59,
+   60
+  ],
+  "food.kcal": [
+   40,
+   40
+  ],
+  "food.meal": [
+   59,
+   59
+  ],
+  "food.name": [
+   59,
+   59
+  ],
+  "food.time": [
+   59,
+   59
+  ],
+  "none.no_draft": [
+   57,
+   60
+  ],
+  "workout.day": [
+   55,
+   55
+  ],
+  "workout.drafted": [
+   55,
+   60
+  ],
+  "workout.km": [
+   6,
+   6
+  ],
+  "workout.minutes": [
+   55,
+   55
+  ],
+  "workout.time": [
+   55,
+   55
+  ],
+  "workout.type": [
+   51,
+   55
+  ]
+ },
+ "cost_usd": 0.9254,
+ "wrong": [
+  {
+   "m": "add a bowl of tabbouleh as breakfast yesterday at 8:40am",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "log a soccer match from the day before yesterday, started 17:15, lasted 1h15",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "log a rowing machine session from yesterday, started 9am, lasted three quarters of an hour",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "The day before yesterday I did a boxing session at 11:45am for 1.5 hours, add it please",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "Two days ago I did an elliptical session at 16:00 for 1h15, add it please",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "record a HIIT workout: yesterday, 7:45pm, 40 min",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "record a HIIT workout: two days ago, 8:15am, three quarters of an hour",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "record a jog: yesterday, 15:15, 1h15, 12 km",
+   "fields": {
+    "drafted": false
+   }
+  },
+  {
+   "m": "can you add a squash game I did yesterday at 15:30? it took 45 minutes",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "can you add a squash game I did yesterday at 20:30? it took an hour",
+   "fields": {
+    "drafted": true,
+    "type": false,
+    "day": true,
+    "time": true,
+    "minutes": true
+   }
+  },
+  {
+   "m": "a bowl of chicken noodle soup for breakfast today",
+   "fields": {
+    "no_draft": false
+   }
+  },
+  {
+   "m": "yesterday I had a glass of chocolate milk",
+   "fields": {
+    "no_draft": false
+   }
+  },
+  {
+   "m": "a blueberry muffin for breakfast today",
+   "fields": {
+    "no_draft": false
+   }
+  }
+ ]
+}

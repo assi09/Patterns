@@ -23,7 +23,8 @@ are on 2026-12-05; Nov 24 to Dec 4 stays buffer and rehearsal.
 - **Documents:** `docs/api.md` generated from the code, a README quickstart (#196).
 - **Bonus practices:** Dependabot, CodeQL, pip-audit and npm audit (#199); coverage with a floor
   (#201); a full-stack `docker compose` (#198); a smoke test of production after each deploy
-  (#200); Sentry for the API (#202, waiting for its DSN); Expo packages current for SDK 58 (#197).
+  (#200); Sentry for the API (#202, its DSN set on Railway); Expo packages current for SDK 58 (#197).
+- **The held-out logging test:** 167 / 180 on new wordings after #195 ([test-results.md](test-results.md)).
 - **The poster:** the poster session is done and closed with the instructor; no further poster.
 
 **Left, in order:**
@@ -32,10 +33,10 @@ are on 2026-12-05; Nov 24 to Dec 4 stays buffer and rehearsal.
 |---|---|---|
 | Failure Matrix, threat model, red-team set, chaos, load and contract tests | Jad | 15% of the grade; none in the repository yet |
 | Blind grading of 51 answers (issue 38), judge calibration | Karim and Jad | free |
-| A fresh conversation set written by someone else; the 52-request logging test | Jad or the TA writes; Karim runs | about $1.30 |
+| A fresh conversation set written by someone else | Jad or the TA writes; Karim runs | about $1 |
 | The pilot: Monday briefing (Nov 23), sign-ups, spend, then report, survey, interviews | Karim | live caps ($50) |
 | Final technical report (results chapter from [evaluation.md](evaluation.md)), demo script with failure cases, presentation, a `v1.0-demo` tag | Karim, with Jad's sections | |
-| Sentry DSN on Railway; Dependabot alerts setting; whether the brief asks for a project board | Karim | settings and sign-ups only |
+| Whether the brief asks for a project board | Karim | the Sentry DSN and Dependabot alerts are set (2026-11-22) |
 
 The deferred agent issues are fixed only if the demo or the pilot shows one matters.
 
