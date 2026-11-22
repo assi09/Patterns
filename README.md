@@ -8,6 +8,56 @@ numbers by hand. This project builds an agent that analyzes months of a user's F
 which metrics and time windows are worth investigating, and reports trends, changes and relationships —
 with every insight backed by a computed statistic the user can inspect.
 
+## Quickstart
+
+Needs Python 3.12+, Node 22 and Docker. Commands run from the repository root unless they `cd`.
+
+**1. The app alone, on made-up data** (no backend, no keys):
+
+```bash
+cd mobile && npm ci && npm run web     # http://localhost:8081
+```
+
+Sign in as `demo@patterns.app` / `demo-password`. Every screen works on the in-memory mock.
+
+**2. The whole stack locally:**
+
+```bash
+cp .env.example .env
+# In .env: set FA_TOKEN_KEY (the command that makes one is in the file) and
+# FA_ADMIN_EMAILS=["you@example.com"]. FA_OPENAI_API_KEY is needed only for chat answers.
+docker compose up -d db                       # Postgres on localhost:5433
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e "backend[dev]"
+alembic -c backend/alembic.ini upgrade head
+uvicorn app.api.main:app --app-dir backend --reload   # API on :8000, its docs on /docs
+```
+
+In a second terminal, the app against that API:
+
+```bash
+cd mobile && npm ci && EXPO_PUBLIC_API_URL=http://127.0.0.1:8000 npm run web
+```
+
+Sign up in the browser with the email from `FA_ADMIN_EMAILS`, then approve it:
+`python -m app.auth approve you@example.com`. Data comes from Google Health (Settings → Connect,
+after the [Google sign-in setup](#google-health-sign-in-live-data)) or a Takeout export in
+`FA_EXPORT_DIR`. Without an OpenAI key, Ask answers `503 agent_unavailable`; everything else
+works.
+
+**3. The checks CI runs** (no keys, no paid calls; tests build their own SQLite database):
+
+```bash
+(source .venv/bin/activate && cd backend && ruff check . && ruff format --check . && pytest -q)
+(cd mobile && npm run lint && npm run typecheck && npm test && npx expo export --platform web)
+```
+
+**4. The evaluation.** Methods, results and the command behind each result are in
+[docs/evaluation.md](docs/evaluation.md) and [docs/test-results.md](docs/test-results.md).
+Most scripts in `eval/` call paid models on purpose: read [docs/costs.md](docs/costs.md) first.
+The deployed setup (Railway and Vercel) is in [docs/deployment.md](docs/deployment.md), the API
+in [docs/api.md](docs/api.md).
+
 ## Repository layout
 
 | Path | Contents |
@@ -15,7 +65,7 @@ with every insight backed by a computed statistic the user can inspect.
 | `backend/` | FastAPI service: data ingestion, analysis tools, agent, API |
 | `mobile/` | Expo (React Native) app for iOS, Android and web |
 | `eval/` | Benchmark and evaluation scripts for PHIA, baselines, routing, retrieval, verifier checks, logging and team privacy. See [evaluation results](docs/evaluation.md) before running paid scripts |
-| `docs/` | [Status](docs/status.md) (start here), product, architecture, metrics, [roadmap](docs/roadmap.md); later API, failure matrix, threat model |
+| `docs/` | [Status](docs/status.md) (start here), [plan](docs/plan.md), [API reference](docs/api.md), [architecture](docs/architecture.md), [evaluation](docs/evaluation.md), [deployment](docs/deployment.md), product, metrics |
 
 ## Contributing
 
