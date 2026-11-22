@@ -2,144 +2,12 @@ import { useState } from 'react';
 import { type StyleProp, StyleSheet, TextInput, View, type ViewStyle } from 'react-native';
 
 import { ApiError } from '@/api/http';
-import {
-  useAddTeamNote,
-  useDecideTeamAction,
-  useDeleteTeamNote,
-  useTeamActions,
-  useTeamAlerts,
-  useTeamNotes,
-} from '@/api/hooks';
-import type { TeamAction } from '@/api/types';
+import { useAddTeamNote, useDeleteTeamNote, useTeamNotes } from '@/api/hooks';
 import { Row, Section } from '@/components/list';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { fonts, radius, spacing, useColors } from '@/theme';
 
-
-// Concerns first, then load and bedtime, then good news.
-const KIND_ORDER = { concern: 0, change: 1, improvement: 2 };
-
-/** Changes in the team's aggregate, raised once by the daily check (docs/teams.md). */
-export function AlertsSection({
-  teamId,
-  style,
-  endedOnly = false,
-}: {
-  teamId: string;
-  style?: StyleProp<ViewStyle>;
-  endedOnly?: boolean; // where the open ones are already in the briefing
-}) {
-  const alerts = useTeamAlerts(teamId);
-  const open = endedOnly ? [] : (alerts.data ?? []).filter((a) => !a.resolvedAt);
-  const ended = (alerts.data ?? []).filter((a) => a.resolvedAt).slice(0, 3);
-  if (!open.length && !ended.length) return null;
-  return (
-    <Section
-      style={style}
-      title={endedOnly ? 'Earlier alerts' : 'Alerts'}
-      footer="Team figures from at least five people. A change has to hold for several days before it is raised."
-    >
-      {[...open]
-        .sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind])
-        .map((alert) => (
-          <Row
-            key={alert.id}
-            icon={alert.direction === 'up' ? 'trending-up' : 'trending-down'}
-            title={alert.label}
-            detail={alert.text}
-            value={alert.kind === 'improvement' ? 'Good news' : 'Ongoing'}
-          />
-        ))}
-      {ended.map((alert) => (
-        <Row
-          key={alert.id}
-          icon="checkmark-circle-outline"
-          title={alert.label}
-          detail={alert.text}
-          value={alert.kind === 'concern' ? 'Back to usual' : 'Ended'}
-        />
-      ))}
-    </Section>
-  );
-}
-
-function when(action: TeamAction): string {
-  if (action.kind !== 'challenge' || !action.startsOn || !action.endsOn)
-    return 'A note to everyone';
-  return `A challenge, ${action.startsOn} to ${action.endsOn}`;
-}
-
-/** What the agent proposed for the whole team; nothing reaches members before approval. */
-export function ProposalsSection({
-  teamId,
-  style,
-}: {
-  teamId: string;
-  style?: StyleProp<ViewStyle>;
-}) {
-  const actions = useTeamActions(teamId);
-  const decide = useDecideTeamAction(teamId);
-  const [told, setTold] = useState<string | null>(null);
-  const waiting = (actions.data ?? []).filter((a) => a.status === 'proposed');
-  const decided = (actions.data ?? []).filter((a) => a.status !== 'proposed').slice(0, 4);
-  if (!waiting.length && !decided.length) return null;
-  return (
-    <Section
-      style={style}
-      title="Waiting for you"
-      footer="Approving sends it to every member's inbox, signed by no one."
-    >
-      {waiting.map((action) => (
-        <View key={action.id} style={styles.proposal}>
-          <Text variant="caption" color="faint">
-            {when(action)}
-          </Text>
-          <Text style={styles.title}>{action.title}</Text>
-          <Text color="muted">{action.body}</Text>
-          <View style={styles.buttons}>
-            <Button
-              label="Approve"
-              disabled={decide.isPending}
-              onPress={() =>
-                decide.mutate(
-                  { actionId: action.id, approve: true },
-                  {
-                    onSuccess: (r) =>
-                      setTold(
-                        `Sent to ${r.membersTold} ${r.membersTold === 1 ? 'person' : 'people'}.`,
-                      ),
-                  },
-                )
-              }
-            />
-            <Button
-              label="Decline"
-              variant="secondary"
-              disabled={decide.isPending}
-              onPress={() => decide.mutate({ actionId: action.id, approve: false })}
-            />
-          </View>
-        </View>
-      ))}
-      {told ? (
-        <Text variant="caption" color="muted" style={styles.note}>
-          {told}
-        </Text>
-      ) : null}
-      {decided.map((action) => (
-        <Row
-          key={action.id}
-          icon={action.status === 'approved' ? 'checkmark-circle-outline' : 'close-circle-outline'}
-          title={action.title}
-          detail={when(action)}
-          value={action.status === 'approved' ? 'Approved' : 'Declined'}
-        />
-      ))}
-      {decide.error ? <ErrorLine error={decide.error} /> : null}
-    </Section>
-  );
-}
 
 /** What the supervisor told the agent about the team's work, so changes can be lined up with it. */
 export function NotesSection({
@@ -253,8 +121,5 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 15,
   },
-  proposal: { gap: spacing.xs, paddingVertical: spacing.md },
-  title: { fontFamily: fonts.semibold },
-  buttons: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.sm },
   note: { paddingBottom: spacing.sm },
 });

@@ -241,3 +241,18 @@ export function briefingItems(
     }));
   return [...open, ...found].slice(0, most);
 }
+
+export interface TeamWeekFigures {
+  median_change: number;
+  members: number;
+  members_up: number;
+  members_down: number;
+}
+
+/** The latest week's figures: a scan keeps them per week, a single change holds them itself. */
+export function latestTeamWeek(evidence: Evidence | undefined): TeamWeekFigures | null {
+  const stats = evidence?.stats;
+  const weeks = stats?.weeks;
+  if (Array.isArray(weeks) && weeks.length) return weeks[weeks.length - 1] as TeamWeekFigures;
+  return typeof stats?.median_change === 'number' ? (stats as unknown as TeamWeekFigures) : null;
+}

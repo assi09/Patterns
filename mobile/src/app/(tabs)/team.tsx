@@ -17,6 +17,7 @@ import {
   useMakeTeamReport,
   useRotateTeamCode,
   useTeamAlerts,
+  useTeamPulse,
   useTeamReport,
   useTeamReports,
   useTeams,
@@ -29,7 +30,8 @@ import type {
   TeamReportSummary,
 } from '@/api/types';
 import { Row, Section } from '@/components/list';
-import { AlertsSection, NotesSection, ProposalsSection } from '@/components/teamAgent';
+import { NotesSection } from '@/components/teamAgent';
+import { Cards, KeyTiles, Part, TeamBoard, WhoMoved } from '@/components/teamBoard';
 import { TeamPulseTile } from '@/components/pulse';
 import { AreaChips, BriefingCard } from '@/components/teamBrief';
 import { TILE_RADIUS } from '@/components/widgets';
@@ -40,7 +42,6 @@ import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { windowLabel } from '@/lib/format';
 import { areaReadings, briefingItems, changeRows, teamStatus } from '@/lib/team';
-import { useWide } from '@/lib/layout';
 import { fonts, radius, spacing, useColors, useMetricColor } from '@/theme';
 
 // The team last looked at, for this session: switching tabs and back keeps it.
@@ -192,85 +193,98 @@ function CreateTeam({
 }
 
 function TeamView({ team }: { team: SupervisedTeam }) {
-  const wide = useWide();
   const colors = useColors();
-  const card = [styles.card, { backgroundColor: colors.surface }];
+  const card = [styles.card, { backgroundColor: colors.surface, borderColor: colors.border }];
   const reports = useTeamReports(team.id);
   const [chosen, setChosen] = useState<ISODate | undefined>();
+  const [planning, setPlanning] = useState(false);
   const week = chosen ?? reports.data?.[0]?.week.start;
   const report = useTeamReport(team.id, week);
   // Where the team stands now: the latest report and the open alerts, whatever week is shown.
   const latest = useTeamReport(team.id, reports.data?.[0]?.week.start);
   const alerts = useTeamAlerts(team.id);
+  const pulse = useTeamPulse(team.id);
 
   const status = teamStatus(alerts.data, latest.data);
+  const ready = latest.data?.status === 'ready';
   const kicker = [
     `${team.members} ${team.members === 1 ? 'person' : 'people'}`,
     latest.data ? `week of ${windowLabel(latest.data.week)}` : null,
   ]
     .filter(Boolean)
     .join(' · ');
-  const main = team.paused ? (
-    <>
-      <Section title="Figures paused" style={card}>
-        <Text color="muted">{team.paused}</Text>
-      </Section>
-    </>
-  ) : (
-    <>
-      {/* Five "Steady"s would claim a reading the team does not have yet. */}
-      {status.level === 'unknown' ? null : (
-        <AreaChips readings={areaReadings(alerts.data, latest.data)} />
-      )}
-      <BriefingCard
-        status={status}
-        items={briefingItems(alerts.data, latest.data)}
-        briefing={latest.data?.briefing}
-      />
-      <TeamPulseTile teamId={team.id} />
-      <ProposalsSection teamId={team.id} style={card} />
-      <ReportSection team={team} reports={reports.data} report={report.data} card={card} />
-    </>
-  );
-  const side = (
-    <>
-      <NotesSection teamId={team.id} style={card} />
-      <AlertsSection
-        teamId={team.id}
-        style={card}
-        endedOnly={Boolean(team.paused) || !latest.data?.briefing}
-      />
-      {report.data ? <LevelsSection levels={report.data.levels} card={card} /> : null}
-      <InviteSection team={team} card={card} />
-      <PastWeeks
-        reports={reports.data ?? []}
-        selected={week}
-        onSelect={(start) => setChosen(start)}
-        card={card}
-      />
-    </>
-  );
-  const top = (
-    <Text variant="label" color="muted">
-      {kicker}
-    </Text>
-  );
-  if (!wide) {
-    return (
-      <View style={styles.stack}>
-        {top}
-        {main}
-        {side}
-      </View>
-    );
-  }
   return (
-    <View style={styles.stack}>
-      {top}
-      <View style={styles.columns}>
-        <View style={[styles.main, styles.stack]}>{main}</View>
-        <View style={[styles.side, styles.stack]}>{side}</View>
+    <View style={styles.page}>
+      <View style={styles.stack}>
+        <Text variant="label" color="muted">
+          {kicker}
+        </Text>
+        {/* Five "Steady"s would claim a reading the team does not have yet. */}
+        {team.paused || status.level === 'unknown' ? null : (
+          <AreaChips readings={areaReadings(alerts.data, latest.data)} />
+        )}
       </View>
+      {team.paused ? (
+        <Section title="Figures paused" style={card}>
+          <Text color="muted">{team.paused}</Text>
+        </Section>
+      ) : (
+        <>
+          <Part number="01" title="This week">
+            <Cards>
+              <BriefingCard
+                status={status}
+                items={briefingItems(alerts.data, latest.data)}
+                briefing={latest.data?.briefing}
+              />
+              {ready || pulse.data?.weeks.length ? (
+                <KeyTiles teamId={team.id} report={latest.data} />
+              ) : null}
+              {ready ? <WhoMoved report={latest.data} /> : null}
+            </Cards>
+          </Part>
+          <Part
+            number="02"
+            title="Team board"
+            detail="Alerts, decisions, coming events and changes you are trying"
+            action={
+              <Button
+                label={planning ? 'Close' : 'Plan a change'}
+                icon={planning ? 'close' : 'add'}
+                variant={planning ? 'secondary' : 'primary'}
+                onPress={() => setPlanning(!planning)}
+              />
+            }
+          >
+            <TeamBoard teamId={team.id} briefing={latest.data?.briefing} planning={planning} />
+          </Part>
+          <Part
+            number="03"
+            title="Weekly report"
+            detail={report.data ? `Week of ${windowLabel(report.data.week)}` : undefined}
+          >
+            <ReportSection team={team} reports={reports.data} report={report.data} card={card} />
+            <Cards>
+              {report.data ? <LevelsSection levels={report.data.levels} card={card} /> : null}
+              {pulse.data?.weeks.length ? <TeamPulseTile teamId={team.id} style={card} /> : null}
+              {(reports.data?.length ?? 0) > 1 ? (
+                <PastWeeks
+                  reports={reports.data ?? []}
+                  selected={week}
+                  onSelect={(start) => setChosen(start)}
+                  card={card}
+                />
+              ) : null}
+            </Cards>
+          </Part>
+        </>
+      )}
+      <Part number={team.paused ? '01' : '04'} title="Notes and invite">
+        <Cards>
+          <NotesSection teamId={team.id} style={card} />
+          <InviteSection team={team} card={card} />
+        </Cards>
+      </Part>
     </View>
   );
 }
@@ -317,54 +331,56 @@ function ReportSection({
 
   const rows = changeRows(report);
   const changed = rows.filter((row) => row.status === 'changed').length;
-  return (
-    <>
-      <Section title={`Week of ${windowLabel(report.week)}`} style={card}>
-        <Text variant="headline" style={styles.headline}>
-          {report.headline}
-        </Text>
-        {report.narrative.map((paragraph) => (
-          <Line key={paragraph.text} metric={paragraph.metric}>
-            {paragraph.text}
-          </Line>
-        ))}
-        {report.status === 'ready' ? (
-          <KeyFigures
-            items={[
-              { value: `${report.membersIncluded}`, label: 'people with data' },
-              { value: `${changed} of ${rows.length}`, label: 'metrics changed' },
-              { value: `${report.levels.length}`, label: 'sharing levels' },
-            ]}
-          />
-        ) : null}
-      </Section>
+  const summary = (
+    <Section title="Summary" style={card}>
+      <Text variant="headline" style={styles.headline}>
+        {report.headline}
+      </Text>
+      {report.narrative.map((paragraph) => (
+        <Line key={paragraph.text} metric={paragraph.metric}>
+          {paragraph.text}
+        </Line>
+      ))}
       {report.status === 'ready' ? (
-        <>
+        <KeyFigures
+          items={[
+            { value: `${report.membersIncluded}`, label: 'people with data' },
+            { value: `${changed} of ${rows.length}`, label: 'metrics changed' },
+            { value: `${report.levels.length}`, label: 'sharing levels' },
+          ]}
+        />
+      ) : null}
+    </Section>
+  );
+  if (report.status !== 'ready') return summary;
+  return (
+    <Cards basis={360}>
+      <View style={styles.stack}>
+        {summary}
+        {report.weekdays.length > 0 ? (
           <Section
             style={card}
-            title="How the team changed"
-            footer="Each person's week against their own four weeks before; only the counts and the median reach you, never anyone's own data. A metric counts as changed only when the whole team moved clearly. Patterns, not advice."
+            title="By weekday"
+            footer="The median, across people, of each weekday against each person's own usual over five weeks. A description, not a test."
           >
-            <ChangeChart rows={rows} />
+            {report.weekdays.map((section) => (
+              <WeekdayChart
+                key={section.evidenceId}
+                section={section}
+                evidence={report.evidence[section.evidenceId]}
+              />
+            ))}
           </Section>
-          {report.weekdays.length > 0 ? (
-            <Section
-              style={card}
-              title="By weekday"
-              footer="The median, across people, of each weekday against each person's own usual over five weeks. A description, not a test."
-            >
-              {report.weekdays.map((section) => (
-                <WeekdayChart
-                  key={section.evidenceId}
-                  section={section}
-                  evidence={report.evidence[section.evidenceId]}
-                />
-              ))}
-            </Section>
-          ) : null}
-        </>
-      ) : null}
-    </>
+        ) : null}
+      </View>
+      <Section
+        style={card}
+        title="How the team changed"
+        footer="Each person's week against their own four weeks before; only the counts and the median reach you, never anyone's own data. A metric counts as changed only when the whole team moved clearly. Patterns, not advice."
+      >
+        <ChangeChart rows={rows} />
+      </Section>
+    </Cards>
   );
 }
 
@@ -486,11 +502,9 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   switchOpen: { fontFamily: fonts.semibold },
-  columns: { flexDirection: 'row', gap: spacing.lg, alignItems: 'flex-start' },
+  page: { gap: spacing.xxl },
   stack: { gap: spacing.md },
-  card: { borderRadius: TILE_RADIUS, padding: spacing.lg, marginTop: 0 },
-  main: { flex: 3, minWidth: 0 },
-  side: { flex: 2, minWidth: 0 },
+  card: { borderRadius: TILE_RADIUS, borderWidth: 1, padding: spacing.lg, marginTop: 0 },
   field: {
     flexDirection: 'row',
     alignItems: 'center',

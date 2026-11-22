@@ -1371,6 +1371,12 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
         { text: 'Time asleep has been lower for 3 weeks running.', kind: 'change',
           metric: 'sleep_minutes', evidenceIds: ['e_sleep_minutes'] },
         { text: 'Steps rose this week.', kind: 'change', metric: 'steps', evidenceIds: ['e_steps'] },
+        {
+          text: 'Release 2.0 is on Thu Dec 3. In the two weeks after the last release, time asleep changed by a median -38 min (7 of 8 people). Watch for a similar pattern this time.',
+          kind: 'ahead',
+          metric: null,
+          evidenceIds: [],
+        },
       ],
       proposals: 0,
       madeAt: new Date().toISOString(),
@@ -1392,7 +1398,7 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
     sections: [
       change('sleep_minutes', 'Time asleep', -38, '-38 min', 1, 7, true),
       change('bedtime_hour', 'Bedtime', 0.2, '+12 min', 5, 3),
-      change('steps', 'Steps', -310, '-310 steps', 3, 5),
+      change('steps', 'Steps', 1400, '+1,400 steps', 7, 1, true),
       change('active_zone_minutes', 'Active Zone Minutes', 2.5, '+2.5 min', 5, 3),
       change('resting_hr', 'Resting heart rate', 0.4, '+0.4 bpm', 4, 4),
       change('hrv_ms', 'Heart rate variability', -1.8, '-1.8 ms', 3, 5),

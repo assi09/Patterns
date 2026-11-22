@@ -3,6 +3,7 @@ import {
   areaReadings,
   briefingItems,
   changeRows,
+  latestTeamWeek,
   levelMark,
   shortChange,
   signedChange,
@@ -225,5 +226,37 @@ describe('briefingItems', () => {
     expect(briefingItems([], report([found], 'withheld'))).toEqual([]);
     const many = Array.from({ length: 8 }, (_, i) => raised(`x${i}`, `m${i}`, 'change'));
     expect(briefingItems(many)).toHaveLength(5);
+  });
+});
+
+describe('latestTeamWeek', () => {
+  const base = {
+    id: 'e',
+    tool: 'team_scan',
+    metrics: ['steps'],
+    windows: [],
+    n: 8,
+    sufficient: true,
+  };
+  const week = (median: number) => ({
+    median_change: median,
+    members: 8,
+    members_up: 7,
+    members_down: 1,
+  });
+
+  it('reads the last week of a scan', () => {
+    const evidence = { ...base, stats: { weeks: [week(200), week(1400)] } };
+    expect(latestTeamWeek(evidence)?.median_change).toBe(1400);
+  });
+
+  it('reads a single change as it is', () => {
+    const evidence = { ...base, tool: 'team_change', stats: week(-38) };
+    expect(latestTeamWeek(evidence)?.members_down).toBe(1);
+  });
+
+  it('gives nothing without figures', () => {
+    expect(latestTeamWeek(undefined)).toBeNull();
+    expect(latestTeamWeek({ ...base, stats: { members: 3 } })).toBeNull();
   });
 });
