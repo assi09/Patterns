@@ -351,3 +351,12 @@ All offline review and verification cost $0. Recommendation: stop repeated audit
 record remaining limitations; this is not a clean pass of the original zero-wrong-period gate.
 See the [final audit report](independent-audit-910da27-final.md) and
 [deferred issues](pr-195-followup-issues.md). No further paid audit is planned.
+
+### November 23, 2026 — chat check of which dates are missing
+
+`eval/missing_dates_check.py` on branch `fix/missing-dates` (`2d1108a`): 20 reserved
+missing-night weeks from the Fitbit replay's bank, two turns each through `/chat` in fresh
+wordings, the real model, router and guard, no Google traffic. Frozen and hashed before running
+(`a39b4d22…`), cap $0.40, approved by Karim. Recorded usage: OpenAI $0.157421, Jev $0.003696,
+total **$0.161117**, 97 calls, nothing rerun.
+[Results](experiments.md#which-dates-are-missing-through-the-chat-2026-11-23).
