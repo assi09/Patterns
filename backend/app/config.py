@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     token_key: SecretStr | None = None
     # The bearer token Prometheus or Grafana Cloud scrapes /metrics with; unset: no /metrics.
     metrics_token: SecretStr | None = None
+    # Error reports to Sentry (app/observability.py); nothing is sent without a DSN.
+    sentry_dsn: SecretStr | None = None
+    sentry_environment: str = "production"
     public_url: str = "http://127.0.0.1:8000"
     app_url: str = "http://localhost:8081"
     # Send due reminders from a loop inside the API, once a minute.

@@ -37,6 +37,7 @@ from app.auth.accounts import AuthError
 from app.background import Background
 from app.config import settings
 from app.ingest.takeout import IngestError
+from app.observability import init_sentry
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    # Before the app exists, so Sentry's FastAPI integration sees it (a no-op without a DSN).
+    init_sentry(settings)
     app = FastAPI(title="Fitbit agent API", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
