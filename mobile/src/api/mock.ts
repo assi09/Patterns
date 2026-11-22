@@ -46,8 +46,10 @@ import type {
   TeamPreview,
   Membership,
   SupervisedTeam,
+  PlanChange,
   TeamAction,
   TeamAlert,
+  TeamPlay,
   TeamChatMessage,
   TeamNote,
   TeamReport,
@@ -1049,6 +1051,190 @@ function supervisorAccount(): MockAccount {
   return account;
 }
 
+// The changes a supervisor can start, as in backend/app/teams/playbook.py.
+const MOCK_PLAYS: TeamPlay[] = [
+  {
+    id: 'no_late_meetings',
+    title: 'No meetings after 5 pm',
+    body: 'No team meetings or calls after 5 pm on working days.',
+    metrics: [
+      'sleep_minutes',
+      'bedtime_hour',
+      'recovery_score',
+      'hrv_ms',
+      'resting_hr',
+      'stress_score',
+    ],
+    days: 14,
+  },
+  {
+    id: 'lighter_week',
+    title: 'A lighter week',
+    body: 'No new deadlines this week, and only the meetings that matter.',
+    metrics: ['recovery_score', 'sleep_minutes', 'stress_score', 'strain', 'hrv_ms', 'resting_hr'],
+    days: 7,
+  },
+  {
+    id: 'quiet_evenings',
+    title: 'Quiet evenings',
+    body: 'No work messages after 7 pm; anything urgent waits for the morning.',
+    metrics: ['bedtime_hour', 'sleep_minutes', 'stress_score'],
+    days: 14,
+  },
+  {
+    id: 'focus_mornings',
+    title: 'Protected focus mornings',
+    body: 'No meetings before 11 am, so the day starts calmer.',
+    metrics: ['stress_score', 'strain', 'recovery_score'],
+    days: 14,
+  },
+  {
+    id: 'walking_meetings',
+    title: 'Walking meetings',
+    body: 'Hold one-to-ones and small meetings as walks when the weather allows.',
+    metrics: ['steps', 'active_zone_minutes'],
+    days: 14,
+  },
+  {
+    id: 'step_goal',
+    title: 'A team step goal',
+    body: "A shared goal for the team's steps together; nobody is ranked.",
+    metrics: ['steps', 'active_zone_minutes'],
+    days: 14,
+  },
+];
+
+const TEAM_METRICS = [
+  'sleep_minutes',
+  'bedtime_hour',
+  'steps',
+  'active_zone_minutes',
+  'resting_hr',
+  'hrv_ms',
+  'recovery_score',
+  'strain',
+  'stress_score',
+];
+
+/** A new team's board: a suggestion waiting, a change running and one that ended. */
+function seededActions(): TeamAction[] {
+  const at = (daysAgo: number) => new Date(Date.now() - daysAgo * 86_400_000).toISOString();
+  return [
+    {
+      id: 'act-suggested',
+      kind: 'challenge',
+      title: 'A lighter week',
+      body: 'No new deadlines this week, and only the meetings that matter.',
+      metric: 'recovery_score',
+      startsOn: isoDate(-10),
+      endsOn: isoDate(-16),
+      status: 'proposed',
+      source: 'agent',
+      play: 'lighter_week',
+      result: null,
+      proposedAt: at(1),
+      decidedAt: null,
+    },
+    {
+      id: 'act-running',
+      kind: 'challenge',
+      title: 'No meetings after 5 pm',
+      body: 'No team meetings or calls after 5 pm on working days.',
+      metric: 'sleep_minutes',
+      startsOn: isoDate(5),
+      endsOn: isoDate(-8),
+      status: 'approved',
+      source: 'supervisor',
+      play: 'no_late_meetings',
+      result: null,
+      proposedAt: at(6),
+      decidedAt: at(6),
+    },
+    {
+      id: 'act-ended',
+      kind: 'challenge',
+      title: 'Walking meetings',
+      body: 'Hold one-to-ones and small meetings as walks when the weather allows.',
+      metric: 'steps',
+      startsOn: isoDate(36),
+      endsOn: isoDate(23),
+      status: 'approved',
+      source: 'supervisor',
+      play: 'walking_meetings',
+      result: {
+        verdict: 'better',
+        text:
+          'Steps rose during it: median change +900 against the 28 days before (6 of 8 people).',
+        evidence: {
+          id: 'e_change_walks',
+          tool: 'team_change',
+          metrics: ['steps'],
+          windows: [{ start: isoDate(36), end: isoDate(23) }],
+          n: 8,
+          sufficient: true,
+          stats: { members: 8, median_change: 900, members_up: 6, members_down: 2 },
+        },
+      },
+      proposedAt: at(37),
+      decidedAt: at(37),
+    },
+  ];
+}
+
+function actionsOf(teamId: string): TeamAction[] {
+  if (!teamActions.has(teamId)) teamActions.set(teamId, seededActions());
+  return teamActions.get(teamId)!;
+}
+
+function planChange(change: PlanChange): TeamAction {
+  const custom = change.play === 'custom';
+  const play = MOCK_PLAYS.find((p) => p.id === change.play);
+  if (!custom && !play) throw new ApiError(`Unknown change '${change.play}'.`, 'bad_change', 422);
+  const title = change.title?.trim() || play?.title;
+  const body = change.body?.trim() || play?.body;
+  const metric = change.metric ?? play?.metrics[0];
+  if (!title || !body || !metric) {
+    throw new ApiError(
+      'A change of your own needs a title, what it is and what to measure.',
+      'bad_change',
+      422,
+    );
+  }
+  if (!TEAM_METRICS.includes(metric)) {
+    throw new ApiError(`Unknown metric '${metric}'.`, 'bad_change', 422);
+  }
+  if (ABOUT_A_PERSON.test(`${title} ${body}`)) {
+    throw new ApiError(
+      'Not planned: it would single out a person; keep it about the whole team.',
+      'unsafe_change',
+      422,
+    );
+  }
+  const days = change.days ?? play?.days ?? 14;
+  if (days < 7 || days > 28) throw new ApiError('A change runs 7 to 28 days.', 'bad_change', 422);
+  const startsOn = change.startsOn ?? isoDate(-1);
+  if (startsOn < isoDate(0) || startsOn > isoDate(-60)) {
+    throw new ApiError('A change starts between today and 60 days from now.', 'bad_start', 422);
+  }
+  const end = new Date(Date.parse(`${startsOn}T00:00:00Z`) + (days - 1) * 86_400_000);
+  const now = new Date().toISOString();
+  return {
+    id: `act-${Math.random().toString(36).slice(2, 10)}`,
+    kind: 'challenge',
+    title: title.slice(0, 80),
+    body: body.slice(0, 400),
+    metric,
+    startsOn,
+    endsOn: end.toISOString().slice(0, 10),
+    status: 'approved',
+    source: 'supervisor',
+    play: change.play,
+    result: null,
+    proposedAt: now,
+    decidedAt: now,
+  };
+}
+
 function ownTeam(teamId: string): SupervisedTeam {
   supervisorAccount();
   const team = supervisedTeams.find((t) => t.id === teamId);
@@ -1367,12 +1553,24 @@ export const mockClient: ApiClient = {
   getTeamActions: (teamId) =>
     later(() => {
       ownTeam(teamId);
-      return teamActions.get(teamId) ?? [];
+      return actionsOf(teamId);
+    }),
+  getTeamPlaybook: (teamId) =>
+    later(() => {
+      ownTeam(teamId);
+      return MOCK_PLAYS;
+    }),
+  planTeamChange: (teamId, change) =>
+    later(() => {
+      const team = ownTeam(teamId);
+      const action = planChange(change);
+      teamActions.set(teamId, [action, ...actionsOf(teamId)]);
+      return { membersTold: team.members, action };
     }),
   decideTeamAction: (teamId, actionId, approve) =>
     later(() => {
       const team = ownTeam(teamId);
-      const action = (teamActions.get(teamId) ?? []).find((a) => a.id === actionId);
+      const action = actionsOf(teamId).find((a) => a.id === actionId);
       if (!action) throw new ApiError('There is no such proposal.', 'not_found', 404);
       if (action.status !== 'proposed') {
         throw new ApiError('This proposal was already decided.', 'already_decided', 409);

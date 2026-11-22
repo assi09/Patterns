@@ -34,6 +34,7 @@ import type {
   SignedIn,
   SupervisedTeam,
   TeamAction,
+  TeamPlay,
   TeamAlert,
   TeamChatMessage,
   TeamNote,
@@ -240,6 +241,14 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         `/teams/${encodeURIComponent(teamId)}/actions/${encodeURIComponent(actionId)}/${
           approve ? 'approve' : 'decline'
         }`,
+      ),
+    getTeamPlaybook: (teamId) =>
+      request<TeamPlay[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/playbook`),
+    planTeamChange: (teamId, change) =>
+      post<{ membersTold: number; action: TeamAction }>(
+        baseUrl,
+        `/teams/${encodeURIComponent(teamId)}/actions`,
+        change,
       ),
     makeTeamReport: (teamId, week) =>
       post<TeamReport>(baseUrl, `/teams/${encodeURIComponent(teamId)}/reports`, { week }, 60_000),

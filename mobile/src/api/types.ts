@@ -549,7 +549,15 @@ export interface TeamChatMessage {
   createdAt: ISODateTime;
 }
 
-/** A team-wide action the agent proposed; nothing reaches members until it is approved. */
+/** How the team's metric went during an ended change, against the 28 days before it. */
+export interface ChangeResult {
+  verdict: 'better' | 'worse' | 'changed' | 'no_change' | 'unclear';
+  text: string;
+  evidence: Evidence;
+}
+
+/** A team-wide change: suggested by the agent (waits for approval) or started by the supervisor
+ * (approved as made). Nothing reaches members until it is approved. */
 export interface TeamAction {
   id: string;
   kind: 'challenge' | 'message';
@@ -559,8 +567,30 @@ export interface TeamAction {
   startsOn: ISODate | null;
   endsOn: ISODate | null;
   status: 'proposed' | 'approved' | 'declined';
+  source?: 'agent' | 'supervisor';
+  play?: string | null; // the playbook change it came from, or "custom"
+  result?: ChangeResult | null; // once an approved change has ended
   proposedAt: ISODateTime;
   decidedAt: ISODateTime | null;
+}
+
+/** A change from the playbook a supervisor can start. */
+export interface TeamPlay {
+  id: string;
+  title: string;
+  body: string;
+  metrics: string[]; // what it is meant for, the first measured by default
+  days: number;
+}
+
+/** A change the supervisor plans: a playbook one, or their own with play "custom". */
+export interface PlanChange {
+  play: string;
+  title?: string;
+  body?: string;
+  metric?: string;
+  startsOn?: ISODate; // tomorrow when left out
+  days?: number; // 7 to 28
 }
 
 /** Something the supervisor told the agent about the team's work, such as a deadline. */
@@ -715,6 +745,11 @@ export interface ApiClient {
     teamId: string,
     actionId: string,
     approve: boolean,
+  ): Promise<{ membersTold: number; action: TeamAction }>;
+  getTeamPlaybook(teamId: string): Promise<TeamPlay[]>;
+  planTeamChange(
+    teamId: string,
+    change: PlanChange,
   ): Promise<{ membersTold: number; action: TeamAction }>;
 }
 

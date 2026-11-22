@@ -14,6 +14,7 @@ import type {
   ISODate,
   NewReminder,
   NotificationSettings,
+  PlanChange,
   Rating,
   ReminderChange,
   SendOptions,
@@ -645,6 +646,22 @@ export function useTeamActions(teamId: string) {
   return useQuery({
     queryKey: [...keys.teams, teamId, 'actions'],
     queryFn: () => api.getTeamActions(teamId),
+  });
+}
+
+export function useTeamPlaybook(teamId: string) {
+  return useQuery({
+    queryKey: [...keys.teams, teamId, 'playbook'],
+    queryFn: () => api.getTeamPlaybook(teamId),
+    staleTime: Infinity, // fixed in code
+  });
+}
+
+export function usePlanTeamChange(teamId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (change: PlanChange) => api.planTeamChange(teamId, change),
+    onSuccess: () => client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'actions'] }),
   });
 }
 
