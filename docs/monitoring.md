@@ -1,10 +1,11 @@
 # Monitoring: Prometheus and Grafana
 
-How the deployed API is watched while the pilot runs. Two views, each for what it is good at:
+How the deployed API is watched while the pilot runs. Three views, each for what it is good at:
 
 | View | Where | What it shows |
 |---|---|---|
 | **Grafana** (this page) | Grafana Cloud, or Prometheus and Grafana on a laptop | the live service: whether the API and database are up, requests and their speed by route, answers by outcome, answer time, verifier rejections, tool errors, spending against the caps, Google syncs, accounts, the daily questions, with alerts |
+| **Sentry** ([below](#errors-sentry)) | sentry.io, when `FA_SENTRY_DSN` is set | where the API fails: each unhandled exception and each logged error with its type, stack and release, grouped, with an email for a new kind; never a message, value, body or person |
 | **Operations page** | the app, Settings → Operations (admins) | the agent's quality for a period: accuracy against the answer key, recall of changes, thumbs, success, latency, cost per answer and per person, response rates ([PR #183](https://github.com/assi09/Patterns/pull/183)) |
 
 Grafana cannot read the database (it has no public port), so the quality checks that need each
@@ -123,6 +124,33 @@ open http://localhost:3001                                        # sign in as a
 The same images as on Railway, the history in Docker volumes (kept across restarts and rebuilds),
 both bound to 127.0.0.1. It only scrapes while the laptop is on. `docker compose up -d db` still
 starts only Postgres.
+
+## Errors: Sentry
+
+Grafana counts failures; Sentry says where they happen (`backend/app/observability.py`). It is off
+until `FA_SENTRY_DSN` is set, and sends errors only (no performance tracing).
+
+**What is sent:** exceptions the API does not handle (a 500) and every `logger.error` or
+`logger.exception` record, which is how the chat and the background passes (syncs, alarms, team
+alerts, reminders) report failures. Each event keeps the exception type, the stack (files, lines,
+functions, the public source around them), the route, the release (`RAILWAY_GIT_COMMIT_SHA`) and
+the log template ("Sync failed").
+
+**What is not:** exception messages (replaced by `[removed]`), local variables, log arguments,
+breadcrumbs, request bodies, query strings, cookies, headers other than content type and length,
+host and user agent, and any user. `tests/test_observability.py` sends a failure carrying a made-up
+value, email and session token through a real Sentry client into memory and checks none of them
+leave; with the scrubbing switched off, it fails.
+
+**Turning it on** (Sentry's free plan is enough for this project):
+
+1. Sign up at sentry.io, create a **FastAPI** project, copy its DSN.
+2. Railway → the `api` service → Variables: `FA_SENTRY_DSN` = the DSN (and optionally
+   `FA_SENTRY_ENVIRONMENT`, `production` by default). Railway redeploys.
+3. In Sentry → Alerts, keep the default "new issue" email alert (it emails on each new kind of
+   error).
+
+Locally it stays off unless the DSN is put in `.env`.
 
 ## How it was checked (2026-11-17)
 

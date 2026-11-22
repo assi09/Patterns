@@ -21,6 +21,7 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "scipy>=1.13",
+    "sentry-sdk[fastapi]>=2.40",
     "sqlalchemy>=2.1",
     "uvicorn[standard]>=0.30",
 ]
