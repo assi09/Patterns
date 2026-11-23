@@ -352,6 +352,22 @@ record remaining limitations; this is not a clean pass of the original zero-wron
 See the [final audit report](independent-audit-910da27-final.md) and
 [deferred issues](pr-195-followup-issues.md). No further paid audit is planned.
 
+### November 22, 2026 — Fitbit core scenario replay
+
+492 frozen public-Fitbit scenarios, 16 scripted controls, 11 separate supervisor wording probes and
+one corrected food fixture. Authorized maximum $6.50. Recorded usage: OpenAI $3.404335360 and
+Jev $0.060678534, total **$3.465013894**. Outstanding provider reservations **$0.120245250**
+give an upper bound of **$3.585259144**. Reported usage is metered cost, pending provider billing
+reconciliation. Local statistics and phone-width rendering cost $0. [Results](fitbit-replay-results.md).
+
+### November 23, 2026 — reader-only check of picks by order
+
+`eval/reference_pick.py` on branch `fix/reference-by-order` (`1d39a87`): only the reader, on the
+third turn of the replay's 66 step-total conversations, twice each (132 readings). Jobs frozen and
+hashed before reading (`0364b979…`), cap $0.55, approved by Karim. Recorded usage
+**$0.423755**, all 132 read, nothing rerun. No paid judge, no Google traffic.
+[Results](experiments.md#picking-an-earlier-week-by-order-2026-11-23).
+
 ### November 23, 2026 — chat check of which dates are missing
 
 `eval/missing_dates_check.py` on branch `fix/missing-dates` (`2d1108a`): 20 reserved
@@ -360,3 +376,22 @@ wordings, the real model, router and guard, no Google traffic. Frozen and hashed
 (`a39b4d22…`), cap $0.40, approved by Karim. Recorded usage: OpenAI $0.157421, Jev $0.003696,
 total **$0.161117**, 97 calls, nothing rerun.
 [Results](experiments.md#which-dates-are-missing-through-the-chat-2026-11-23).
+
+### November 23, 2026 — reader check of follow-ups with each result's question shown
+
+`eval/reader_followups.py` on branch `fix/results-with-questions`: only the reader, on the replay's
+third turns (steps 66, resting heart rate 62, sleep 47) and a 44-reading opening-week control.
+Frozen and hashed first (`e4eebf5d…`), cap $0.95. Recorded usage **$0.500423**, all 219 read.
+[Results](experiments.md#each-earlier-result-shown-with-its-question-2026-11-23).
+
+### November 23, 2026 — reader probes for "that earlier week"
+
+`eval/reader_model_probe.py`, reader only, on the frozen third turns of the replay's three-turn
+conversations. (1) The large model (gpt-5.5) as the reader on main, 40 reserved readings: cap
+$1.20, recorded usage **$0.791546**. (2) Branch `fix/calendar-week-of-earlier` with the small
+reader, all 219 readings: cap $0.85, recorded usage **$0.482840**. Both frozen and hashed first;
+nothing rerun. (3) The small reader at temperature 0 on main, the same 40 readings: cap $0.30,
+recorded usage **$0.108379**. A run with low reasoning effort was stopped at once: the API
+refuses reasoning effort with function tools on chat completions for this model, every call
+failed before any reading, and it cost $0. One reading of the replay's control P4 to see its
+reading: **$0.008830**. [Results](experiments.md#that-earlier-week-model-and-representation-2026-11-23).

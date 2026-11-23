@@ -21,7 +21,15 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from app.actions.exercises import TYPES
-from app.agent.requests import Fields, Operation, Part, Period, Reading, RetryReading
+from app.agent.requests import (
+    Ambiguous,
+    Fields,
+    Operation,
+    Part,
+    Period,
+    Reading,
+    RetryReading,
+)
 
 # ---- periods: one kind per meaning ----
 
@@ -542,6 +550,17 @@ class StatusClause(Fields):
     )
 
 
+class SourceClause(Fields):
+    """Asks where the last answer came from: the public source it cites, or which of their data it
+    was computed from ("where did that advice come from?", "what's that based on?"). Read-only:
+    about the answer already given, never a new question. Without it, the question had no
+    place: sent back as unplaced and retried, it became a memory recall and was answered from
+    saved memory (the Fitbit replay, 2026-11-22)."""
+
+    type: Literal["source"]
+    said: str = SAID
+
+
 class ConfirmClause(Fields):
     """Asks to save the waiting card ('go ahead', 'log it')."""
 
@@ -600,6 +619,7 @@ Clause = Annotated[
     | LogClause
     | CorrectClause
     | StatusClause
+    | SourceClause
     | ConfirmClause
     | MemoryClause
     | OtherClause,
@@ -660,6 +680,7 @@ PRIMARY = (
     "confirm",
     "status",
     "memory",
+    "source",
     "investigate",
     "guidance",
     "data",
@@ -670,6 +691,7 @@ KIND = {
     "correct": "correction",
     "confirm": "confirmation",
     "status": "status",
+    "source": "source",
     "memory": "memory",
     "investigate": "investigate",
     "guidance": "guidance",
@@ -865,6 +887,11 @@ def _every_metric_looked_into(clauses: list, earlier: bool = False) -> list:
     return [*rest[:first], looked, *rest[first:]]
 
 
+SOURCE_AND_MORE = (
+    "Should I first say where that last answer came from, or answer the rest of your message?"
+)
+
+
 def reading_from(
     said: Said, question: str = "", earlier: bool = False, before: Sequence[str] = ()
 ) -> Reading:
@@ -898,6 +925,9 @@ def reading_from(
     ]
     clauses = _every_metric_looked_into(clauses, earlier)
     types = [c.type for c in clauses]
+    if "source" in types and any(t not in ("source", "other") for t in types):
+        # Answered from the last answer alone: beside another request, one would be dropped.
+        raise Ambiguous(SOURCE_AND_MORE)
     primary = next((t for t in PRIMARY if t in types), None)
     fields: dict = {
         "medical": said.medical and _medical_here(said, question, before),
