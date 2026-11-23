@@ -99,6 +99,7 @@ class Reading(Fields):
         "investigate",
         "memory",
         "status",
+        "source",
         "other",
         "clarify",
         "redo",
@@ -1114,6 +1115,9 @@ Clause types:
   and max_lag (null keeps them). earlier_result names an earlier result by index ("the steps
   result", "the all-measure comparison"); null is the last answer as a whole. options: how
   many options they ask for. Code keeps whatever it does not change.
+- source: where the last answer came from: the public source it cites, or which of their
+  data it was computed from ("where did that advice come from?", "what is that based on?").
+  Never memory: what the app keeps about them is memory recall.
 - other: small talk, thanks, or nothing the app does; also anything they tell about themselves
   ("I'm training for a 10k"), as its own clause even beside a question, with about_them true;
   message says which. Never a request about their data or about an earlier answer: a
@@ -1185,7 +1189,8 @@ UNPLACED = (
     "This message follows the conversation and was not placed. If it asks for an earlier "
     "answer again or changed (other days, statistic, measure, threshold, or another form), it is "
     "redo; whether an entry was saved or what the waiting card holds is status; what the app "
-    "keeps or what they said here is memory recall; a change to the waiting card is correct. "
+    "keeps or what they said here is memory recall; where the last answer came from (its source, "
+    "or the data it used) is source; a change to the waiting card is correct. "
     "Keep other only for small talk, something about them, or what the app does not do."
 )
 

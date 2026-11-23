@@ -101,6 +101,7 @@ from app.agent.personal import (
     without_filler,
 )
 from app.agent.present import METRICS, label
+from app.agent.provenance import answer_source
 from app.agent.requested import _when
 from app.agent.requested import execute as execute_request
 from app.agent.requests import interpret, previous_state
@@ -1240,6 +1241,7 @@ def ask(
         typed is not None and typed.kind in ("logging", "correction", "confirmation")
     )
     gap = None  # days an investigation named that the data does not have
+    source_links: list[dict] = []  # the last answer's sources, for "where did that come from?"
     if typed is not None:
         # Wearable bounds do not bound confirmed food or public guidance. Precise requests
         # determine availability per source/part, including mixed food and wearable questions.
@@ -1272,6 +1274,9 @@ def ask(
             gap := outside_data(typed, frame, _day(today or now))
         ):
             fixed = gap  # never another period's days in place of the ones named
+        elif typed.kind == "source":
+            # From what the last answer stored, never from the model or from saved memory.
+            fixed, source_links = answer_source(history, _day(today or now))
         elif typed.kind == "status":
             fixed = status_reply(action_states, waiting_card)  # from the store, never a write
         elif typed.kind == "confirmation":
@@ -1394,6 +1399,7 @@ def ask(
         )
         if fixed:
             result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="limits", summary=fixed)
+            result.sources = list(source_links)
             if gap and typed.focus == "coaching":
                 # Options asked for on days with no data: the limit stands, and the options
                 # asked for are still answered, from vetted general sources when there is a
@@ -1879,6 +1885,7 @@ def ask(
         )
     elif fixed:
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="limits", summary=fixed)
+        result.sources = list(source_links)  # the last answer's, for "where did that come from?"
     elif route.action == "refuse":
         # Health-shaped (melatonin to sleep, a symptom): the medical wording; else off topic.
         medical = (
