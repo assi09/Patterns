@@ -43,12 +43,23 @@ class Dates(Fields):
 
 
 class CalendarPeriod(Fields):
-    """'this week' (offset 0), 'last month' (offset -1), 'the week before last' (-2). Weeks
-    start on Monday."""
+    """A calendar week (from Monday), month or year. Counted from today: 'this week' (offset 0),
+    'last month' (-1), 'the week before last' (-2). Counted from an earlier result (relative_to
+    earlier_result): the week, month or year that holds that result's days, moved by offset:
+    'that week' is 0, 'the full week before that week' -1, 'the week after it' 1. days: Monday
+    to Friday (weekdays) or Saturday and Sunday (weekend) of the week."""
 
     kind: Literal["calendar"]
     unit: Literal["week", "month", "year"]
-    offset: int = Field(ge=-100, le=0)
+    offset: int = Field(ge=-100, le=100)
+    relative_to: Literal["today", "earlier_result"] = "today"
+    days: Literal["all", "weekdays", "weekend"] = "all"
+
+    @model_validator(mode="after")
+    def _past_from_today(self):
+        if self.relative_to == "today" and self.offset > 0:
+            raise ValueError("A calendar period counted from today is this one or an earlier one")
+        return self
 
 
 class DaysEnding(Fields):
@@ -215,7 +226,13 @@ def period_of(span: Span) -> Period:
     if isinstance(span, Dates):
         return Period(kind="explicit", start=span.start, end=span.end)
     if isinstance(span, CalendarPeriod):
-        return Period(kind="calendar", unit=span.unit, offset_units=span.offset)
+        return Period(
+            kind="calendar",
+            unit=span.unit,
+            offset_units=span.offset,
+            anchor="previous" if span.relative_to == "earlier_result" else "today",
+            week_days=span.days,
+        )
     if isinstance(span, SameAsEarlier):
         return Period(kind="inherit")
     if isinstance(span, AfterEarlier | BeforeEarlier):
