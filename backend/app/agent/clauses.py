@@ -725,9 +725,12 @@ def _food_only(metrics: Sequence[str]) -> bool:
     """Whether every measure named is a nutrient of the meals and none a tracker measure: the
     tracker records no protein, carbohydrate or fat, so only the food log can be read for them.
     Named as a tracker metric, "total recorded protein for that day" was refused as an unknown
-    measure (the audit of 910da27, final_food_breakfast-01/t2, food_filter-02/t2)."""
+    measure (the audit of 910da27, final_food_breakfast-01/t2, food_filter-02/t2). Energy is in
+    both sources (eaten, and burned: the tracker's calories are also called energy burned), so it
+    is never taken as food on its own: which one is meant stays the reader's to say."""
     return bool(metrics) and all(
-        m.casefold() in NUTRIENT_NAMES and m not in METRICS for m in metrics
+        NUTRIENT_NAMES.get(m.casefold()) not in (None, "energy") and m not in METRICS
+        for m in metrics
     )
 
 

@@ -127,3 +127,12 @@ def test_switching_to_the_tracker_never_keeps_a_meal():
     words = "Same date, switch to energy burned from the tracker."
     part, _ = part_of(words, redo(words, SAME, metrics=["calories"], source="tracker"))
     assert part.meal_type is None and part.operation == "value"
+
+
+@pytest.mark.parametrize("named", ["energy", "Energy"])
+def test_energy_on_the_tracker_is_never_silently_read_as_food(named):
+    """Energy is eaten or burned; named for the tracker it is not turned into food eaten."""
+    words = "And the energy for that day?"
+    clause = data(words, [named], "sum", SAME, earlier_result=0, source="tracker")
+    request, _ = read(words, said(clause), history=[BREAKFAST], today=TODAY)
+    assert not (request.kind == "data" and request.parts[0].operation == "food")
