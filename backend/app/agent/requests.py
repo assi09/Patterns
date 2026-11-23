@@ -1211,19 +1211,20 @@ def kept_fields(arguments, before, fields: Sequence[str]):
 
 
 def _lengths_kept(clause: dict, before: dict) -> list:
+    """The length each period of the first reading said, put back on the same period of the
+    retry, whatever the retry gave it. The error that sent the reading back was not about the
+    length, so the retry has no reason to change it: restored only when the retry left it
+    empty, a three-day block retried with length 1 or 2 was accepted, and even the question
+    asked about it named the new count (the audit of 910da27). A period of the retry with no
+    length to give (explicit dates) keeps what it says, and so does one the first reading had
+    no length for."""
     periods = list(clause.get("periods") or [])
     old = list(before.get("periods") or [])
     for index, period in enumerate(periods):
         earlier = old[index] if index < len(old) else None
-        if (
-            isinstance(period, dict)
-            and isinstance(earlier, dict)
-            and period.get("kind") == earlier.get("kind")
-            and "length" in period
-            and period.get("length") is None
-            and earlier.get("length")
-        ):
-            periods[index] = period | {"length": earlier["length"]}
+        said = earlier.get("length") if isinstance(earlier, dict) else None
+        if isinstance(period, dict) and "length" in period and said is not None:
+            periods[index] = period | {"length": said}
     return periods
 
 
