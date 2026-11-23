@@ -1161,3 +1161,24 @@ ambiguous in English, and the bank's key assumes one reading.
 is merged; the calendar-week branch scored lower on one family. The limitation is recorded in
 [pr-195-followup-issues.md](pr-195-followup-issues.md) (item 13). Every precise answer states
 its exact dates, so a wrong week is visible to the person.
+
+
+## Food edits and source questions (2026-11-23)
+
+**What it tested.** Two follow-ups the reading could not express. Food: after a breakfast-energy
+answer, keep the meal and change the nutrient, clear the meal, or switch to energy burned from
+the tracker (pr-195-followup-issues.md item 4). Source: "where did that come from?" after a
+guidance or a data answer (the replay's control P8). 12 made-up turns in fresh wordings. $0.07.
+
+| Follow-ups | main | fix |
+|---|---:|---:|
+| Food edits (6) | 4/6 | 4/6, then 5/6 with the redo's meal and nutrient fields |
+| Source questions (6) | 0/6 | 6/6 |
+
+**What it showed.** Source: on main none was read as a question about the last answer (other,
+memory, data or an investigation); with a source clause, all six. Food: the first fix (nutrients
+read from the meals, a redo that can switch records) did not move these wordings, because the
+reader said two of them as a redo, which could not keep a meal or name a nutrient; with those
+fields, 5 of 6. The miss: "drop the breakfast filter" read with the breakfast meal kept, a
+reading mistake that another run did not make. 6 turns per kind: a check of these distinctions,
+not a broad score.

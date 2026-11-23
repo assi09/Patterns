@@ -21,6 +21,7 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from app.actions.exercises import TYPES
+from app.agent.present import METRICS
 from app.agent.requests import (
     Ambiguous,
     Fields,
@@ -533,6 +534,26 @@ class RedoClause(Fields):
     max_lag: int | None = Field(
         default=None, ge=0, le=14, description="Null keeps the earlier lag."
     )
+    # Without it a redo could not change records: "same date, switch to energy burned from the
+    # tracker" after a food answer kept the food operation and was sent back twice (the audit of
+    # 910da27, final_food_breakfast-01/t3 and food_unknown-01/t3).
+    source: Literal["tracker", "food_log"] | None = Field(
+        default=None,
+        description="Null keeps the earlier result's records; tracker or food_log when this "
+        "message switches them ('switch to energy burned from the tracker').",
+    )
+    # A food answer repeated, changed only where the message says: "the protein for that same
+    # breakfast" keeps the meal and changes the nutrient; "the whole day" clears the meal.
+    meal: Literal["keep", "every", "BREAKFAST", "LUNCH", "DINNER", "SNACK"] = Field(
+        default="keep",
+        description="For food eaten: keep the earlier result's meal, every meal ('the whole "
+        "day', 'drop the breakfast filter'), or the one meal this message names.",
+    )
+    nutrients: list[str] = Field(
+        default_factory=list,
+        description="For food eaten: the nutrients this message asks about ('and the "
+        "protein?'); empty keeps the earlier ones.",
+    )
     options: int | None = Field(
         default=None, ge=1, le=5, description="How many options or points they ask for."
     )
@@ -700,6 +721,20 @@ KIND = {
 }
 
 
+def _food_only(metrics: Sequence[str]) -> bool:
+    """Whether every measure named is a nutrient of the meals and none a tracker measure: the
+    tracker records no protein, carbohydrate or fat, so only the food log can be read for them.
+    Named as a tracker metric, "total recorded protein for that day" was refused as an unknown
+    measure (the audit of 910da27, final_food_breakfast-01/t2, food_filter-02/t2)."""
+    return bool(metrics) and all(
+        m.casefold() in NUTRIENT_NAMES and m not in METRICS for m in metrics
+    )
+
+
+def _records(source: str | None, metrics: Sequence[str]) -> str | None:
+    return "food_log" if _food_only(metrics) else source
+
+
 def _part(clause: DataClause | InvestigateClause, earlier: bool = False) -> Part:
     common = {
         "metrics": clause.metrics,
@@ -709,6 +744,7 @@ def _part(clause: DataClause | InvestigateClause, earlier: bool = False) -> Part
     }
     if isinstance(clause, InvestigateClause):
         return Part(operation="describe", every_metric=clause.every_metric, **common)
+    source = _records(clause.source, clause.metrics)
     return Part(
         operation=clause.operation,
         comparison=clause.comparison,
@@ -716,18 +752,18 @@ def _part(clause: DataClause | InvestigateClause, earlier: bool = False) -> Part
         threshold_unit=clause.threshold_unit,
         max_lag=clause.max_lag,
         meal_type=clause.meal_type,
-        source=clause.source,
+        source=source,
         every_metric=_whole_registry(clause, earlier),
-        nutrients=_nutrients(clause),
+        nutrients=_nutrients(source, clause.nutrients, clause.metrics),
         **common,
     )
 
 
-def _nutrients(clause: DataClause) -> list[str]:
+def _nutrients(source: str | None, nutrients: Sequence[str], metrics: Sequence[str]) -> list[str]:
     """The nutrients a food clause asks about: said as such, or written as its metrics."""
-    if clause.source != "food_log":
+    if source != "food_log":
         return []
-    named = [*clause.nutrients, *(NUTRIENT_NAMES.get(m.casefold(), "") for m in clause.metrics)]
+    named = [*nutrients, *(NUTRIENT_NAMES.get(m.casefold(), "") for m in metrics)]
     return list(dict.fromkeys(n for n in named if n))
 
 
@@ -753,6 +789,14 @@ def _edit(redo: RedoClause) -> Part:
         threshold=redo.threshold,
         threshold_unit=redo.threshold_unit,
         max_lag=redo.max_lag,
+        source=_records(redo.source, redo.metrics),
+        nutrients=_nutrients(
+            "food_log" if redo.nutrients else _records(redo.source, redo.metrics),
+            redo.nutrients,
+            redo.metrics,
+        ),
+        meal_type=None if redo.meal in ("keep", "every") else redo.meal,
+        meal_edit="named" if redo.meal not in ("keep", "every") else redo.meal,
         said=redo.said,
     )
 

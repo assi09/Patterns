@@ -395,3 +395,12 @@ recorded usage **$0.108379**. A run with low reasoning effort was stopped at onc
 refuses reasoning effort with function tools on chat completions for this model, every call
 failed before any reading, and it cost $0. One reading of the replay's control P4 to see its
 reading: **$0.008830**. [Results](experiments.md#that-earlier-week-model-and-representation-2026-11-23).
+
+### November 23, 2026 — reader check of food edits and source questions
+
+`eval/followup_kinds_check.py`: 12 made-up follow-ups in fresh wordings (6 food edits after a
+breakfast answer, 6 "where did that come from?"), read on main and on each fix. Frozen and hashed
+first (`5cb8913b…`), cap $0.20 per run. Recorded usage: food on main **$0.012610**, on
+`fix/food-source-edits` before and after its redo meal edits **$0.016108** and **$0.014142**;
+source on main **$0.014453** and on `fix/answer-source` **$0.015400**.
+[Results](experiments.md#food-edits-and-source-questions-2026-11-23).
