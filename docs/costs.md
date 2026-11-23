@@ -376,3 +376,10 @@ wordings, the real model, router and guard, no Google traffic. Frozen and hashed
 (`a39b4d22…`), cap $0.40, approved by Karim. Recorded usage: OpenAI $0.157421, Jev $0.003696,
 total **$0.161117**, 97 calls, nothing rerun.
 [Results](experiments.md#which-dates-are-missing-through-the-chat-2026-11-23).
+
+### November 23, 2026 — reader check of recording questions about one measure
+
+`eval/openings_check.py`: the 20 opening questions of the missing-dates chat check, read with no
+history once on main and once on branch `fix/every-measure-wording`. Frozen and hashed first
+(`a077ba50…`), cap $0.15 per version. Recorded usage **$0.053247** (main) and **$0.065562** (fix).
+[Results](experiments.md#recording-questions-about-one-measure-2026-11-23).

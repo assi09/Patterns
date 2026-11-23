@@ -1098,3 +1098,21 @@ whenever the request is read as a list of dates. What remains is the reading: a 
 "missing" or "dates" ("nothing recorded") can still go to an investigation. 20 weeks and nine
 wordings show the fix works for most phrasings; they are no proof for every one, and the
 replay's 0/43 used another wording, so the two are not a controlled before and after.
+
+
+## Recording questions about one measure (2026-11-23)
+
+**What it tested.** In the missing-dates chat check, "on how many nights was my sleep tracked?"
+was read as a look at every measure in 2 of 5 conversations, so its follow-up had no sleep result
+to work from. Two candidate causes: the reader's example for every measure was "everything you
+track", and "my sleep" names no single measure. The first was changed alone (branch
+`fix/every-measure-wording`: the example no longer shares the verb, and how often one measure was
+recorded is said to be its coverage). The same 20 openings were read on both versions. $0.12.
+
+| Openings, four wordings | main | fix |
+|---|---:|---:|
+| Read as a sleep count over exactly that week | 17/20 | 20/20 |
+
+**What it showed.** On main the misreading recurred (3 of 20, all looks at every measure); with
+the example apart from recording questions, none. The second candidate (a "sleep" alias) was not
+needed and is not made. 20 readings of one kind of question.
