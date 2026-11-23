@@ -1098,3 +1098,66 @@ whenever the request is read as a list of dates. What remains is the reading: a 
 "missing" or "dates" ("nothing recorded") can still go to an investigation. 20 weeks and nine
 wordings show the fix works for most phrasings; they are no proof for every one, and the
 replay's 0/43 used another wording, so the two are not a controlled before and after.
+
+
+## Each earlier result shown with its question (2026-11-23)
+
+**What it tested.** The replay's traces showed the reader each earlier result apart from the
+questions, labelled "last" and "older". Branch `fix/results-with-questions` showed each result
+beside the question that asked for it, with a neutral `in_last_answer` flag. Reader only, on the
+replay's third turns, graded against the bank's key. $0.50.
+
+| Third turn | Now | Replay |
+|---|---:|---:|
+| Steps: "For that earlier week, just Monday to Friday?" | 32/66 | 2/66 |
+| Resting heart rate: "Just that earlier weekend?" | 12/62 | 23/62 |
+| Sleep: "Now average the full week before that week." | 26/47 | 43/47 |
+| Control: "Now the first week I asked about, Monday to Friday only." | 23/44 | — |
+
+**What it showed.** A trade, not a fix (70/175 against 68/175 on the three families). Two causes
+are separate. (1) Which week "that earlier" means: on the weekend wording the reader still chose
+the opening week in most readings, with the questions in view; the small reader model reads
+"earlier" as earlier in the chat. (2) A gap in what a period can say: "the full week before that
+week" after a weekend result needs the calendar week that contains an earlier result. There is no
+such period, so the reader counts days from whichever result it picks; with the questions shown
+it picked the weekend more often (21 of 47), and the count from the weekend is the wrong week.
+
+**What it changed.** Not merged. The next change gives periods the calendar week containing an
+earlier result, and a weekday or weekend part of it, so that any referent in that week gives the
+same days.
+
+
+## "That earlier week": model and representation (2026-11-23)
+
+**What it tested.** Whether the remaining follow-up failure is the reader model or what a period
+can say. Reader only, on the replay's frozen third turns, graded against the bank's key.
+
+| Third turn | Replay (small) | Large reader | Calendar week of an earlier result (small) |
+|---|---:|---:|---:|
+| Steps: "For that earlier week, just Monday to Friday?" | 2/66 | 8/14 | 0/66 |
+| Resting heart rate: "Just that earlier weekend?" | 23/62 | 8/13 | 6/62 |
+| Sleep: "Now average the full week before that week." | 43/47 | 6/13 | 41/47 |
+
+The large-reader column is 40 reserved readings; its baseline on the same readings was 0/14,
+3/13 and 11/13. On the same 40, the small reader at temperature 0 (the reader otherwise samples at
+the API's default of 1) scored 0/14, 1/13 and 13/13: with no sampling at all it still reads the
+opening week, so the choice is a steady reading, not noise. Low reasoning effort could not be
+tried: the API refuses it with function tools on chat completions for this model. The
+calendar-week run's opening-week control ("Now the first week I asked about") scored 20/44.
+$0.79, $0.48 and $0.11.
+
+**What it showed.** Every large-reader sleep miss pointed at the weekend result and counted 7
+days back from it: the missing "week that holds that result". The calendar-week branch gives the
+reader that period and a weekday or weekend part, and it used them almost every time, so the days
+within the week it chose were right. But it chose the opening week in all 66 step readings and
+56 of 62 heart-rate ones. Some heart-rate readings in the replay were right by accident ("the two
+days before the opening week" is the earlier week's weekend); with a clear "weekend of that week"
+the reader said the opening week's weekend instead. What remains is one interpretation: "that
+earlier week" read as the week from earlier in the conversation, not the week before. The large
+model reads it the intended way more often (about 60%), the small one almost never. The phrase is
+ambiguous in English, and the bank's key assumes one reading.
+
+**What it changed.** Decided on 2026-11-23: neither the large reader nor the calendar-week branch
+is merged; the calendar-week branch scored lower on one family. The limitation is recorded in
+[pr-195-followup-issues.md](pr-195-followup-issues.md) (item 13). Every precise answer states
+its exact dates, so a wrong week is visible to the person.
