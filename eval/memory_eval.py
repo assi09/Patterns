@@ -560,16 +560,20 @@ def p5_declined_fact(r: Run):
 def p6_said_once_then_twice(r: Run):
     h = r.chat()
     r.ask(h, "By the way, I've started cycling to work.", label="said once")
+    # Something they volunteer is a card at once (`listen_to`): waiting to hear it twice meant
+    # no card ever came. This check expected the earlier design, "noticed, not a card", and
+    # failed on every run since that change (the memory re-run of 2026-11-23).
     page = r.memory()
-    noticed = any("cycl" in f["text"].casefold() for f in page["noticed"])
-    carded = any("cycl" in f["text"].casefold() for f in page["waiting"])
-    r.expect(
-        "once: noticed, not a card", noticed and not carded, json.dumps(page)[:300]
-    )
+    cards = [f for f in page["waiting"] if "cycl" in f["text"].casefold()]
+    r.expect("once, volunteered: a card", len(cards) == 1, json.dumps(page)[:300])
     i = r.chat()
     r.ask(i, "Cycling to work every day has been tiring me out.", label="said twice")
-    carded = any("cycl" in f["text"].casefold() for f in r.memory()["waiting"])
-    r.expect("twice: a card", carded, "no card after the second time")
+    cards = [f for f in r.memory()["waiting"] if "cycl" in f["text"].casefold()]
+    r.expect(
+        "twice: still one card",
+        len(cards) == 1,
+        f"{len(cards)} cards after the second time",
+    )
     j = r.chat()
     r.ask(
         j,
@@ -997,7 +1001,9 @@ def summarise(r: Run, spent: float) -> dict:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--only", default="", help="personal scenario names, e.g. P3,P4 (needs included)"
+        "--only",
+        default="",
+        help="personal scenario names, e.g. P3,P4 (needs included)",
     )
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--stop", type=float, default=3.0)
@@ -1006,9 +1012,13 @@ def main():
         "--dry", action="store_true", help="no paid calls: checks the harness"
     )
     args = parser.parse_args()
-    wanted = [n for n in args.only.split(",") if n] or [n for n in SCENARIOS if n.startswith("P")]
+    wanted = [n for n in args.only.split(",") if n] or [
+        n for n in SCENARIOS if n.startswith("P")
+    ]
     if any(n.startswith("T") for n in wanted):
-        parser.error("Team chat retired. Run backend/tests/test_team_briefing.py for weekly team cases.")
+        parser.error(
+            "Team chat retired. Run backend/tests/test_team_briefing.py for weekly team cases."
+        )
     settings.chat_daily_cap_per_user_usd = settings.chat_daily_cap_total_usd = 100.0
     if (
         args.dry
