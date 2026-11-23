@@ -1,5 +1,7 @@
 # Archived handoff from November 11
 
+> **Historical record** (added to the repository on 2026-11-16), kept as written. An archived handoff from 2026-11-11. For what is true now, see [current.md](current.md).
+
 This records the pilot proposal at commit `fa845eb`. For current work use the [open issues](status.md#open-issues)
 and [plan](plan.md). Stored traces, thumbs, the aggregate pilot report and owner-operated account deletion
 shipped after this handoff. The November 17 [pilot record](progress-2026-11-17.md) supersedes the proposed dates and caps below.

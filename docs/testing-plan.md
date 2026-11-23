@@ -1,5 +1,7 @@
 # Testing plan to the demo
 
+> **Historical record** (added to the repository on 2026-11-16), kept as written. The testing plan as written on 2026-11-16; what has since run is recorded in test-results.md. For what is true now, see [current.md](current.md).
+
 Written 2026-11-16. What is tested, on what, against what, and when, from now to the presentations
 on 2026-12-05. The methods and the reasons behind them are in [evaluation-plan.md](evaluation-plan.md);
 results go to [evaluation.md](evaluation.md), every paid run to [costs.md](costs.md) and

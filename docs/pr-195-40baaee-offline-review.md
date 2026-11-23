@@ -1,5 +1,7 @@
 # Offline implementation review of PR #195 at 40baaee
 
+> **Historical record** (added to the repository on 2026-11-21), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **Not ready for the next paid audit yet.** The implementation addresses several real contracts,
 but independent offline probes find five deterministic edit/state gaps, a still-open answer-assembly
 case and an unchanged prose-grounding gap. Passing the submitted reproduction tests does not close these neighboring cases.

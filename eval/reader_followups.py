@@ -1,6 +1,6 @@
 """Reads the third turn of the replay's three-turn conversations again, on today's code, and
 grades the resolved request against the bank's independent key. Paid: about $0.0035 a reading
-(the reader and its read back), a hard cap. Run from the repository root.
+(one reader call; the read-back check is off by default), a hard cap. Run from the repository root.
 
 The reader now sees each earlier result beside the question that asked for it. In the Fitbit
 replay of 2026-11-22 it saw the results apart from the questions, labelled "last" and "older",

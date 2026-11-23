@@ -1,5 +1,7 @@
 # Live implementation review — 2026-11-19
 
+> **Historical record** (added to the repository on 2026-11-19), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 Reviewed Claude's uncommitted changes on `978aa31` in PR #195, independently of the earlier paid
 agent audit. **The direction is useful, but this snapshot is not ready for a paid success claim
 or deployment.** The investigation and memory categories address missing capabilities. However,

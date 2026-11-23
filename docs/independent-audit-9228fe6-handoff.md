@@ -1,5 +1,7 @@
 # Independent live audit of 9228fe6
 
+> **Historical record** (added to the repository on 2026-11-21), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **Hold PR #195.** The independent run on `9228fe678e804ecfd0fe85b004f86cd408214b3a` confirmed the workout repair and passed PHIA B1. The zero-tolerance period gate failed. No candidate code changed during the audit.
 
 ## Sample and results

@@ -1,5 +1,7 @@
 # Agent audit after Claude's PHIA repair — completed local handoff
 
+> **Historical record** (added to the repository on 2026-11-19), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 Tested candidate **`fa15f4a82ba27c0032738b1f2cc04a69ba4fde3f`**, Claude's PR **#195** head, on November 19, 2026.
 **All 463 main turns and 25 additional diagnostic turns were executed once and directly reviewed.**
 The combined metered upper cost is **$0.910415**, within Karim's separate **$2** allowance.

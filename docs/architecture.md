@@ -152,7 +152,7 @@ Planned: the evaluation comparing the experts with the general agent, and the ro
 other on a labeled question set.
 
 **Stored traces and ratings** (`trace.py`, table `answer_traces`, migration 0025). Every answer in
-either chat, the person's or the supervisor's, gets one row next to it, deleted with it. It holds the
+either chat, the person's or the supervisor's (retired in #213; its stored messages remain), gets one row next to it, deleted with it. It holds the
 outcome (`answered`, `answered_in_part`, `budget`, `failed_checks`, `refused`, `failed`), the agent's
 own stop reason, the router's question type, the wall-clock latency and its split (model, router,
 guard, the rest), the model and tool calls (a consulted expert's included), tool errors, repair
@@ -370,7 +370,7 @@ measurement: where it and their data disagree, the data wins and the answer says
 what is known about them, recall starts from the profile; another chat's older wording is out of
 date, and if a reply fails its checks the fallback lists what was kept, never an old chat.
 
-**Time in follow-ups (local update, 2026-11-18).** A constrained small-model reader interprets
+**Time in follow-ups (2026-11-18; merged with #195 on 2026-11-22).** A constrained small-model reader interprets
 the request into typed metrics, operations, comparisons and date expressions. Code performs
 calendar arithmetic, validates references/capabilities and retains data scope separately from
 guidance subjects in the owned conversation's existing answer trace. Precise supported data
@@ -378,7 +378,7 @@ questions execute and render directly from deterministic evidence; broad investi
 the expert loop. The former phrase-based scope path remains for legacy adapters/scripted fixtures,
 not the normal OpenAI reader path. An event the person kept that overlaps a question's dates can
 still be described as something that lined up, never as a cause or a statistic. See
-[the request contract, validation and limits](typed-requests.md).
+[the request contract, validation and limits](typed-requests.md), and for what it gained after the merge (missing dates, source questions, chat recall, food edits, calendar weeks), [its last section](typed-requests.md#since-the-merge-2026-11-23). The small-model read-back of each reading is built but off by default.
 
 ### Searching
 

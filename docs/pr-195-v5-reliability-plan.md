@@ -1,5 +1,7 @@
 # PR 195 reliability plan after independent audit v5
 
+> **Historical record** (added to the repository on 2026-11-20), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **Decision:** keep the candidate under review. Preserve its deterministic statistics and direct lookup path. Concentrate changes at the points where a resolved request, a database fact or a supported finding stops controlling the answer. This is an implementation plan for commit `7ef95c7`, not a measured improvement. Read alongside [the scored audit](independent-audit-v5-handoff.md) and [the predeclared gates](acceptance-structured-requests.md).
 
 ## 1. Pin down what each change must preserve

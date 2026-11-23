@@ -1,5 +1,7 @@
 # Independent audit after A + B → C → D — November 19, 2026
 
+> **Historical record** (added to the repository on 2026-11-22), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **Recommendation: do not merge PR #195 yet.** Retrieval and arithmetic are strong, and the small
 PHIA regression gate passes. The complete conversational agent still misses the agreed targets
 for investigations, memory, logging and guidance, and silently changes three requested periods.

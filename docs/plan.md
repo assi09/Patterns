@@ -11,6 +11,15 @@ applicable bonus practice is in it.
 Each item is its own small PR, per [AGENTS.md](../AGENTS.md). Open issues are the numbered list in
 [status.md](status.md#open-issues); they are referred to here as "issue n".
 
+## Update (2026-11-23)
+
+The agent's follow-up fixes from the Fitbit replay landed (#217–#229; [current.md](current.md)
+has every result with its revision). For the list below: the item "a fresh conversation set
+written by someone else" is **partly** done: an independent bank of 191 single follow-ups, worded
+by the large model, was read on main and with the fixes (#227); a fresh *multi-turn* conversation
+set is still to do, and PHIA and the memory test were not re-run after the fixes. Nothing else in
+the list changed.
+
 ## Where we are (2026-11-22)
 
 **This section replaces the earlier ones below**, which are kept for the record. Presentations

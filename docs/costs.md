@@ -425,3 +425,16 @@ versions of the recall wording, each on the 50 recall cases and the 62 heart-rat
 **$0.123792** and **$0.178121**; **$0.111485** and **$0.186774**. The recall wording with calendar
 weeks: **$0.150868** and **$0.133701**. Total about **$3.42**.
 [Results](experiments.md#bigger-independent-checks-of-the-reader-fixes-2026-11-23).
+
+### November 23, 2026 — PHIA and memory re-run on today's code
+
+All on `main` (`b3273f8`, then #231), Sentry off for every run, answers about real people kept in
+the git-ignored data folder. PHIA real people, Patterns only: batch B2 again, the same 337
+questions (**$0.65**), and the new batch B3, 337 questions never asked (**$0.65**); the three
+baselines on B3 (single agent, chatbot, code: about **$1.65** for the first 172 questions, where the
+run stopped, and **$1.40** for the other 165). Memory evaluation, 52 personal checks: on `b3273f8`
+**$0.211**, on the commit before the Nov 23 fixes **$0.258**, on the commit before #195 (its own
+script) **$0.333**; the P7 listener probe **$0.002** and two single-scenario checks **$0.016**; on #231
+**$0.235**. A new memory set of 100 cases (`eval/memory_bank.py`): written by the large model
+(**$0.142**), run on main (**$0.214**) and on #231 (**$0.227**). Total about **$5.99**.
+[Results](experiments.md#phia-and-memory-re-run-on-todays-code-2026-11-23).

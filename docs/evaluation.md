@@ -1,7 +1,11 @@
 # Evaluation: what was tested, and what it does and does not show
 
-Run on 2026-11-10. Costs are in [costs.md](costs.md), the running history in
-[experiments.md](experiments.md). Every script is in `eval/`, every result in `eval/results/`.
+> **Which results are current:** [current.md](current.md) lists every headline result with the
+> revision it was measured on and whether today's code still matches it. This page explains the
+> methods and keeps each result as it was reported.
+
+First run on 2026-11-10, with later dated notes. Costs are in [costs.md](costs.md), the running
+history in [experiments.md](experiments.md). Every script is in `eval/`, every result in `eval/results/`.
 
 **Version note, November 19.** The benchmark results below belong to their recorded revisions. The [PR #195 audit](experiments.md#agent-reliability-from-november-17-to-19) independently checked new synthetic conversations and a small PHIA regression sample on `84db5f5`. The later [reader replay](reader-replay-2026-11-19.md) measures interpretation on previously exposed questions.
 

@@ -1,5 +1,7 @@
 # Patterns core workflow replay, November 22, 2026
 
+> **Historical record** (added to the repository on 2026-11-23), kept as written. The replay ran on `31c3ca9` (2026-11-22), before the supervisor chat was retired (#213) and before the 2026-11-23 fixes: its team-chat results describe a retired feature, and its missing-date and follow-up findings are updated on the current page. For what is true now, see [current.md](current.md).
+
 All 492 frozen Fitbit scenarios ran through the local application, plus 16 scripted workflow controls. One food control had an invalid initial fixture. The isolated run used the real configured language model and router for conversational paths, local SQLite, a fake workout writer and local email. No real Google writes or outgoing team emails. The application checkout at worker startup was `31c3ca9`. Manifest SHA-256: `f27b1d764f5cc91f6d0af4971ec019440989d5b3c6ea059925abc87d55497c04`.
 
 ## Personal agent

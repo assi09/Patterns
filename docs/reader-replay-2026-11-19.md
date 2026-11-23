@@ -1,5 +1,7 @@
 # What the request reader actually read on the v4 audit's misses (2026-11-19)
 
+> **Historical record** (added to the repository on 2026-11-19), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 The v4 audit kept only each turn's final request, so a failure could not be put down to the reader
 misreading, to code rejecting a good reading, or to a later stage. `eval/reader_replay.py` replayed
 only the reader on the 47 failed and partial turns and 11 passing controls, with the context each

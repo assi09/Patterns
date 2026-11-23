@@ -6,6 +6,26 @@ finish the final audit and move on to other deliverables. Candidate:
 [completed report](independent-audit-910da27-final.md): matched full results improved
 504/592 → 563/592, new wordings 42/48 full, PHIA 24/24.
 
+## Status of each item (2026-11-23, `main` at `b3273f8`)
+
+The items below are kept as written on 2026-11-22. Work resumed on 2026-11-23; where each stands:
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Relative-period boundary roles | **Open.** Renaming the new period's days (begins/ends) made no difference on 30 independent cases (25/30 on both); not merged (#226 closed) |
+| 2 | Whole-message policy survives composition | **Fixed** (#220): the message's flags come from its own reading, whichever result leads |
+| 3 | Protected retry counts | **Fixed** (#220): a protected length always comes back |
+| 4 | Food source, nutrient and meal-filter edits | **Fixed in code** (#225, #229): source, meal and nutrient are explicit edits; on 30 independent cases the reader's rate is unchanged (26/30 on both) |
+| 5 | Memory replacement and misleading "already kept" | **Fixed** (#218) |
+| 6 | Recall versus other memory actions | **Partly fixed** (#223): recall of what was said in this chat, 13/25 and 6/15 on independent cases against 1/25 and 1/15 before |
+| 7 | Return to the broader result after a side read | Open |
+| 8 | Exercise identity and source continuity | Open (a "where did that come from?" question is now answered from the last answer, #221) |
+| 9 | Status/read requests versus edits | Open |
+| 10 | Food-draft false fabrication refusal | Open |
+| 11 | Coverage and explanatory completeness | **Partly fixed** (#217): "which dates are missing?" lists the exact dates (14/20 through the chat) |
+| 12 | General coaching scope | Open |
+| 13 | "That earlier week" | **Documented limitation**: see item 13 and [current.md](current.md) |
+
 The priorities below identify what matters when work resumes. They do not imply the original
 release gates passed. Concrete per-turn grades and raw attempts remain private under
 `data/eval/910_final_review` and `910_final_results`.

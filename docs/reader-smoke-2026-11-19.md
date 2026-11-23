@@ -1,5 +1,7 @@
 # Smoke run of the clause reader (2026-11-19)
 
+> **Historical record** (added to the repository on 2026-11-19), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 The first time the real request reader sees the clause schema. Approved with a hard $0.03 cap
 from the $2 allowance. Written **before** the run; results are added below it afterwards.
 
