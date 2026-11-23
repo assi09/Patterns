@@ -1163,6 +1163,49 @@ is merged; the calendar-week branch scored lower on one family. The limitation i
 its exact dates, so a wrong week is visible to the person.
 
 
+## Food edits and source questions (2026-11-23)
+
+**What it tested.** Two follow-ups the reading could not express. Food: after a breakfast-energy
+answer, keep the meal and change the nutrient, clear the meal, or switch to energy burned from
+the tracker (pr-195-followup-issues.md item 4). Source: "where did that come from?" after a
+guidance or a data answer (the replay's control P8). 12 made-up turns in fresh wordings. $0.07.
+
+| Follow-ups | main | fix |
+|---|---:|---:|
+| Food edits (6) | 4/6 | 4/6, then 5/6 with the redo's meal and nutrient fields |
+| Source questions (6) | 0/6 | 6/6 |
+
+**What it showed.** Source: on main none was read as a question about the last answer (other,
+memory, data or an investigation); with a source clause, all six. Food: the first fix (nutrients
+read from the meals, a redo that can switch records) did not move these wordings, because the
+reader said two of them as a redo, which could not keep a meal or name a nutrient; with those
+fields, 5 of 6. The miss: "drop the breakfast filter" read with the breakfast meal kept, a
+reading mistake that another run did not make. 6 turns per kind: a check of these distinctions,
+not a broad score.
+
+
+## Recalling what was said in this chat (2026-11-23)
+
+**What it tested.** The Fitbit replay's control P4: "What day did I just mention?" after "Just
+for this chat I plan to walk on Friday. Don't save it." was read as outside the app, or sent back
+twice. Code already answers a this-chat recall correctly, from the conversation; the reading was
+wrong. The reader's own definitions disagreed: memory was "what the app keeps about them", and
+something said with "don't save" is not kept. Branch `fix/chat-recall` defines memory as what
+they told the app, kept or said earlier in this chat, and "don't save" as not kept after the
+chat, still part of it. 15 made-up turns in fresh wordings, read on both versions. $0.07.
+
+| Second turn | main | fix |
+|---|---:|---:|
+| Something said with "don't save" or "just for this chat", then asked about | 0/8 | 7/8 |
+| Something said plainly, then asked about | 0/4 | 3/4 |
+| Questions about saved memory (control) | 2/3 | 2/3 |
+
+**What it showed.** On main no question about the conversation was read as recall (clarify or
+other, all 12). With the definitions consistent, 10 of 12, and the controls are unchanged; their
+miss on both versions is "Is anything waiting for my approval?" read as a question about a
+waiting entry card. 15 turns of one kind: a check of this distinction, not a broad score.
+
+
 ## Bigger independent checks of the reader fixes (2026-11-23)
 
 **What it tested.** Whether the small checks of the day's reader fixes hold on more cases worded

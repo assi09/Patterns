@@ -21,7 +21,16 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from app.actions.exercises import TYPES
-from app.agent.requests import Fields, Operation, Part, Period, Reading, RetryReading
+from app.agent.present import METRICS
+from app.agent.requests import (
+    Ambiguous,
+    Fields,
+    Operation,
+    Part,
+    Period,
+    Reading,
+    RetryReading,
+)
 
 # ---- periods: one kind per meaning ----
 
@@ -35,12 +44,23 @@ class Dates(Fields):
 
 
 class CalendarPeriod(Fields):
-    """'this week' (offset 0), 'last month' (offset -1), 'the week before last' (-2). Weeks
-    start on Monday."""
+    """A calendar week (from Monday), month or year. Counted from today: 'this week' (offset 0),
+    'last month' (-1), 'the week before last' (-2). Counted from an earlier result (relative_to
+    earlier_result): the week, month or year that holds that result's days, moved by offset:
+    'that week' is 0, 'the full week before that week' -1, 'the week after it' 1. days: Monday
+    to Friday (weekdays) or Saturday and Sunday (weekend) of the week."""
 
     kind: Literal["calendar"]
     unit: Literal["week", "month", "year"]
-    offset: int = Field(ge=-100, le=0)
+    offset: int = Field(ge=-100, le=100)
+    relative_to: Literal["today", "earlier_result"] = "today"
+    days: Literal["all", "weekdays", "weekend"] = "all"
+
+    @model_validator(mode="after")
+    def _past_from_today(self):
+        if self.relative_to == "today" and self.offset > 0:
+            raise ValueError("A calendar period counted from today is this one or an earlier one")
+        return self
 
 
 class DaysEnding(Fields):
@@ -207,7 +227,13 @@ def period_of(span: Span) -> Period:
     if isinstance(span, Dates):
         return Period(kind="explicit", start=span.start, end=span.end)
     if isinstance(span, CalendarPeriod):
-        return Period(kind="calendar", unit=span.unit, offset_units=span.offset)
+        return Period(
+            kind="calendar",
+            unit=span.unit,
+            offset_units=span.offset,
+            anchor="previous" if span.relative_to == "earlier_result" else "today",
+            week_days=span.days,
+        )
     if isinstance(span, SameAsEarlier):
         return Period(kind="inherit")
     if isinstance(span, AfterEarlier | BeforeEarlier):
@@ -508,6 +534,26 @@ class RedoClause(Fields):
     max_lag: int | None = Field(
         default=None, ge=0, le=14, description="Null keeps the earlier lag."
     )
+    # Without it a redo could not change records: "same date, switch to energy burned from the
+    # tracker" after a food answer kept the food operation and was sent back twice (the audit of
+    # 910da27, final_food_breakfast-01/t3 and food_unknown-01/t3).
+    source: Literal["tracker", "food_log"] | None = Field(
+        default=None,
+        description="Null keeps the earlier result's records; tracker or food_log when this "
+        "message switches them ('switch to energy burned from the tracker').",
+    )
+    # A food answer repeated, changed only where the message says: "the protein for that same
+    # breakfast" keeps the meal and changes the nutrient; "the whole day" clears the meal.
+    meal: Literal["keep", "every", "BREAKFAST", "LUNCH", "DINNER", "SNACK"] = Field(
+        default="keep",
+        description="For food eaten: keep the earlier result's meal, every meal ('the whole "
+        "day', 'drop the breakfast filter'), or the one meal this message names.",
+    )
+    nutrients: list[str] = Field(
+        default_factory=list,
+        description="For food eaten: the nutrients this message asks about ('and the "
+        "protein?'); empty keeps the earlier ones.",
+    )
     options: int | None = Field(
         default=None, ge=1, le=5, description="How many options or points they ask for."
     )
@@ -525,6 +571,17 @@ class StatusClause(Fields):
     )
 
 
+class SourceClause(Fields):
+    """Asks where the last answer came from: the public source it cites, or which of their data it
+    was computed from ("where did that advice come from?", "what's that based on?"). Read-only:
+    about the answer already given, never a new question. Without it, the question had no
+    place: sent back as unplaced and retried, it became a memory recall and was answered from
+    saved memory (the Fitbit replay, 2026-11-22)."""
+
+    type: Literal["source"]
+    said: str = SAID
+
+
 class ConfirmClause(Fields):
     """Asks to save the waiting card ('go ahead', 'log it')."""
 
@@ -533,7 +590,11 @@ class ConfirmClause(Fields):
 
 
 class MemoryClause(Fields):
-    """About what the app keeps about them."""
+    """About what they have told the app: what it keeps about them (approved, or waiting for a
+    tap), and what they told it in this conversation, kept or not. Defined only as what the
+    app keeps, "What day did I just mention?" after "Just for this chat I plan to walk on Friday.
+    Don't save it." was read as outside the app: nothing about it was kept (the Fitbit replay's
+    control P4, 2026-11-22)."""
 
     type: Literal["memory"]
     said: str = SAID
@@ -541,7 +602,8 @@ class MemoryClause(Fields):
     recall: Literal["kept", "waiting", "this_chat", "all"] | None = Field(
         default=None,
         description="For recall: what they approved (kept), cards waiting for a tap, what they "
-        "said in this conversation, or all of it.",
+        "told the app in this conversation (this_chat: including what they asked not to save, "
+        "which is still part of this chat), or all of it.",
     )
     states_new_fact: bool = Field(
         default=False,
@@ -571,7 +633,8 @@ class OtherClause(Fields):
         default="small_talk",
         description="small_talk: thanks, greetings, chat. about_them: something they tell about "
         "themselves. outside_the_app: asks for something the app does not do (what the app keeps "
-        "about them, and removing it, is memory). unsure: you cannot tell what it asks.",
+        "about them, removing it, and what they told it in this chat are memory). unsure: "
+        "you cannot tell what it asks.",
     )
 
 
@@ -583,6 +646,7 @@ Clause = Annotated[
     | LogClause
     | CorrectClause
     | StatusClause
+    | SourceClause
     | ConfirmClause
     | MemoryClause
     | OtherClause,
@@ -598,7 +662,9 @@ class Said(Fields):
     )
     clauses: list[Clause] = Field(min_length=0, max_length=6)
     store_nothing: bool = Field(
-        description='They ask that nothing from this message be kept ("don\'t save this").'
+        description='They ask that nothing from this message be kept ("don\'t save this"): '
+        "nothing is kept once the chat ends, and it is still part of this conversation, to use "
+        "and recall while it lasts.",
     )
     medical: bool = Field(
         default=False,
@@ -643,6 +709,7 @@ PRIMARY = (
     "confirm",
     "status",
     "memory",
+    "source",
     "investigate",
     "guidance",
     "data",
@@ -653,12 +720,27 @@ KIND = {
     "correct": "correction",
     "confirm": "confirmation",
     "status": "status",
+    "source": "source",
     "memory": "memory",
     "investigate": "investigate",
     "guidance": "guidance",
     "data": "data",
     "redo": "redo",
 }
+
+
+def _food_only(metrics: Sequence[str]) -> bool:
+    """Whether every measure named is a nutrient of the meals and none a tracker measure: the
+    tracker records no protein, carbohydrate or fat, so only the food log can be read for them.
+    Named as a tracker metric, "total recorded protein for that day" was refused as an unknown
+    measure (the audit of 910da27, final_food_breakfast-01/t2, food_filter-02/t2)."""
+    return bool(metrics) and all(
+        m.casefold() in NUTRIENT_NAMES and m not in METRICS for m in metrics
+    )
+
+
+def _records(source: str | None, metrics: Sequence[str]) -> str | None:
+    return "food_log" if _food_only(metrics) else source
 
 
 def _part(clause: DataClause | InvestigateClause, earlier: bool = False) -> Part:
@@ -670,6 +752,7 @@ def _part(clause: DataClause | InvestigateClause, earlier: bool = False) -> Part
     }
     if isinstance(clause, InvestigateClause):
         return Part(operation="describe", every_metric=clause.every_metric, **common)
+    source = _records(clause.source, clause.metrics)
     return Part(
         operation=clause.operation,
         comparison=clause.comparison,
@@ -677,18 +760,18 @@ def _part(clause: DataClause | InvestigateClause, earlier: bool = False) -> Part
         threshold_unit=clause.threshold_unit,
         max_lag=clause.max_lag,
         meal_type=clause.meal_type,
-        source=clause.source,
+        source=source,
         every_metric=_whole_registry(clause, earlier),
-        nutrients=_nutrients(clause),
+        nutrients=_nutrients(source, clause.nutrients, clause.metrics),
         **common,
     )
 
 
-def _nutrients(clause: DataClause) -> list[str]:
+def _nutrients(source: str | None, nutrients: Sequence[str], metrics: Sequence[str]) -> list[str]:
     """The nutrients a food clause asks about: said as such, or written as its metrics."""
-    if clause.source != "food_log":
+    if source != "food_log":
         return []
-    named = [*clause.nutrients, *(NUTRIENT_NAMES.get(m.casefold(), "") for m in clause.metrics)]
+    named = [*nutrients, *(NUTRIENT_NAMES.get(m.casefold(), "") for m in metrics)]
     return list(dict.fromkeys(n for n in named if n))
 
 
@@ -714,6 +797,14 @@ def _edit(redo: RedoClause) -> Part:
         threshold=redo.threshold,
         threshold_unit=redo.threshold_unit,
         max_lag=redo.max_lag,
+        source=_records(redo.source, redo.metrics),
+        nutrients=_nutrients(
+            "food_log" if redo.nutrients else _records(redo.source, redo.metrics),
+            redo.nutrients,
+            redo.metrics,
+        ),
+        meal_type=None if redo.meal in ("keep", "every") else redo.meal,
+        meal_edit="named" if redo.meal not in ("keep", "every") else redo.meal,
         said=redo.said,
     )
 
@@ -848,6 +939,11 @@ def _every_metric_looked_into(clauses: list, earlier: bool = False) -> list:
     return [*rest[:first], looked, *rest[first:]]
 
 
+SOURCE_AND_MORE = (
+    "Should I first say where that last answer came from, or answer the rest of your message?"
+)
+
+
 def reading_from(
     said: Said, question: str = "", earlier: bool = False, before: Sequence[str] = ()
 ) -> Reading:
@@ -881,6 +977,9 @@ def reading_from(
     ]
     clauses = _every_metric_looked_into(clauses, earlier)
     types = [c.type for c in clauses]
+    if "source" in types and any(t not in ("source", "other") for t in types):
+        # Answered from the last answer alone: beside another request, one would be dropped.
+        raise Ambiguous(SOURCE_AND_MORE)
     primary = next((t for t in PRIMARY if t in types), None)
     fields: dict = {
         "medical": said.medical and _medical_here(said, question, before),

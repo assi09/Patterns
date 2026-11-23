@@ -47,6 +47,10 @@ class Period(Fields):
     end_offset: int = Field(default=0, ge=-36600, le=36600)
     sized: bool = True
     keep_width: bool = False  # beside: the earlier period's own number of days (a shift)
+    # calendar weeks: Monday to Friday or Saturday and Sunday of the week, worked out by code. Said
+    # as days counted from an earlier result, "that earlier weekend" and "Monday to Friday" were
+    # placed by hand and often wrong (the Fitbit replay of 2026-11-22).
+    week_days: Literal["all", "weekdays", "weekend"] = "all"
 
 
 Operation = Literal[
@@ -85,6 +89,9 @@ class Part(Fields):
         "explaining the earlier result's own metric.",
     )
     nutrients: list[str] = Field(default_factory=list)  # food eaten: the nutrients asked about
+    # A redo's meal: keep the earlier result's, every meal, or the one named (meal_type). None
+    # for a data clause, which never carries a meal over (Codex's review, 2026-11-19).
+    meal_edit: Literal["keep", "every", "named"] | None = None
     said: str = ""  # the words of the message this part comes from: checks read these
 
 
@@ -99,6 +106,7 @@ class Reading(Fields):
         "investigate",
         "memory",
         "status",
+        "source",
         "other",
         "clarify",
         "redo",
@@ -406,15 +414,30 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
         if period.kind == "relative":
             shift = timedelta(days=period.offset_days)
             return [Window(start=window.start + shift, end=window.end + shift)]
+        if period.kind == "calendar" and _unit_of(window.start, period.unit) != _unit_of(
+            window.end, period.unit
+        ):
+            # "That week" of a period across two weeks is not one week: never pick one silently.
+            raise Ambiguous(
+                f"That period spans more than one {period.unit}. Which one do you mean?"
+            )
         anchor = window.end
     anchor += timedelta(days=period.offset_days)
     if period.kind == "relative":
         return [Window(start=anchor, end=anchor)]
     if period.kind == "rolling":
         return [Window(start=anchor - timedelta(days=period.days - 1), end=anchor)]
+    if period.week_days != "all" and period.unit != "week":
+        raise RetryReading("Weekdays or the weekend are part of a week: unit week.")
     if period.unit == "week":
         start = anchor - timedelta(days=anchor.weekday()) + timedelta(weeks=period.offset_units)
         end = start + timedelta(days=6)
+        if period.week_days == "weekdays":
+            end = start + timedelta(days=4)
+        elif period.week_days == "weekend":
+            start = start + timedelta(days=5)
+        if start > today:
+            raise Ambiguous("Those days haven't happened yet. Which days do you mean?")
     elif period.unit == "month":
         number = anchor.year * 12 + anchor.month - 1 + period.offset_units
         year, month = divmod(number, 12)
@@ -424,6 +447,13 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
         start = date(anchor.year + period.offset_units, 1, 1)
         end = date(start.year, 12, 31)
     return [Window(start=start, end=min(end, today) if period.offset_units == 0 else end)]
+
+
+def _unit_of(day: date, unit: str) -> tuple:
+    """Which calendar week (from Monday), month or year a day is in."""
+    if unit == "week":
+        return (day - timedelta(days=day.weekday()),)
+    return (day.year, day.month) if unit == "month" else (day.year,)
 
 
 # Requests that are not a data question, but may have data questions beside them.
@@ -487,6 +517,9 @@ def _changes(edit: Part, previous: Sequence[ResolvedPart]) -> bool:
         or edit.comparison is not None
         or edit.threshold is not None
         or (edit.max_lag is not None and bool(lags) and lags != {edit.max_lag})
+        or bool(edit.nutrients)
+        or edit.source is not None
+        or edit.meal_edit in ("every", "named")
     )
 
 
@@ -609,6 +642,15 @@ def _redo(request: Request, reading: Reading, state: dict, today: date) -> Reque
             and not edit.every_metric
         ):
             edit = edit.model_copy(update={"every_metric": True})  # an all-measure result
+        if referent is not None and referent.operation == "food" and edit.source != "tracker":
+            # A food answer repeated keeps what this message does not change: "and the protein
+            # for that same breakfast?" said as a redo lost both the meal and the nutrient.
+            kept: dict = {}
+            if edit.meal_edit == "keep":
+                kept["meal_type"] = referent.meal_type
+            if not edit.nutrients and not edit.metrics:
+                kept["nutrients"] = list(referent.nutrients)
+            edit = edit.model_copy(update=kept)
         asked = Reading(
             kind="investigate" if looked else "data",
             parts=[edit],
@@ -1100,7 +1142,8 @@ Clause types:
 - confirm: asks to save the waiting card ("go ahead", "log it"); only with pending_draft true.
   Reading entries already saved is a data clause.
 - memory: remember (keep something about them, however politely asked); recall (kept: what they
-  approved; waiting: cards not yet tapped; this_chat: what they said in this conversation; all);
+  approved; waiting: cards not yet tapped; this_chat: what they told the app in this
+  conversation, including what they asked not to save; all);
   forget (remove something already kept, or prepare the card that removes it once they tap,
   "ask me to confirm removing it"; states_new_fact when they also say what is true now).
   "Keep this out of my profile" about something said now is store_nothing, not forget.
@@ -1114,6 +1157,9 @@ Clause types:
   and max_lag (null keeps them). earlier_result names an earlier result by index ("the steps
   result", "the all-measure comparison"); null is the last answer as a whole. options: how
   many options they ask for. Code keeps whatever it does not change.
+- source: where the last answer came from: the public source it cites, or which of their
+  data it was computed from ("where did that advice come from?", "what is that based on?").
+  Never memory: what the app keeps about them is memory recall.
 - other: small talk, thanks, or nothing the app does; also anything they tell about themselves
   ("I'm training for a 10k"), as its own clause even beside a question, with about_them true;
   message says which. Never a request about their data or about an earlier answer: a
@@ -1128,6 +1174,10 @@ asks: "the first result only" is one clause, never a repeat of the others.
 Periods, for data and investigate clauses; pick the kind that means what was said:
 - dates: dates written out; one day has start = end.
 - calendar: this week (week, 0), last month (month, -1), the week before last (week, -2).
+  relative_to earlier_result: the calendar week, month or year holding an earlier result's
+  days, moved by offset: "that week" is 0, "the full week before that week" -1, "the week
+  after it" 1. days weekdays (Monday to Friday) or weekend (Saturday and Sunday) of a week,
+  counted from today or from an earlier result ("weekdays of that week", "that weekend").
 - month: a month named with its year, past or future ("January 2027"); a month named alone is
   its latest occurrence up to today.
 - same_as_earlier: all of an earlier result's periods, unchanged: the same days, or the same
@@ -1172,7 +1222,9 @@ their own data or general guidance ("my teammate asks about MY sleep score" is s
 they ask for a diagnosis, whether they have an illness or condition, or treatment or medication.
 medical_said: the words of this message that make it medical, copied exactly; never words of an
 earlier message. store_nothing: they ask that nothing from this message be
-kept; a forget is still a forget. clarification: only when the message is genuinely unclear or
+kept once the chat ends; it is still part of this conversation, and asking what they told the
+app in it ("what day did I just mention?") is memory recall this_chat. A forget is still a
+forget. clarification: only when the message is genuinely unclear or
 asks about something untracked; never substitute a related metric. Requests to fabricate
 statistics, evidence or citations: fabricate and store_nothing, and copy them into no field.
 mix_sources: they ask to join an export and the live sync (or two devices) into one series.
@@ -1185,7 +1237,8 @@ UNPLACED = (
     "This message follows the conversation and was not placed. If it asks for an earlier "
     "answer again or changed (other days, statistic, measure, threshold, or another form), it is "
     "redo; whether an entry was saved or what the waiting card holds is status; what the app "
-    "keeps or what they said here is memory recall; a change to the waiting card is correct. "
+    "keeps or what they said here is memory recall; where the last answer came from (its source, "
+    "or the data it used) is source; a change to the waiting card is correct. "
     "Keep other only for small talk, something about them, or what the app does not do."
 )
 
