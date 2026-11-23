@@ -1040,3 +1040,61 @@ on action/memory requests and period fields that the resolver ignores. Those are
 observations from newly generated readings. They help locate defects; a final user answer and
 database state were outside that replay. See the [audit](test-results.md#later-pr-195-checks-and-outstanding-results),
 [implementation plan](plan.md#agent-reliability-priorities-as-of-november-19) and [spend record](costs.md).
+
+
+## Picking an earlier week by order (2026-11-23)
+
+**What it tested.** In the Fitbit replay, "For that earlier week, just Monday to Friday?" after
+"And the week before?" pointed at the opening week by index in 63 of 66 readings (the saved
+traces). Branch `fix/reference-by-order` let the reader pick by order (`earlier_pick`) and code
+resolve it. Only the reader was run again, on the frozen third turns, twice per conversation:
+the replay's own question (right week: the week before) and "Go back to the opening week and take
+its weekdays." (right week: the opening one, which is not the last answer). $0.42, 132 readings.
+
+| Wording | Split | Intended week | Intended week, Monday to Friday |
+|---|---|---:|---:|
+| "that earlier week" (by the calendar) | reserved | 8/44 | 5/44 |
+| | practice | 8/22 | 7/22 |
+| "the opening week" (by asking order) | reserved | 39/44 | 0/44 |
+| | practice | 21/22 | 0/22 |
+
+**What it showed.** The code path works when the reader uses it (the offline tests and a scripted
+dry run on the same frozen histories agree), but the reader mostly does not. On the calendar
+wording it still named the opening week by index in 42 of 66 readings and used `earlier_days` in
+20; the intended week rose from 2 of 66 in the replay traces to 16 of 66. On the asking-order
+wording it picked `asked_first` in 63 of 66 and found the right week in 60, but in 55 it kept
+the whole week: it read "take its weekdays" as the same days, so no reading had the five days.
+That control wording was weak, so its zero says little about the date reading itself.
+
+**What it changed.** Nothing merged: decided on 2026-11-23 to keep the branch unmerged and record the limitation in [pr-195-followup-issues.md](pr-195-followup-issues.md). Picking by order alone does not fix this failure: the
+reader's choice of week, not the resolution, is what goes wrong, and a new field did not move it
+far. The bank is now further exposed; any next attempt needs fresh wording.
+
+## Which dates are missing, through the chat (2026-11-23)
+
+**What it tested.** In the Fitbit replay, "Which dates have no sleep record?" after a count of
+recorded nights was completed in 0 of 43 reserved conversations: there was no way to ask for the
+dates themselves. Branch `fix/missing-dates` added a `missing_dates` request answered from
+coverage evidence that lists every calendar date in the window with no value. This check asked
+20 of those 43 reserved weeks through `/chat`, in four opening and five follow-up wordings the
+replay never used, with the real model, router and guard. The expected dates are the bank's
+independent key; the new tool agreed with it on all 20 weeks before the run. $0.16.
+
+| Turn | Result (frozen grader) |
+|---|---:|
+| Opening count: evidence counts the key's recorded nights for that week | 17/20 |
+| Which dates: evidence for that week lists exactly the key's dates, and the reply names them | **14/20** |
+
+**Read after the run, not a re-grade.** Two of the six failures are the grader's: their evidence
+was exact and the reply wrote consecutive dates as a range ("Thu, Jan 23 to Mon, Jan 27"), which
+names only each range's first and last day, while the frozen grader looked for every date by
+name. Counted as correct, 16/20. The four real failures: "On which days is there nothing
+recorded?" was read as a change investigation over all history (2) or got no data answer (1),
+3 of 4 times with that wording; "And which dates are those?" repeated the count without the
+dates (1). No reply named a recorded date as missing.
+
+**What it showed.** With an operation for the list, the dates come from code and are exact
+whenever the request is read as a list of dates. What remains is the reading: a wording without
+"missing" or "dates" ("nothing recorded") can still go to an investigation. 20 weeks and nine
+wordings show the fix works for most phrasings; they are no proof for every one, and the
+replay's 0/43 used another wording, so the two are not a controlled before and after.

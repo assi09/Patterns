@@ -30,6 +30,7 @@ STATISTIC = {
     "describe": "a description",
     "trend": "the trend",
     "coverage": "how many days were recorded",
+    "missing_dates": "which dates have no record",
 }
 SIGN = {">": "above", ">=": "at or above", "<": "below", "<=": "at or below", "==": "exactly"}
 FOCUS = {

@@ -77,6 +77,15 @@ release gates passed. Concrete per-turn grades and raw attempts remain private u
     are correct, and no personal efficacy is claimed, but source availability is not sufficient
     relevance/scope validation. Examples: `investigate_lowwear-02/t4`, `investigate_gaps-02/t4`.
 
+13. **"That earlier week" picks the opening week (measured limitation).** In the Fitbit replay,
+    "For that earlier week, just Monday to Friday?" after "And the week before?" pointed at the
+    opening week in 63 of 66 readings. An order selector resolved by code (branch
+    `fix/reference-by-order`, not merged) raised the right week to 16 of 66 and exact weekdays to
+    12 of 66 in a reader-only check: the reader's choice, not the resolution, is wrong. Decided
+    2026-11-23 not to merge it or spend more on this week. Known limitation: when calendar order
+    and conversation order differ, "earlier" can be read as the week asked about earlier. See
+    [experiments.md](experiments.md#picking-an-earlier-week-by-order-2026-11-23).
+
 ## Keep the improvements
 
 Preserve evidence versioning and inspectability, correct zero/missing handling, approval-only
