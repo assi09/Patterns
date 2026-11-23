@@ -1,6 +1,20 @@
 # Project status
 
-The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-11-22.
+The working log of the project, with [plan.md](plan.md) for what is left. Updated 2026-11-23.
+**For what is true now, with the revision behind every result, read [current.md](current.md)
+first**; the sections below are dated and kept as they were written.
+
+## 2026-11-23: follow-ups, checked at scale
+
+From the Fitbit replay (`31c3ca9`) and the #195 backlog: exact missing dates (#217), "already kept"
+only for the same words (#218), protected retry lengths and the message's own flags (#220),
+"where did that come from?" (#221), Sentry below 3.0 so CI installs a version with its privacy
+option (#222), chat recall (#223), food source, meal and nutrient edits (#225, with #229 fixing
+"energy" read as food), calendar weeks and their weekdays or weekend (#228). Records: #216, #219,
+#227. Not merged, with the measurement: #224, #226 and two experiment branches. An independent
+bank of 191 cases worded by the large model confirmed source and recall, showed no gain for the
+rest, and found a regression (the weekend dropped from heart-rate follow-ups) that calendar weeks
+removed. Paid runs about $6.90 ([costs.md](costs.md)).
 
 **PR #195 merged on 2026-11-22** (structured request interpretation: metric, operation, threshold
 and dates kept apart from the statistics, persistent conversation scope, food readback, corrected

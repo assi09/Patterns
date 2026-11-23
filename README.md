@@ -64,7 +64,8 @@ with `docker compose exec api python -m app.auth approve you@example.com`. Stop 
 (cd mobile && npm run lint && npm run typecheck && npm test && npx expo export --platform web)
 ```
 
-**4. The evaluation.** Methods, results and the command behind each result are in
+**4. The evaluation.** The current results, each with the revision it was measured on, are in
+[docs/current.md](docs/current.md). Methods and the command behind each result are in
 [docs/evaluation.md](docs/evaluation.md) and [docs/test-results.md](docs/test-results.md).
 Most scripts in `eval/` call paid models on purpose: read [docs/costs.md](docs/costs.md) first.
 The deployed setup (Railway and Vercel) is in [docs/deployment.md](docs/deployment.md), the API
