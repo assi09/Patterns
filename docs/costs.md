@@ -404,3 +404,10 @@ first (`5cb8913b…`), cap $0.20 per run. Recorded usage: food on main **$0.0126
 `fix/food-source-edits` before and after its redo meal edits **$0.016108** and **$0.014142**;
 source on main **$0.014453** and on `fix/answer-source` **$0.015400**.
 [Results](experiments.md#food-edits-and-source-questions-2026-11-23).
+
+### November 23, 2026 — reader check of recalling what was said in this chat
+
+`eval/recall_check.py`: 15 made-up second turns in fresh wordings, read once on main and once on
+branch `fix/chat-recall`. Frozen and hashed first (`f2ea3409…`), cap $0.25 per version. Recorded
+usage **$0.033026** (main) and **$0.033633** (fix), nothing rerun.
+[Results](experiments.md#recalling-what-was-said-in-this-chat-2026-11-23).
