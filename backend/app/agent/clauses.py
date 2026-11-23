@@ -336,7 +336,8 @@ class DataClause(Fields):
     every_metric: bool = Field(
         default=False,
         description="They ask about every measure they have ('my full set of measurements', "
-        "'everything you track'), not only ones they name.",
+        "'all of my measures'), not only ones they name. How often one measure was recorded "
+        "('nights my sleep was tracked') is that measure's coverage, never every measure.",
     )
 
 

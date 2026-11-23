@@ -1055,7 +1055,9 @@ Clause types:
   a threshold: keep their number, with threshold_unit hours when they give hours for a minutes
   metric. "My step count on Nov 5" or "what is the count?" is the value, not count.
   every_metric when they ask about every measure they have ("my full set of measurements",
-  "everything you track") instead of naming them; metrics then empty. compare
+  "all of my measures") instead of naming them; metrics then empty. How often one measure was
+  recorded or tracked ("on how many nights was my sleep tracked?") is that measure's coverage,
+  never every measure. compare
   lists the focal period first, the baseline second. correlate lists driver then
   target; max_lag only when they ask for a lag (0 for the same day), null to keep an earlier
   result's lag; asks_cause when they ask whether one causes the other. operation inherit only
