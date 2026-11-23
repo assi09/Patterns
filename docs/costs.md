@@ -377,6 +377,25 @@ wordings, the real model, router and guard, no Google traffic. Frozen and hashed
 total **$0.161117**, 97 calls, nothing rerun.
 [Results](experiments.md#which-dates-are-missing-through-the-chat-2026-11-23).
 
+### November 23, 2026 — reader check of follow-ups with each result's question shown
+
+`eval/reader_followups.py` on branch `fix/results-with-questions`: only the reader, on the replay's
+third turns (steps 66, resting heart rate 62, sleep 47) and a 44-reading opening-week control.
+Frozen and hashed first (`e4eebf5d…`), cap $0.95. Recorded usage **$0.500423**, all 219 read.
+[Results](experiments.md#each-earlier-result-shown-with-its-question-2026-11-23).
+
+### November 23, 2026 — reader probes for "that earlier week"
+
+`eval/reader_model_probe.py`, reader only, on the frozen third turns of the replay's three-turn
+conversations. (1) The large model (gpt-5.5) as the reader on main, 40 reserved readings: cap
+$1.20, recorded usage **$0.791546**. (2) Branch `fix/calendar-week-of-earlier` with the small
+reader, all 219 readings: cap $0.85, recorded usage **$0.482840**. Both frozen and hashed first;
+nothing rerun. (3) The small reader at temperature 0 on main, the same 40 readings: cap $0.30,
+recorded usage **$0.108379**. A run with low reasoning effort was stopped at once: the API
+refuses reasoning effort with function tools on chat completions for this model, every call
+failed before any reading, and it cost $0. One reading of the replay's control P4 to see its
+reading: **$0.008830**. [Results](experiments.md#that-earlier-week-model-and-representation-2026-11-23).
+
 ### November 23, 2026 — reader check of food edits and source questions
 
 `eval/followup_kinds_check.py`: 12 made-up follow-ups in fresh wordings (6 food edits after a
