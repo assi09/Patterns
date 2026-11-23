@@ -1,5 +1,11 @@
 # Structured requests and validation (2026-11-18)
 
+> **Current (2026-11-23).** Merged on 2026-11-22 as `2ce08b5` (PR #195); the sections below are
+> its design and the record of each review round, kept as written ("now implemented locally" was
+> true when written). The small-model read-back is off (`read_back_enabled` defaults to False).
+> What the request format gained after the merge is in the last section,
+> [Since the merge](#since-the-merge-2026-11-23); results are in [current.md](current.md).
+
 The independent follow-up audit is development material, not a held-out score. Its principal
 failure was interpretation: correct tools were often called for the wrong dates or operation,
 and correct evidence could still produce an unavailable or contradictory final answer.
@@ -617,3 +623,23 @@ code, scored with Codex's frozen `score`, changes nothing that passed (146 of 14
 case now passes (`investigate_lowwear-02/t4`). The two lost-length cases now ask instead of
 accepting a one-day window. The history-override and memory-removal misses need a live reader,
 and their prompt changes are unmeasured.
+
+
+## Since the merge (2026-11-23)
+
+What a reading can now say, each computed or checked by code (all merged):
+
+| Addition | Where | PR |
+|---|---|---|
+| `missing_dates`: the exact dates a measure has no record, from coverage evidence that lists them (a recorded zero is a record) | `Operation`, `requested.py`, `tools.coverage(dates=True)` | #217 |
+| A protected retry length always comes back, whatever the retry gave | `_lengths_kept` | #220 |
+| The message's own flags (medical, fabricate, mix sources, don't save) apply whichever result leads a composed answer | `resolve`, `MESSAGE_POLICY` | #220 |
+| `source` clause: where the last answer came from, answered from its stored sources or results | `SourceClause`, `provenance.py` | #221 |
+| Memory recall of what was said in this chat, with or without "don't save" | `MemoryClause` definitions, reader prompt | #223 |
+| A part naming only protein, carbohydrate or fat reads the food log; a redo can say its `source`, `meal` (keep, every meal, one meal) and `nutrients` | `clauses._part`, `RedoClause`, `_redo` | #225, #229 |
+| A calendar period counted from an earlier result (`relative_to: earlier_result`), and a week's `days`: weekdays or weekend | `CalendarPeriod`, `Period.week_days` | #228 |
+
+Tried and not merged, with the measurement behind each decision in
+[experiments.md](experiments.md): picking an earlier result by order (`fix/reference-by-order`),
+showing each result with its question (`fix/results-with-questions`), every-measure example
+wording (#224) and begins/ends names for placed periods (#226).

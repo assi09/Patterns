@@ -4,7 +4,7 @@ The small reader (gpt-5.4-mini) read "For that earlier week, just Monday to Frid
 the week before?" as the opening week in 64 of 66 replayed conversations, and showing each result
 with its question moved the error between families rather than removing it. This reads 40 of
 the same frozen third turns (reserved people only) with the large model (gpt-5.5) as the reader,
-on the code of main, and grades them against the bank's key. The read-back check is unchanged.
+on the code of main, and grades them against the bank's key. The read-back check is off, as in the app's default.
 The baseline is the replay's own small-model reading of the same turns.
 
     PYTHONPATH=backend .venv/bin/python eval/reader_model_probe.py freeze
@@ -110,7 +110,7 @@ def run(sha: str) -> None:
         llm.__dict__.update(base.__dict__)
     else:
         llm = base
-    # The reader's own options; the read-back check is unchanged. Function tools take
+    # The reader's own options; the read-back check stays off. Function tools take
     # no reasoning effort on chat completions for the small model (a 400 from the API).
     options = {
         key: value
