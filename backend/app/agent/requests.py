@@ -694,9 +694,17 @@ def resolve(reading: Reading, state: dict, today: date) -> Request:
             today,
         )
         request = _composed(request, again)
+        # What the whole message says about itself, from its own reading, whichever result
+        # leads the composed answer: the repeat is resolved from a reading of its own clause
+        # alone, and when it led, a medical question, a request to invent figures or to mix
+        # sources beside "that again" lost its flag (the audit of 910da27). Only this message's:
+        # an earlier turn's flags are not carried.
+        request = request.model_copy(update={f: getattr(reading, f) for f in MESSAGE_POLICY})
     return _normalized(request)
 
 
+# Fields of a reading that describe the whole message, not one of its clauses.
+MESSAGE_POLICY = ("subject", "medical", "fabricate", "mix_sources", "memory")
 TOGETHER = "Which should I do first: repeat that earlier answer, or the rest of your message?"
 
 
