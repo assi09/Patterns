@@ -1133,14 +1133,15 @@ Periods, for data and investigate clauses; pick the kind that means what was sai
   is -2). These say the relation; code works out the dates.
 - from_earlier: any other days placed against an earlier result's period, which
   earlier_results lists with its first day, last day and number of days. Place the new
-  period's first day (new_first_day), its last day (new_last_day), or both, each counted from
+  day it begins on (begins), the day it ends on (ends), or both, each counted from
   the earlier period's first or last day (counted_from) with days_after (+1 the day after, -1
   the day before, 0 that day itself), and give its length: the number of days said (null only
-  when both days are placed). Place the day the message describes. After a five-day period:
-  its last three days: new_last_day its_last_day 0, length 3. Four days starting on its second
-  day: new_first_day its_first_day +1, length 4. Three days whose last day is its first day:
-  new_last_day its_first_day 0, length 3. Without its first and last day: new_first_day
-  its_first_day +1 and new_last_day its_last_day -1, length null.
+  when both days are placed). Place the day the message describes: a period said to begin
+  somewhere is begins, one said to end or close somewhere is ends, whichever of the earlier
+  period's days it is counted from. After a five-day period: its last three days: ends
+  its_last_day 0, length 3. Four days starting on its second day: begins its_first_day +1,
+  length 4. Three days ending on its first day: ends its_first_day 0, length 3. Without its
+  first and last day: begins its_first_day +1 and ends its_last_day -1, length null.
 - relative_to, for block_after, block_before and from_earlier: earlier_result (a result
   computed before this message) or this_clause (the period named first in this same clause:
   "Oct 9-31 compared with the four weeks before" is dates Oct 9-31, then block_before

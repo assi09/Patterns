@@ -1098,3 +1098,25 @@ whenever the request is read as a list of dates. What remains is the reading: a 
 "missing" or "dates" ("nothing recorded") can still go to an investigation. 20 weeks and nine
 wordings show the fix works for most phrasings; they are no proof for every one, and the
 replay's 0/43 used another wording, so the two are not a controlled before and after.
+
+
+## Periods said to begin or end somewhere (2026-11-23)
+
+**What it tested.** The audit of 910da27 found readings with the roles reversed: "four dates
+beginning two dates after that last day" ended there. The new period's days were named
+new_first_day and new_last_day, beside the earlier period's its_first_day and its_last_day, so
+"last" meant two things in one reading. Branch `fix/period-begins-ends` names them begins and
+ends (the old names are still read). Six pairs that differ only in begins/ends, against one
+five-day result, read on both versions. $0.05.
+
+| | main | fix |
+|---|---:|---:|
+| Said to end somewhere | 4/6 | 5/6 |
+| Said to begin somewhere | 5/6 | 5/6 |
+| Both of a pair right | 3/6 | 4/6 |
+
+**What it showed.** The audited phrasing is right with the names apart (wrong on main: its last
+day placed as the new last day). Two misses remain on both versions: "a five-day window that
+opens on its final date" read as ending there, and "two days finishing the day before it
+started" placed as an impossible period, which is asked about, not answered. One reading of
+difference on twelve: no regression, and weak evidence of a gain.

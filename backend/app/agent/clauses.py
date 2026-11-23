@@ -18,7 +18,7 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 
 from app.actions.exercises import TYPES
 from app.agent.requests import Fields, Operation, Part, Period, Reading, RetryReading
@@ -90,17 +90,26 @@ class FromEarlier(Fields):
 
     A block right after or before it, or the whole period moved, has its own kind
     (block_after, block_before, whole_shifted). After a five-day period: its last three
-    days: new_last_day its_last_day 0, length 3. Four days starting on its second day:
-    new_first_day its_first_day +1, length 4. Three days whose last day is its first day:
-    new_last_day its_first_day 0, length 3. Without its first and last day: new_first_day
-    its_first_day +1 and new_last_day its_last_day -1, length null."""
+    days: ends its_last_day 0, length 3. Four days starting on its second day: begins
+    its_first_day +1, length 4. Three days ending on its first day: ends its_first_day 0,
+    length 3. Without its first and last day: begins its_first_day +1 and ends its_last_day -1,
+    length null."""
 
     kind: Literal["from_earlier"]
-    new_first_day: EdgeDay | None = Field(
-        default=None, description="The new period's first day, when the message places it."
+    # Named apart from the earlier period's days: as new_first_day and new_last_day beside
+    # its_first_day and its_last_day, "four dates beginning two dates after that last day" was
+    # read as the new period's last day (both "last"), and "make the opening date the closing
+    # date" put the opening date first (the audit of 910da27, date_endzero-02/t2 and
+    # metric_strain-02/t2). The older names are still read, for recorded readings.
+    begins: EdgeDay | None = Field(
+        default=None,
+        validation_alias=AliasChoices("begins", "new_first_day"),
+        description="The day the new period begins on, when the message places it.",
     )
-    new_last_day: EdgeDay | None = Field(
-        default=None, description="The new period's last day, when the message places it."
+    ends: EdgeDay | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ends", "new_last_day"),
+        description="The day the new period ends on, when the message places it.",
     )
     # Required with one day placed: left optional, "three calendar days" and "four days up to
     # the day before" came back with no length (the matched comparison on the b730 and a196
@@ -232,24 +241,24 @@ def period_of(span: Span) -> Period:
             keep_width=True,
         )
     if isinstance(span, FromEarlier):
-        placed = span.new_first_day or span.new_last_day
+        placed = span.begins or span.ends
         if placed is None:
             raise RetryReading(
                 "A from_earlier period places its first day, its last day or both against the "
                 "earlier period; this one placed neither."
             )
-        if span.length is None and not (span.new_first_day and span.new_last_day):
+        if span.length is None and not (span.begins and span.ends):
             raise RetryReading(
                 "A from_earlier period with one day placed needs its length: the number of days "
                 "said, or the earlier period's own number of days when none is said."
             )
-        other = span.new_last_day if span.new_first_day else None
+        other = span.ends if span.begins else None
         side = {"its_first_day": "first", "its_last_day": "last"}
         return Period(
             kind="beside",
             anchor="own" if span.relative_to == "this_clause" else "previous",
             edge="first" if placed.counted_from == "its_first_day" else "last",
-            starts=span.new_first_day is not None,
+            starts=span.begins is not None,
             offset_days=placed.days_after,
             days=span.length or 1,
             sized=span.length is not None,

@@ -376,3 +376,10 @@ wordings, the real model, router and guard, no Google traffic. Frozen and hashed
 (`a39b4d22…`), cap $0.40, approved by Karim. Recorded usage: OpenAI $0.157421, Jev $0.003696,
 total **$0.161117**, 97 calls, nothing rerun.
 [Results](experiments.md#which-dates-are-missing-through-the-chat-2026-11-23).
+
+### November 23, 2026 — reader check of periods said to begin or end somewhere
+
+`eval/period_roles_check.py`: 6 pairs of made-up follow-ups that differ only in begins or ends,
+against one five-day result, read on main and on branch `fix/period-begins-ends`. Frozen and
+hashed first (`a15a4269…`), cap $0.15 per version. Recorded usage **$0.021783** (main) and
+**$0.030452** (fix). [Results](experiments.md#periods-said-to-begin-or-end-somewhere-2026-11-23).
