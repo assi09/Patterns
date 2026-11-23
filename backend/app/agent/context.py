@@ -63,6 +63,7 @@ class Turn:
     refused: bool = False
     at: datetime | None = None  # when it was answered
     request_state: dict = field(default_factory=dict)  # validated private trace, never prose
+    sources: tuple[dict, ...] = ()  # the public sources the answer cited: title, source, url
 
     @property
     def evidence_ids(self) -> list[str]:
@@ -138,6 +139,7 @@ def turns_from(messages: Iterable, states: dict | None = None) -> list[Turn]:
                     refused=bool(message.refused),
                     at=getattr(message, "created_at", None),
                     request_state=(states or {}).get(getattr(message, "id", None), {}),
+                    sources=tuple(getattr(message, "sources", None) or ()),
                 )
             )
             question = None

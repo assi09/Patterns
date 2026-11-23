@@ -85,6 +85,12 @@ release gates passed. Concrete per-turn grades and raw attempts remain private u
     2026-11-23 not to merge it or spend more on this week. Known limitation: when calendar order
     and conversation order differ, "earlier" can be read as the week asked about earlier. See
     [experiments.md](experiments.md#picking-an-earlier-week-by-order-2026-11-23).
+    Three more attempts the same day separated the causes: showing each result with its question
+    (steps 2 to 32 of 66, but heart rate and sleep fell), the large reader (about 60% right), and
+    a calendar week of an earlier result with weekday and weekend parts (dates right, week still
+    the opening one). None is merged: the remaining cause is how the model reads an ambiguous
+    phrase, and every answer states its dates. See
+    [experiments.md](experiments.md#that-earlier-week-model-and-representation-2026-11-23).
 
 ## Keep the improvements
 
