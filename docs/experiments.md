@@ -1204,3 +1204,38 @@ chat, still part of it. 15 made-up turns in fresh wordings, read on both version
 other, all 12). With the definitions consistent, 10 of 12, and the controls are unchanged; their
 miss on both versions is "Is anything waiting for my approval?" read as a question about a
 waiting entry card. 15 turns of one kind: a check of this distinction, not a broad score.
+
+
+## Bigger independent checks of the reader fixes (2026-11-23)
+
+**What it tested.** Whether the small checks of the day's reader fixes hold on more cases worded
+by someone else. The large model wrote 195 cases from descriptions (the expected reading comes
+from each case), with negative controls a fix must not catch; four that asked for a data
+breakdown rather than a source were excluded before any reading. Read on main and on a branch
+with every fix merged, each family with a Wilson 95% interval. Then the replay's 219 three-turn
+readings on that branch, to catch regressions.
+
+| Family | main | every fix | |
+|---|---:|---:|---|
+| Source, after guidance / after data | 0/15, 0/11 | 15/15, 9/11 | holds |
+| Source negatives (must not trigger) | 15/15 | 15/15 | no false trigger |
+| Recall after "don't save" / plain | 1/25, 1/15 | 18/25, 9/15 | holds |
+| Saved-memory questions | 4/10 | 4/10 | same 6 misses: read as entry status |
+| Coverage of one measure / negatives | 30/30, 10/10 | 30/30, 10/10 | no gain: main did not misread these |
+| Food edits | 26/30 | 26/30 | no gain; different items miss (noise) |
+| Periods begin/end | 25/30 | 25/30 | no gain; different items miss (noise) |
+
+**A regression the small checks missed.** On the heart-rate third turn ("Just that earlier
+weekend?") the merged branch read the weekend as the same days as before, the whole week, in
+49 of 62 readings. Branch by branch on the same 62: main 20, period names 24, food 24, source
+28, every-measure 30, **recall 50**. Two narrower recall wordings did not remove it (45 and 44)
+and the narrower one lost the recall gain. What removed it is the missing period: with calendar
+weeks (a week of an earlier result, and its weekend) the reader kept the weekend in 59 of 62
+and dropped it in none, and recall stayed 13/25 and 6/15. The weekend had no form of its own;
+the reader improvised day offsets, and any wording change tipped them.
+
+**Corrections.** A fresh main run scores the heart-rate turn 9/62, not the replay's 23/62 (an
+older checkout, and readings vary between runs). The earlier decision not to merge the
+calendar-week branch rested on 23 against 6; against today's main it is within noise, and it
+keeps the weekend in every reading. The small checks' gains for every-measure wording, food and
+period names do not show on this bank.

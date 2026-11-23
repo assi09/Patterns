@@ -411,3 +411,17 @@ source on main **$0.014453** and on `fix/answer-source` **$0.015400**.
 branch `fix/chat-recall`. Frozen and hashed first (`f2ea3409…`), cap $0.25 per version. Recorded
 usage **$0.033026** (main) and **$0.033633** (fix), nothing rerun.
 [Results](experiments.md#recalling-what-was-said-in-this-chat-2026-11-23).
+
+### November 23, 2026 — bigger independent checks of the reader fixes
+
+All reader only unless noted, frozen and hashed before reading, each with a hard cap; nothing
+rerun. An independent bank of 195 cases worded by the large model from case descriptions
+(`eval/fresh_bank.py`, about **$0.196**); its 191 frozen readings on main and on a branch with
+every fix merged (`eval/fresh_bank_check.py`): **$0.367383** and **$0.357794**. The replay's 219
+three-turn readings on that branch: **$0.546590**. Locating a regression on the 62 heart-rate
+third turns, one branch at a time (main, period names, food, every-measure, recall, source):
+**$0.184893**, **$0.195028**, **$0.186584**, **$0.198000**, **$0.173344**, **$0.226144**. Two more
+versions of the recall wording, each on the 50 recall cases and the 62 heart-rate turns:
+**$0.123792** and **$0.178121**; **$0.111485** and **$0.186774**. The recall wording with calendar
+weeks: **$0.150868** and **$0.133701**. Total about **$3.42**.
+[Results](experiments.md#bigger-independent-checks-of-the-reader-fixes-2026-11-23).
