@@ -47,6 +47,10 @@ class Period(Fields):
     end_offset: int = Field(default=0, ge=-36600, le=36600)
     sized: bool = True
     keep_width: bool = False  # beside: the earlier period's own number of days (a shift)
+    # calendar weeks: Monday to Friday or Saturday and Sunday of the week, worked out by code. Said
+    # as days counted from an earlier result, "that earlier weekend" and "Monday to Friday" were
+    # placed by hand and often wrong (the Fitbit replay of 2026-11-22).
+    week_days: Literal["all", "weekdays", "weekend"] = "all"
 
 
 Operation = Literal[
@@ -406,15 +410,30 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
         if period.kind == "relative":
             shift = timedelta(days=period.offset_days)
             return [Window(start=window.start + shift, end=window.end + shift)]
+        if period.kind == "calendar" and _unit_of(window.start, period.unit) != _unit_of(
+            window.end, period.unit
+        ):
+            # "That week" of a period across two weeks is not one week: never pick one silently.
+            raise Ambiguous(
+                f"That period spans more than one {period.unit}. Which one do you mean?"
+            )
         anchor = window.end
     anchor += timedelta(days=period.offset_days)
     if period.kind == "relative":
         return [Window(start=anchor, end=anchor)]
     if period.kind == "rolling":
         return [Window(start=anchor - timedelta(days=period.days - 1), end=anchor)]
+    if period.week_days != "all" and period.unit != "week":
+        raise RetryReading("Weekdays or the weekend are part of a week: unit week.")
     if period.unit == "week":
         start = anchor - timedelta(days=anchor.weekday()) + timedelta(weeks=period.offset_units)
         end = start + timedelta(days=6)
+        if period.week_days == "weekdays":
+            end = start + timedelta(days=4)
+        elif period.week_days == "weekend":
+            start = start + timedelta(days=5)
+        if start > today:
+            raise Ambiguous("Those days haven't happened yet. Which days do you mean?")
     elif period.unit == "month":
         number = anchor.year * 12 + anchor.month - 1 + period.offset_units
         year, month = divmod(number, 12)
@@ -424,6 +443,13 @@ def period_window(period: Period, previous: ResolvedPart | None, today: date) ->
         start = date(anchor.year + period.offset_units, 1, 1)
         end = date(start.year, 12, 31)
     return [Window(start=start, end=min(end, today) if period.offset_units == 0 else end)]
+
+
+def _unit_of(day: date, unit: str) -> tuple:
+    """Which calendar week (from Monday), month or year a day is in."""
+    if unit == "week":
+        return (day - timedelta(days=day.weekday()),)
+    return (day.year, day.month) if unit == "month" else (day.year,)
 
 
 # Requests that are not a data question, but may have data questions beside them.
@@ -1120,6 +1146,10 @@ asks: "the first result only" is one clause, never a repeat of the others.
 Periods, for data and investigate clauses; pick the kind that means what was said:
 - dates: dates written out; one day has start = end.
 - calendar: this week (week, 0), last month (month, -1), the week before last (week, -2).
+  relative_to earlier_result: the calendar week, month or year holding an earlier result's
+  days, moved by offset: "that week" is 0, "the full week before that week" -1, "the week
+  after it" 1. days weekdays (Monday to Friday) or weekend (Saturday and Sunday) of a week,
+  counted from today or from an earlier result ("weekdays of that week", "that weekend").
 - month: a month named with its year, past or future ("January 2027"); a month named alone is
   its latest occurrence up to today.
 - same_as_earlier: all of an earlier result's periods, unchanged: the same days, or the same
