@@ -286,6 +286,16 @@ def _normalized(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
+def says(fact: MemoryFact, kind: str, text: str) -> bool:
+    """Whether a kept fact holds these very words (as stored, after cleaning): what "I already
+    keep that" may rest on, never only the listener's judgment that two wordings are the same."""
+    try:
+        cleaned, _ = validate_fact(kind, text, ())
+    except FactRejected:
+        return False
+    return fact.kind == kind and _normalized(fact.text) == _normalized(cleaned)
+
+
 def _ask_to_keep(session: Session, fact: MemoryFact) -> None:
     """Makes a heard fact a card: proposed, and asked about in the inbox."""
     fact.status = "proposed"
@@ -316,23 +326,29 @@ def propose_fact(
     replaces: uuid.UUID | None = None,
     message_id: uuid.UUID | None = None,
     now: datetime | None = None,
+    replace_reworded: bool = False,
 ) -> MemoryFact | None:
     """Records something the person said. `explicit` (they asked for it) makes it a card at once;
     otherwise it is a candidate until heard `PROMOTE_AT` times. `same_as` is what the listener took
-    it to repeat. Returns None if they declined it before."""
+    it to repeat. Returns None if they declined it before.
+
+    `replace_reworded`, for an explicit request to remember: a kept fact the listener took it to
+    repeat, in other words, is offered as a replacement card rather than counted as heard again.
+    "After dinner now, rather than before breakfast" was taken as the kept "before breakfast"
+    and answered "I already keep that in mind" (the audit of 910da27)."""
     try:
         cleaned, concerned = validate_fact(kind, text, metrics)
     except FactRejected as exc:
         raise MemoryRejected(str(exc)) from exc
     now = now or _now()
-    same = [
-        fact
-        for fact in session.scalars(select(MemoryFact).where(MemoryFact.user_id == user_id))
-        if _normalized(fact.text) == _normalized(cleaned)
-        or (fact.id == same_as and fact.kind == kind)
-    ]
+    facts = list(session.scalars(select(MemoryFact).where(MemoryFact.user_id == user_id)))
+    exact = [fact for fact in facts if _normalized(fact.text) == _normalized(cleaned)]
+    judged = [f for f in facts if f.id == same_as and f.kind == kind and f not in exact]
+    same = exact + judged
     if any(fact.status == "declined" for fact in same):
         return None  # the person said no; do not ask again
+    if replace_reworded and not exact and judged and judged[0].status == "approved":
+        replaces, same = judged[0].id, []  # the new words, on a card that replaces the old
     if same:
         fact = same[0]
         fact.seen += 1
