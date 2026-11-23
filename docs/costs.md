@@ -376,3 +376,11 @@ wordings, the real model, router and guard, no Google traffic. Frozen and hashed
 (`a39b4d22…`), cap $0.40, approved by Karim. Recorded usage: OpenAI $0.157421, Jev $0.003696,
 total **$0.161117**, 97 calls, nothing rerun.
 [Results](experiments.md#which-dates-are-missing-through-the-chat-2026-11-23).
+
+### November 23, 2026 — reader probes for "that earlier week"
+
+`eval/reader_model_probe.py`, reader only, on the frozen third turns of the replay's three-turn
+conversations. (1) The large model (gpt-5.5) as the reader on main, 40 reserved readings: cap
+$1.20, recorded usage **$0.791546**. (2) Branch `fix/calendar-week-of-earlier` with the small
+reader, all 219 readings: cap $0.85, recorded usage **$0.482840**. Both frozen and hashed first;
+nothing rerun. [Results](experiments.md#that-earlier-week-model-and-representation-2026-11-23).
