@@ -376,3 +376,12 @@ wordings, the real model, router and guard, no Google traffic. Frozen and hashed
 (`a39b4d22…`), cap $0.40, approved by Karim. Recorded usage: OpenAI $0.157421, Jev $0.003696,
 total **$0.161117**, 97 calls, nothing rerun.
 [Results](experiments.md#which-dates-are-missing-through-the-chat-2026-11-23).
+
+### November 23, 2026 — reader check of food edits and source questions
+
+`eval/followup_kinds_check.py`: 12 made-up follow-ups in fresh wordings (6 food edits after a
+breakfast answer, 6 "where did that come from?"), read on main and on each fix. Frozen and hashed
+first (`5cb8913b…`), cap $0.20 per run. Recorded usage: food on main **$0.012610**, on
+`fix/food-source-edits` before and after its redo meal edits **$0.016108** and **$0.014142**;
+source on main **$0.014453** and on `fix/answer-source` **$0.015400**.
+[Results](experiments.md#food-edits-and-source-questions-2026-11-23).
