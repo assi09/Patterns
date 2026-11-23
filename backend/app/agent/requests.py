@@ -85,6 +85,9 @@ class Part(Fields):
         "explaining the earlier result's own metric.",
     )
     nutrients: list[str] = Field(default_factory=list)  # food eaten: the nutrients asked about
+    # A redo's meal: keep the earlier result's, every meal, or the one named (meal_type). None
+    # for a data clause, which never carries a meal over (Codex's review, 2026-11-19).
+    meal_edit: Literal["keep", "every", "named"] | None = None
     said: str = ""  # the words of the message this part comes from: checks read these
 
 
@@ -487,6 +490,9 @@ def _changes(edit: Part, previous: Sequence[ResolvedPart]) -> bool:
         or edit.comparison is not None
         or edit.threshold is not None
         or (edit.max_lag is not None and bool(lags) and lags != {edit.max_lag})
+        or bool(edit.nutrients)
+        or edit.source is not None
+        or edit.meal_edit in ("every", "named")
     )
 
 
@@ -609,6 +615,15 @@ def _redo(request: Request, reading: Reading, state: dict, today: date) -> Reque
             and not edit.every_metric
         ):
             edit = edit.model_copy(update={"every_metric": True})  # an all-measure result
+        if referent is not None and referent.operation == "food" and edit.source != "tracker":
+            # A food answer repeated keeps what this message does not change: "and the protein
+            # for that same breakfast?" said as a redo lost both the meal and the nutrient.
+            kept: dict = {}
+            if edit.meal_edit == "keep":
+                kept["meal_type"] = referent.meal_type
+            if not edit.nutrients and not edit.metrics:
+                kept["nutrients"] = list(referent.nutrients)
+            edit = edit.model_copy(update=kept)
         asked = Reading(
             kind="investigate" if looked else "data",
             parts=[edit],

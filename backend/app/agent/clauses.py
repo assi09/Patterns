@@ -517,6 +517,18 @@ class RedoClause(Fields):
         description="Null keeps the earlier result's records; tracker or food_log when this "
         "message switches them ('switch to energy burned from the tracker').",
     )
+    # A food answer repeated, changed only where the message says: "the protein for that same
+    # breakfast" keeps the meal and changes the nutrient; "the whole day" clears the meal.
+    meal: Literal["keep", "every", "BREAKFAST", "LUNCH", "DINNER", "SNACK"] = Field(
+        default="keep",
+        description="For food eaten: keep the earlier result's meal, every meal ('the whole "
+        "day', 'drop the breakfast filter'), or the one meal this message names.",
+    )
+    nutrients: list[str] = Field(
+        default_factory=list,
+        description="For food eaten: the nutrients this message asks about ('and the "
+        "protein?'); empty keeps the earlier ones.",
+    )
     options: int | None = Field(
         default=None, ge=1, le=5, description="How many options or points they ask for."
     )
@@ -739,7 +751,13 @@ def _edit(redo: RedoClause) -> Part:
         threshold_unit=redo.threshold_unit,
         max_lag=redo.max_lag,
         source=_records(redo.source, redo.metrics),
-        nutrients=_nutrients(_records(redo.source, redo.metrics), (), redo.metrics),
+        nutrients=_nutrients(
+            "food_log" if redo.nutrients else _records(redo.source, redo.metrics),
+            redo.nutrients,
+            redo.metrics,
+        ),
+        meal_type=None if redo.meal in ("keep", "every") else redo.meal,
+        meal_edit="named" if redo.meal not in ("keep", "every") else redo.meal,
         said=redo.said,
     )
 

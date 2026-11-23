@@ -56,7 +56,7 @@ def test_whole_day_protein_is_read_from_the_food_log_however_the_source_was_said
 
 def test_the_same_edit_said_as_a_redo_is_read_the_same():
     words = "Same day, but protein for every meal."
-    part, days = part_of(words, redo(words, SAME, metrics=["protein"]))
+    part, days = part_of(words, redo(words, SAME, metrics=["protein"], meal="every"))
     assert (part.operation, part.nutrients, part.meal_type, days) == (
         "food",
         ["protein"],
@@ -89,3 +89,41 @@ def test_food_and_tracker_measures_in_one_clause_are_still_split():
     clause = data(words, ["protein", "steps"], "sum", SAME, earlier_result=0, source="tracker")
     request, _ = read(words, said(clause), history=[BREAKFAST], today=TODAY)
     assert request.kind == "clarify"  # one clause per source; never protein from the tracker
+
+
+# ---- a redo of a food answer keeps what the message does not change ----
+
+
+@pytest.mark.parametrize(
+    "words, edit, nutrients, meal",
+    [
+        (
+            "And the protein for that same breakfast?",
+            {"nutrients": ["protein"]},
+            ["protein"],
+            "BREAKFAST",
+        ),
+        (
+            "Protein for the whole day instead.",
+            {"nutrients": ["protein"], "meal": "every"},
+            ["protein"],
+            None,
+        ),
+        ("Same nutrient, but for lunch.", {"meal": "LUNCH"}, ["energy"], "LUNCH"),
+        ("Again, for the whole day.", {"meal": "every"}, ["energy"], None),
+    ],
+)
+def test_a_food_redo_changes_only_the_meal_or_nutrient_it_says(words, edit, nutrients, meal):
+    part, days = part_of(words, redo(words, SAME, **edit))
+    assert (part.operation, part.nutrients, part.meal_type, days) == (
+        "food",
+        nutrients,
+        meal,
+        [DAY],
+    )
+
+
+def test_switching_to_the_tracker_never_keeps_a_meal():
+    words = "Same date, switch to energy burned from the tracker."
+    part, _ = part_of(words, redo(words, SAME, metrics=["calories"], source="tracker"))
+    assert part.meal_type is None and part.operation == "value"
