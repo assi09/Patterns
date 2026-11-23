@@ -42,7 +42,13 @@ def resolved(request: dict | None) -> list:
     ]
 
 
-def freeze(reader: str = "large", every: bool = False, cap: float = CAP_USD) -> None:
+def freeze(
+    reader: str = "large",
+    every: bool = False,
+    cap: float = CAP_USD,
+    reasoning: str | None = None,
+    temperature: float | None = None,
+) -> None:
     """`every`: all of the source's readings, both splits and the opening-week control."""
     source = json.loads(SOURCE.read_text())["jobs"]
     jobs = []
@@ -64,11 +70,18 @@ def freeze(reader: str = "large", every: bool = False, cap: float = CAP_USD) -> 
             ]
             jobs.append(job | {"history": history})
     OUT.mkdir(parents=True, exist_ok=True)
-    frozen = {"cap_usd": cap, "reader": reader, "jobs": jobs}
+    frozen = {
+        "cap_usd": cap,
+        "reader": reader,
+        "reasoning": reasoning,
+        "temperature": temperature,
+        "jobs": jobs,
+    }
     body = json.dumps(frozen, sort_keys=True, indent=1)
     JOBS.write_text(body)
     print(f"{len(jobs)} readings frozen {dict(Counter(j['family'] for j in jobs))}")
-    print(f"reader {reader}, cap ${cap}")
+    print(f"reader {reader}, reasoning {reasoning}, temperature {temperature}")
+    print(f"cap ${cap}")
     print(f"sha256 {hashlib.sha256(body.encode()).hexdigest()}")
 
 
@@ -97,6 +110,19 @@ def run(sha: str) -> None:
         llm.__dict__.update(base.__dict__)
     else:
         llm = base
+    # The reader's own options; the read-back check is unchanged. Function tools take
+    # no reasoning effort on chat completions for the small model (a 400 from the API).
+    options = {
+        key: value
+        for key, value in (
+            ("reasoning_effort", frozen.get("reasoning")),
+            ("temperature", frozen.get("temperature")),
+        )
+        if value is not None
+    }
+    if options:
+        role = Role.LARGE if frozen["reader"] == "large" else Role.SMALL
+        llm._options = {**llm._options, role: options}
     done = 0
     with READINGS.open("w") as out:
         for job in frozen["jobs"]:
@@ -142,12 +168,21 @@ def score() -> None:
         now[job["family"], job["expected"] in resolved(row["request"])] += 1
         if job["baseline_right"] is not None:
             before[job["family"], job["baseline_right"]] += 1
-    for family in TAKE:
-        total = now[family, True] + now[family, False]
-        print(
-            f"{family:14} large reader {now[family, True]}/{total}   small (replay) "
-            f"{before[family, True]}/{total}"
+    frozen = json.loads(JOBS.read_text())
+    setting = (
+        ", ".join(
+            f"{key} {frozen[key]}"
+            for key in ("reader", "reasoning", "temperature")
+            if frozen.get(key) is not None
         )
+        or "reader large"
+    )  # the first probe's file predates these fields
+    print(setting)
+    for family in sorted({f for f, _ in now}):
+        total = now[family, True] + now[family, False]
+        was = before[family, True] + before[family, False]
+        base = f"small (replay) {before[family, True]}/{was}" if was else "no baseline"
+        print(f"{family:17} now {now[family, True]}/{total}   {base}")
     print(f"{len(rows)} of {len(jobs)} read; ${sum(r['cost_usd'] for r in rows):.6f}")
 
 
@@ -159,12 +194,14 @@ def main() -> None:
     frozen.add_argument("--reader", choices=("small", "large"), default="large")
     frozen.add_argument("--every", action="store_true")
     frozen.add_argument("--cap", type=float, default=CAP_USD)
+    frozen.add_argument("--reasoning", choices=("minimal", "low", "medium"))
+    frozen.add_argument("--temperature", type=float)
     sub.add_parser("run").add_argument("--sha", required=True)
     sub.add_parser("score")
     args = parser.parse_args()
     use(args.out)
     if args.command == "freeze":
-        freeze(args.reader, args.every, args.cap)
+        freeze(args.reader, args.every, args.cap, args.reasoning, args.temperature)
     elif args.command == "run":
         run(args.sha)
     else:

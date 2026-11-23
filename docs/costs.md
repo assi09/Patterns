@@ -390,4 +390,8 @@ Frozen and hashed first (`e4eebf5d…`), cap $0.95. Recorded usage **$0.500423**
 conversations. (1) The large model (gpt-5.5) as the reader on main, 40 reserved readings: cap
 $1.20, recorded usage **$0.791546**. (2) Branch `fix/calendar-week-of-earlier` with the small
 reader, all 219 readings: cap $0.85, recorded usage **$0.482840**. Both frozen and hashed first;
-nothing rerun. [Results](experiments.md#that-earlier-week-model-and-representation-2026-11-23).
+nothing rerun. (3) The small reader at temperature 0 on main, the same 40 readings: cap $0.30,
+recorded usage **$0.108379**. A run with low reasoning effort was stopped at once: the API
+refuses reasoning effort with function tools on chat completions for this model, every call
+failed before any reading, and it cost $0. One reading of the replay's control P4 to see its
+reading: **$0.008830**. [Results](experiments.md#that-earlier-week-model-and-representation-2026-11-23).

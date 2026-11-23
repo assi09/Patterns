@@ -1139,7 +1139,12 @@ can say. Reader only, on the replay's frozen third turns, graded against the ban
 | Sleep: "Now average the full week before that week." | 43/47 | 6/13 | 41/47 |
 
 The large-reader column is 40 reserved readings; its baseline on the same readings was 0/14,
-3/13 and 11/13. $0.79 and $0.48.
+3/13 and 11/13. On the same 40, the small reader at temperature 0 (the reader otherwise samples at
+the API's default of 1) scored 0/14, 1/13 and 13/13: with no sampling at all it still reads the
+opening week, so the choice is a steady reading, not noise. Low reasoning effort could not be
+tried: the API refuses it with function tools on chat completions for this model. The
+calendar-week run's opening-week control ("Now the first week I asked about") scored 20/44.
+$0.79, $0.48 and $0.11.
 
 **What it showed.** Every large-reader sleep miss pointed at the weekend result and counted 7
 days back from it: the missing "week that holds that result". The calendar-week branch gives the
