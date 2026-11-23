@@ -534,7 +534,7 @@ class ConfirmClause(Fields):
 
 class MemoryClause(Fields):
     """About what they have told the app: what it keeps about them (approved, or waiting for a
-    tap), and what they said earlier in this conversation, kept or not. Defined only as what the
+    tap), and what they told it in this conversation, kept or not. Defined only as what the
     app keeps, "What day did I just mention?" after "Just for this chat I plan to walk on Friday.
     Don't save it." was read as outside the app: nothing about it was kept (the Fitbit replay's
     control P4, 2026-11-22)."""
@@ -545,7 +545,7 @@ class MemoryClause(Fields):
     recall: Literal["kept", "waiting", "this_chat", "all"] | None = Field(
         default=None,
         description="For recall: what they approved (kept), cards waiting for a tap, what they "
-        "said earlier in this conversation (this_chat: including what they asked not to save, "
+        "told the app in this conversation (this_chat: including what they asked not to save, "
         "which is still part of this chat), or all of it.",
     )
     states_new_fact: bool = Field(
@@ -576,7 +576,7 @@ class OtherClause(Fields):
         default="small_talk",
         description="small_talk: thanks, greetings, chat. about_them: something they tell about "
         "themselves. outside_the_app: asks for something the app does not do (what the app keeps "
-        "about them, removing it, and what they said earlier in this chat are memory). unsure: "
+        "about them, removing it, and what they told it in this chat are memory). unsure: "
         "you cannot tell what it asks.",
     )
 
@@ -604,7 +604,9 @@ class Said(Fields):
     )
     clauses: list[Clause] = Field(min_length=0, max_length=6)
     store_nothing: bool = Field(
-        description='They ask that nothing from this message be kept ("don\'t save this").'
+        description='They ask that nothing from this message be kept ("don\'t save this"): '
+        "nothing is kept once the chat ends, and it is still part of this conversation, to use "
+        "and recall while it lasts.",
     )
     medical: bool = Field(
         default=False,
