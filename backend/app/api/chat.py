@@ -387,9 +387,15 @@ def listen_to(
                         replaces=None if heard.replaces is None else known[heard.replaces][0],
                         message_id=question_id,
                         now=now,
+                        replace_reworded=asked,
                     )
                     if fact is not None:
-                        statuses.append(fact.status)
+                        # Kept already only when kept in these words: a match the listener judged
+                        # alone may be an edit of it ("after dinner now, rather than before").
+                        reworded = fact.status == "approved" and not memory.says(
+                            fact, heard.kind, heard.text
+                        )
+                        statuses.append("approved_reworded" if reworded else fact.status)
             if question is not None and question.conversation_id:
                 store.charge_answer(db, user_id, question.conversation_id, result.cost_usd)
     except Exception:
@@ -415,6 +421,10 @@ NOT_KEPT = (
 )
 NOT_HEARD = "I couldn't note that just now. Could you tell me again in a moment?"
 ALREADY_KEPT = "I already keep that in mind."
+KEPT_REWORDED = (
+    "I keep something close to that, in other words. If it has changed, tell me what it is now "
+    "(\u201creplace \u2026 with \u2026\u201d) and I'll put the change on a card for you to keep."
+)
 
 
 NOTHING_KEPT = "I don't keep anything about you yet, so there's nothing to forget."
@@ -631,6 +641,8 @@ def noted_reply(statuses: list[str] | None) -> str:
         return NOTED
     if "approved" in statuses:
         return ALREADY_KEPT
+    if "approved_reworded" in statuses:
+        return KEPT_REWORDED
     return NOT_KEPT
 
 

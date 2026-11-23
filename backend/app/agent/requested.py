@@ -33,6 +33,24 @@ def _when(window: Window, today: date) -> str:
     return f"from {window.start.strftime(form)} to {window.end.strftime(form)}"
 
 
+SHOWN_RUNS = 10  # runs of missing dates written out; the evidence keeps every one
+
+
+def _dates_said(days: Sequence[str], today: date) -> str:
+    """Exact dates as runs of consecutive days: "Tue, Mar 10, and Thu, Mar 12 to Sat, Mar 14"."""
+    runs: list[list[date]] = []
+    for day in map(date.fromisoformat, days):
+        if runs and (day - runs[-1][-1]).days == 1:
+            runs[-1].append(day)
+        else:
+            runs.append([day])
+    said = [_when(Window(start=r[0], end=r[-1]), today).split(" ", 1)[1] for r in runs]
+    if len(said) > SHOWN_RUNS:
+        rest = sum(len(r) for r in runs[SHOWN_RUNS:])
+        said = [*said[:SHOWN_RUNS], f"{_days(rest)} more, all listed in the evidence"]
+    return said[0] if len(said) == 1 else f"{', '.join(said[:-1])}, and {said[-1]}"
+
+
 def _first_up(text: str) -> str:
     return text[:1].upper() + text[1:]
 
@@ -316,6 +334,24 @@ def execute(
                         f"{_first_up(name)} was recorded on {have} of {_days(window.days)} "
                         f"{when}; {_days(window.days - have)} have no reading."
                     )
+                    say(text, record, metric, "data_quality")
+                    continue
+                elif op == "missing_dates":
+                    # The dates themselves, from the evidence the answer cites: a count repeated,
+                    # or a recorded date named as missing, answered "which dates?" (the replay).
+                    record = coverage(frame[[metric]], window, dates=True)
+                    missing = record.stats["missing_dates"][metric]
+                    if not missing:
+                        text = (
+                            f"{_first_up(name)} was recorded on every one of the "
+                            f"{_days(window.days)} {when}; no date is missing."
+                        )
+                    else:
+                        text = (
+                            f"{_first_up(when)}, {name} has no record on "
+                            f"{_dates_said(missing, today)} ({len(missing)} of "
+                            f"{_days(window.days)})."
+                        )
                     say(text, record, metric, "data_quality")
                     continue
                 elif op == "compare":

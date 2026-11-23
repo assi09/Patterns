@@ -367,3 +367,12 @@ third turn of the replay's 66 step-total conversations, twice each (132 readings
 hashed before reading (`0364b979…`), cap $0.55, approved by Karim. Recorded usage
 **$0.423755**, all 132 read, nothing rerun. No paid judge, no Google traffic.
 [Results](experiments.md#picking-an-earlier-week-by-order-2026-11-23).
+
+### November 23, 2026 — chat check of which dates are missing
+
+`eval/missing_dates_check.py` on branch `fix/missing-dates` (`2d1108a`): 20 reserved
+missing-night weeks from the Fitbit replay's bank, two turns each through `/chat` in fresh
+wordings, the real model, router and guard, no Google traffic. Frozen and hashed before running
+(`a39b4d22…`), cap $0.40, approved by Karim. Recorded usage: OpenAI $0.157421, Jev $0.003696,
+total **$0.161117**, 97 calls, nothing rerun.
+[Results](experiments.md#which-dates-are-missing-through-the-chat-2026-11-23).
