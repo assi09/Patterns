@@ -1,5 +1,7 @@
 # Independent audit of PR 195, November 20, 2026
 
+> **Historical record** (added to the repository on 2026-11-20), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **Hold the merge.** The candidate at `7ef95c7d16a85835f8e57a592025920e029a8b19` handled direct metric retrieval well. It answered a named January investigation with November data. That single example violates the predeclared period gate. Several conversational areas also fell below target.
 
 ## What was tested

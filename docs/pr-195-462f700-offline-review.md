@@ -1,5 +1,7 @@
 # Offline implementation review of PR #195 at 462f700
 
+> **Historical record** (added to the repository on 2026-11-21), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **The first six repairs from the 40baaee review hold in independent offline controls. The seventh
 fix removes the original bad summary, but does not yet enforce grounding of all personal factual
 text. Replay also has a legacy-state regression and loses the prior option count.** Repair these

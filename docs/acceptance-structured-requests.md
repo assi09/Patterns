@@ -1,5 +1,7 @@
 # Acceptance criteria for the structured-request redesign (PR #195)
 
+> **Historical record** (added to the repository on 2026-11-19), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 Written on 2026-11-19, **before** the fixes they judge and before any paid run, so the bar cannot
 move to fit the results. The redesign is A (code checks the reader instead of rewriting it),
 B (investigation scope), C (forget with confirmation), D (guidance passages and workout times).

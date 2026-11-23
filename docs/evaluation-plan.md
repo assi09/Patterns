@@ -1,5 +1,7 @@
 # How we defend the agent: the evaluation plan before the pilot
 
+> **Historical record** (added to the repository on 2026-11-16), kept as written. The evaluation plan as written on 2026-11-16. For what is true now, see [current.md](current.md).
+
 Written 2026-11-16: how each part of the agent is defended, and why. What runs when, and its cost, is
 in [testing-plan.md](testing-plan.md). The pilot then adds real users' own questions and the team
 feature live.

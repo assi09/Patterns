@@ -1,5 +1,7 @@
 # Six practice scenarios for Patterns
 
+> **Historical record** (added to the repository on 2026-11-23), kept as written. Scenario designs for the 2026-11-22 replay. For what is true now, see [current.md](current.md).
+
 Use an isolated database, made-up accounts, a fake Fitbit provider, and a local email outbox. Send each quoted message as a separate turn in the same chat.
 
 ### Run with real Fitbit histories first

@@ -1,3 +1,5 @@
+> **Historical record** (added to the repository on 2026-11-22), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 > Scheduling update: the user subsequently requested completing the final paid audit on this SHA despite the preflight findings. That run is complete; see [the final report](independent-audit-910da27-final.md). This file preserves the earlier findings, not a request for another repair round.
 
 # Independent offline preflight of 910da27 — November 22, 2026

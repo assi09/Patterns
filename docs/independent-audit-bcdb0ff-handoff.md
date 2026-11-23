@@ -1,5 +1,7 @@
 # Independent review of bcdb0ff — November 22, 2026
 
+> **Historical record** (added to the repository on 2026-11-22), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **HOLD PR #195.** The fresh matched comparison improves 138/152 → 146/152, including 7/12 → 12/12 successor blocks. Coaching rendering, compound dispatch and duplicate state still fail independent controls; semantic reader misses remain. No fresh release audit ran.
 
 Frozen candidate: `bcdb0ffb205effdc4e3145d89400a0454eab2482`; baseline reader:

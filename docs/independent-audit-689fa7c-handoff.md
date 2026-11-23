@@ -1,5 +1,7 @@
 # Independent audit of 689fa7c — November 21, 2026
 
+> **Historical record** (added to the repository on 2026-11-21), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **HOLD PR #195.** Frozen candidate: `689fa7c4df53acf2ef76450bd0ecad18ba50b96e`.
 The 592-turn synthetic audit, offline verification and separate 24-item PHIA gate are complete.
 PHIA is 23/24, one regression within its predeclared allowance. The named-period zero-tolerance

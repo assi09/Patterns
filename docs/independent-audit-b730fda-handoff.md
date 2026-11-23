@@ -1,5 +1,7 @@
 # Independent live audit of PR 195 at b730fda
 
+> **Historical record** (added to the repository on 2026-11-20), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 November 20, 2026. **Hold the merge.** The candidate handled every direct metric lookup, mixed request and explicit memory turn in this deck. It silently answered ten turns using a different period from the one requested. Investigations and guidance also missed their acceptance targets.
 
 ## Frozen protocol and results

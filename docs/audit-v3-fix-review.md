@@ -1,5 +1,7 @@
 # Review of the uncommitted audit fixes — November 19, 2026
 
+> **Historical record** (added to the repository on 2026-11-19), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 This is a **new offline code review**, separate from the completed 488-turn paid audit. It does
 not change the earlier scores or claim a new live-agent accuracy. The shared working tree is
 still based on `fa15f4a`, with Claude's uncommitted changes. The reviewed source and test files

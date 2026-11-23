@@ -1,5 +1,7 @@
 # Final audit of PR #195 — November 22, 2026
 
+> **Historical record** (added to the repository on 2026-11-22), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **Recommendation: end this audit/repair cycle and move on to the other project deliverables.**
 There is substantial measured improvement. Keep the remaining issues in the
 [deferred backlog](pr-195-followup-issues.md); this recommendation is not a claim that the agent

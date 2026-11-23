@@ -1,5 +1,7 @@
 # PR 195 fresh live audit, November 20, 2026
 
+> **Historical record** (added to the repository on 2026-11-20), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **Hold the merge.** On frozen commit `9684d773cc64eb0aa1f8d2d7a7b6002a4ed2b744`, eight metric follow-ups silently used an old interval. An equality count also returned the expected number for the wrong week. The zero-swapped-period gate in [the acceptance criteria](acceptance-structured-requests.md) failed. The small PHIA gate passed.
 
 ## What was run and graded

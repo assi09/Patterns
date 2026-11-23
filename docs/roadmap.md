@@ -1,5 +1,7 @@
 # Roadmap
 
+> **Historical record** (added to the repository on 2026-10-19), kept as written. The October roadmap, superseded by plan.md from 2026-10-27. For what is true now, see [current.md](current.md).
+
 The original October roadmap, agreed on 2026-10-21
 after a 20-question planning session. The current [plan](plan.md) targets November 23 for readiness and December 5 for presentations. Shipped work is recorded in [status.md](status.md). Each item ships as
 its own pull request ([AGENTS.md](../AGENTS.md)).

@@ -1,5 +1,7 @@
 # Why the same failures recur in PR 195
 
+> **Historical record** (added to the repository on 2026-11-21), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 Reviewed November 21 at `a196c6d58631651ee195df94ec3cafa476520cb1`. This is an implementation proposal based on the [independent live audit](independent-audit-a196c6d-handoff.md), its saved reader attempts, tool errors, replies and state snapshots. The fixes below have not been implemented or evaluated. The two offline probes described below used the current functions and synthetic fixtures.
 
 ## Decision for Claude after reviewing the earlier audits

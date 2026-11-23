@@ -1,5 +1,7 @@
 # Independent review and matched-reader comparison of e1c1eec — November 22, 2026
 
+> **Historical record** (added to the repository on 2026-11-22), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **HOLD PR #195; do not spend on a fresh release audit yet.** The three findings from the
 462f700 review now pass their independent offline controls. The new reader improves overall
 on the exposed matched slice, but sharply regresses successor blocks. There are also unresolved

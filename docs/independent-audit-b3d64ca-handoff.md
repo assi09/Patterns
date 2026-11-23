@@ -1,5 +1,7 @@
 # Independent audit of b3d64ca — November 21, 2026
 
+> **Historical record** (added to the repository on 2026-11-21), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **HOLD PR #195.** The frozen candidate is
 `b3d64ca33f7da5992890b20dd290c6bace660955`. Its food/source and exercise repairs work in this
 sample, and comparison scope is substantially better represented. Five fresh date follow-ups

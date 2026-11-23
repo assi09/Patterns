@@ -1,5 +1,7 @@
 # Independent audit request: PR #195 after the redesign
 
+> **Historical record** (added to the repository on 2026-11-20), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 **Frozen target: the commit that adds this file.** Verify with
 `git log -1 --format=%H -- docs/independent-audit-v7-request.md`; it must equal the PR head and
 `git status` must be clean. Nothing is pushed to the PR until the audit is reported. Keep the PR

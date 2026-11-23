@@ -1,5 +1,7 @@
 # PR #195: general repairs before the next independent audit
 
+> **Historical record** (added to the repository on 2026-11-21), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 Prepared November 21, 2026 for Claude Code. The reviewed local and remote PR head remains
 `b3d64ca33f7da5992890b20dd290c6bace660955`; the PR is open and unmerged. No newer repair commit
 was available. This planning pass made no production changes or paid calls.

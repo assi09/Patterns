@@ -1,5 +1,7 @@
 # Independent live audit of PR 195 at a196c6d
 
+> **Historical record** (added to the repository on 2026-11-21), kept as written. It describes PR #195 before it was merged; #195 was merged on 2026-11-22 as `2ce08b5`. For what is true now, see [current.md](current.md).
+
 November 21, 2026. **Hold the merge.** The evidence-version fix worked across successive live investigations. The agent also answered all 24 direct metric questions and all eight exercise-guidance turns correctly. Nine date follow-ups silently returned other dates, and neither wording of a date-only correction to a paused workout produced the requested card.
 
 ## Results
