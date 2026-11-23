@@ -1,0 +1,104 @@
+{
+  "checks": 52,
+  "passed": 44,
+  "by_scenario": {
+    "P1": "3/5",
+    "P2": "10/11",
+    "P3": "0/1",
+    "P4": "2/3",
+    "P5": "4/4",
+    "P6": "5/5",
+    "P7": "4/4",
+    "P8": "3/4",
+    "P9": "0/2",
+    "P10": "2/2",
+    "P11": "3/3",
+    "P12": "4/4",
+    "P13": "1/1",
+    "P14": "2/2",
+    "P15": "1/1"
+  },
+  "context_tokens": {
+    "budget": 1500,
+    "median": 56.5,
+    "max": 1497,
+    "over_budget": 0
+  },
+  "dropped_items": 31,
+  "dropped_reasons": [
+    "over the context budget"
+  ],
+  "cost_usd": 0.235,
+  "failures": [
+    {
+      "scenario": "P1",
+      "label": "And how does that compare with the month before?",
+      "problems": [
+        "missing any of ('resting',)"
+      ],
+      "a": "Which two periods should I compare?"
+    },
+    {
+      "scenario": "P1",
+      "label": "What about just on weekends?",
+      "problems": [
+        "missing any of ('weekend',)",
+        "missing any of ('resting', 'heart')"
+      ],
+      "a": "That period spans more than one week. Which one do you mean?"
+    },
+    {
+      "scenario": "P2",
+      "label": "trip used 10 turns later",
+      "problems": [
+        "missing any of ('trip', 'travel')",
+        "missing any of ('less', 'shorter', 'lower', 'fell', 'drop', 'down', 'dip')",
+        "no tool looked at 2026-09-29..2026-10-05"
+      ],
+      "a": "I can't tie an explanation to a tested result for those days.\n\nWhat this can't tell apart: these are changes seen over the same days, not a tested cause, so your data alone can't say which of them, if any, explains it."
+    },
+    {
+      "scenario": "P3",
+      "label": "recall from another chat",
+      "problems": [
+        "fact: the trip's dates"
+      ],
+      "a": "From Tue, Nov 10 to Mon, Nov 23, compared with from Tue, Oct 13 to Mon, Nov 9, the clear changes were: Resting heart rate went up: 68.2 bpm against 63.9 bpm. The other 23 measures tested showed no clear change; that doesn't prove they stayed the same."
+    },
+    {
+      "scenario": "P4",
+      "label": "kept fact shapes advice in a new chat",
+      "problems": [
+        "missing any of ('night', 'shift')"
+      ],
+      "a": "Aim to go to bed in time to get enough sleep before the alarm goes off. Follow a schedule that allows a reasonable bedtime and stick to it. If you are not sleepy at the time you have to go to bed, the passage says to look at the previous suggestions about light manipulation.\n\nFrom NIOSH, CDC, not fr"
+    },
+    {
+      "scenario": "P8",
+      "label": "event used when its dates match",
+      "problems": [
+        "missing any of ('exam',)",
+        "no tool looked at 2026-08-27..2026-09-02"
+      ],
+      "a": "Sleep score showed no clear change: 78.6 against 77.4.\n\nWhat this can't tell apart: these are changes seen over the same days, not a tested cause, so your data alone can't say which of them, if any, explains it."
+    },
+    {
+      "scenario": "P9",
+      "label": "the finding became an episode",
+      "problems": [
+        "[]"
+      ],
+      "a": ""
+    },
+    {
+      "scenario": "P9",
+      "label": "earlier finding recalled",
+      "problems": [
+        "missing any of ('resting',)",
+        "missing any of ('up', 'higher', 'rose', 'risen', 'increase')",
+        "no tool of ('memory_lookup', 'search_conversations', 'recall'); ran ['request']"
+      ],
+      "a": "There's no earlier answer in this chat to say the source of."
+    }
+  ]
+}

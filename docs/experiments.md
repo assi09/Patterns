@@ -1239,3 +1239,31 @@ older checkout, and readings vary between runs). The earlier decision not to mer
 calendar-week branch rested on 23 against 6; against today's main it is within noise, and it
 keeps the weekend in every reading. The small checks' gains for every-measure wording, food and
 period names do not show on this bank.
+
+
+## PHIA and memory re-run on today's code (2026-11-23)
+
+**What it tested.** Whether the two headline results measured before #195 and the Nov 23 fixes
+still hold: PHIA 97.0% (Nov 17) and memory 77/77 (Nov 11).
+
+**PHIA holds.** B2 again, the same questions, people and key: **97.9%** (95.8–99.0) against 97.0%.
+B3, the next batch of the same frozen design (rebuilt with the same seed, which reproduces all
+2,086 frozen items exactly; none of its questions was in B1 or B2): Patterns **97.6%**, single
+agent 88.7% (Patterns +8.9 points, p < .001), chatbot 69.4%, code 99.1% (Patterns −1.5, p = .125).
+The same ordering as B2.
+
+**Memory did not hold.** 52 personal checks on `b3273f8`: **40/52** (the 25 team checks used the
+supervisor chat retired in #213). The commit before the Nov 23 fixes failed the same checks, so they
+did not cause it; on the commit before #195 (its own script) 7 personal checks already failed, so
+part of the drop is older and most came with #195. Of the 12 failures: one stale check (P6 expected
+"noticed, not a card", but a volunteered fact has been a card at once by design), one knock-on, and
+ten real. The clearest, P7: "I'm on day shifts now" made no replacement card although the listener
+hears it right; every message routed to conversation counted as read-only, statements too. #231
+fixed that rule and the stale check: **44/52**.
+
+**A new memory set of 100 cases**, worded by the large model, each for a fresh person and checked
+by code from the stored memory and the reply: **64/100 on main, 84/100 with #231**. Volunteered
+fact → card 1/15 → 14/15; a kept fact changes → replacement card 8/15 → 14/15; remember 17 → 19 of
+20; don't save, recall and forget unchanged (36/40). The same fact said again 2/10 → 1/10: since
+#218 a fact in other words gets a replacement card rather than "already kept", and 2 of 10 replied
+"I didn't keep that" to a fact that is kept, a misleading reply whose cause is not yet proven.

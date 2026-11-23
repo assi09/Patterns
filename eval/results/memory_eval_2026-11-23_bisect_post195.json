@@ -1,0 +1,132 @@
+{
+  "checks": 52,
+  "passed": 40,
+  "by_scenario": {
+    "P1": "4/5",
+    "P2": "10/11",
+    "P3": "0/1",
+    "P4": "2/3",
+    "P5": "4/4",
+    "P6": "3/5",
+    "P7": "2/4",
+    "P8": "3/4",
+    "P9": "0/2",
+    "P10": "2/2",
+    "P11": "3/3",
+    "P12": "4/4",
+    "P13": "0/1",
+    "P14": "2/2",
+    "P15": "1/1"
+  },
+  "context_tokens": {
+    "budget": 1500,
+    "median": 60,
+    "max": 1499,
+    "over_budget": 0
+  },
+  "dropped_items": 41,
+  "dropped_reasons": [
+    "over the context budget"
+  ],
+  "cost_usd": 0.2583,
+  "failures": [
+    {
+      "scenario": "P1",
+      "label": "What about just on weekends?",
+      "problems": [
+        "missing any of ('weekend',)"
+      ],
+      "a": "Daily average resting heart rate from Thu, Oct 1 to Sat, Oct 31: 62.5 bpm, from 31 days with data."
+    },
+    {
+      "scenario": "P2",
+      "label": "trip used 10 turns later",
+      "problems": [
+        "missing any of ('trip', 'travel')"
+      ],
+      "a": "Time asleep went down: 5 h 43 min against 6 h 56 min. Time in bed went down: 6 h 27 min against 7 h 46 min. Deep sleep went down: 1 h 1 min against 1 h 17 min. Light sleep went down: 3 h 14 min against 3 h 56 min.\n\nWhat this can't tell apart: these are changes seen over the same days, not a tested c"
+    },
+    {
+      "scenario": "P3",
+      "label": "recall from another chat",
+      "problems": [
+        "no tool of ('search_conversations', 'memory_lookup', 'recall'); ran ['request']",
+        "fact: the trip's dates"
+      ],
+      "a": "I'm not sure what you'd like me to look at. Which measure and which days?"
+    },
+    {
+      "scenario": "P4",
+      "label": "kept fact shapes advice in a new chat",
+      "problems": [
+        "missing any of ('night', 'shift')"
+      ],
+      "a": "Aim to go to bed in time to get enough sleep, and follow a schedule that allows a reasonable bedtime. If you keep staying up too late and missing sleep, it says to consider what kept you up and weigh that against getting enough sleep.\n\nFrom NIOSH, CDC and Sleep Foundation, not from your data."
+    },
+    {
+      "scenario": "P6",
+      "label": "once: noticed, not a card",
+      "problems": [
+        "{\"waiting\": [{\"id\": \"d4290ece-6c5f-446c-a846-f0d9664a2cf3\", \"kind\": \"routine\", \"text\": \"They cycle to work.\", \"status\": \"proposed\", \"action\": \"keep\", \"forgets\": null, \"start\": null, \"end\": null, \"createdAt\": \"2026-11-23T13:52:49.134070Z\"}], \"kept\": [{\"id\": \"3a573de7-9260-4eb1-9797-8e11a1332bba\", \"ki"
+      ],
+      "a": ""
+    },
+    {
+      "scenario": "P6",
+      "label": "found when asked",
+      "problems": [
+        "missing any of ('cycl', 'bike')"
+      ],
+      "a": "I'm not sure what you'd like me to look at. Which measure and which days?"
+    },
+    {
+      "scenario": "P7",
+      "label": "the change became a card",
+      "problems": [
+        "no card"
+      ],
+      "a": ""
+    },
+    {
+      "scenario": "P7",
+      "label": "the old fact was replaced",
+      "problems": [
+        "['They work night shifts.']"
+      ],
+      "a": ""
+    },
+    {
+      "scenario": "P8",
+      "label": "event used when its dates match",
+      "problems": [
+        "missing any of ('exam',)",
+        "no tool looked at 2026-08-27..2026-09-02"
+      ],
+      "a": "Sleep score showed no clear change: 78.6 against 77.4.\n\nWhat this can't tell apart: these are changes seen over the same days, not a tested cause, so your data alone can't say which of them, if any, explains it."
+    },
+    {
+      "scenario": "P9",
+      "label": "the finding became an episode",
+      "problems": [
+        "[]"
+      ],
+      "a": ""
+    },
+    {
+      "scenario": "P9",
+      "label": "earlier finding recalled",
+      "problems": [
+        "missing any of ('up', 'higher', 'rose', 'risen', 'increase')"
+      ],
+      "a": "Resting heart rate stayed fairly steady from Jul 27 to Nov 23, averaging 63.1 bpm with a median of 62.6 bpm."
+    },
+    {
+      "scenario": "P13",
+      "label": "a day-shift fact to reword",
+      "problems": [
+        "none kept"
+      ],
+      "a": ""
+    }
+  ]
+}
