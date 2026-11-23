@@ -978,9 +978,12 @@ def _answer(
             reply.result.summary = noted_reply(outcome)
         # A read-only request ("remind me what I said", "is it saved?") gives no permission to
         # propose a fact from its own words: a readback became a preference card (the v5 audit).
+        # Said by the reading (a recall, a status) and by how it was answered, never by the route
+        # alone: every message the router sent to conversation counted as read-only, statements
+        # too, so "I'm on day shifts now" was never listened to (the memory evaluation's P7,
+        # 2026-11-23).
         read_only = reply is not None and (
-            reply.route.action == "conversation"
-            or reply.result.stop_reason == "recalled"
+            reply.result.stop_reason == "recalled"
             or (
                 typed is not None
                 and (
