@@ -63,6 +63,7 @@ Operation = Literal[
     "correlate",
     "trend",
     "coverage",
+    "missing_dates",
     "food",
 ]
 
@@ -1055,7 +1056,10 @@ Clause types:
   of day ("that morning only" is BREAKFAST); absent means every meal they logged.
   value is one day's value; mean, median, sum, min, max are distinct; count
   needs comparison and threshold (above/over/more than >, at least >=, under/below <, at most/no
-  more than/no higher than <=, exactly/equal to ==); coverage counts days recorded. Never invent
+  more than/no higher than <=, exactly/equal to ==); coverage counts days recorded;
+  missing_dates lists which dates have no record ("which dates have no sleep record?", "which
+  days are missing?"). A follow-up asking which dates are missing after a count of recorded
+  days keeps that count's metric and days: same_as_earlier, never all_history. Never invent
   a threshold: keep their number, with threshold_unit hours when they give hours for a minutes
   metric. "My step count on Nov 5" or "what is the count?" is the value, not count.
   every_metric when they ask about every measure they have ("my full set of measurements",

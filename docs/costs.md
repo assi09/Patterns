@@ -351,3 +351,28 @@ All offline review and verification cost $0. Recommendation: stop repeated audit
 record remaining limitations; this is not a clean pass of the original zero-wrong-period gate.
 See the [final audit report](independent-audit-910da27-final.md) and
 [deferred issues](pr-195-followup-issues.md). No further paid audit is planned.
+
+### November 22, 2026 — Fitbit core scenario replay
+
+492 frozen public-Fitbit scenarios, 16 scripted controls, 11 separate supervisor wording probes and
+one corrected food fixture. Authorized maximum $6.50. Recorded usage: OpenAI $3.404335360 and
+Jev $0.060678534, total **$3.465013894**. Outstanding provider reservations **$0.120245250**
+give an upper bound of **$3.585259144**. Reported usage is metered cost, pending provider billing
+reconciliation. Local statistics and phone-width rendering cost $0. [Results](fitbit-replay-results.md).
+
+### November 23, 2026 — reader-only check of picks by order
+
+`eval/reference_pick.py` on branch `fix/reference-by-order` (`1d39a87`): only the reader, on the
+third turn of the replay's 66 step-total conversations, twice each (132 readings). Jobs frozen and
+hashed before reading (`0364b979…`), cap $0.55, approved by Karim. Recorded usage
+**$0.423755**, all 132 read, nothing rerun. No paid judge, no Google traffic.
+[Results](experiments.md#picking-an-earlier-week-by-order-2026-11-23).
+
+### November 23, 2026 — chat check of which dates are missing
+
+`eval/missing_dates_check.py` on branch `fix/missing-dates` (`2d1108a`): 20 reserved
+missing-night weeks from the Fitbit replay's bank, two turns each through `/chat` in fresh
+wordings, the real model, router and guard, no Google traffic. Frozen and hashed before running
+(`a39b4d22…`), cap $0.40, approved by Karim. Recorded usage: OpenAI $0.157421, Jev $0.003696,
+total **$0.161117**, 97 calls, nothing rerun.
+[Results](experiments.md#which-dates-are-missing-through-the-chat-2026-11-23).
