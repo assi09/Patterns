@@ -352,6 +352,13 @@ record remaining limitations; this is not a clean pass of the original zero-wron
 See the [final audit report](independent-audit-910da27-final.md) and
 [deferred issues](pr-195-followup-issues.md). No further paid audit is planned.
 
+### November 23, 2026 — reader check of follow-ups with each result's question shown
+
+`eval/reader_followups.py` on branch `fix/results-with-questions`: only the reader, on the replay's
+third turns (steps 66, resting heart rate 62, sleep 47) and a 44-reading opening-week control.
+Frozen and hashed first (`e4eebf5d…`), cap $0.95. Recorded usage **$0.500423**, all 219 read.
+[Results](experiments.md#each-earlier-result-shown-with-its-question-2026-11-23).
+
 ### November 22, 2026 — Fitbit core scenario replay
 
 492 frozen public-Fitbit scenarios, 16 scripted controls, 11 separate supervisor wording probes and

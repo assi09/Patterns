@@ -1042,6 +1042,33 @@ database state were outside that replay. See the [audit](test-results.md#later-p
 [implementation plan](plan.md#agent-reliability-priorities-as-of-november-19) and [spend record](costs.md).
 
 
+## Each earlier result shown with its question (2026-11-23)
+
+**What it tested.** The replay's traces showed the reader each earlier result apart from the
+questions, labelled "last" and "older". Branch `fix/results-with-questions` showed each result
+beside the question that asked for it, with a neutral `in_last_answer` flag. Reader only, on the
+replay's third turns, graded against the bank's key. $0.50.
+
+| Third turn | Now | Replay |
+|---|---:|---:|
+| Steps: "For that earlier week, just Monday to Friday?" | 32/66 | 2/66 |
+| Resting heart rate: "Just that earlier weekend?" | 12/62 | 23/62 |
+| Sleep: "Now average the full week before that week." | 26/47 | 43/47 |
+| Control: "Now the first week I asked about, Monday to Friday only." | 23/44 | — |
+
+**What it showed.** A trade, not a fix (70/175 against 68/175 on the three families). Two causes
+are separate. (1) Which week "that earlier" means: on the weekend wording the reader still chose
+the opening week in most readings, with the questions in view; the small reader model reads
+"earlier" as earlier in the chat. (2) A gap in what a period can say: "the full week before that
+week" after a weekend result needs the calendar week that contains an earlier result. There is no
+such period, so the reader counts days from whichever result it picks; with the questions shown
+it picked the weekend more often (21 of 47), and the count from the weekend is the wrong week.
+
+**What it changed.** Not merged. The next change gives periods the calendar week containing an
+earlier result, and a weekday or weekend part of it, so that any referent in that week gives the
+same days.
+
+
 ## Picking an earlier week by order (2026-11-23)
 
 **What it tested.** In the Fitbit replay, "For that earlier week, just Monday to Friday?" after
