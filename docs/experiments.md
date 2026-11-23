@@ -1098,3 +1098,25 @@ whenever the request is read as a list of dates. What remains is the reading: a 
 "missing" or "dates" ("nothing recorded") can still go to an investigation. 20 weeks and nine
 wordings show the fix works for most phrasings; they are no proof for every one, and the
 replay's 0/43 used another wording, so the two are not a controlled before and after.
+
+
+## Recalling what was said in this chat (2026-11-23)
+
+**What it tested.** The Fitbit replay's control P4: "What day did I just mention?" after "Just
+for this chat I plan to walk on Friday. Don't save it." was read as outside the app, or sent back
+twice. Code already answers a this-chat recall correctly, from the conversation; the reading was
+wrong. The reader's own definitions disagreed: memory was "what the app keeps about them", and
+something said with "don't save" is not kept. Branch `fix/chat-recall` defines memory as what
+they told the app, kept or said earlier in this chat, and "don't save" as not kept after the
+chat, still part of it. 15 made-up turns in fresh wordings, read on both versions. $0.07.
+
+| Second turn | main | fix |
+|---|---:|---:|
+| Something said with "don't save" or "just for this chat", then asked about | 0/8 | 7/8 |
+| Something said plainly, then asked about | 0/4 | 3/4 |
+| Questions about saved memory (control) | 2/3 | 2/3 |
+
+**What it showed.** On main no question about the conversation was read as recall (clarify or
+other, all 12). With the definitions consistent, 10 of 12, and the controls are unchanged; their
+miss on both versions is "Is anything waiting for my approval?" read as a question about a
+waiting entry card. 15 turns of one kind: a check of this distinction, not a broad score.

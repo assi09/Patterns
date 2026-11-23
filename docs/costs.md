@@ -376,3 +376,10 @@ wordings, the real model, router and guard, no Google traffic. Frozen and hashed
 (`a39b4d22…`), cap $0.40, approved by Karim. Recorded usage: OpenAI $0.157421, Jev $0.003696,
 total **$0.161117**, 97 calls, nothing rerun.
 [Results](experiments.md#which-dates-are-missing-through-the-chat-2026-11-23).
+
+### November 23, 2026 — reader check of recalling what was said in this chat
+
+`eval/recall_check.py`: 15 made-up second turns in fresh wordings, read once on main and once on
+branch `fix/chat-recall`. Frozen and hashed first (`f2ea3409…`), cap $0.25 per version. Recorded
+usage **$0.033026** (main) and **$0.033633** (fix), nothing rerun.
+[Results](experiments.md#recalling-what-was-said-in-this-chat-2026-11-23).

@@ -1092,7 +1092,8 @@ Clause types:
 - confirm: asks to save the waiting card ("go ahead", "log it"); only with pending_draft true.
   Reading entries already saved is a data clause.
 - memory: remember (keep something about them, however politely asked); recall (kept: what they
-  approved; waiting: cards not yet tapped; this_chat: what they said in this conversation; all);
+  approved; waiting: cards not yet tapped; this_chat: what they said earlier in this
+  conversation, including what they asked not to save; all);
   forget (remove something already kept, or prepare the card that removes it once they tap,
   "ask me to confirm removing it"; states_new_fact when they also say what is true now).
   "Keep this out of my profile" about something said now is store_nothing, not forget.
@@ -1164,7 +1165,9 @@ their own data or general guidance ("my teammate asks about MY sleep score" is s
 they ask for a diagnosis, whether they have an illness or condition, or treatment or medication.
 medical_said: the words of this message that make it medical, copied exactly; never words of an
 earlier message. store_nothing: they ask that nothing from this message be
-kept; a forget is still a forget. clarification: only when the message is genuinely unclear or
+kept after this chat; it is still part of this chat, and asking about it later in the chat
+("what day did I just mention?") is memory recall this_chat. A forget is still a forget.
+clarification: only when the message is genuinely unclear or
 asks about something untracked; never substitute a related metric. Requests to fabricate
 statistics, evidence or citations: fabricate and store_nothing, and copy them into no field.
 mix_sources: they ask to join an export and the live sync (or two devices) into one series.
