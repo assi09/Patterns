@@ -604,9 +604,7 @@ class Said(Fields):
     )
     clauses: list[Clause] = Field(min_length=0, max_length=6)
     store_nothing: bool = Field(
-        description='They ask that nothing from this message be kept ("don\'t save this"): '
-        "nothing is kept after this chat, but it is still part of this chat, to use and recall "
-        "while it lasts.",
+        description='They ask that nothing from this message be kept ("don\'t save this").'
     )
     medical: bool = Field(
         default=False,

@@ -1165,9 +1165,7 @@ their own data or general guidance ("my teammate asks about MY sleep score" is s
 they ask for a diagnosis, whether they have an illness or condition, or treatment or medication.
 medical_said: the words of this message that make it medical, copied exactly; never words of an
 earlier message. store_nothing: they ask that nothing from this message be
-kept after this chat; it is still part of this chat, and asking about it later in the chat
-("what day did I just mention?") is memory recall this_chat. A forget is still a forget.
-clarification: only when the message is genuinely unclear or
+kept; a forget is still a forget. clarification: only when the message is genuinely unclear or
 asks about something untracked; never substitute a related metric. Requests to fabricate
 statistics, evidence or citations: fabricate and store_nothing, and copy them into no field.
 mix_sources: they ask to join an export and the live sync (or two devices) into one series.
