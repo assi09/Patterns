@@ -18,6 +18,7 @@ from app.api import (
     actions,
     alarms,
     auth,
+    calendar,
     chat,
     checkins,
     data,
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(actions.router)
     app.include_router(alarms.router)
     app.include_router(auth.router)
+    app.include_router(calendar.router)
     app.include_router(chat.router)
     app.include_router(checkins.router)
     app.include_router(google.router)

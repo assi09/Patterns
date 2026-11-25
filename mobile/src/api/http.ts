@@ -26,7 +26,10 @@ import type {
   PulseToday,
   TeamPulse,
   Inbox,
+  CalendarDay,
+  CalendarStatus,
   Membership,
+  TeamCalendar,
   OwnCheckin,
   ReceivedCheckin,
   MetricSeries,
@@ -209,6 +212,13 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         consentVersion,
       }),
     getMyCheckins: () => request<OwnCheckin[]>(baseUrl, '/me/checkins'),
+    getCalendarStatus: () => request<CalendarStatus>(baseUrl, '/calendar/status'),
+    getMyCalendar: () => request<CalendarDay[]>(baseUrl, '/me/calendar'),
+    getTeamCalendar: (teamId, week) =>
+      request<TeamCalendar>(
+        baseUrl,
+        `/teams/${encodeURIComponent(teamId)}/calendar${week ? `?week=${week}` : ''}`,
+      ),
     withdrawCheckin: (id) =>
       post<OwnCheckin>(baseUrl, `/me/checkins/${encodeURIComponent(id)}/withdraw`),
     getReceivedCheckins: () => request<ReceivedCheckin[]>(baseUrl, '/checkins'),

@@ -537,6 +537,49 @@ export interface CheckinMark {
   markedAt: ISODateTime | null;
 }
 
+/** The calendar: read-only, kept as daily counts, never events (backend/app/sync/calendar.py). */
+export interface CalendarStatus {
+  connected: boolean;
+  lastSync: ISODateTime | null;
+  lastError: string | null;
+  days: number;
+}
+
+export interface CalendarDay {
+  date: ISODate;
+  meetingMinutes: number;
+  meetings: number;
+  afterHoursMinutes: number;
+  backToBack: number;
+  focusMinutes: number;
+  outOfOffice: number;
+}
+
+/** One team calendar figure, built from at least `minimumMembers` people or not at all. */
+export interface TeamCalendarMetric {
+  metric: string;
+  label: string;
+  unit: 'min' | 'count';
+  members: number;
+  sufficient: boolean;
+  medianWeek?: number | null; // per person, this week
+  q1Week?: number | null;
+  q3Week?: number | null;
+  medianChange?: number | null; // against each person's own usual week
+  membersUp?: number | null;
+  membersDown?: number | null;
+  medianPlanned?: number | null; // next week, as planned so far
+  evidenceId: string;
+}
+
+export interface TeamCalendar {
+  week: Window;
+  connected: number; // members with a connected calendar
+  minimumMembers: number;
+  metrics: TeamCalendarMetric[];
+  generatedAt: ISODateTime;
+}
+
 /** A sent alert as HR or the supervisor sees it: who, which team, when; never why. */
 export interface ReceivedCheckin {
   id: string;
@@ -715,7 +758,9 @@ export interface ApiClient {
   getAccessRequests(): Promise<AccessRequest[]>; // admins only
   decideAccessRequest(id: string, approve: boolean, role?: Account['role']): Promise<Account>; // admins only; role on approval, member by default
   getGoogleStatus(): Promise<GoogleStatus>;
-  connectGoogle(capability?: 'food_logging' | 'workout_logging'): Promise<{ url: string }>; // Google's sign-in page; it returns to /settings
+  connectGoogle(
+    capability?: 'food_logging' | 'workout_logging' | 'calendar',
+  ): Promise<{ url: string }>; // Google's sign-in page; it returns to /settings
   // The app calls it by itself (open, focus, pull to refresh); the server starts a sync only when
   // the last one began over 10 minutes ago, unless `force` (Settings' "Sync now").
   syncGoogle(options?: { force?: boolean }): Promise<GoogleStatus>;
@@ -773,6 +818,9 @@ export interface ApiClient {
   shareTeamLevels(teamId: string, share: boolean, consentVersion?: string): Promise<Membership>;
   shareTeamCheckin(teamId: string, share: boolean, consentVersion?: string): Promise<Membership>;
   getMyCheckins(): Promise<OwnCheckin[]>;
+  getCalendarStatus(): Promise<CalendarStatus>;
+  getMyCalendar(): Promise<CalendarDay[]>;
+  getTeamCalendar(teamId: string, week?: ISODate): Promise<TeamCalendar>; // supervisors
   withdrawCheckin(id: string): Promise<OwnCheckin>;
   getReceivedCheckins(): Promise<ReceivedCheckin[]>; // HR and supervisors
   openCheckin(id: string): Promise<ReceivedCheckin>;

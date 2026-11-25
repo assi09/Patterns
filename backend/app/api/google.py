@@ -29,7 +29,7 @@ from app.api.chat import Sessions, get_sessions
 from app.api.errors import ApiError
 from app.config import settings
 from app.db.models import GoogleConnection, SyncRun, User
-from app.sync import connections
+from app.sync import calendar, connections
 from app.sync.client import HealthClient
 from app.sync.connections import OAuth, SignIns, Syncs, TokenBox
 from app.sync.google_auth import SCOPES, OAuthClient, SyncError
@@ -80,10 +80,13 @@ def _status(db, user: User) -> schemas.GoogleStatus:
 
 
 def _start_sync(google: GoogleParts, sessions: Sessions, user: User, today: date) -> None:
-    syncs.start(
-        user.id,
-        lambda: connections.sync(sessions, google.box, user.id, google.health_for, today),
-    )
+    syncs.start(user.id, lambda: sync_everything(google, sessions, user.id, today))
+
+
+def sync_everything(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
+    """Google Health, then the calendar if the person allowed it (app/sync/calendar.py)."""
+    connections.sync(sessions, google.box, user_id, google.health_for, today)
+    calendar.sync_person(sessions, google.box, user_id, today, settings.timezone)
 
 
 @router.get("/status", response_model=schemas.GoogleStatus)
@@ -92,7 +95,7 @@ def google_status(db: Db, user: Person) -> schemas.GoogleStatus:
 
 
 class ConnectOptions(schemas.ApiModel):
-    capability: Literal["food_logging", "workout_logging"]
+    capability: Literal["food_logging", "workout_logging", "calendar"]
 
 
 @router.post("/connect", response_model=schemas.ConnectStart)
@@ -101,9 +104,11 @@ def connect(
 ) -> schemas.ConnectStart:
     scopes = set(SCOPES)
     connection = db.get(GoogleConnection, user.id)
-    if connection is not None:
-        scopes.update(set(connection.scopes) & set(WRITE_SCOPES.values()))
-    if body is not None:
+    if connection is not None:  # a reconnect keeps what the person allowed before
+        scopes.update(set(connection.scopes) & (set(WRITE_SCOPES.values()) | {calendar.SCOPE}))
+    if body is not None and body.capability == "calendar":
+        scopes.add(calendar.SCOPE)
+    elif body is not None:
         scopes.add(WRITE_SCOPES["food" if body.capability == "food_logging" else "workout"])
     return schemas.ConnectStart(
         url=sign_ins.start(google.oauth, user.id, clock, tuple(sorted(scopes)))
