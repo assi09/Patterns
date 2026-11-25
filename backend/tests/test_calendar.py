@@ -526,8 +526,8 @@ def test_the_calendar_keeps_syncing_when_google_health_has_expired(engine, box, 
     with session_scope(engine) as db:
         runs = db.scalars(select(SyncRun).where(SyncRun.user_id == person_id)).all()
     assert [(r.source, r.status) for r in runs] == [(calendar.SOURCE, "succeeded")]
-    assert background.start_due_syncs(now + timedelta(hours=1), sessions) == 0  # not again so soon
-    assert background.start_due_syncs(now + timedelta(hours=4), sessions) == 1  # but later, yes
+    assert background.start_due_syncs(now + timedelta(minutes=20), sessions) == 0  # not so soon
+    assert background.start_due_syncs(now + timedelta(minutes=40), sessions) == 1  # every 30 min
 
 
 def test_google_health_keeps_syncing_after_the_calendar_is_disconnected(
