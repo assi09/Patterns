@@ -29,6 +29,14 @@ without redesigning the rest. **Current** marks what is built; the others are ke
 - **The current HR contact stays until the replacement accepts.** Once they do, the former contact
   loses access to the team's alerts at once (the role rule below). A new invitation replaces a
   waiting one; removing the contact clears both.
+- **Only the current link works, even under overlapping requests.** The database holds one open
+  invitation per team, and issuing, replacing and accepting take turns on the team's row, each
+  acting on the row as it is once its turn comes (never on what it loaded before waiting). Two
+  invitations sent at the same moment both succeed, the second replacing the first, so only its
+  link works; a link accepted while a replacement is being issued finds itself replaced and
+  changes nothing; a removal that waited on an acceptance still removes. Without the turns, the
+  one-open-invitation index alone still refuses an overlapping second invitation (its request is
+  told to retry). `tests/test_hr_invite_postgres.py` checks each on PostgreSQL with two sessions.
 - A wrong address, an expired link or a link already used creates no account and claims nothing.
   An existing account that is not HR is never converted quietly; the owner can still set roles
   (`python -m app.auth set-role <email> hr`).

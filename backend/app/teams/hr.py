@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from html import escape
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError
@@ -62,6 +63,19 @@ def invite_email(team: Team, supervisor: User, to: str, link: str) -> Email:
     return Email(to=to, subject=f"Become the HR contact for {team.name}", text=text, html=html)
 
 
+def _lock(db: Session, team_id) -> Team:
+    """Issuing, replacing and accepting a team's invitation take turns on the team's row, so only
+    the current link can change the HR contact (PostgreSQL; SQLite runs one writer at a time).
+    Returns the whole row as it is once the lock is held, refreshed over anything this session
+    loaded before waiting, so a change is never made on a stale HR assignment."""
+    return db.execute(
+        select(Team)
+        .where(Team.id == team_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one()
+
+
 def set_contact(
     db: Session,
     team: Team,
@@ -71,7 +85,9 @@ def set_contact(
     mailer: Mailer,
     app_url: str,
 ) -> tuple[str | None, bool]:
-    """Names, invites or removes the team's HR contact; returns (email, invited)."""
+    """Names, invites or removes the team's HR contact; returns (email, invited). Any earlier
+    open invitation for the team stops working, so only the latest link can be accepted."""
+    team = _lock(db, team.id)
     db.execute(delete(HrInvite).where(HrInvite.team_id == team.id, HrInvite.accepted_at.is_(None)))
     if email is None or not email.strip():
         team.hr_id = None
@@ -102,6 +118,14 @@ def set_contact(
             expires_at=now + timedelta(days=INVITE_DAYS),
         )
     )
+    try:
+        db.flush()  # the one-open-invitation index refuses an overlapping second
+    except IntegrityError:
+        raise ApiError(
+            409,
+            "changed_meanwhile",
+            "The team's HR contact was changed at the same time. Look again and retry.",
+        ) from None
     link = f"{app_url.rstrip('/')}/sign-up?hr={token}"
     try:
         mailer.send(invite_email(team, supervisor, email, link))
@@ -112,8 +136,15 @@ def set_contact(
 
 
 def accept(db: Session, user: User, token: str, now: datetime) -> Team:
-    """Makes a new account the HR contact its invitation was for."""
-    invite = db.scalar(select(HrInvite).where(HrInvite.token_hash == _hash(token)))
+    """Makes a new account the HR contact its invitation was for, if that invitation is still the
+    team's current one once the team is locked: a link replaced meanwhile no longer works."""
+    found = db.scalar(select(HrInvite.team_id).where(HrInvite.token_hash == _hash(token)))
+    locked = _lock(db, found) if found is not None else None
+    invite = db.scalar(
+        select(HrInvite)
+        .where(HrInvite.token_hash == _hash(token))
+        .execution_options(populate_existing=True)
+    )
     if (
         invite is None
         or invite.accepted_at is not None
@@ -122,7 +153,7 @@ def accept(db: Session, user: User, token: str, now: datetime) -> Team:
         raise ApiError(400, "invite_invalid", "This invitation has expired or was already used.")
     if user.email != invite.email:
         raise ApiError(400, "invite_other_email", "This invitation is for another email address.")
-    team = db.get(Team, invite.team_id)
+    team = locked  # the row as it is under the lock
     user.status, user.role, user.decided_at = "approved", "hr", now
     team.hr_id = user.id
     invite.accepted_at = now

@@ -299,6 +299,7 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 409 | `already_member` |
 | 409 | `already_sent` |
 | 409 | `busy` |
+| 409 | `changed_meanwhile` |
 | 409 | `consent_changed` |
 | 409 | `duplicate_log` |
 | 409 | `email_taken` |
