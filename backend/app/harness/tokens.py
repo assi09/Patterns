@@ -3,7 +3,7 @@
 import hashlib
 import secrets
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -12,6 +12,7 @@ from app.api.errors import ApiError
 from app.db.models import AccessToken, HarnessCall, User
 
 PREFIX = "pat_"  # so a leaked token is recognisable in logs and scanners
+OAUTH_PREFIX = "oat_"  # an OAuth access token (app.harness.oauth.ACCESS_PREFIX)
 MAX_TOKENS = 5  # per person, so an old one is revoked before many pile up
 
 
@@ -22,7 +23,11 @@ def _hash(token: str) -> str:
 def make(db: Session, user: User, name: str, now: datetime) -> tuple[AccessToken, str]:
     """A new token for the person; the token itself is returned once and never stored."""
     active = db.scalars(
-        select(AccessToken).where(AccessToken.user_id == user.id, AccessToken.revoked_at.is_(None))
+        select(AccessToken).where(
+            AccessToken.user_id == user.id,
+            AccessToken.revoked_at.is_(None),
+            AccessToken.client_id.is_(None),  # OAuth sign-ins are one per assistant instead
+        )
     ).all()
     if len(active) >= MAX_TOKENS:
         raise ApiError(409, "too_many_tokens", f"Revoke a token first: at most {MAX_TOKENS}.")
@@ -58,12 +63,17 @@ def revoke(db: Session, user: User, token_id: str, now: datetime) -> AccessToken
 
 
 def holder(db: Session, token: str, now: datetime) -> tuple[User, AccessToken] | None:
-    """The approved account a live token belongs to, recording its use; None otherwise."""
-    if not token.startswith(PREFIX):
+    """The approved account a live token belongs to, recording its use; None otherwise. Takes a
+    pasted token or an OAuth access token (`app.harness.oauth`), which also has to be unexpired."""
+    if not token.startswith((PREFIX, OAUTH_PREFIX)):
         return None
     row = db.scalar(select(AccessToken).where(AccessToken.token_hash == _hash(token)))
     if row is None or row.revoked_at is not None:
         return None
+    if row.expires_at is not None:
+        expires = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=UTC)
+        if expires <= now:
+            return None
     user = db.get(User, row.user_id)
     if user is None or user.status != "approved":
         return None

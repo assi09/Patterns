@@ -50,7 +50,7 @@ class TokenCheck:
             user, row = found
             return AccessToken(
                 token="",  # never kept or logged
-                client_id="patterns-personal-token",
+                client_id=row.client_id or "patterns-personal-token",
                 scopes=[],
                 subject=str(user.id),
                 claims={"token_id": str(row.id)},
@@ -212,6 +212,31 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
         )
 
     return server
+
+
+def oauth_routes(sessions: Sessions, public_url: str, app_url: str) -> list:
+    """The OAuth routes, at the API's root where assistants look for them: the two metadata
+    documents, client registration, /authorize, /token and /revoke (docs/mcp.md)."""
+    from mcp.server.auth.routes import create_auth_routes, create_protected_resource_routes
+    from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
+    from pydantic import AnyHttpUrl
+
+    from app.harness import oauth
+
+    base = public_url.rstrip("/")
+    return create_auth_routes(
+        provider=oauth.PatternsOAuth(sessions, app_url),
+        issuer_url=AnyHttpUrl(base),
+        client_registration_options=ClientRegistrationOptions(
+            enabled=True, valid_scopes=[oauth.SCOPE], default_scopes=[oauth.SCOPE]
+        ),
+        revocation_options=RevocationOptions(enabled=True),
+    ) + create_protected_resource_routes(
+        resource_url=AnyHttpUrl(f"{base}/mcp"),
+        authorization_servers=[AnyHttpUrl(base)],
+        scopes_supported=[oauth.SCOPE],
+        resource_name="Patterns",
+    )
 
 
 def asgi_app(server: MCPServer, public_url: str):

@@ -10,7 +10,7 @@ from pydantic import Field
 from app.api.auth import Db, Now, approved_user
 from app.api.schemas import ApiModel
 from app.db.models import AccessToken, HarnessSubmission, User
-from app.harness import approvals, tokens
+from app.harness import approvals, oauth, tokens
 
 router = APIRouter(tags=["harness"])
 Person = Annotated[User, Depends(approved_user)]
@@ -34,6 +34,8 @@ class TokenOut(ApiModel):
     revoked_at: datetime | None
     # What the harness did with it in the last 24 hours: tool names and counts, never data.
     activity: list[ToolCount] = []
+    # True when the assistant signed in (OAuth) rather than being given a pasted token.
+    signed_in: bool = False
 
 
 class MadeToken(TokenOut):
@@ -56,6 +58,7 @@ def _token(row: AccessToken) -> TokenOut:
         created_at=row.created_at,
         last_used_at=row.last_used_at,
         revoked_at=row.revoked_at,
+        signed_in=row.client_id is not None,
     )
 
 
@@ -113,3 +116,32 @@ def approve(submission_id: str, db: Db, clock: Now, user: Person) -> SubmissionO
 @router.post("/me/harness/{submission_id}/decline", response_model=SubmissionOut)
 def decline(submission_id: str, db: Db, clock: Now, user: Person) -> SubmissionOut:
     return _submission(approvals.decline(db, user, submission_id, clock))
+
+
+# --- OAuth sign-in: the app's Allow page (docs/mcp.md) ---------------------------------------
+
+
+class ConnectRequestOut(ApiModel):
+    client_name: str  # the assistant's own claim
+    redirect_host: str  # where the answer is sent: what the person should check
+    expires_at: datetime
+
+
+class ConnectDecisionIn(ApiModel):
+    allow: bool
+
+
+class ConnectDecisionOut(ApiModel):
+    redirect_to: str
+
+
+@router.get("/oauth/requests/{request_id}", response_model=ConnectRequestOut)
+def connect_request(request_id: str, db: Db, user: Person) -> ConnectRequestOut:
+    return ConnectRequestOut(**oauth.describe(db, request_id))
+
+
+@router.post("/oauth/requests/{request_id}", response_model=ConnectDecisionOut)
+def decide_connect_request(
+    request_id: str, body: ConnectDecisionIn, db: Db, user: Person
+) -> ConnectDecisionOut:
+    return ConnectDecisionOut(redirect_to=oauth.decide(db, user, request_id, body.allow))
