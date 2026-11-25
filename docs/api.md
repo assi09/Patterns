@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-98 operations, grouped by area.
+99 operations, grouped by area.
 
 ### meta
 
@@ -138,6 +138,7 @@ Besides the codes listed under [Error codes](#error-codes):
 | Method | Path | Access | Parameters | Body | Returns | Notes |
 |---|---|---|---|---|---|---|
 | `GET` | `/calendar/status` | approved |  |  | [CalendarStatus](#calendarstatus) |  |
+| `POST` | `/calendar/disconnect` | approved |  |  | [CalendarStatus](#calendarstatus) | Forgets the calendar sign-in only; Google Health is left alone. The days already synced stay, as for Google Health. |
 | `GET` | `/me/calendar` | approved |  |  | list[[CalendarDay](#calendarday)] | The person's own daily counts: the last four weeks and what is planned ahead. |
 | `GET` | `/teams/{team_id}/calendar` | supervisor | `team_id`, `week`? |  | [TeamCalendar](#teamcalendar) | The team's meeting load for a Monday-to-Sunday week (the last full one by default). |
 

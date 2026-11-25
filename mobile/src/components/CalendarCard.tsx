@@ -41,20 +41,42 @@ export function CalendarCard() {
     setOpening(false);
   }
 
+  async function disconnect() {
+    setError(null);
+    try {
+      await api.disconnectCalendar();
+      await client.invalidateQueries({ queryKey: keys.calendar });
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Could not disconnect.');
+    }
+  }
+
   if (calendar?.connected) {
     return (
-      <Row
-        icon="calendar-outline"
-        title={calendar.lastError ? 'The latest calendar sync failed' : 'Google Calendar connected'}
-        tone={calendar.lastError ? 'danger' : undefined}
-        detail={
-          calendar.lastError
-            ? `${calendar.lastError}${calendar.lastSync ? ` Last good sync ${timeAgo(calendar.lastSync)}.` : ''} It tries again within three hours.`
-            : calendar.lastSync
-              ? `${calendar.days} days of meeting load · synced ${timeAgo(calendar.lastSync)}`
-              : 'Reading your calendar…'
-        }
-      />
+      <View>
+        <Row
+          icon="calendar-outline"
+          title={
+            calendar.lastError ? 'The latest calendar sync failed' : 'Google Calendar connected'
+          }
+          tone={calendar.lastError ? 'danger' : undefined}
+          detail={
+            calendar.lastError
+              ? `${calendar.lastError}${calendar.lastSync ? ` Last good sync ${timeAgo(calendar.lastSync)}.` : ''} It tries again within three hours.`
+              : calendar.lastSync
+                ? `${calendar.days} days of meeting load · synced ${timeAgo(calendar.lastSync)}`
+                : 'Reading your calendar…'
+          }
+        />
+        <Row
+          icon="close-circle-outline"
+          title="Disconnect Google Calendar"
+          detail="Stops reading your calendar; Google Health stays connected. Synced days are kept."
+          tone="danger"
+          onPress={disconnect}
+        />
+        {error ? <Text color="danger">{error}</Text> : null}
+      </View>
     );
   }
   return (

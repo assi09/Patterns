@@ -18,7 +18,7 @@ from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
 from app.api.teams import Supervisor
 from app.db.daily import load_daily
-from app.db.models import DailyMetric, GoogleConnection, SyncRun, User
+from app.db.models import DailyMetric, SyncRun, User
 from app.sync import calendar
 from app.teams import memberships as teams
 
@@ -29,7 +29,7 @@ OWN_DAYS_BACK = 28
 
 @router.get("/calendar/status", response_model=schemas.CalendarStatus)
 def calendar_status(db: Db, user: Person) -> schemas.CalendarStatus:
-    connection = db.get(GoogleConnection, user.id)
+    connection = calendar.connection_for(db, user.id)
     runs = select(SyncRun).where(SyncRun.user_id == user.id, SyncRun.source == calendar.SOURCE)
     latest = db.scalar(runs.order_by(SyncRun.started_at.desc()).limit(1))
     synced = db.scalar(
@@ -45,11 +45,22 @@ def calendar_status(db: Db, user: Person) -> schemas.CalendarStatus:
         )
     )
     return schemas.CalendarStatus(
-        connected=calendar.has_scope(connection) and connection.status == "active",
+        connected=connection is not None and connection.status == "active",
         last_sync=synced,
         last_error=latest.error if latest and latest.status == "failed" else None,
         days=days or 0,
     )
+
+
+@router.post("/calendar/disconnect", response_model=schemas.CalendarStatus)
+def disconnect(db: Db, user: Person) -> schemas.CalendarStatus:
+    """Forgets the calendar sign-in only; Google Health is left alone. The days already synced
+    stay, as for Google Health."""
+    connection = calendar.connection_for(db, user.id)
+    if connection is not None:
+        db.delete(connection)
+        db.flush()
+    return calendar_status(db, user)
 
 
 @router.get("/me/calendar", response_model=list[schemas.CalendarDay])

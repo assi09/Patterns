@@ -435,3 +435,30 @@ def test_a_partly_granted_sign_in_is_accepted(monkeypatch):
     )
     oauth.exchange("code", "verifier")
     assert seen["relaxed"] == "1"
+
+
+def test_a_sync_refused_before_any_day_is_shown_as_failed(engine, box):
+    """Regression: when Google refused the first request (here: a sign-in carrying a scope the
+    Health API does not allow), nothing was recorded, so the app kept saying the data was on its
+    way. Now a failed run says why."""
+    from app.sync.client import ApiError
+
+    class Refused:
+        def __init__(self, token):
+            pass
+
+        def daily_rollup(self, data_type, start, end):
+            raise ApiError("Google Health denied access (disallowed OAuth scope).", 403)
+
+    with session_scope(engine) as session:
+        person = User(email="p@example.com", status="approved")
+        session.add(person)
+        session.flush()
+        connections.save_connection(session, box, person.id, credentials())
+        person_id = person.id
+    connections.sync(lambda: session_scope(engine), box, person_id, Refused, TODAY)
+    with session_scope(engine) as session:
+        run = session.scalar(select(SyncRun).where(SyncRun.user_id == person_id))
+        assert run.status == "failed" and "denied access" in run.error
+        shown = connections.status(session, person_id)
+    assert "denied access" in shown["last_error"]

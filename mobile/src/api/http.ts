@@ -214,6 +214,7 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       }),
     getMyCheckins: () => request<OwnCheckin[]>(baseUrl, '/me/checkins'),
     getCalendarStatus: () => request<CalendarStatus>(baseUrl, '/calendar/status'),
+    disconnectCalendar: () => post<CalendarStatus>(baseUrl, '/calendar/disconnect'),
     getMyCalendar: () => request<CalendarDay[]>(baseUrl, '/me/calendar'),
     getTeamCalendar: (teamId, week) =>
       request<TeamCalendar>(
