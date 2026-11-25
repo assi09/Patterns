@@ -1086,6 +1086,16 @@ class HrInvite(Base):
     """
 
     __tablename__ = "hr_invites"
+    __table_args__ = (
+        # One open invitation per team: two that overlap cannot both stay valid.
+        Index(
+            "uq_hr_invites_open_team",
+            "team_id",
+            unique=True,
+            sqlite_where=text("accepted_at IS NULL"),
+            postgresql_where=text("accepted_at IS NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     team_id: Mapped[uuid.UUID] = mapped_column(
