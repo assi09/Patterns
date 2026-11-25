@@ -44,6 +44,7 @@ import type {
   SignedIn,
   Strain,
   TeamPreview,
+  CalendarStatus,
   Membership,
   TeamObserved,
   OwnCheckin,
@@ -60,6 +61,13 @@ import type {
 
 const DAYS = 28;
 const LATENCY_MS = 400;
+
+/** "Nov 25", as the backend names a dated reading. */
+function shortDay(daysAgo: number): string {
+  const day = new Date();
+  day.setDate(day.getDate() - daysAgo);
+  return day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 export function isoDate(daysAgo: number): ISODate {
   const date = new Date();
@@ -1001,6 +1009,51 @@ let myTeams: Membership[] = [];
 // Check-in alerts (docs/escalation.md), made up. Turning them on here raises a sample alert at
 // once, so the screens can be seen; the real rule needs a sustained, extreme week.
 let myCheckins: OwnCheckin[] = [];
+let calendarStatus: CalendarStatus = { connected: false, lastSync: null, lastError: null, days: 0 };
+
+/** Made-up team meeting load, aggregates only, as the backend would build it. */
+function mockTeamCalendar() {
+  const monday = new Date();
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7) - 7);
+  const day = (offset: number) =>
+    new Date(monday.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+  const metric = (
+    name: string,
+    label: string,
+    unit: 'min' | 'count',
+    week: number,
+    change: number,
+    up: number,
+    planned: number,
+  ) => ({
+    metric: name,
+    label,
+    unit,
+    members: 7,
+    sufficient: true,
+    medianWeek: week,
+    q1Week: Math.round(week * 0.7),
+    q3Week: Math.round(week * 1.3),
+    medianChange: change,
+    membersUp: up,
+    membersDown: 7 - up - 1,
+    medianPlanned: planned,
+    evidenceId: `cal-${name}`,
+  });
+  return {
+    week: { start: day(0), end: day(6) },
+    connected: 7,
+    minimumMembers: 5,
+    metrics: [
+      metric('meeting_minutes', 'Time in meetings', 'min', 960, 210, 5, 1080),
+      metric('after_hours_minutes', 'Meetings after hours', 'min', 120, 75, 4, 150),
+      metric('back_to_back', 'Back-to-back meetings', 'count', 9, 4, 5, 11),
+      metric('meetings', 'Meetings', 'count', 17, 3, 4, 19),
+      metric('focus_minutes', 'Focus time', 'min', 240, -60, 1, 180),
+    ],
+    generatedAt: new Date().toISOString(),
+  };
+}
 function sampleCheckin(membership: Membership): OwnCheckin {
   const now = Date.now();
   const day = (offset: number) => new Date(now + offset * 86_400_000).toISOString().slice(0, 10);
@@ -1749,6 +1802,15 @@ export const mockClient: ApiClient = {
       return membership;
     }),
   getMyCheckins: () => later(() => myCheckins),
+  getCalendarStatus: () => later(() => calendarStatus),
+  getMyCalendar: () => later(() => []),
+  getTeamCalendar: (teamId) =>
+    later(() => {
+      if (!supervisedTeams.some((t) => t.id === teamId)) {
+        throw new ApiError('No such team.', 'not_found', 404);
+      }
+      return mockTeamCalendar();
+    }),
   sendCheckinNow: (id) =>
     later<OwnCheckin>(() => {
       const found = waitingCheckin(id);
@@ -1912,8 +1974,12 @@ export const mockClient: ApiClient = {
 
   // Google Health: connecting succeeds at once (no Google page) and a sync takes 3 seconds.
   getGoogleStatus: () => later(() => google),
-  connectGoogle: () =>
+  connectGoogle: (capability) =>
     later(() => {
+      if (capability === 'calendar') {
+        calendarStatus = { connected: true, lastSync: new Date().toISOString(), lastError: null, days: 78 };
+        return { url: '' };
+      }
       google = { ...google, status: 'active', missingScopes: [] };
       const account = accounts.find((a) => a.id === sessions.get(getToken() ?? ''));
       if (account) account.hasData = true; // the made-up history stands in for theirs
@@ -2076,7 +2142,7 @@ export const mockClient: ApiClient = {
         minimumMembers: 5,
         figures: [
           ['sleep_minutes', 0, 430, 'Median sleep last night: 7 h 10 min, based on 6 members.'],
-          ['resting_hr', 0, 61, 'Median resting heart rate last night: 61 bpm, based on 6 members.'],
+          ['resting_hr', 0, 61, `Median resting heart rate on ${shortDay(0)}: 61 bpm, based on 6 members.`],
           ['steps', 1, 8240, 'Median steps yesterday: 8,240, based on 6 members.'],
         ].map(([metric, offset, median, text]) => ({
           metric: metric as string,

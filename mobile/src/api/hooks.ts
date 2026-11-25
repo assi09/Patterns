@@ -39,6 +39,7 @@ export const keys = {
   teams: ['teams'] as const,
   myCheckins: ['me', 'checkins'] as const,
   checkins: ['checkins'] as const,
+  calendar: ['calendar', 'status'] as const,
 };
 
 /** A day's numbers; 'latest' is the newest day with data. Kept while moving between days. */
@@ -564,6 +565,20 @@ export function useShareTeamLevels() {
       consentVersion?: string;
     }) => api.shareTeamLevels(teamId, share, consentVersion),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.myTeams }),
+  });
+}
+
+// The calendar (backend/app/sync/calendar.py)
+
+export function useCalendarStatus() {
+  return useQuery({ queryKey: keys.calendar, queryFn: api.getCalendarStatus });
+}
+
+export function useTeamCalendar(teamId: string | undefined, week?: ISODate) {
+  return useQuery({
+    queryKey: ['teams', teamId, 'calendar', week ?? 'last'],
+    queryFn: () => api.getTeamCalendar(teamId!, week),
+    enabled: !!teamId,
   });
 }
 

@@ -33,6 +33,7 @@ import type {
 } from '@/api/types';
 import { Row, Section } from '@/components/list';
 import { NotesSection } from '@/components/teamAgent';
+import { MeetingLoad } from '@/components/teamCalendar';
 import { Cards, KeyTiles, Part, TeamBoard, WhoMoved } from '@/components/teamBoard';
 import { TeamPulseTile } from '@/components/pulse';
 import { AreaChips, BriefingCard } from '@/components/teamBrief';
@@ -240,13 +241,14 @@ function TeamView({ team }: { team: SupervisedTeam }) {
                 items={briefingItems(alerts.data, latest.data)}
                 briefing={latest.data?.briefing}
                 observed={
-                  buildingHistory(latest.data) ? observed.data?.figures.map((f) => f.text) : []
+                  buildingHistory(latest.data, alerts.data) ? observed.data?.figures.map((f) => f.text) : []
                 }
               />
               {ready || pulse.data?.weeks.length ? (
                 <KeyTiles teamId={team.id} report={latest.data} />
               ) : null}
               {ready ? <WhoMoved report={latest.data} /> : null}
+              <MeetingLoad teamId={team.id} style={card} />
             </Cards>
           </Part>
           <Part

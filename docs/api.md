@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-95 operations, grouped by area.
+98 operations, grouped by area.
 
 ### meta
 
@@ -132,6 +132,14 @@ Besides the codes listed under [Error codes](#error-codes):
 | `GET` | `/admin/access-requests` | owner |  |  | list[[AccessRequest](#accessrequest)] |  |
 | `POST` | `/admin/access-requests/{user_id}/approve` | owner | `user_id` | [Approval](#approval) or null | [Account](#account) |  |
 | `POST` | `/admin/access-requests/{user_id}/reject` | owner | `user_id` |  | [Account](#account) |  |
+
+### calendar
+
+| Method | Path | Access | Parameters | Body | Returns | Notes |
+|---|---|---|---|---|---|---|
+| `GET` | `/calendar/status` | approved |  |  | [CalendarStatus](#calendarstatus) |  |
+| `GET` | `/me/calendar` | approved |  |  | list[[CalendarDay](#calendarday)] | The person's own daily counts: the last four weeks and what is planned ahead. |
+| `GET` | `/teams/{team_id}/calendar` | supervisor | `team_id`, `week`? |  | [TeamCalendar](#teamcalendar) | The team's meeting load for a Monday-to-Sunday week (the last full one by default). |
 
 ### chat
 
@@ -298,6 +306,7 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 409 | `not_in_team` |
 | 409 | `not_logged` |
 | 409 | `own_team` |
+| 409 | `paused` |
 | 409 | `reconnect_needed` |
 | 409 | `request_conflict` |
 | 409 | `stale_action` |
@@ -415,6 +424,27 @@ A field not marked required may be left out.
 | `kind` | string | yes |  |
 | `metric` | string or null |  |  |
 
+### CalendarDay
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `date` | string (date) | yes |  |
+| `meetingMinutes` | number | yes |  |
+| `meetings` | number | yes |  |
+| `afterHoursMinutes` | number | yes |  |
+| `backToBack` | number | yes |  |
+| `focusMinutes` | number | yes |  |
+| `outOfOffice` | number | yes |  |
+
+### CalendarStatus
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `connected` | boolean | yes |  |
+| `lastSync` | string (date-time) or null | yes |  |
+| `lastError` | string or null | yes |  |
+| `days` | integer | yes |  |
+
 ### ChangeResult
 
 How the team's metric went during an ended change, against the 28 days before it.
@@ -483,7 +513,7 @@ One signal behind a person's own check-in alert; shown to that person only.
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
-| `capability` | `food_logging` \| `workout_logging` | yes |  |
+| `capability` | `food_logging` \| `workout_logging` \| `calendar` | yes |  |
 
 ### ConnectStart
 
@@ -1178,6 +1208,34 @@ Weekly highlights and upcoming event warnings, each linked to the report evidenc
 | `items` | list[[BriefingItem](#briefingitem)] | yes |  |
 | `proposals` | integer |  | default `0` |
 | `madeAt` | string (date-time) | yes |  |
+
+### TeamCalendar
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `week` | [Window](#window) | yes |  |
+| `connected` | integer | yes |  |
+| `minimumMembers` | integer | yes |  |
+| `metrics` | list[[TeamCalendarMetric](#teamcalendarmetric)] | yes |  |
+| `generatedAt` | string (date-time) | yes |  |
+
+### TeamCalendarMetric
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `metric` | string | yes |  |
+| `label` | string | yes |  |
+| `unit` | `min` \| `count` | yes |  |
+| `members` | integer | yes |  |
+| `sufficient` | boolean | yes |  |
+| `medianWeek` | number or null |  |  |
+| `q1Week` | number or null |  |  |
+| `q3Week` | number or null |  |  |
+| `medianChange` | number or null |  |  |
+| `membersUp` | integer or null |  |  |
+| `membersDown` | integer or null |  |  |
+| `medianPlanned` | number or null |  |  |
+| `evidenceId` | string | yes |  |
 
 ### TeamChatMessage
 

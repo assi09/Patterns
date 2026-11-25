@@ -1,4 +1,4 @@
-import type { Evidence, TeamReport } from '@/api/types';
+import type { Evidence, TeamAlert, TeamReport } from '@/api/types';
 
 import { briefingContent, buildingHistory, type TeamStatus } from '../team';
 
@@ -55,5 +55,11 @@ describe('whether a team is still building history', () => {
 
   it('is not, once one metric has enough history to say what changed', () => {
     expect(buildingHistory(report('ready', [false, true]))).toBe(false);
+  });
+
+  it('is not once a team alert exists: an alert is itself a change from usual', () => {
+    const alert = { id: 'a1', kind: 'concern' } as TeamAlert;
+    expect(buildingHistory(undefined, [alert])).toBe(false);
+    expect(buildingHistory(report('withheld', []), [alert])).toBe(false);
   });
 });

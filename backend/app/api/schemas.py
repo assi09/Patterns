@@ -580,6 +580,50 @@ class TeamHr(ApiModel):
     email: str | None  # None removes the HR contact
 
 
+# Calendar (app/sync/calendar.py): daily counts only, never events
+
+
+class CalendarStatus(ApiModel):
+    connected: bool  # the calendar scope was granted and the sign-in works
+    last_sync: datetime | None
+    last_error: str | None
+    days: int
+
+
+class CalendarDay(ApiModel):
+    date: date
+    meeting_minutes: float
+    meetings: float
+    after_hours_minutes: float
+    back_to_back: float
+    focus_minutes: float
+    out_of_office: float
+
+
+class TeamCalendarMetric(ApiModel):
+    metric: str
+    label: str
+    unit: Literal["min", "count"]
+    members: int  # members with a connected calendar who counted for it
+    sufficient: bool  # False: fewer than the minimum, so no figures
+    median_week: float | None = None  # per person, this week
+    q1_week: float | None = None
+    q3_week: float | None = None
+    median_change: float | None = None  # against each person's own usual week
+    members_up: int | None = None
+    members_down: int | None = None
+    median_planned: float | None = None  # next week, as planned so far
+    evidence_id: str
+
+
+class TeamCalendar(ApiModel):
+    week: Window
+    connected: int  # members with a connected calendar
+    minimum_members: int
+    metrics: list[TeamCalendarMetric]
+    generated_at: datetime
+
+
 class TeamObservedFigure(ApiModel):
     """What the team's latest night or day looked like; never a change from usual."""
 

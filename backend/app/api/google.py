@@ -29,7 +29,7 @@ from app.api.chat import Sessions, get_sessions
 from app.api.errors import ApiError
 from app.config import settings
 from app.db.models import GoogleConnection, SyncRun, User
-from app.sync import connections
+from app.sync import calendar, connections
 from app.sync.client import HealthClient
 from app.sync.connections import OAuth, SignIns, Syncs, TokenBox
 from app.sync.google_auth import SCOPES, OAuthClient, SyncError
@@ -81,20 +81,29 @@ def _status(db, user: User) -> schemas.GoogleStatus:
 
 
 def _start_sync(google: GoogleParts, sessions: Sessions, user: User, today: date) -> None:
-    syncs.start(user.id, lambda: sync_and_check(google, sessions, user.id, today))
+    syncs.start(user.id, lambda: sync_everything(google, sessions, user.id, today))
 
 
-def sync_and_check(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
-    """Pulls the person's Google Health data, then, if that sync succeeded, checks the check-in
-    rule for every team they agreed to it for (app/teams/checkin.py)."""
+def sync_everything(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
+    """Everything that follows a person's sync, in order, each step guarded so one failing never
+    stops the next: Google Health; then, if that sync succeeded, the check-in rule for every team
+    they agreed to it for (app/teams/checkin.py); then their calendar, if they allowed it
+    (app/sync/calendar.py)."""
     started = connections.now_utc()
-    connections.sync(sessions, google.box, user_id, google.health_for, today)
+    try:
+        connections.sync(sessions, google.box, user_id, google.health_for, today)
+    except Exception:
+        logger.exception("The Google Health sync failed")
     try:
         with sessions() as db:
             if connections.succeeded_since(db, user_id, started):
                 checkin.after_sync(db, user_id, connections.now_utc())
     except Exception:
         logger.exception("Checking the check-in rule after a sync failed")
+    try:
+        calendar.sync_person(sessions, google.box, user_id, today, settings.timezone)
+    except Exception:
+        logger.exception("The calendar sync failed")
 
 
 @router.get("/status", response_model=schemas.GoogleStatus)
@@ -103,7 +112,7 @@ def google_status(db: Db, user: Person) -> schemas.GoogleStatus:
 
 
 class ConnectOptions(schemas.ApiModel):
-    capability: Literal["food_logging", "workout_logging"]
+    capability: Literal["food_logging", "workout_logging", "calendar"]
 
 
 @router.post("/connect", response_model=schemas.ConnectStart)
@@ -112,9 +121,11 @@ def connect(
 ) -> schemas.ConnectStart:
     scopes = set(SCOPES)
     connection = db.get(GoogleConnection, user.id)
-    if connection is not None:
-        scopes.update(set(connection.scopes) & set(WRITE_SCOPES.values()))
-    if body is not None:
+    if connection is not None:  # a reconnect keeps what the person allowed before
+        scopes.update(set(connection.scopes) & (set(WRITE_SCOPES.values()) | {calendar.SCOPE}))
+    if body is not None and body.capability == "calendar":
+        scopes.add(calendar.SCOPE)
+    elif body is not None:
         scopes.add(WRITE_SCOPES["food" if body.capability == "food_logging" else "workout"])
     return schemas.ConnectStart(
         url=sign_ins.start(google.oauth, user.id, clock, tuple(sorted(scopes)))

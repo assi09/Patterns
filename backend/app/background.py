@@ -64,7 +64,7 @@ def start_due_syncs(now: datetime) -> int:
             attempted = attempted.replace(tzinfo=UTC)
         if attempted is not None and now - attempted < SYNC_EVERY:
             continue
-        work = lambda uid=user_id: google.sync_and_check(  # noqa: E731
+        work = lambda uid=user_id: google.sync_everything(  # noqa: E731
             parts, session_scope, uid, now.date()
         )
         started += google.syncs.start(user_id, work)

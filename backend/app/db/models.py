@@ -30,7 +30,8 @@ from app.agent.facts import FACT_KINDS
 
 # Where a day's numbers came from. A history is read from one source only: the legacy export's
 # sleep comes from an older algorithm than the API's, so mixing them would fake a change.
-SOURCES = ("google_health", "takeout")
+# google_calendar holds daily meeting counts only, never events (app/sync/calendar.py).
+SOURCES = ("google_health", "takeout", "google_calendar")
 SYNC_STATUSES = ("running", "succeeded", "failed")
 CHAT_ROLES = ("user", "assistant")
 # A person's or a supervisor's thumbs on an answer, for the pilot's report.

@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { useDataStatus, useNoData } from '@/api/hooks';
 import type { DataStatus, MetricCoverage } from '@/api/types';
+import { CalendarCard } from '@/components/CalendarCard';
 import { GoogleHealthCard } from '@/components/GoogleHealthCard';
 import { Row, Section } from '@/components/list';
 import { Screen } from '@/components/Screen';
@@ -81,6 +82,10 @@ export default function SettingsScreen() {
 
       <Section title="Google Health">
         <GoogleHealthCard returned={returned} />
+      </Section>
+
+      <Section title="Google Calendar">
+        <CalendarCard />
       </Section>
 
       <YourData />
