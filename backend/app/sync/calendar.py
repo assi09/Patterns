@@ -29,7 +29,7 @@ from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from sqlalchemy.orm import Session
 
-from app.db.daily import save_daily
+from app.db.daily import load_daily, save_daily
 from app.db.models import CalendarConnection, SyncRun, User
 from app.sync.client import HealthClient
 from app.sync.connections import TokenBox
@@ -39,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
 SOURCE = "google_calendar"
+# Days a member approved from a harness (docs/mcp.md): the same counts, labelled by where they came
+# from. A person's calendar is read from one source only, Google's when connected.
+HARNESS_SOURCE = "harness_calendar"
 EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 FIELDS = (
     "nextPageToken,items(status,eventType,transparency,start(dateTime,date),"
@@ -299,3 +302,10 @@ def sync_person(
     except Exception:
         logger.exception("Calendar sync failed")
     return 0
+
+
+def frame_for(session: Session, user_id: uuid.UUID, start: date, end: date) -> pd.DataFrame:
+    """A person's daily calendar counts for [start, end): Google Calendar when they connected it,
+    otherwise the days they approved from a harness. Never the two mixed."""
+    frame = load_daily(session, user_id, SOURCE, start, end)
+    return frame if not frame.empty else load_daily(session, user_id, HARNESS_SOURCE, start, end)

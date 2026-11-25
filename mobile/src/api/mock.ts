@@ -45,6 +45,8 @@ import type {
   Strain,
   TeamPreview,
   CalendarStatus,
+  AccessTokenInfo,
+  HarnessSubmission,
   Membership,
   TeamObserved,
   OwnCheckin,
@@ -1009,6 +1011,23 @@ let myTeams: Membership[] = [];
 // Check-in alerts (docs/escalation.md), made up. Turning them on here raises a sample alert at
 // once, so the screens can be seen; the real rule needs a sustained, extreme week.
 let myCheckins: OwnCheckin[] = [];
+// MCP (docs/mcp.md), made up: tokens made here, and one send waiting for approval.
+let accessTokens: (AccessTokenInfo & { token: string })[] = [];
+const harnessSubmissions: HarnessSubmission[] = [
+  {
+    id: 'sent-1',
+    kind: 'calendar_days',
+    status: 'pending',
+    payload: {
+      days: [
+        { date: isoDate(1), meeting_minutes: 240, meetings: 5, after_hours_minutes: 30, back_to_back: 2 },
+        { date: isoDate(2), meeting_minutes: 180, meetings: 4, after_hours_minutes: 0, back_to_back: 1 },
+      ],
+    },
+    teamId: null,
+    createdAt: new Date().toISOString(),
+  },
+];
 let calendarStatus: CalendarStatus = { connected: false, lastSync: null, lastError: null, days: 0 };
 
 /** Made-up team meeting load, aggregates only, as the backend would build it. */
@@ -1803,6 +1822,40 @@ export const mockClient: ApiClient = {
     }),
   getMyCheckins: () => later(() => myCheckins),
   getCalendarStatus: () => later(() => calendarStatus),
+  getAccessTokens: () => later(() => accessTokens.map(({ token: _, ...info }) => info)),
+  makeAccessToken: (name) =>
+    later(() => {
+      if (accessTokens.filter((t) => !t.revokedAt).length >= 5) {
+        throw new ApiError('Revoke a token first: at most 5.', 'too_many_tokens', 409);
+      }
+      const made = {
+        id: `tok-${accessTokens.length + 1}`,
+        name: name.trim(),
+        createdAt: new Date().toISOString(),
+        lastUsedAt: null,
+        revokedAt: null,
+        token: `pat_mock-${Math.random().toString(36).slice(2)}`,
+      };
+      accessTokens = [made, ...accessTokens];
+      return made;
+    }),
+  revokeAccessToken: (id) =>
+    later(() => {
+      const found = accessTokens.find((t) => t.id === id);
+      if (!found) throw new ApiError('No such token.', 'not_found', 404);
+      found.revokedAt = found.revokedAt ?? new Date().toISOString();
+    }),
+  getHarnessSubmissions: () => later(() => harnessSubmissions.filter((h) => h.status === 'pending')),
+  decideHarnessSubmission: (id, approve) =>
+    later<HarnessSubmission>(() => {
+      const found = harnessSubmissions.find((h) => h.id === id);
+      if (!found) throw new ApiError('Nothing like that is waiting.', 'not_found', 404);
+      if (found.status !== 'pending') {
+        throw new ApiError('This was already approved or declined.', 'already_decided', 409);
+      }
+      found.status = approve ? 'approved' : 'declined';
+      return found;
+    }),
   disconnectCalendar: () =>
     later(() => {
       calendarStatus = { ...calendarStatus, connected: false, lastError: null };

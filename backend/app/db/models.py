@@ -31,7 +31,7 @@ from app.agent.facts import FACT_KINDS
 # Where a day's numbers came from. A history is read from one source only: the legacy export's
 # sleep comes from an older algorithm than the API's, so mixing them would fake a change.
 # google_calendar holds daily meeting counts only, never events (app/sync/calendar.py).
-SOURCES = ("google_health", "takeout", "google_calendar")
+SOURCES = ("google_health", "takeout", "google_calendar", "harness_calendar")
 SYNC_STATUSES = ("running", "succeeded", "failed")
 CHAT_ROLES = ("user", "assistant")
 # A person's or a supervisor's thumbs on an answer, for the pilot's report.
@@ -1125,3 +1125,57 @@ class HrInvite(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class AccessToken(Base):
+    """A personal access token for the MCP server (docs/mcp.md). Only a hash is stored; the
+    token is shown once when made. Revoking it, or deleting the account, stops it at once."""
+
+    __tablename__ = "access_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(60))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+HARNESS_KINDS = ("calendar_days", "team_event")
+HARNESS_STATUSES = ("pending", "approved", "declined")
+
+
+class HarnessSubmission(Base):
+    """What a harness sent through MCP: untrusted, checked against a schema, and held until the
+    person (or, for a team event, the supervisor) approves it in the app (docs/mcp.md)."""
+
+    __tablename__ = "harness_submissions"
+    __table_args__ = (
+        CheckConstraint(
+            f"kind IN ({', '.join(repr(k) for k in HARNESS_KINDS)})",
+            name="ck_harness_submissions_kind",
+        ),
+        CheckConstraint(
+            f"status IN ({', '.join(repr(s) for s in HARNESS_STATUSES)})",
+            name="ck_harness_submissions_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    team_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), default=None
+    )
+    token_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("access_tokens.id", ondelete="SET NULL"), default=None
+    )
+    kind: Mapped[str] = mapped_column(String(16))
+    payload: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)

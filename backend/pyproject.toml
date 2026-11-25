@@ -13,6 +13,7 @@ dependencies = [
     "fastapi>=0.115",
     "google-auth-oauthlib>=1.5",
     "httpx2>=2.14",
+    "mcp>=2.3,<3",  # the MCP server for harnesses (docs/mcp.md)
     "numpy>=1.26",
     "openai>=3.35",
     "pandas>=2.2",

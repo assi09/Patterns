@@ -40,6 +40,8 @@ export const keys = {
   myCheckins: ['me', 'checkins'] as const,
   checkins: ['checkins'] as const,
   calendar: ['calendar', 'status'] as const,
+  tokens: ['me', 'tokens'] as const,
+  harness: ['me', 'harness'] as const,
 };
 
 /** A day's numbers; 'latest' is the newest day with data. Kept while moving between days. */
@@ -579,6 +581,44 @@ export function useTeamCalendar(teamId: string | undefined, week?: ISODate) {
     queryKey: ['teams', teamId, 'calendar', week ?? 'last'],
     queryFn: () => api.getTeamCalendar(teamId!, week),
     enabled: !!teamId,
+  });
+}
+
+// MCP: personal tokens and what a harness sent (docs/mcp.md)
+
+export function useAccessTokens() {
+  return useQuery({ queryKey: keys.tokens, queryFn: api.getAccessTokens });
+}
+
+export function useMakeAccessToken() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api.makeAccessToken(name),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.tokens }),
+  });
+}
+
+export function useRevokeAccessToken() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.revokeAccessToken(id),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.tokens }),
+  });
+}
+
+export function useHarnessSubmissions() {
+  return useQuery({ queryKey: keys.harness, queryFn: api.getHarnessSubmissions });
+}
+
+export function useDecideHarnessSubmission() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, approve }: { id: string; approve: boolean }) =>
+      api.decideHarnessSubmission(id, approve),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: keys.harness });
+      client.invalidateQueries({ queryKey: keys.calendar });
+    },
   });
 }
 

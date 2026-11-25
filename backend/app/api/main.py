@@ -25,6 +25,7 @@ from app.api import (
     days,
     feedback,
     google,
+    harness,
     memory,
     metrics,
     notifications,
@@ -38,6 +39,7 @@ from app.api.schemas import ErrorBody, ErrorResponse
 from app.auth.accounts import AuthError
 from app.background import Background
 from app.config import settings
+from app.harness import server as mcp_server
 from app.ingest.takeout import IngestError
 from app.observability import init_sentry
 
@@ -50,12 +52,14 @@ def _error(status: int, code: str, message: str) -> JSONResponse:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Background work that lives as long as the server: reminders, syncs and smart alarms."""
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Background work that lives as long as the server: reminders, syncs and smart alarms, and
+    the MCP server's sessions."""
     loop = Background() if settings.reminders_enabled else None
     if loop:
         loop.start()
-    yield
+    async with app.state.mcp.session_manager.run():
+        yield
     if loop:
         loop.stop()
 
@@ -126,6 +130,15 @@ def create_app() -> FastAPI:
     app.include_router(reminders.router)
     app.include_router(reports.router)
     app.include_router(teams.router)
+    app.include_router(harness.router)
+
+    # The MCP server for harnesses (docs/mcp.md): https://<api>/mcp/ with a personal token. It
+    # opens sessions the way the rest of the API does (`chat.get_sessions`, which tests override).
+    def sessions():
+        return app.dependency_overrides.get(chat.get_sessions, chat.get_sessions)()()
+
+    app.state.mcp = mcp_server.build(sessions, settings.public_url, settings.timezone)
+    app.mount("/mcp", mcp_server.asgi_app(app.state.mcp, settings.public_url))
     return app
 
 
