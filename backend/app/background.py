@@ -53,7 +53,7 @@ def _last_attempts(db, source: str) -> dict:
     )
 
 
-def start_due_syncs(now: datetime, sessions=session_scope) -> int:
+def start_due_syncs(now: datetime, sessions=None) -> int:
     """Starts a sync for each connection whose last attempt is older than `SYNC_EVERY`: Google
     Health (with the check-in rule) and Google Calendar each on their own, from their own sign-in
     and their own last attempt, so one expired or disconnected never stops the other."""
@@ -61,6 +61,7 @@ def start_due_syncs(now: datetime, sessions=session_scope) -> int:
     from app.api.errors import ApiError
     from app.sync import calendar, connections
 
+    sessions = sessions or session_scope  # looked up now, not when this was defined
     try:
         parts = google.get_google()
     except ApiError:
