@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import {
@@ -56,6 +56,9 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const session = useSession();
   const copy = COPY[mode];
   const signingUp = mode === 'signUp';
+  // An HR invitation link: /sign-up?hr=<token> (docs/escalation.md).
+  const { hr } = useLocalSearchParams<{ hr?: string }>();
+  const hrInvite = signingUp && typeof hr === 'string' && hr ? hr : undefined;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -76,7 +79,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setBusy(true);
     setError(null);
     try {
-      const credentials = { email: email.trim(), password };
+      const credentials = { email: email.trim(), password, ...(hrInvite && { hrInvite }) };
       await (signingUp ? session.signUp(credentials) : session.logIn(credentials));
       // The routes switch on the session, so there is nowhere to navigate to here.
     } catch (caught) {
@@ -141,6 +144,12 @@ export function AuthForm({ mode }: { mode: Mode }) {
         <Text variant="display" style={styles.title}>
           {copy.title}
         </Text>
+        {hrInvite ? (
+          <Text color="muted">
+            You were invited as a team&apos;s HR contact. Sign up with the address the invitation was
+            sent to; your account is ready at once.
+          </Text>
+        ) : null}
         <View style={styles.switchRow}>
           <Text color="muted">{copy.switchPrompt} </Text>
           <Pressable accessibilityRole="link" onPress={() => router.replace(copy.switchTo)}>

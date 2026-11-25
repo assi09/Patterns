@@ -473,6 +473,7 @@ export interface Account {
 export interface Credentials {
   email: string;
   password: string;
+  hrInvite?: string; // from an HR invitation link: approved as that team's HR at once
 }
 
 export interface SignedIn {
@@ -616,6 +617,7 @@ export interface SupervisedTeam {
   minimumMembers: number; // no team figure is built from fewer
   reportEmail: string | null;
   hrEmail?: string | null; // the team's HR contact for check-in alerts
+  hrInvited?: string | null; // invited by email, not signed up yet
   paused?: string | null; // why its figures are paused: it differs from another team by too few
   createdAt: ISODateTime;
 }
@@ -843,7 +845,10 @@ export interface ApiClient {
   getReceivedCheckins(): Promise<ReceivedCheckin[]>; // HR and supervisors
   openCheckin(id: string): Promise<ReceivedCheckin>;
   markCheckin(id: string, outcome: CheckinOutcome, note?: string): Promise<ReceivedCheckin>;
-  setTeamHr(teamId: string, email: string | null): Promise<{ email: string | null }>; // supervisors
+  setTeamHr(
+    teamId: string,
+    email: string | null,
+  ): Promise<{ email: string | null; invited: boolean }>; // supervisors: links an HR account, or emails an invitation
   leaveTeam(teamId: string): Promise<void>;
   getTeams(): Promise<SupervisedTeam[]>; // supervisors only
   createTeam(name: string): Promise<SupervisedTeam>;

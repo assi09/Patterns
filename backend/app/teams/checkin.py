@@ -49,6 +49,8 @@ from app.db.models import (
     TeamMembership,
     User,
 )
+from app.email import Mailer, MailError
+from app.teams.hr import notice_email
 
 logger = logging.getLogger(__name__)
 
@@ -322,7 +324,18 @@ def _recipients(db: Session, team: Team) -> list[tuple[uuid.UUID, str]]:
     return found
 
 
-def send_due(db: Session, now: datetime) -> int:
+def _email(db: Session, user_id: uuid.UUID, mailer: Mailer | None, app_url: str) -> None:
+    """Tells a recipient by email that an alert is waiting, never whom it is about."""
+    if mailer is None:
+        return
+    recipient = db.get(User, user_id)
+    try:
+        mailer.send(notice_email(recipient.email, app_url))
+    except MailError as error:
+        logger.warning("A check-in notice could not be emailed: %s", error)
+
+
+def send_due(db: Session, now: datetime, mailer: Mailer | None = None, app_url: str = "") -> int:
     """Sends every alert whose wait is over, if the person still agrees; returns how many."""
     sent = 0
     due = db.scalars(
@@ -333,13 +346,19 @@ def send_due(db: Session, now: datetime) -> int:
         if team is None or not _still_agrees(db, alert):
             _withdraw(db, alert, None, now)  # left the team or turned it off: nothing goes
             continue
-        _deliver(db, alert, team, None, now)
+        _deliver(db, alert, team, None, now, mailer, app_url)
         sent += 1
     return sent
 
 
 def _deliver(
-    db: Session, alert: CheckinAlert, team: Team, actor: uuid.UUID | None, now: datetime
+    db: Session,
+    alert: CheckinAlert,
+    team: Team,
+    actor: uuid.UUID | None,
+    now: datetime,
+    mailer: Mailer | None = None,
+    app_url: str = "",
 ) -> None:
     """Sends the alert to whoever holds the supervisor and HR roles now; once only."""
     alert.status = "sent"
@@ -348,6 +367,7 @@ def _deliver(
     for user_id, role in _recipients(db, team):
         db.add(CheckinMark(alert_id=alert.id, user_id=user_id, role=role))
         _notify(db, user_id, RECIPIENT_TITLE, RECIPIENT_BODY, "/checkins", now)
+        _email(db, user_id, mailer, app_url)
 
 
 def holds_role(db: Session, mark: CheckinMark, team: Team) -> bool:
@@ -357,7 +377,7 @@ def holds_role(db: Session, mark: CheckinMark, team: Team) -> bool:
     return current_holder(db, team, mark.role) == mark.user_id
 
 
-def remind_due(db: Session, now: datetime) -> int:
+def remind_due(db: Session, now: datetime, mailer: Mailer | None = None, app_url: str = "") -> int:
     """Shows an alert nobody has marked after REMIND_AFTER once more to its recipients."""
     reminded = 0
     stale = db.scalars(
@@ -376,19 +396,22 @@ def remind_due(db: Session, now: datetime) -> int:
             if not holds_role(db, mark, team):
                 continue  # left the role: no reminder, though their delivery record stays
             _notify(db, mark.user_id, RECIPIENT_TITLE, REMINDER_BODY, "/checkins", now)
+            _email(db, mark.user_id, mailer, app_url)
         alert.reminded_at = now
         _log(db, alert, None, "reminded", now)
         reminded += 1
     return reminded
 
 
-def run_due(sessions: Sessions, now: datetime) -> Counter:
+def run_due(
+    sessions: Sessions, now: datetime, mailer: Mailer | None = None, app_url: str = ""
+) -> Counter:
     """From the background loop, every minute: sends what is due and reminds what is unmarked.
     Alerts are raised after each successful health sync (`after_sync`), not here."""
     counts: Counter = Counter()
     with sessions() as db:
-        counts["sent"] += send_due(db, now)
-        counts["reminded"] += remind_due(db, now)
+        counts["sent"] += send_due(db, now, mailer, app_url)
+        counts["reminded"] += remind_due(db, now, mailer, app_url)
     return +counts
 
 
@@ -541,7 +564,14 @@ def withdraw_waiting(
     return len(waiting)
 
 
-def send_now(db: Session, user: User, alert_id: str, now: datetime) -> CheckinAlert:
+def send_now(
+    db: Session,
+    user: User,
+    alert_id: str,
+    now: datetime,
+    mailer: Mailer | None = None,
+    app_url: str = "",
+) -> CheckinAlert:
     """The person sends their own waiting alert before the hour is up, if they are still in the
     team with check-in alerts on; from an old screen after leaving, nothing goes."""
     alert, team = _own_waiting(db, user, alert_id)
@@ -550,7 +580,7 @@ def send_now(db: Session, user: User, alert_id: str, now: datetime) -> CheckinAl
         raise ApiError(
             409, "not_in_team", "You are no longer in this team with check-in alerts on."
         )
-    _deliver(db, alert, team, user.id, now)
+    _deliver(db, alert, team, user.id, now, mailer, app_url)
     db.flush()
     return alert
 

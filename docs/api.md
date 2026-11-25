@@ -164,7 +164,7 @@ Besides the codes listed under [Error codes](#error-codes):
 | `GET` | `/checkins` | approved |  |  | list[[ReceivedCheckin](#receivedcheckin)] |  |
 | `POST` | `/checkins/{alert_id}/open` | approved | `alert_id` |  | [ReceivedCheckin](#receivedcheckin) |  |
 | `POST` | `/checkins/{alert_id}/mark` | approved | `alert_id` | [MarkCheckin](#markcheckin) | [ReceivedCheckin](#receivedcheckin) |  |
-| `PUT` | `/teams/{team_id}/hr` | supervisor | `team_id` | [TeamHr](#teamhr) | [TeamHr](#teamhr) | Names the team's HR contact: an approved account with the hr role, or none. |
+| `PUT` | `/teams/{team_id}/hr` | supervisor | `team_id` | [TeamHr](#teamhr) | [TeamHr](#teamhr) | Names the team's HR contact. An existing HR account is linked at once; an address without an account is emailed an invitation to sign up as this team's HR; none removes it. |
 
 ### google
 
@@ -283,6 +283,8 @@ Raised in the code with a fixed status and code (the message varies by case).
 
 | Status | Code |
 |---|---|
+| 400 | `invite_invalid` |
+| 400 | `invite_other_email` |
 | 401 | `invalid_credentials` |
 | 401 | `signed_out` |
 | 403 | `forbidden` |
@@ -291,7 +293,6 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 403 | `write_scope_needed` |
 | 404 | `no_data` |
 | 404 | `not_found` |
-| 404 | `not_hr` |
 | 404 | `unknown_code` |
 | 404 | `unknown_metric` |
 | 409 | `already_decided` |
@@ -303,6 +304,7 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 409 | `email_taken` |
 | 409 | `not_changeable` |
 | 409 | `not_connected` |
+| 409 | `not_hr` |
 | 409 | `not_in_team` |
 | 409 | `not_logged` |
 | 409 | `own_team` |
@@ -328,6 +330,7 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 429 | `app_daily_limit` |
 | 429 | `daily_limit` |
 | 429 | `too_many_attempts` |
+| 502 | `email_failed` |
 | 503 | `agent_unavailable` |
 | 503 | `google_unavailable` |
 | 503 | `writes_disabled` |
@@ -555,6 +558,7 @@ One signal behind a person's own check-in alert; shown to that person only.
 |---|---|---|---|
 | `email` | string | yes | max length 1000 |
 | `password` | string | yes | max length 1000 |
+| `hrInvite` | string or null |  |  |
 
 ### DataStatus
 
@@ -1144,6 +1148,7 @@ One member who chose to share, with their week against their own usual.
 | `minimumMembers` | integer | yes |  |
 | `reportEmail` | string or null | yes |  |
 | `hrEmail` | string or null |  |  |
+| `hrInvited` | string or null |  |  |
 | `paused` | string or null |  |  |
 | `createdAt` | string (date-time) | yes |  |
 
@@ -1259,6 +1264,7 @@ Weekly highlights and upcoming event warnings, each linked to the report evidenc
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `email` | string or null | yes |  |
+| `invited` | boolean |  | default `False` |
 
 ### TeamNote
 

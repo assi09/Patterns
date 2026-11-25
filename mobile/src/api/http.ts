@@ -231,10 +231,14 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         note,
       }),
     setTeamHr: (teamId, email) =>
-      request<{ email: string | null }>(baseUrl, `/teams/${encodeURIComponent(teamId)}/hr`, {
-        method: 'PUT',
-        body: JSON.stringify({ email }),
-      }),
+      request<{ email: string | null; invited: boolean }>(
+        baseUrl,
+        `/teams/${encodeURIComponent(teamId)}/hr`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ email }),
+        },
+      ),
     getTeams: () => request<SupervisedTeam[]>(baseUrl, '/teams'),
     createTeam: (name) => post<SupervisedTeam>(baseUrl, '/teams', { name }),
     rotateTeamCode: (teamId) =>

@@ -2,6 +2,7 @@ import type {
   Evidence,
   ISODate,
   ReportSection,
+  SupervisedTeam,
   TeamAlert,
   TeamLevel,
   TeamReport,
@@ -299,4 +300,14 @@ export function briefingContent(
     return { main: null, observed, title: 'First readings' };
   }
   return { main: 'line', observed, title: status.title };
+}
+
+/** Who holds the HR role now, and who is invited to take it over. */
+export function hrDetail(team: Pick<SupervisedTeam, 'hrEmail' | 'hrInvited'>): string {
+  if (team.hrInvited) {
+    return team.hrEmail
+      ? `${team.hrInvited} is invited to take over; ${team.hrEmail} stays until they sign up (the link lasts 7 days)`
+      : `${team.hrInvited} is invited; waiting for them to sign up (the link lasts 7 days)`;
+  }
+  return 'Check-in alerts go to you and HR, only for people who turned them on';
 }

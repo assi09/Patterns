@@ -86,6 +86,10 @@ def _account(user: User) -> schemas.Account:
 @router.post("/auth/signup", response_model=schemas.SignedIn, status_code=201)
 def sign_up(body: schemas.Credentials, db: Db, clock: Now) -> schemas.SignedIn:
     user = accounts.sign_up(db, body.email, body.password)
+    if body.hr_invite:  # from an HR invitation link: approved as that team's HR at once
+        from app.teams import hr  # here, so accounts do not depend on teams at import
+
+        hr.accept(db, user, body.hr_invite, clock)
     token = accounts.start_session(db, user, clock, settings.session_days)
     return schemas.SignedIn(token=token, account=_account(user))
 

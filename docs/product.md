@@ -14,7 +14,7 @@ covers how it is built. Sections marked *open* are not decided yet.
 |---|---|
 | **Member** | Today (their own data), Inbox, Settings: Google Health, Your teams (join with a code, the three consents: team figures, named weekly levels, check-in alerts), and their own check-in alert page with Send it now and Stop this alert |
 | **Supervisor** | Today, **Team** (briefing, team board, weekly report, invite, the HR contact), **Check-ins**, Inbox, Settings |
-| **HR contact** | **Check-ins**, Inbox, Settings, and Today; Today goes away with the HR invitation work (planned, [plan.md](plan.md)) |
+| **HR contact** | **Check-ins**, Inbox, Settings. Signs up through the supervisor's emailed invitation ([escalation.md](escalation.md)) |
 
 ## User and problem
 

@@ -20,9 +20,23 @@ without redesigning the rest. **Current** marks what is built; the others are ke
 | D. A contact the person picks | a colleague, HR or the supervisor | the most respectful of the person | the person may pick no one |
 | E. The person only | a nudge to themselves | no one else learns anything | not a team feature; Today already does this (smart alarms) |
 
-The owner gives an account the HR role (`python -m app.auth set-role <email> hr`); the team's
-supervisor then names it as the team's HR contact (`PUT /teams/{id}/hr`). An HR account sees
-only the check-in alerts of teams it is the contact for, never team reports or named levels.
+**Naming the HR contact** (`PUT /teams/{id}/hr`, Team → Invite in the app; `app/teams/hr.py`):
+
+- The supervisor enters an email. An existing HR account is linked at once. Any other address is
+  **emailed an invitation**: a link with a one-time token (only its hash is stored), valid for 7
+  days, for that address and that team only. Signing up through it with that address makes the
+  account an approved HR account and the team's HR contact; no owner step is needed.
+- **The current HR contact stays until the replacement accepts.** Once they do, the former contact
+  loses access to the team's alerts at once (the role rule below). A new invitation replaces a
+  waiting one; removing the contact clears both.
+- A wrong address, an expired link or a link already used creates no account and claims nothing.
+  An existing account that is not HR is never converted quietly; the owner can still set roles
+  (`python -m app.auth set-role <email> hr`).
+- HR accounts open on **Check-ins** and have only Check-ins, Inbox and Settings: no Today and no
+  member guide, since they have no Fitbit data here. An HR account sees only the check-in alerts
+  of teams it is the contact for, never team reports or named levels.
+- Recipients are also emailed "You have a check-in request", with no name, when an alert goes out
+  or is reminded.
 
 **Roles, not people.** Alerts go to whoever holds the supervisor and HR-contact roles when the
 alert goes out. One rule decides who holds a role, for delivery and for every later access
