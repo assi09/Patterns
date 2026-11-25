@@ -252,11 +252,13 @@ export function latestTeamWeek(evidence: Evidence | undefined): TeamWeekFigures 
 }
 
 /**
- * Whether the team is still building the history a change needs: no weekly report yet, a
+ * Whether the team is still building the history a change needs: no team alert (an alert is
+ * itself a change from usual, so it proves the history exists), and no weekly report yet, a
  * withheld one, or one where no metric had enough members with 14 earlier days. While it is,
  * the briefing card keeps showing the team's observed readings next to anything else.
  */
-export function buildingHistory(report?: TeamReport): boolean {
+export function buildingHistory(report?: TeamReport, alerts: TeamAlert[] = []): boolean {
+  if (alerts.length) return false;
   if (!report || report.status !== 'ready') return true;
   return report.sections.every((s) => report.evidence[s.evidenceId]?.sufficient === false);
 }

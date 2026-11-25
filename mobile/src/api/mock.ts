@@ -62,6 +62,13 @@ import type {
 const DAYS = 28;
 const LATENCY_MS = 400;
 
+/** "Nov 25", as the backend names a dated reading. */
+function shortDay(daysAgo: number): string {
+  const day = new Date();
+  day.setDate(day.getDate() - daysAgo);
+  return day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export function isoDate(daysAgo: number): ISODate {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() - daysAgo);
@@ -2135,7 +2142,7 @@ export const mockClient: ApiClient = {
         minimumMembers: 5,
         figures: [
           ['sleep_minutes', 0, 430, 'Median sleep last night: 7 h 10 min, based on 6 members.'],
-          ['resting_hr', 0, 61, 'Median resting heart rate last night: 61 bpm, based on 6 members.'],
+          ['resting_hr', 0, 61, `Median resting heart rate on ${shortDay(0)}: 61 bpm, based on 6 members.`],
           ['steps', 1, 8240, 'Median steps yesterday: 8,240, based on 6 members.'],
         ].map(([metric, offset, median, text]) => ({
           metric: metric as string,
