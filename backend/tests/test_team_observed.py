@@ -61,6 +61,11 @@ def test_figures_show_from_the_first_days_without_history():
     steps = found["steps"]
     assert steps.windows[0].end == TODAY - timedelta(days=1)  # the last whole day
     assert sentence(steps, TODAY) == "Median steps yesterday: 8,250, based on 6 members."
+    resting = found["resting_hr"]  # Fitbit's daily value: named by its date, not "last night"
+    assert sentence(resting, TODAY) == (
+        f"Median resting heart rate on {TODAY:%b} {TODAY.day}: 60 bpm, based on 6 members."
+    )
+    assert "last night" in sentence(found["hrv_ms"], TODAY)  # measured while asleep
 
 
 def test_never_from_fewer_than_five_people():

@@ -5,7 +5,13 @@ import { stateColor } from '@/components/teamDashboard';
 import { Text } from '@/components/Text';
 import { Tile } from '@/components/widgets';
 import type { TeamBriefing } from '@/api/types';
-import type { AreaReading, AreaState, BriefingItem, TeamStatus } from '@/lib/team';
+import {
+  type AreaReading,
+  type AreaState,
+  type BriefingItem,
+  briefingContent,
+  type TeamStatus,
+} from '@/lib/team';
 import { fonts, radius, spacing, type as typeScale, useColors } from '@/theme';
 
 const WORD: Record<AreaState, string> = {
@@ -62,7 +68,7 @@ export function BriefingCard({
   observed?: string[];
 }) {
   const colors = useColors();
-  const first = status.level === 'unknown' && observed.length > 0;
+  const content = briefingContent(status, !!briefing, items.length, observed);
   return (
     <Tile>
       <View style={styles.from}>
@@ -83,43 +89,41 @@ export function BriefingCard({
         accessibilityRole="header"
         style={[typeScale.title, { color: stateColor(status.level, colors) }]}
       >
-        {first ? 'First readings' : status.title}
+        {content.title}
       </Text>
-      {briefing ? (
+      {content.main === 'briefing' && briefing ? (
         <Text style={{ fontSize: 16, lineHeight: 24 }}>{briefing.summary}</Text>
-      ) : items.length ? (
-        items.map((item, index) => (
-          <View key={item.key} style={styles.item}>
-            <Text
-              variant="bodyStrong"
-              style={[styles.number, { color: stateColor(item.kind, colors) }]}
-            >
-              {index + 1}
-            </Text>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text>{item.text}</Text>
-              <Text variant="caption" color="faint">
-                {item.label} · {item.when}
+      ) : null}
+      {content.main === 'items'
+        ? items.map((item, index) => (
+            <View key={item.key} style={styles.item}>
+              <Text
+                variant="bodyStrong"
+                style={[styles.number, { color: stateColor(item.kind, colors) }]}
+              >
+                {index + 1}
               </Text>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text>{item.text}</Text>
+                <Text variant="caption" color="faint">
+                  {item.label} · {item.when}
+                </Text>
+              </View>
             </View>
-          </View>
-        ))
-      ) : observed.length ? (
+          ))
+        : null}
+      {content.main === 'line' ? <Text color="muted">{status.line}</Text> : null}
+      {content.observed.length ? (
         <View style={{ gap: spacing.xs }}>
-          {first ? null : <Text color="muted">{status.line}</Text>}
-          {observed.map((line) => (
+          {content.observed.map((line) => (
             <Text key={line}>{line}</Text>
           ))}
-          {first ? (
-            <Text variant="caption" color="faint">
-              What changed from usual comes once members have enough history: at least 14 earlier
-              days each.
-            </Text>
-          ) : null}
+          <Text variant="caption" color="faint">
+            What changed from usual comes once members have enough history: at least 14 earlier days
+            each.
+          </Text>
         </View>
-      ) : (
-        <Text color="muted">{status.line}</Text>
-      )}
+      ) : null}
     </Tile>
   );
 }

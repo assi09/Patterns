@@ -19,6 +19,8 @@ NAMES = {
 
 
 def _when(kind: str, day: date, today: date) -> str:
+    if kind == "date":
+        return f"on {day:%b} {day.day}"
     if kind == "night":
         return "last night" if day == today else f"the night to {day:%a %b} {day.day}"
     return "yesterday" if day == today - timedelta(days=1) else f"on {day:%a %b} {day.day}"
@@ -30,6 +32,8 @@ def _value(metric: str, value: float) -> str:
         return f"{minutes // 60} h {minutes % 60} min" if minutes >= 60 else f"{minutes} min"
     if metric == "steps":
         return f"{round(value):,}"
+    if metric == "resting_hr":  # whole beats; a median of an even count can end in .5
+        return f"{value:.1f}".removesuffix(".0") + " bpm"
     return format_value(metric, value)
 
 

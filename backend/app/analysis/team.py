@@ -529,9 +529,12 @@ def _week_mean(frame: pd.DataFrame, metric: str, week: Window) -> float | None:
 # Observed figures: what the team's latest night or day looked like, from at least MIN_MEMBERS
 # people with a reading. They need no history, so a team sees them from its first sync; they never
 # say that anything changed, which still needs each member's 14 earlier days (`team_change`).
-OBSERVED = {  # metric -> "night" (dated by the morning it ended) or "day" (whole once it is over)
+# metric -> how its latest value is dated (docs/metrics.md): "night" for sleep and HRV, measured
+# while asleep and dated by the morning the night ended; "date" for Fitbit's daily resting heart
+# rate, named by its date; "day" for activity, whole only once the day is over.
+OBSERVED = {
     "sleep_minutes": "night",
-    "resting_hr": "night",
+    "resting_hr": "date",
     "hrv_ms": "night",
     "steps": "day",
     "active_zone_minutes": "day",
@@ -545,7 +548,7 @@ def team_observed(frames: list[pd.DataFrame], today: date) -> list[Evidence]:
     prepared = [prepare(frame) for frame in frames if not frame.empty]
     found = []
     for metric, kind in OBSERVED.items():
-        last = today if kind == "night" else today - timedelta(days=1)
+        last = today - timedelta(days=1) if kind == "day" else today
         for back in range(OBSERVED_LOOKBACK_DAYS):
             day = last - timedelta(days=back)
             stamp = pd.Timestamp(day)

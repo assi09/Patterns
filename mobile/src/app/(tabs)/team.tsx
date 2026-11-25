@@ -43,7 +43,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { windowLabel } from '@/lib/format';
-import { areaReadings, briefingItems, changeRows, teamStatus } from '@/lib/team';
+import { areaReadings, briefingItems, buildingHistory, changeRows, teamStatus } from '@/lib/team';
 import { fonts, radius, spacing, useColors, useMetricColor } from '@/theme';
 
 // The team last looked at, for this session: switching tabs and back keeps it.
@@ -239,7 +239,9 @@ function TeamView({ team }: { team: SupervisedTeam }) {
                 status={status}
                 items={briefingItems(alerts.data, latest.data)}
                 briefing={latest.data?.briefing}
-                observed={observed.data?.figures.map((f) => f.text)}
+                observed={
+                  buildingHistory(latest.data) ? observed.data?.figures.map((f) => f.text) : []
+                }
               />
               {ready || pulse.data?.weeks.length ? (
                 <KeyTiles teamId={team.id} report={latest.data} />

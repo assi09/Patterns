@@ -1,10 +1,4 @@
-import type {
-  Evidence,
-  ReportSection,
-  TeamAlert,
-  TeamLevel,
-  TeamReport,
-} from '@/api/types';
+import type { Evidence, ReportSection, TeamAlert, TeamLevel, TeamReport } from '@/api/types';
 import { formatWithUnit, metricLabel } from '@/lib/format';
 
 /** A signed change in the metric's units: "-1 h 4 min", "+12 min" for bedtime, "-1,148 steps". */
@@ -255,4 +249,36 @@ export function latestTeamWeek(evidence: Evidence | undefined): TeamWeekFigures 
   const weeks = stats?.weeks;
   if (Array.isArray(weeks) && weeks.length) return weeks[weeks.length - 1] as TeamWeekFigures;
   return typeof stats?.median_change === 'number' ? (stats as unknown as TeamWeekFigures) : null;
+}
+
+/**
+ * Whether the team is still building the history a change needs: no weekly report yet, a
+ * withheld one, or one where no metric had enough members with 14 earlier days. While it is,
+ * the briefing card keeps showing the team's observed readings next to anything else.
+ */
+export function buildingHistory(report?: TeamReport): boolean {
+  if (!report || report.status !== 'ready') return true;
+  return report.sections.every((s) => report.evidence[s.evidenceId]?.sufficient === false);
+}
+
+export interface BriefingContent {
+  main: 'briefing' | 'items' | 'line' | null; // what leads the card
+  observed: string[]; // the team's readings, shown under it
+  title: string;
+}
+
+/** What the briefing card shows: the briefing, its items or its status line, and the readings
+ * alongside while the team builds history; "First readings" when they are all there is. */
+export function briefingContent(
+  status: TeamStatus,
+  hasBriefing: boolean,
+  itemCount: number,
+  observed: string[] = [],
+): BriefingContent {
+  const main = hasBriefing ? 'briefing' : itemCount > 0 ? 'items' : null;
+  if (main) return { main, observed, title: status.title };
+  if (observed.length && status.level === 'unknown') {
+    return { main: null, observed, title: 'First readings' };
+  }
+  return { main: 'line', observed, title: status.title };
 }
