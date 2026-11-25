@@ -49,10 +49,12 @@ with a regression test confirmed to fail without the fix:
 | A supervisor demoted after sending kept access | one role rule for delivery and access |
 | A replaced HR contact kept access and reminders | the same rule; their delivery record stays for the audit |
 
-**Measured** (`tests/test_checkin.py`, 42 tests, on synthetic people): under 0.5% of 10,000 calm
-weekly windows raise an alert; at least 95 of 100 planted extreme weeks are found; one signal, one
-night, three days, missing wear, old data and short history raise nothing. Full backend suite
-2,931 passed; app 198 tests; browser runs of every check-in screen in light and dark mode.
+**Measured** on the synthetic people of `tests/test_checkin.py` (42 tests): **0 of 11,400**
+overlapping 7-day windows of 100 calm people raised an alert (the test requires under 0.5%); a
+planted extreme week was found in **100 of 100** (the test requires 95); one signal only, one
+bad night and three bad days raised 0 of 30 each (the test allows 1), and a barely worn week,
+missing wear, old data and short history 0 of 20 each. Synthetic people have mild, well-behaved noise, so zero alerts on them shows the rule is not trigger-happy by construction; it is not a false-alarm rate for real people. Full backend suite 2,931
+passed; app 198 tests; browser runs of every check-in screen in light and dark mode.
 
 **Built, not merged yet:** Google Calendar as daily meeting load (only event times are read;
 titles, notes and attendees never leave Google), with a team "Meeting load" card from at least 5

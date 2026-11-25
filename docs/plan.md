@@ -1,9 +1,15 @@
 # The last four weeks
 
-The working plan from 2026-10-27 to the end of the project. **Everything planned is built and
-evidenced by Monday 2026-11-23**; the two weeks after (Nov 24 – Dec 7) are kept free for surprises,
-rehearsal and only small fixes. The poster session is done and closed with the instructor; this
-plan covers the rest of the final submission: live demo and presentation, the repository with
+**Now (since 2026-11-25):** the product is being rebuilt around teams. Features are built
+**Wednesday 25 to Friday 27 November** (the calendar, the HR invitation, the MCP server, the
+coach), **Saturday 28 and Sunday 29 are for testing only**, and **December 1–4** are for the
+report, demo and rehearsal before the presentations on **5 December**. The schedule is the first
+section below.
+
+*Historical:* this plan was written on 2026-10-27 with the target that everything planned would be
+built and evidenced by Monday 2026-11-23, and the two weeks after kept for surprises, rehearsal
+and small fixes. The change of scope on 2026-11-25 replaced that. The poster session is done and
+closed with the instructor; this plan covers the rest of the final submission: live demo and presentation, the repository with
 setup and reproducibility, the evaluation and its results, traces and operational metrics, failure
 and threat analysis, architecture and API documentation, and the final technical report. Every
 applicable bonus practice is in it.
@@ -32,8 +38,17 @@ behind a flag (#234, live), check-in alerts with four review rounds (#235). Deta
 | Thu 26 | **HR invitation**: the supervisor types HR's email, HR signs up through the link as that team's HR; HR sees Check-ins, Inbox and Settings only; a generic email notice | cut first if Friday is tight: HR can be set on the server |
 | Fri 27 | **MCP server**: personal tokens; supervisors read their own teams' aggregates; members read their own data and send in calendar findings, checked against a schema and held until approved; check-in alerts never pass through it | tried for real from Claude Code and Codex |
 | Fri 27 | **The coach**: the Monday briefing uses calendar load next to sleep and recovery, computed in code and verified | |
-| Sat 28 – Sun 29 | **Testing only**: the check-in rule on real people (PMData, LifeSnaps) for false alarms and detection; MCP access and prompt-injection attacks; end to end in production; `current.md` updated with every result | |
+| Sat 28 – Sun 29 | **Testing only**: the check-in rule on real people (below); MCP access and prompt-injection attacks; end to end in production; `current.md` updated with every result | |
 | Dec 1–4 | Final report (results from [evaluation.md](evaluation.md) and the weekend), demo script with failure cases, rehearsal, a `v1.0-demo` tag | |
+
+**What the real-data run can and cannot measure** (PMData, LifeSnaps, Sat 28 – Sun 29):
+1. **Eligibility first**: how many participants, and how many of their weeks, have at least 5
+   confirmed-worn days and 14 days of history, since the rule cannot fire on anyone else.
+2. **How often it fires on ordinary weeks**: alerts per eligible person-week. These weeks are
+   unlabelled, so a natural alert is reported as an alert, not called false: calling it false
+   would need independent evidence that it was unwarranted, which these datasets do not have.
+3. **Detection**: a known sustained change planted into real histories, and how often the rule
+   finds it, by size of change.
 
 **Left for Jad** (none of it is in the repository yet, as of 2026-11-25; it is 15% of the grade,
 reliability, QA and security):

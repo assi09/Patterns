@@ -62,11 +62,11 @@ the result. "Changed since" means it has, and the result has not been re-measure
 
 | Test | Result | Measured on | Valid now? |
 |---|---|---|---|
-| False alarms on calm synthetic people | under **0.5%** of 10,000 weekly windows (100 people) | #235 final commit `19725f9`, 2026-11-25 | Valid |
-| Planted extreme week (sleep −3 h and HRV −30 ms for 7 days) | found in at least **95 of 100** | same | Valid |
-| What must not raise one | one signal, one bad night, three bad days, missing or partial wear, old data, under 14 days of history: none | same | Valid |
+| Alerts on calm synthetic people | **0 of 11,400** overlapping 7-day windows (100 people, the window moved 3 days at a time); the test requires under 0.5% | #235 final commit `19725f9`, 2026-11-25 | Valid; synthetic noise is mild, so this is not a false-alarm rate for real people |
+| Planted extreme week (sleep −3 h and HRV −30 ms for 7 days) | found in **100 of 100**; the test requires at least 95 | same | Valid |
+| What must not raise one | **0** in every case: one signal only, one bad night, three bad days (0 of 30 each; the test allows 1 of 30); a barely worn week, wear time missing all week, no wear column, four confirmed days, old data, 20 days of history (0 of 20 each; the test allows none) | same | Valid |
 | Privacy and roles | consent to roles; a replaced or demoted HR contact or supervisor loses access at once and gets no reminder; nameless notifications; leaving withdraws at once; one waiting alert per person and team | same, 42 tests, each review finding with a regression test | Valid |
-| On real people | **not measured yet**: weekend testing on PMData and LifeSnaps | — | — |
+| On real people | **not measured yet**: weekend testing on PMData and LifeSnaps, defined in [plan.md](plan.md): eligibility, how often it fires on ordinary weeks, detection of planted changes | — | — |
 
 ### Conversations (follow-ups)
 
