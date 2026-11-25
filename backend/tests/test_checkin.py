@@ -233,12 +233,12 @@ def test_after_the_wait_hr_and_the_supervisor_are_asked_to_check_in_and_nothing_
     assert send(engine, NOW + timedelta(minutes=61)) == 1
     for email in ("boss@example.com", "hr@example.com"):
         [note] = inbox(engine, email)
-        assert note.title == "Please check in with member00@example.com"
+        assert note.title == "You have a check-in request"
         text = (note.title + note.body).lower()
+        assert "member00" not in text  # the name only behind the role check on Check-ins
         for word in ("sleep", "hrv", "heart", "recovery", "stress", "minutes", "below", "above"):
             assert word not in text
-        body = note.body.replace("member00@example.com", "")
-        assert not any(ch.isdigit() for ch in body)  # no value, date or count
+        assert not any(ch.isdigit() for ch in text)  # no value, date or count
         seen = client.get("/checkins", headers=signed_in(client, engine, email)).json()
         assert len(seen) == 1
         assert seen[0]["person"] == "member00@example.com"
@@ -556,7 +556,79 @@ def test_changing_who_is_hr_needs_no_fresh_consent(engine):
         assert len(consenting) == 5  # nobody's consent was reset
     assert raise_now(engine, team_id) == 1
     send(engine, NOW + timedelta(minutes=61))
-    assert [n.title for n in inbox(engine, "new.hr@example.com")] == [
-        "Please check in with member00@example.com"
-    ]
+    assert [n.title for n in inbox(engine, "new.hr@example.com")] == ["You have a check-in request"]
     assert inbox(engine, "hr@example.com") == []
+
+
+# A former recipient never learns the name
+
+
+@pytest.mark.parametrize(
+    ("demoted", "still_told"),
+    [("hr@example.com", "boss@example.com"), ("boss@example.com", "hr@example.com")],
+)
+def test_someone_demoted_during_the_hour_receives_nothing(engine, client, demoted, still_told):
+    """Regression: the timer sent to the account saved on the team without checking that it still
+    held its role, so a demoted HR contact or supervisor got the request."""
+    team_id = make_team(engine)
+    raise_now(engine, team_id)
+    with session_scope(engine) as db:
+        db.scalar(select(User).where(User.email == demoted)).role = "member"
+    assert send(engine, NOW + timedelta(minutes=61)) == 1
+    assert inbox(engine, demoted) == []
+    assert [n.title for n in inbox(engine, still_told)] == ["You have a check-in request"]
+    with session_scope(engine) as db:
+        gone = db.scalar(select(User).where(User.email == demoted))
+        assert db.scalar(select(CheckinMark).where(CheckinMark.user_id == gone.id)) is None
+    assert client.get("/checkins", headers=signed_in(client, engine, demoted)).json() == []
+
+
+def test_a_former_hr_contact_cannot_read_the_name_in_their_inbox(engine, client):
+    """Regression: the inbox kept the original notification, which named the person."""
+    team_id = make_team(engine)
+    raise_now(engine, team_id)
+    send(engine, NOW + timedelta(minutes=61))
+    replace_hr(engine, team_id)
+    old = signed_in(client, engine, "hr@example.com")
+    shown = client.get("/notifications", headers=old)
+    assert shown.status_code == 200 and shown.json()["items"]  # their inbox still works
+    assert "member00" not in shown.text
+    assert client.get("/checkins", headers=old).json() == []
+
+
+def test_leaving_the_team_withdraws_at_once_and_send_now_refuses(engine, client):
+    """Regression: leaving left the alert waiting until its hour ended, and Send now on an old
+    screen still sent it to the former supervisor."""
+    team_id = make_team(engine)
+    raise_now(engine, team_id)
+    me = signed_in(client, engine, "member00@example.com")
+    alert_id = client.get("/me/checkins", headers=me).json()[0]["id"]
+    assert client.post(f"/me/teams/{team_id}/leave", headers=me).status_code == 204
+    with session_scope(engine) as db:
+        assert db.scalar(select(CheckinAlert.status)) == "withdrawn"  # before any timer runs
+    assert client.post(f"/me/checkins/{alert_id}/send", headers=me).status_code == 409
+    assert inbox(engine, "boss@example.com") == [] and inbox(engine, "hr@example.com") == []
+
+
+def test_send_now_rechecks_membership_and_consent(engine, client):
+    """Even if a waiting alert survived a lapse in consent, Send now checks again and sends
+    nothing."""
+    team_id = make_team(engine)
+    raise_now(engine, team_id)
+    me = signed_in(client, engine, "member00@example.com")
+    alert_id = client.get("/me/checkins", headers=me).json()[0]["id"]
+    with session_scope(engine) as db:  # consent off without the usual withdrawal
+        person = db.scalar(select(User).where(User.email == "member00@example.com"))
+        db.scalar(
+            select(TeamMembership).where(TeamMembership.user_id == person.id)
+        ).checkin_alerts = False
+    refused = client.post(f"/me/checkins/{alert_id}/send", headers=me)
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "not_in_team"
+    assert inbox(engine, "boss@example.com") == [] and inbox(engine, "hr@example.com") == []
+    assert send(engine, NOW + timedelta(minutes=1)) == 0
+    with session_scope(engine) as db:
+        assert db.scalar(select(CheckinAlert.status)) == "waiting"  # its hour is not up yet
+    assert send(engine, NOW + timedelta(minutes=61)) == 0  # when it is, withdrawn and unsent
+    with session_scope(engine) as db:
+        assert db.scalar(select(CheckinAlert.status)) == "withdrawn"
+    assert inbox(engine, "boss@example.com") == [] and inbox(engine, "hr@example.com") == []

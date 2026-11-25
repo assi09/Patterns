@@ -294,6 +294,7 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 409 | `email_taken` |
 | 409 | `not_changeable` |
 | 409 | `not_connected` |
+| 409 | `not_in_team` |
 | 409 | `not_logged` |
 | 409 | `own_team` |
 | 409 | `reconnect_needed` |

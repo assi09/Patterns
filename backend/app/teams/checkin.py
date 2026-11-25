@@ -93,11 +93,12 @@ PERSON_BODY = (
     "Your data in the last 7 days met the check-in rule you agreed to. At {at}, one hour from now, "
     f"{RECIPIENTS} will be asked to check in with you. Open it to see why, send it now, or stop it."
 )
-RECIPIENT_TITLE = "Please check in with {person}"
-RECIPIENT_BODY = (
-    "{person} agreed to check-in alerts in {team}, and their own data met the agreed rule. No "
-    "details are shared. Mark it in the app once you have checked in."
-)
+# What lands in a recipient's inbox (and email): never the person's name. The name is shown only on
+# the Check-ins screen, after checking that the reader still holds the role, so someone who leaves
+# the role cannot read it back from an old notification.
+RECIPIENT_TITLE = "You have a check-in request"
+RECIPIENT_BODY = "Open Check-ins to see who it is about. It was raised by the agreed rule."
+REMINDER_BODY = "Still open: " + RECIPIENT_BODY
 
 
 # --- the rule -------------------------------------------------------------------------------
@@ -183,15 +184,7 @@ def set_consent(
     if on:
         membership.checkin_consent_version = CONSENT_VERSION
         return membership
-    waiting = db.scalars(
-        select(CheckinAlert).where(
-            CheckinAlert.team_id == team.id,
-            CheckinAlert.user_id == membership.user_id,
-            CheckinAlert.status == "waiting",
-        )
-    )
-    for alert in waiting:
-        _withdraw(db, alert, membership.user_id, now)
+    withdraw_waiting(db, team.id, membership.user_id, membership.user_id, now)
     return membership
 
 
@@ -305,10 +298,17 @@ def after_sync(db: Session, user_id: uuid.UUID, now: datetime) -> int:
     )
 
 
-def _recipients(team: Team) -> list[tuple[uuid.UUID, str]]:
-    found = [(team.supervisor_id, "supervisor")]
-    if team.hr_id and team.hr_id != team.supervisor_id:
-        found.append((team.hr_id, "hr"))
+def _recipients(db: Session, team: Team) -> list[tuple[uuid.UUID, str]]:
+    """Whoever holds each role now: the team's supervisor if their account is still a supervisor,
+    and its HR contact if theirs is still an HR account. Checked at the moment of sending, so a
+    demotion during the hour means nothing reaches that account."""
+    found = []
+    supervisor = db.get(User, team.supervisor_id)
+    if supervisor is not None and supervisor.role == "supervisor":
+        found.append((supervisor.id, "supervisor"))
+    hr = db.get(User, team.hr_id) if team.hr_id else None
+    if hr is not None and hr.role == "hr" and hr.id != team.supervisor_id:
+        found.append((hr.id, "hr"))
     return found
 
 
@@ -320,14 +320,7 @@ def send_due(db: Session, now: datetime) -> int:
     ).all()
     for alert in due:
         team = db.get(Team, alert.team_id)
-        membership = db.scalar(
-            select(TeamMembership).where(
-                TeamMembership.team_id == alert.team_id,
-                TeamMembership.user_id == alert.user_id,
-                TeamMembership.left_at.is_(None),
-            )
-        )
-        if team is None or membership is None or not membership.checkin_alerts:
+        if team is None or not _still_agrees(db, alert):
             _withdraw(db, alert, None, now)  # left the team or turned it off: nothing goes
             continue
         _deliver(db, alert, team, None, now)
@@ -339,20 +332,12 @@ def _deliver(
     db: Session, alert: CheckinAlert, team: Team, actor: uuid.UUID | None, now: datetime
 ) -> None:
     """Sends the alert to whoever holds the supervisor and HR roles now; once only."""
-    person = db.get(User, alert.user_id)
     alert.status = "sent"
     alert.sent_at = now
     _log(db, alert, actor, "sent", now)
-    for user_id, role in _recipients(team):
+    for user_id, role in _recipients(db, team):
         db.add(CheckinMark(alert_id=alert.id, user_id=user_id, role=role))
-        _notify(
-            db,
-            user_id,
-            RECIPIENT_TITLE.format(person=person.email),
-            RECIPIENT_BODY.format(person=person.email, team=team.name),
-            "/checkins",
-            now,
-        )
+        _notify(db, user_id, RECIPIENT_TITLE, RECIPIENT_BODY, "/checkins", now)
 
 
 def holds_role(db: Session, mark: CheckinMark, team: Team) -> bool:
@@ -380,19 +365,11 @@ def remind_due(db: Session, now: datetime) -> int:
         marks = db.scalars(select(CheckinMark).where(CheckinMark.alert_id == alert.id)).all()
         if any(mark.outcome for mark in marks):
             continue
-        person = db.get(User, alert.user_id)
         team = db.get(Team, alert.team_id)
         for mark in marks:
             if not holds_role(db, mark, team):
                 continue  # left the role: no reminder, though their delivery record stays
-            _notify(
-                db,
-                mark.user_id,
-                RECIPIENT_TITLE.format(person=person.email),
-                "Still open: " + RECIPIENT_BODY.format(person=person.email, team=team.name),
-                "/checkins",
-                now,
-            )
+            _notify(db, mark.user_id, RECIPIENT_TITLE, REMINDER_BODY, "/checkins", now)
         alert.reminded_at = now
         _log(db, alert, None, "reminded", now)
         reminded += 1
@@ -530,9 +507,43 @@ def _own_waiting(db: Session, user: User, alert_id: str) -> tuple[CheckinAlert, 
     return alert, db.get(Team, alert.team_id)
 
 
+def _still_agrees(db: Session, alert: CheckinAlert) -> bool:
+    """Whether the person is still an active member of the alert's team with check-in alerts on."""
+    membership = db.scalar(
+        select(TeamMembership).where(
+            TeamMembership.team_id == alert.team_id,
+            TeamMembership.user_id == alert.user_id,
+            TeamMembership.left_at.is_(None),
+        )
+    )
+    return membership is not None and membership.checkin_alerts
+
+
+def withdraw_waiting(
+    db: Session, team_id: uuid.UUID, user_id: uuid.UUID, actor: uuid.UUID | None, now: datetime
+) -> int:
+    """Withdraws the person's waiting alerts in a team, at once (leaving it, turning alerts off)."""
+    waiting = db.scalars(
+        select(CheckinAlert).where(
+            CheckinAlert.team_id == team_id,
+            CheckinAlert.user_id == user_id,
+            CheckinAlert.status == "waiting",
+        )
+    ).all()
+    for alert in waiting:
+        _withdraw(db, alert, actor, now)
+    return len(waiting)
+
+
 def send_now(db: Session, user: User, alert_id: str, now: datetime) -> CheckinAlert:
-    """The person sends their own waiting alert before the hour is up."""
+    """The person sends their own waiting alert before the hour is up, if they are still in the
+    team with check-in alerts on; from an old screen after leaving, nothing goes."""
     alert, team = _own_waiting(db, user, alert_id)
+    if team is None or not _still_agrees(db, alert):
+        # Refused (the request rolls back); when its hour ends, the timer withdraws it unsent.
+        raise ApiError(
+            409, "not_in_team", "You are no longer in this team with check-in alerts on."
+        )
     _deliver(db, alert, team, user.id, now)
     db.flush()
     return alert

@@ -80,11 +80,20 @@ worn week, old data and under 14 days of history raise nothing. The same check o
 
 | Option | Notes |
 |---|---|
-| **The person's name and "please check in with them"**, the date, and that it was raised by the agreed rule (current) | no metric, value, direction or reason |
+| **On the Check-ins screen: the person's name and "please check in with them"**, the team and when it was sent (current) | no metric, value, direction or reason; shown only after checking the reader still holds the role |
 | Which signals moved | more useful to HR; tells an employer about someone's sleep or heart rate |
 | The full evidence | as the person sees it; far too much for an employer |
 
-The person always sees the full evidence behind their own alert.
+**Notifications never carry the name.** The inbox entry (and any email) says only "You have a
+check-in request", so the name is read only behind the role check: someone who leaves a role
+cannot read it back from an old notification. Recipients are chosen when the alert goes out, each
+checked for still holding their role at that moment (still the team's supervisor with a supervisor
+account, still its HR contact with an HR account), so a demotion during the hour means nothing
+reaches that account.
+
+The person always sees the full evidence behind their own alert. Leaving the team or turning
+check-in alerts off withdraws a waiting alert at once, and Send now checks again that the person
+is still in the team with check-in alerts on.
 
 ## 6. What the recipients do
 
