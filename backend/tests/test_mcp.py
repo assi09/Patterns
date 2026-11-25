@@ -3,6 +3,7 @@
 how it is held, and that check-in alerts are out of reach."""
 
 import asyncio
+import contextlib
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -18,7 +19,7 @@ from test_checkin import NOW, PASSWORD, TODAY, client, engine, make_team, signed
 from app.api import chat
 from app.auth.deletion import held
 from app.db.daily import load_daily
-from app.db.models import HarnessSubmission, TeamNote, User
+from app.db.models import HarnessCall, HarnessSubmission, TeamNote, User
 from app.db.session import session_scope
 from app.harness import server as mcp_server
 from app.harness import tokens
@@ -323,3 +324,53 @@ def test_a_token_is_limited_to_a_number_of_calls_a_minute(engine, monkeypatch):
     assert not call(server, boss, "who_am_i")[0]
     failed, text = call(server, boss, "who_am_i")
     assert failed and "Too many calls" in text
+
+
+def test_each_call_is_recorded_without_its_data_and_shown_per_token(engine, client):
+    make_team(engine)
+    headers = signed_in(client, engine, "boss@example.com")
+    made = client.post("/me/tokens", headers=headers, json={"name": "Codex"}).json()
+    boss = user_id(engine, "boss@example.com")
+
+    async def as_token():
+        handle = auth_context_var.set(
+            AuthenticatedUser(
+                McpToken(
+                    token="",
+                    client_id="test",
+                    scopes=[],
+                    subject=str(boss),
+                    claims={"token_id": made["id"]},
+                )
+            )
+        )
+        server = build(engine)
+        try:
+            await server.call_tool("who_am_i", {})
+            await server.call_tool("who_am_i", {})
+            with contextlib.suppress(ToolError):  # refused, and still recorded
+                await server.call_tool("team_overview", {"team_id": "not-a-team"})
+        finally:
+            auth_context_var.reset(handle)
+
+    asyncio.run(as_token())
+    with session_scope(engine) as db:
+        calls = db.scalars(select(HarnessCall)).all()
+        assert sorted((c.tool, c.ok) for c in calls) == [
+            ("team_overview", False),
+            ("who_am_i", True),
+            ("who_am_i", True),
+        ]
+    assert set(HarnessCall.__table__.columns.keys()) == {
+        "id",
+        "user_id",
+        "token_id",
+        "tool",
+        "ok",
+        "at",
+    }
+    listed = client.get("/me/tokens", headers=headers).json()[0]
+    assert listed["activity"] == [
+        {"tool": "who_am_i", "calls": 2, "failed": 0},
+        {"tool": "team_overview", "calls": 1, "failed": 1},
+    ]

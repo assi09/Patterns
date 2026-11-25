@@ -5,11 +5,11 @@ import secrets
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError
-from app.db.models import AccessToken, User
+from app.db.models import AccessToken, HarnessCall, User
 
 PREFIX = "pat_"  # so a leaked token is recognisable in logs and scanners
 MAX_TOKENS = 5  # per person, so an old one is revoked before many pile up
@@ -69,3 +69,25 @@ def holder(db: Session, token: str, now: datetime) -> tuple[User, AccessToken] |
         return None
     row.last_used_at = now
     return user, row
+
+
+def activity(db: Session, token_ids: list, since: datetime) -> dict:
+    """Per token, its tool calls since `since`: [(tool, calls, failed)], most used first."""
+    if not token_ids:
+        return {}
+    rows = db.execute(
+        select(
+            HarnessCall.token_id,
+            HarnessCall.tool,
+            func.count(),
+            func.sum(case((HarnessCall.ok.is_(False), 1), else_=0)),
+        )
+        .where(HarnessCall.token_id.in_(token_ids), HarnessCall.at >= since)
+        .group_by(HarnessCall.token_id, HarnessCall.tool)
+    ).all()
+    out: dict = {}
+    for token_id, tool, calls, failed in rows:
+        out.setdefault(token_id, []).append((tool, int(calls), int(failed or 0)))
+    for items in out.values():
+        items.sort(key=lambda item: -item[1])
+    return out

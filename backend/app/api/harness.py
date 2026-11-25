@@ -1,7 +1,7 @@
 """Connecting a harness (docs/mcp.md): personal tokens for the MCP server, and approving what a
 harness sent. A token is shown once; what a harness sends changes nothing until approved here."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Response
@@ -20,12 +20,20 @@ class NewToken(ApiModel):
     name: str = Field(min_length=1, max_length=60)  # "Claude Code on my laptop"
 
 
+class ToolCount(ApiModel):
+    tool: str
+    calls: int
+    failed: int
+
+
 class TokenOut(ApiModel):
     id: str
     name: str
     created_at: datetime
     last_used_at: datetime | None
     revoked_at: datetime | None
+    # What the harness did with it in the last 24 hours: tool names and counts, never data.
+    activity: list[ToolCount] = []
 
 
 class MadeToken(TokenOut):
@@ -69,8 +77,20 @@ def make_token(body: NewToken, db: Db, clock: Now, user: Person) -> MadeToken:
 
 
 @router.get("/me/tokens", response_model=list[TokenOut])
-def list_tokens(db: Db, user: Person) -> list[TokenOut]:
-    return [_token(row) for row in tokens.listing(db, user)]
+def list_tokens(db: Db, clock: Now, user: Person) -> list[TokenOut]:
+    rows = tokens.listing(db, user)
+    calls = tokens.activity(db, [row.id for row in rows], clock - timedelta(hours=24))
+    return [
+        _token(row).model_copy(
+            update={
+                "activity": [
+                    ToolCount(tool=tool, calls=n, failed=failed)
+                    for tool, n, failed in calls.get(row.id, [])
+                ]
+            }
+        )
+        for row in rows
+    ]
 
 
 @router.delete("/me/tokens/{token_id}", status_code=204)

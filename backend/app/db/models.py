@@ -1179,3 +1179,22 @@ class HarnessSubmission(Base):
     status: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class HarnessCall(Base):
+    """One MCP tool call, for the person's own activity view and operations: which tool, whether
+    it worked, when. Never its inputs or results (docs/mcp.md)."""
+
+    __tablename__ = "harness_calls"
+    __table_args__ = (Index("ix_harness_calls_token_at", "token_id", "at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    token_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("access_tokens.id", ondelete="CASCADE"), default=None
+    )
+    tool: Mapped[str] = mapped_column(String(40))
+    ok: Mapped[bool] = mapped_column(Boolean)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

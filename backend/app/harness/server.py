@@ -4,6 +4,7 @@ A bearer token made in the app identifies the person; every tool then checks the
 and returns only what the app would show them (`app.harness.tools`). Check-in alerts have no tool.
 """
 
+import logging
 import threading
 import time
 import uuid
@@ -19,11 +20,12 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy.orm import Session
 
-from app.db.models import User
+from app.db.models import HarnessCall, User
 from app.harness import tokens, tools
 from app.harness.tools import CalendarDayIn, HarnessError, TeamEventIn
 
 Sessions = Callable[[], AbstractContextManager[Session]]
+logger = logging.getLogger(__name__)
 
 INSTRUCTIONS = (
     "Patterns describes a team's or a person's own Fitbit and calendar patterns, from computed "
@@ -95,6 +97,18 @@ def _caller(db: Session) -> tuple[User, uuid.UUID | None]:
     return user, uuid.UUID(token_id) if token_id else None
 
 
+def _record(sessions: Sessions, user_id, token_id, tool: str, ok: bool) -> None:
+    try:
+        with sessions() as db:
+            db.add(
+                HarnessCall(
+                    user_id=user_id, token_id=token_id, tool=tool, ok=ok, at=datetime.now(UTC)
+                )
+            )
+    except Exception:  # recording must never break the call it records
+        logger.exception("Recording an MCP call failed")
+
+
 def _today(user: User, fallback: str) -> date:
     try:
         return datetime.now(ZoneInfo(user.timezone or fallback)).date()
@@ -118,41 +132,59 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
         ),
     )
 
+    def use(tool: str, work):
+        """Runs one tool call as its caller and records it (tool, outcome, time; never inputs or
+        results) in its own transaction, so a refused call is recorded too."""
+        token_id = user_id = None
+        ok = False
+        try:
+            with sessions() as db:
+                user, token_id = _caller(db)
+                user_id = user.id
+                result = work(db, user, token_id)
+            ok = True
+            return result
+        finally:
+            if user_id is not None:
+                _record(sessions, user_id, token_id, tool, ok)
+
     @server.tool(description="Who the token belongs to, their role and what they may do.")
     def who_am_i() -> dict:
-        with sessions() as db:
-            user, _ = _caller(db)
-            return tools.who_am_i(db, user)
+        return use("who_am_i", lambda db, user, _: tools.who_am_i(db, user))
 
     @server.tool(
         description="A supervisor's team as on its Team tab: observed readings, the latest weekly "
         "report's team figures and open team alerts. Aggregates from at least 5 people."
     )
     def team_overview(team_id: str) -> dict:
-        with sessions() as db:
-            user, _ = _caller(db)
-            return tools.team_overview(db, user, team_id, _today(user, timezone))
+        return use(
+            "team_overview",
+            lambda db, user, _: tools.team_overview(db, user, team_id, _today(user, timezone)),
+        )
 
     @server.tool(
         description="A supervisor's team meeting load for the last full week, per person against "
         "each member's usual week, from at least 5 people."
     )
     def team_meeting_load(team_id: str) -> dict:
-        with sessions() as db:
-            user, _ = _caller(db)
-            return tools.team_meeting_load(db, user, team_id, _today(user, timezone))
+        return use(
+            "team_meeting_load",
+            lambda db, user, _: tools.team_meeting_load(db, user, team_id, _today(user, timezone)),
+        )
 
     @server.tool(description="Your own last days (1-28): sleep, steps, resting heart rate, HRV.")
     def my_recent_days(days: int = 7) -> list[dict]:
-        with sessions() as db:
-            user, _ = _caller(db)
-            return tools.my_recent_days(db, user, _today(user, timezone), days)
+        return use(
+            "my_recent_days",
+            lambda db, user, _: tools.my_recent_days(db, user, _today(user, timezone), days),
+        )
 
     @server.tool(description="Your own daily calendar counts (1-60 days), as Patterns has them.")
     def my_calendar_days(days: int = 14) -> list[dict]:
-        with sessions() as db:
-            user, _ = _caller(db)
-            return tools.my_calendar_days(db, user, _today(user, timezone), days)
+        return use(
+            "my_calendar_days",
+            lambda db, user, _: tools.my_calendar_days(db, user, _today(user, timezone), days),
+        )
 
     @server.tool(
         description="Send your own calendar days, counted from your calendar: meeting minutes, "
@@ -160,18 +192,24 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
         "approve them in the Patterns app."
     )
     def send_calendar_days(days: list[CalendarDayIn]) -> dict:
-        with sessions() as db:
-            user, token_id = _caller(db)
-            return tools.send_calendar_days(db, user, days, token_id, datetime.now(UTC))
+        return use(
+            "send_calendar_days",
+            lambda db, user, token: tools.send_calendar_days(
+                db, user, days, token, datetime.now(UTC)
+            ),
+        )
 
     @server.tool(
         description="Send a team event (a launch, a deadline) for your team's notes: a short "
         "title and dates. Held until you approve it in the Patterns app."
     )
     def send_team_event(team_id: str, event: TeamEventIn) -> dict:
-        with sessions() as db:
-            user, token_id = _caller(db)
-            return tools.send_team_event(db, user, team_id, event, token_id, datetime.now(UTC))
+        return use(
+            "send_team_event",
+            lambda db, user, token: tools.send_team_event(
+                db, user, team_id, event, token, datetime.now(UTC)
+            ),
+        )
 
     return server
 
