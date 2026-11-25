@@ -578,3 +578,19 @@ class ShareCheckin(ApiModel):
 
 class TeamHr(ApiModel):
     email: str | None  # None removes the HR contact
+
+
+class TeamObservedFigure(ApiModel):
+    """What the team's latest night or day looked like; never a change from usual."""
+
+    metric: str
+    day: date
+    median: float
+    members: int  # at least the minimum, with a reading that day
+    text: str  # "Median sleep last night: 7 h 10 min, based on 6 members."
+    evidence_id: str
+
+
+class TeamObserved(ApiModel):
+    figures: list[TeamObservedFigure]
+    minimum_members: int

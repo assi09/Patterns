@@ -45,6 +45,7 @@ import type {
   Strain,
   TeamPreview,
   Membership,
+  TeamObserved,
   OwnCheckin,
   ReceivedCheckin,
   SupervisedTeam,
@@ -2066,6 +2067,26 @@ export const mockClient: ApiClient = {
     later(() => {
       ownTeam(teamId);
       return mockTeamPulse();
+    }),
+  getTeamObserved: (teamId) =>
+    later<TeamObserved>(() => {
+      ownTeam(teamId);
+      // Made up, as the backend writes them: medians of the latest night or day, 5 people or more.
+      return {
+        minimumMembers: 5,
+        figures: [
+          ['sleep_minutes', 0, 430, 'Median sleep last night: 7 h 10 min, based on 6 members.'],
+          ['resting_hr', 0, 61, 'Median resting heart rate last night: 61 bpm, based on 6 members.'],
+          ['steps', 1, 8240, 'Median steps yesterday: 8,240, based on 6 members.'],
+        ].map(([metric, offset, median, text]) => ({
+          metric: metric as string,
+          day: isoDate(offset as number),
+          median: median as number,
+          members: 6,
+          text: text as string,
+          evidenceId: `observed-${metric}`,
+        })),
+      };
     }),
 
   saveCheckIn: (checkIn) =>

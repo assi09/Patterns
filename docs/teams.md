@@ -17,6 +17,7 @@ model-written, checked), the app screens and the weekly email are built; the Rai
 |---|---|
 | The team's name, invite code and number of active members | Who joined or left, or who has not opted in |
 | Weekly aggregates across members: median change per metric, how many moved up and down, a weekday pattern, the evidence behind each | A team figure built from fewer than 5 people |
+| **From the first sync** (since 2026-11-25): the team's latest night and day as observed medians, e.g. "Median sleep last night: 7 h 10 min, based on 6 members" (sleep, resting heart rate, HRV; steps and Active Zone Minutes for the last whole day), each from at least 5 members with a reading that day, no older than 3 days. They need no history and never say what changed: "changed from usual" still needs each member's 14 earlier days (`team_observed`, `GET /teams/{id}/observed`) | A change claim from members without that history |
 | Which metrics had too little data to report | Anyone's daily values, other metrics, workouts, chats, check-ins or findings |
 | **Only for people who opted in:** their name and this week's recovery, sleep, strain and stress, each as a level against their own baseline plus the week's average | Any named data about someone who has not opted in, or after they switch it off |
 

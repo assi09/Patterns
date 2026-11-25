@@ -27,6 +27,7 @@ import type {
   TeamPulse,
   Inbox,
   Membership,
+  TeamObserved,
   OwnCheckin,
   ReceivedCheckin,
   MetricSeries,
@@ -297,6 +298,8 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       }),
     getTeamPulse: (teamId) =>
       request<TeamPulse>(baseUrl, `/teams/${encodeURIComponent(teamId)}/pulse`),
+    getTeamObserved: (teamId) =>
+      request<TeamObserved>(baseUrl, `/teams/${encodeURIComponent(teamId)}/observed`),
     saveCheckIn: (checkIn) =>
       request<CheckIn>(baseUrl, `/checkins/${checkIn.day}`, {
         method: 'PUT',

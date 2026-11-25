@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-94 operations, grouped by area.
+95 operations, grouped by area.
 
 ### meta
 
@@ -257,6 +257,7 @@ Besides the codes listed under [Error codes](#error-codes):
 | `GET` | `/teams/{team_id}/notes` | supervisor | `team_id` |  | list[[TeamNote](#teamnote)] |  |
 | `POST` | `/teams/{team_id}/notes` | supervisor | `team_id` | [TeamNoteIn](#teamnotein) | 201: [TeamNote](#teamnote) |  |
 | `DELETE` | `/teams/{team_id}/notes/{note_id}` | supervisor | `team_id`, `note_id` |  | 204, no body |  |
+| `GET` | `/teams/{team_id}/observed` | supervisor | `team_id` |  | [TeamObserved](#teamobserved) | What the team's latest night and day looked like, from the first sync: each figure from at least 5 members with a reading, none while the team's figures are paused. |
 | `GET` | `/teams/{team_id}/alerts` | supervisor | `team_id` |  | list[[TeamAlert](#teamalert)] |  |
 | `GET` | `/teams/{team_id}/actions` | supervisor | `team_id` |  | list[[TeamAction](#teamaction)] |  |
 | `GET` | `/teams/{team_id}/playbook` | supervisor | `team_id` |  | list[[TeamPlay](#teamplay)] | The changes a supervisor can start; their own is also possible (play "custom"). |
@@ -1218,6 +1219,26 @@ Weekly highlights and upcoming event warnings, each linked to the report evidenc
 | `text` | string | yes | min length 1, max length 300 |
 | `startsOn` | string (date) or null |  |  |
 | `endsOn` | string (date) or null |  |  |
+
+### TeamObserved
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `figures` | list[[TeamObservedFigure](#teamobservedfigure)] | yes |  |
+| `minimumMembers` | integer | yes |  |
+
+### TeamObservedFigure
+
+What the team's latest night or day looked like; never a change from usual.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `metric` | string | yes |  |
+| `day` | string (date) | yes |  |
+| `median` | number | yes |  |
+| `members` | integer | yes |  |
+| `text` | string | yes |  |
+| `evidenceId` | string | yes |  |
 
 ### TeamPlay
 

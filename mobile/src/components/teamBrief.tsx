@@ -52,12 +52,17 @@ export function BriefingCard({
   status,
   items,
   briefing,
+  observed = [],
 }: {
   status: TeamStatus;
   items: BriefingItem[];
   briefing?: TeamBriefing | null; // the agent's own Monday run, when it checked out
+  // The team's latest night and day, from 5 people or more; shown from the first sync, when
+  // there is no change to tell yet. Changes from usual still need each member's history.
+  observed?: string[];
 }) {
   const colors = useColors();
+  const first = status.level === 'unknown' && observed.length > 0;
   return (
     <Tile>
       <View style={styles.from}>
@@ -78,7 +83,7 @@ export function BriefingCard({
         accessibilityRole="header"
         style={[typeScale.title, { color: stateColor(status.level, colors) }]}
       >
-        {status.title}
+        {first ? 'First readings' : status.title}
       </Text>
       {briefing ? (
         <Text style={{ fontSize: 16, lineHeight: 24 }}>{briefing.summary}</Text>
@@ -99,6 +104,19 @@ export function BriefingCard({
             </View>
           </View>
         ))
+      ) : observed.length ? (
+        <View style={{ gap: spacing.xs }}>
+          {first ? null : <Text color="muted">{status.line}</Text>}
+          {observed.map((line) => (
+            <Text key={line}>{line}</Text>
+          ))}
+          {first ? (
+            <Text variant="caption" color="faint">
+              What changed from usual comes once members have enough history: at least 14 earlier
+              days each.
+            </Text>
+          ) : null}
+        </View>
       ) : (
         <Text color="muted">{status.line}</Text>
       )}

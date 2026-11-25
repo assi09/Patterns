@@ -18,6 +18,7 @@ import {
   useRotateTeamCode,
   useSetTeamHr,
   useTeamAlerts,
+  useTeamObserved,
   useTeamPulse,
   useTeamReport,
   useTeamReports,
@@ -205,6 +206,7 @@ function TeamView({ team }: { team: SupervisedTeam }) {
   const latest = useTeamReport(team.id, reports.data?.[0]?.week.start);
   const alerts = useTeamAlerts(team.id);
   const pulse = useTeamPulse(team.id);
+  const observed = useTeamObserved(team.id);
 
   const status = teamStatus(alerts.data, latest.data);
   const ready = latest.data?.status === 'ready';
@@ -237,6 +239,7 @@ function TeamView({ team }: { team: SupervisedTeam }) {
                 status={status}
                 items={briefingItems(alerts.data, latest.data)}
                 briefing={latest.data?.briefing}
+                observed={observed.data?.figures.map((f) => f.text)}
               />
               {ready || pulse.data?.weeks.length ? (
                 <KeyTiles teamId={team.id} report={latest.data} />
