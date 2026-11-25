@@ -34,13 +34,16 @@ logger = logging.getLogger(__name__)
 TICK_S = 60
 ALARM_TICKS = 15  # alarms and background syncs every 15 minutes
 SYNC_EVERY = timedelta(hours=3)
+# The calendar is light to read (one or two requests a sync), so it is kept fresher than Google
+# Health; the loop checks every ALARM_TICKS minutes, so this is roughly the gap between syncs.
+CALENDAR_SYNC_EVERY = timedelta(minutes=30)
 
 
-def _due(last: dict, user_id, now: datetime) -> bool:
+def _due(last: dict, user_id, now: datetime, every: timedelta = SYNC_EVERY) -> bool:
     attempted = last.get(user_id)
     if attempted is not None and attempted.tzinfo is None:
         attempted = attempted.replace(tzinfo=UTC)
-    return attempted is None or now - attempted >= SYNC_EVERY
+    return attempted is None or now - attempted >= every
 
 
 def _last_attempts(db, source: str) -> dict:
@@ -54,9 +57,10 @@ def _last_attempts(db, source: str) -> dict:
 
 
 def start_due_syncs(now: datetime, sessions=None) -> int:
-    """Starts a sync for each connection whose last attempt is older than `SYNC_EVERY`: Google
-    Health (with the check-in rule) and Google Calendar each on their own, from their own sign-in
-    and their own last attempt, so one expired or disconnected never stops the other."""
+    """Starts a sync for each connection whose last attempt is old enough: Google Health (with the
+    check-in rule) every `SYNC_EVERY`, Google Calendar every `CALENDAR_SYNC_EVERY`, each from its
+    own sign-in and last attempt, so one expired or disconnected never stops the other. Opening the
+    app also syncs both, at most every ten minutes (`app.api.google.RESYNC_AFTER`)."""
     from app.api import google  # the API's Google wiring and its one-sync-per-person registries
     from app.api.errors import ApiError
     from app.sync import calendar, connections
@@ -85,7 +89,7 @@ def start_due_syncs(now: datetime, sessions=None) -> int:
             )
             started += google.syncs.start(user_id, work)
     for user_id in diaries:
-        if _due(calendar_last, user_id, now):
+        if _due(calendar_last, user_id, now, CALENDAR_SYNC_EVERY):
             work = lambda uid=user_id: google.sync_calendar(  # noqa: E731
                 parts, sessions, uid, now.date()
             )

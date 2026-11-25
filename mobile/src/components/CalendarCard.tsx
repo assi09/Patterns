@@ -62,7 +62,7 @@ export function CalendarCard() {
           tone={calendar.lastError ? 'danger' : undefined}
           detail={
             calendar.lastError
-              ? `${calendar.lastError}${calendar.lastSync ? ` Last good sync ${timeAgo(calendar.lastSync)}.` : ''} It tries again within three hours.`
+              ? `${calendar.lastError}${calendar.lastSync ? ` Last good sync ${timeAgo(calendar.lastSync)}.` : ''} It tries again within half an hour.`
               : calendar.lastSync
                 ? `${calendar.days} days of meeting load · synced ${timeAgo(calendar.lastSync)}`
                 : 'Reading your calendar…'
