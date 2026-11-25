@@ -27,6 +27,7 @@ from app.db.models import GoogleConnection, SyncRun
 from app.db.session import session_scope
 from app.reminders.loop import _mailer, run_once
 from app.teams.alerts import run_due as run_team_alerts
+from app.teams.checkin import run_due as run_checkins
 
 logger = logging.getLogger(__name__)
 
@@ -140,3 +141,10 @@ class Background:
             return
         if team_counts:
             logger.info("Team alerts: %s", dict(team_counts))
+        try:
+            checkin_counts = run_checkins(session_scope, now)
+        except Exception:
+            logger.exception("The check-in alert pass failed")
+            return
+        if checkin_counts:
+            logger.info("Check-in alerts: %s", dict(checkin_counts))

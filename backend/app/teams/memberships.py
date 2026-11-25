@@ -205,6 +205,8 @@ def leave(db: Session, user: User, team_id: str, now: datetime) -> None:
     membership.left_at = now
     membership.share_levels = False
     membership.levels_changed_at = now
+    membership.checkin_alerts = False  # an alert still waiting is withdrawn when it falls due
+    membership.checkin_changed_at = now
     _event(db, team, user, "left", now)
 
 

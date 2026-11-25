@@ -28,8 +28,8 @@ from app.reminders import store
 from app.reminders.schedule import zone
 from app.teams import actions as team_actions
 from app.teams import agent as team_agent
+from app.teams import checkin, playbook, pulse, reports
 from app.teams import memberships as teams
-from app.teams import playbook, pulse, reports
 
 router = APIRouter(tags=["teams"])
 # Wrong codes count like wrong passwords, so codes cannot be guessed one after another.
@@ -60,7 +60,9 @@ def _team(db, team: Team) -> schemas.Team:
     )
 
 
-def _membership(membership: TeamMembership, team: Team, supervisor: User) -> schemas.Membership:
+def _membership(
+    membership: TeamMembership, team: Team, supervisor: User, db=None
+) -> schemas.Membership:
     return schemas.Membership(
         team_id=str(team.id),
         team=team.name,
@@ -69,6 +71,9 @@ def _membership(membership: TeamMembership, team: Team, supervisor: User) -> sch
         share_levels=membership.share_levels,
         levels_consent=teams.LEVELS_CONSENT_TEXT,
         levels_consent_version=teams.LEVELS_CONSENT_VERSION,
+        checkin_alerts=membership.checkin_alerts,
+        checkin_consent=checkin.consent_text(db, team) if db is not None else "",
+        checkin_consent_version=checkin.CONSENT_VERSION,
     )
 
 
@@ -492,12 +497,12 @@ def join(body: schemas.JoinTeam, db: Db, clock: Now, user: Person) -> schemas.Me
     if body.consent_version != teams.CONSENT_VERSION:
         raise ApiError(409, "consent_changed", "What joining means has changed. Read it again.")
     membership = teams.join(db, team, user, clock)
-    return _membership(membership, team, db.get(User, team.supervisor_id))
+    return _membership(membership, team, db.get(User, team.supervisor_id), db)
 
 
 @router.get("/me/teams", response_model=list[schemas.Membership])
 def my_teams(db: Db, user: Person) -> list[schemas.Membership]:
-    return [_membership(*row) for row in teams.memberships(db, user)]
+    return [_membership(*row, db) for row in teams.memberships(db, user)]
 
 
 @router.post("/me/teams/{team_id}/levels", response_model=schemas.Membership)
@@ -509,7 +514,7 @@ def share_levels(
         raise ApiError(409, "consent_changed", "Read what sharing your levels means first.")
     membership = teams.share_levels(db, user, team_id, body.share, clock)
     team = db.get(Team, membership.team_id)
-    return _membership(membership, team, db.get(User, team.supervisor_id))
+    return _membership(membership, team, db.get(User, team.supervisor_id), db)
 
 
 @router.post("/me/teams/{team_id}/leave", status_code=204)
