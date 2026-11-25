@@ -3,7 +3,7 @@ import { DEMO_OWNER, mockClient } from '@/api/mock';
 import { saveToken } from '@/api/token';
 import type { HarnessSubmission } from '@/api/types';
 
-import { activityText, setupCommands, submissionText } from '../harness';
+import { activityText, connectAbilities, setupCommands, submissionText } from '../harness';
 
 const sent = (kind: HarnessSubmission['kind'], payload: Record<string, unknown>) =>
   ({ id: 's', kind, status: 'pending', payload, teamId: null, createdAt: '' }) as HarnessSubmission;
@@ -99,5 +99,13 @@ describe('setting up a new device', () => {
         { tool: 'team_overview', calls: 1, failed: 1 },
       ]),
     ).toBe('who_am_i 2 · team_overview 1 (1 refused)');
+  });
+});
+
+describe('what an assistant may do once allowed', () => {
+  it('matches each role, and HR gets nothing to allow', () => {
+    expect(connectAbilities('supervisor')?.join(' ')).toContain('at least 5 people');
+    expect(connectAbilities('member')?.join(' ')).toContain('your own');
+    expect(connectAbilities('hr')).toBeNull();
   });
 });

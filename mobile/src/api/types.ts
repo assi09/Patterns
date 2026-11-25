@@ -605,6 +605,14 @@ export interface AccessTokenInfo {
   lastUsedAt: ISODateTime | null;
   revokedAt: ISODateTime | null;
   activity?: { tool: string; calls: number; failed: number }[]; // the last 24 hours, never data
+  signedIn?: boolean; // the assistant signed in (OAuth) instead of being given a pasted token
+}
+
+/** An assistant asking to sign in (OAuth), as the /connect page shows it (docs/mcp.md). */
+export interface ConnectRequest {
+  clientName: string; // the assistant's own claim
+  redirectHost: string; // where the answer is sent: what the person should check
+  expiresAt: ISODateTime;
 }
 
 export interface MadeAccessToken extends AccessTokenInfo {
@@ -867,6 +875,9 @@ export interface ApiClient {
   revokeAccessToken(id: string): Promise<void>;
   getHarnessSubmissions(): Promise<HarnessSubmission[]>; // waiting for this person's approval
   decideHarnessSubmission(id: string, approve: boolean): Promise<HarnessSubmission>;
+  getConnectRequest(id: string): Promise<ConnectRequest>;
+  /** Allow or deny an assistant's sign-in; returns where to send the browser back to. */
+  decideConnectRequest(id: string, allow: boolean): Promise<{ redirectTo: string }>;
   disconnectCalendar(): Promise<CalendarStatus>; // the calendar's sign-in only; days are kept
   getMyCalendar(): Promise<CalendarDay[]>;
   getTeamCalendar(teamId: string, week?: ISODate): Promise<TeamCalendar>; // supervisors

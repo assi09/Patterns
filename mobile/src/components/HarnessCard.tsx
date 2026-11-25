@@ -50,6 +50,11 @@ export function HarnessCard() {
           setCopied(true);
         }}
       />
+      <Text variant="caption" color="muted">
+        No token needed in claude.ai, Claude Desktop or Codex: add the address above as a custom
+        connector (in Codex, run `codex mcp login patterns` after adding it) and allow it when
+        Patterns asks. For Claude Code or Codex in a terminal, make a token below.
+      </Text>
       {shown ? (
         <View style={[styles.token, { borderColor: colors.border }]}>
           <Text variant="bodyStrong">Connect on this device</Text>
@@ -98,13 +103,13 @@ export function HarnessCard() {
           key={t.id}
           icon="key-outline"
           title={t.name}
-          detail={
-            t.lastUsedAt
-              ? [`Last used ${timeAgo(t.lastUsedAt)}`, activityText(t.activity)]
-                  .filter(Boolean)
-                  .join(' · ')
-              : 'Not used yet'
-          }
+          detail={[
+            t.signedIn ? 'Signed in' : null,
+            t.lastUsedAt ? `Last used ${timeAgo(t.lastUsedAt)}` : 'Not used yet',
+            activityText(t.activity),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
           accessory={
             <Button label="Revoke" variant="secondary" onPress={() => revoke.mutate(t.id)} />
           }

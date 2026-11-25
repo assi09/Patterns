@@ -622,6 +622,24 @@ export function useDecideHarnessSubmission() {
   });
 }
 
+export function useConnectRequest(id: string | undefined) {
+  return useQuery({
+    queryKey: ['connect', id],
+    queryFn: () => api.getConnectRequest(id ?? ''),
+    enabled: Boolean(id),
+    retry: false,
+  });
+}
+
+export function useDecideConnectRequest() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, allow }: { id: string; allow: boolean }) =>
+      api.decideConnectRequest(id, allow),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.tokens }),
+  });
+}
+
 // Check-in alerts (docs/escalation.md)
 
 export function useShareTeamCheckin() {

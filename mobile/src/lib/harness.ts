@@ -43,3 +43,23 @@ export function activityText(
     .map((a) => `${a.tool} ${a.calls}${a.failed ? ` (${a.failed} refused)` : ''}`)
     .join(' · ');
 }
+
+/**
+ * What an assistant may do once allowed, by the person's role, as the MCP tools enforce it
+ * (backend/app/harness/tools.py); null when the role has no tools (HR).
+ */
+export function connectAbilities(role: 'member' | 'supervisor' | 'hr'): string[] | null {
+  if (role === 'supervisor') {
+    return [
+      "Read your teams' figures, built from at least 5 people",
+      'Send team events, held until you approve them here',
+    ];
+  }
+  if (role === 'member') {
+    return [
+      'Read your own recent days and calendar counts',
+      'Send your own calendar days, held until you approve them here',
+    ];
+  }
+  return null;
+}
