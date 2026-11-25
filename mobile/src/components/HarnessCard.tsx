@@ -14,7 +14,7 @@ import { Row } from '@/components/list';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { timeAgo } from '@/lib/format';
-import { submissionText } from '@/lib/harness';
+import { activityText, setupCommands, submissionText } from '@/lib/harness';
 import { radius, spacing, useColors } from '@/theme';
 
 /**
@@ -37,8 +37,9 @@ export function HarnessCard() {
   return (
     <View style={styles.block}>
       <Text color="muted">
-        Use Patterns from Claude Code, Codex or another MCP harness. It sees what you see here, never
-        more, and anything it sends waits for your approval below.
+        Use Patterns from Codex, Claude Code or another MCP assistant. It sees what you see here,
+        never more, and anything it sends waits for your approval below. Make one token per device
+        or assistant, so each can be revoked on its own.
       </Text>
       <Row
         icon="link-outline"
@@ -51,26 +52,25 @@ export function HarnessCard() {
       />
       {shown ? (
         <View style={[styles.token, { borderColor: colors.border }]}>
+          <Text variant="bodyStrong">Connect on this device</Text>
           <Text variant="caption" color="muted">
-            Your token, shown once. Paste it into your harness as a bearer token.
+            Your token is in these commands and is shown only now. Run the one for your assistant in
+            a terminal.
           </Text>
-          <Text selectable style={styles.mono}>
-            {shown}
-          </Text>
-          <Button
-            label="Copy token"
-            onPress={async () => {
-              await Clipboard.setStringAsync(shown);
-              setShown(null);
-            }}
+          <Command label="Codex: add Patterns once" text={setupCommands(mcpUrl, shown).codexAdd} />
+          <Command
+            label="Codex: the token, in your shell profile (e.g. ~/.zshrc)"
+            text={setupCommands(mcpUrl, shown).codexToken}
           />
+          <Command label="Claude Code" text={setupCommands(mcpUrl, shown).claudeCode} />
+          <Button label="Done" variant="secondary" onPress={() => setShown(null)} />
         </View>
       ) : (
         <View style={styles.field}>
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder="Name, e.g. Claude Code on my laptop"
+            placeholder="Name, e.g. Codex on my laptop"
             placeholderTextColor={colors.faint}
             maxLength={60}
             accessibilityLabel="Token name"
@@ -98,7 +98,13 @@ export function HarnessCard() {
           key={t.id}
           icon="key-outline"
           title={t.name}
-          detail={t.lastUsedAt ? `Last used ${timeAgo(t.lastUsedAt)}` : 'Not used yet'}
+          detail={
+            t.lastUsedAt
+              ? [`Last used ${timeAgo(t.lastUsedAt)}`, activityText(t.activity)]
+                  .filter(Boolean)
+                  .join(' · ')
+              : 'Not used yet'
+          }
           accessory={
             <Button label="Revoke" variant="secondary" onPress={() => revoke.mutate(t.id)} />
           }
@@ -130,7 +136,32 @@ export function HarnessCard() {
   );
 }
 
+/** One command, selectable, with its own copy button. */
+function Command({ label, text }: { label: string; text: string }) {
+  const colors = useColors();
+  const [copied, setCopied] = useState(false);
+  return (
+    <View style={{ gap: spacing.xs }}>
+      <Text variant="caption" color="muted">
+        {label}
+      </Text>
+      <Text selectable style={[styles.mono, styles.command, { backgroundColor: colors.surface }]}>
+        {text}
+      </Text>
+      <Button
+        label={copied ? 'Copied' : 'Copy'}
+        variant="secondary"
+        onPress={async () => {
+          await Clipboard.setStringAsync(text);
+          setCopied(true);
+        }}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  command: { padding: spacing.sm, borderRadius: radius.sm },
   block: { gap: spacing.sm, paddingVertical: spacing.md },
   field: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   input: {

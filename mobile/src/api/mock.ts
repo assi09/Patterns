@@ -1834,6 +1834,7 @@ export const mockClient: ApiClient = {
         createdAt: new Date().toISOString(),
         lastUsedAt: null,
         revokedAt: null,
+        activity: [],
         token: `pat_mock-${Math.random().toString(36).slice(2)}`,
       };
       accessTokens = [made, ...accessTokens];

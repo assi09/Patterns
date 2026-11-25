@@ -604,6 +604,7 @@ export interface AccessTokenInfo {
   createdAt: ISODateTime;
   lastUsedAt: ISODateTime | null;
   revokedAt: ISODateTime | null;
+  activity?: { tool: string; calls: number; failed: number }[]; // the last 24 hours, never data
 }
 
 export interface MadeAccessToken extends AccessTokenInfo {
