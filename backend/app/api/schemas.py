@@ -219,7 +219,7 @@ class Account(ApiModel):
     email: str
     status: Literal["pending", "approved", "rejected"]
     is_admin: bool
-    role: Literal["member", "supervisor"] = "member"
+    role: Literal["member", "supervisor", "hr"] = "member"
     # Whether this server has the individual side on (app/api/features.py); the app hides it if not.
     personal_features: bool = False
 
@@ -230,7 +230,7 @@ class SignedIn(ApiModel):
 
 
 class Approval(ApiModel):
-    role: Literal["member", "supervisor"] = "member"
+    role: Literal["member", "supervisor", "hr"] = "member"
 
 
 class AccessRequest(ApiModel):
@@ -310,6 +310,7 @@ class Team(ApiModel):
     members: int  # active members: a count, never who
     minimum_members: int  # no team figure is built from fewer
     report_email: str | None
+    hr_email: str | None = None  # the team's HR contact for check-in alerts
     paused: str | None = None  # why its figures are paused, when they are
     created_at: datetime
 
@@ -339,6 +340,9 @@ class Membership(ApiModel):
     share_levels: bool
     levels_consent: str  # the text for the second, separate consent
     levels_consent_version: str
+    checkin_alerts: bool = False  # the third consent (docs/escalation.md)
+    checkin_consent: str = ""
+    checkin_consent_version: str = ""
 
 
 class ShareLevels(ApiModel):
@@ -510,3 +514,67 @@ class TeamAlert(ApiModel):
 class TeamActionDecision(ApiModel):
     members_told: int
     action: TeamAction
+
+
+# Check-in alerts (docs/escalation.md)
+
+
+class CheckinEvidence(ApiModel):
+    """One signal behind a person's own check-in alert; shown to that person only."""
+
+    id: str
+    metric: str
+    direction: Literal["up", "down"]
+    usual_low: float
+    usual_high: float
+    margin: float
+    days_far: int
+    days_worn: int
+    recent_mean: float
+    usual: Window
+    recent: Window
+
+
+class OwnCheckin(ApiModel):
+    id: str
+    team_id: str
+    team: str
+    status: Literal["waiting", "withdrawn", "sent"]
+    raised_at: datetime
+    send_after: datetime
+    sent_at: datetime | None
+    withdrawn_at: datetime | None
+    recipients: str  # "your supervisor (…) and HR (…)"
+    evidence: list[CheckinEvidence]
+
+
+class CheckinMark(ApiModel):
+    role: Literal["hr", "supervisor"]
+    outcome: Literal["checked_in", "not_needed"] | None
+    marked_at: datetime | None
+
+
+class ReceivedCheckin(ApiModel):
+    """A sent alert as HR or the supervisor sees it: who, which team, when; never why."""
+
+    id: str
+    person: str
+    team: str
+    sent_at: datetime
+    mine: CheckinMark
+    others: list[CheckinMark]
+    note: str | None
+
+
+class MarkCheckin(ApiModel):
+    outcome: Literal["checked_in", "not_needed"]
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ShareCheckin(ApiModel):
+    share: bool
+    consent_version: str | None = None  # needed to turn it on
+
+
+class TeamHr(ApiModel):
+    email: str | None  # None removes the HR contact

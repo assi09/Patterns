@@ -205,6 +205,11 @@ def leave(db: Session, user: User, team_id: str, now: datetime) -> None:
     membership.left_at = now
     membership.share_levels = False
     membership.levels_changed_at = now
+    membership.checkin_alerts = False
+    membership.checkin_changed_at = now
+    from app.teams.checkin import withdraw_waiting  # here: check-ins build on memberships
+
+    withdraw_waiting(db, team.id, user.id, user.id, now)  # at once, not when the hour ends
     _event(db, team, user, "left", now)
 
 

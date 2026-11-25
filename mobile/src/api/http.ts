@@ -27,6 +27,8 @@ import type {
   TeamPulse,
   Inbox,
   Membership,
+  OwnCheckin,
+  ReceivedCheckin,
   MetricSeries,
   NotificationSettings,
   Reminder,
@@ -201,6 +203,27 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         consentVersion,
       }),
     leaveTeam: (teamId) => post<void>(baseUrl, `/me/teams/${encodeURIComponent(teamId)}/leave`),
+    shareTeamCheckin: (teamId, share, consentVersion) =>
+      post<Membership>(baseUrl, `/me/teams/${encodeURIComponent(teamId)}/checkin`, {
+        share,
+        consentVersion,
+      }),
+    getMyCheckins: () => request<OwnCheckin[]>(baseUrl, '/me/checkins'),
+    sendCheckinNow: (id) =>
+      post<OwnCheckin>(baseUrl, `/me/checkins/${encodeURIComponent(id)}/send`),
+    stopCheckin: (id) => post<OwnCheckin>(baseUrl, `/me/checkins/${encodeURIComponent(id)}/stop`),
+    getReceivedCheckins: () => request<ReceivedCheckin[]>(baseUrl, '/checkins'),
+    openCheckin: (id) => post<ReceivedCheckin>(baseUrl, `/checkins/${encodeURIComponent(id)}/open`),
+    markCheckin: (id, outcome, note) =>
+      post<ReceivedCheckin>(baseUrl, `/checkins/${encodeURIComponent(id)}/mark`, {
+        outcome,
+        note,
+      }),
+    setTeamHr: (teamId, email) =>
+      request<{ email: string | null }>(baseUrl, `/teams/${encodeURIComponent(teamId)}/hr`, {
+        method: 'PUT',
+        body: JSON.stringify({ email }),
+      }),
     getTeams: () => request<SupervisedTeam[]>(baseUrl, '/teams'),
     createTeam: (name) => post<SupervisedTeam>(baseUrl, '/teams', { name }),
     rotateTeamCode: (teamId) =>

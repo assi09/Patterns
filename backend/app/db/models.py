@@ -39,8 +39,9 @@ RATINGS = ("up", "down")
 # person must also be added as a test user by hand before they can connect their data.
 USER_STATUSES = ("pending", "approved", "rejected")
 # A supervisor can create teams and read their weekly team reports (docs/teams.md); the owner
-# grants the role. Everyone else is a member, who may join teams.
-USER_ROLES = ("member", "supervisor")
+# grants the role. Everyone else is a member, who may join teams. HR is the contact for teams'
+# check-in alerts (docs/escalation.md) and sees nothing else about them.
+USER_ROLES = ("member", "supervisor", "hr")
 TEAM_EVENTS = (
     "created",
     "code_rotated",
@@ -552,6 +553,10 @@ class Team(Base):
     invite_code: Mapped[str] = mapped_column(String(16), unique=True)
     report_email: Mapped[str | None] = mapped_column(String(320), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # Who receives the team's check-in alerts with the supervisor (docs/escalation.md).
+    hr_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), default=None
+    )
 
 
 class TeamMembership(Base):
@@ -586,6 +591,12 @@ class TeamMembership(Base):
     share_levels: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     levels_consent_version: Mapped[str | None] = mapped_column(String(32), default=None)
     levels_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # The third consent: check-in alerts to HR and the supervisor (docs/escalation.md).
+    checkin_alerts: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    checkin_consent_version: Mapped[str | None] = mapped_column(String(32), default=None)
+    checkin_changed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
 
@@ -970,3 +981,97 @@ class AlarmSetting(Base):
     muted_kinds: Mapped[list[str]] = mapped_column(JSON, default=list)
     sensitivity: Mapped[str] = mapped_column(String(8), default="normal")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+# A check-in alert waits while the person can still turn it off, then goes to HR and the supervisor.
+CHECKIN_STATUSES = ("waiting", "withdrawn", "sent")
+CHECKIN_OUTCOMES = ("checked_in", "not_needed")
+CHECKIN_EVENTS = ("raised", "withdrawn", "sent", "opened", "marked", "reminded")
+
+
+class CheckinAlert(Base):
+    """One person's sustained, extreme change, raised by code for the people responsible.
+
+    The evidence is shown to the person only; HR and the supervisor see that an alert exists, for
+    whom and when, never a metric or value (docs/escalation.md). No model reads this table.
+    """
+
+    __tablename__ = "checkin_alerts"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({', '.join(repr(s) for s in CHECKIN_STATUSES)})",
+            name="ck_checkin_alerts_status",
+        ),
+        # At most one waiting alert per person and team, whatever runs at the same time.
+        Index(
+            "uq_checkin_alerts_waiting",
+            "team_id",
+            "user_id",
+            unique=True,
+            sqlite_where=text("status = 'waiting'"),
+            postgresql_where=text("status = 'waiting'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    rule: Mapped[str] = mapped_column(String(32))  # the rule's version, e.g. checkin-v1
+    last_day: Mapped[date] = mapped_column(Date)  # the window's last day
+    evidence: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="waiting")
+    raised_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    send_after: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class CheckinMark(Base):
+    """What one recipient (HR or the supervisor) did with an alert. Notes never reach a model."""
+
+    __tablename__ = "checkin_marks"
+    __table_args__ = (
+        UniqueConstraint("alert_id", "user_id", name="uq_checkin_marks_recipient"),
+        CheckConstraint(
+            f"outcome IS NULL OR outcome IN ({', '.join(repr(o) for o in CHECKIN_OUTCOMES)})",
+            name="ck_checkin_marks_outcome",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    alert_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("checkin_alerts.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(16))  # hr or supervisor
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    outcome: Mapped[str | None] = mapped_column(String(16), default=None)
+    note: Mapped[str | None] = mapped_column(String(500), default=None)
+    marked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class CheckinEvent(Base):
+    """Append-only log of every step of a check-in alert, with who and when; no health data."""
+
+    __tablename__ = "checkin_events"
+    __table_args__ = (
+        CheckConstraint(
+            f"event IN ({', '.join(repr(e) for e in CHECKIN_EVENTS)})",
+            name="ck_checkin_events_event",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    alert_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("checkin_alerts.id", ondelete="CASCADE"), index=True
+    )
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), default=None
+    )
+    event: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

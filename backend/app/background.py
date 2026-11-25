@@ -27,6 +27,7 @@ from app.db.models import GoogleConnection, SyncRun
 from app.db.session import session_scope
 from app.reminders.loop import _mailer, run_once
 from app.teams.alerts import run_due as run_team_alerts
+from app.teams.checkin import run_due as run_checkins
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +64,8 @@ def start_due_syncs(now: datetime) -> int:
             attempted = attempted.replace(tzinfo=UTC)
         if attempted is not None and now - attempted < SYNC_EVERY:
             continue
-        work = lambda uid=user_id: connections.sync(  # noqa: E731
-            session_scope, parts.box, uid, parts.health_for, now.date()
+        work = lambda uid=user_id: google.sync_and_check(  # noqa: E731
+            parts, session_scope, uid, now.date()
         )
         started += google.syncs.start(user_id, work)
     return started
@@ -101,6 +102,7 @@ class Background:
     def _run(self) -> None:
         tick = 0
         while not self._stop.wait(self.tick_s):
+            self._checkins()  # every minute: a check-in alert goes out when its hour is up
             if settings.personal_features:  # reminders belong to the individual side
                 run_once()
             tick += 1
@@ -108,6 +110,16 @@ class Background:
                 self._alarms()
                 if settings.personal_features:
                     self._memory()
+
+    @staticmethod
+    def _checkins() -> None:
+        try:
+            counts = run_checkins(session_scope, datetime.now(UTC))
+        except Exception:
+            logger.exception("The check-in alert pass failed")
+            return
+        if counts:
+            logger.info("Check-in alerts: %s", dict(counts))
 
     @staticmethod
     def _memory() -> None:

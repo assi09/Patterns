@@ -33,6 +33,7 @@ from app.sync import connections
 from app.sync.client import HealthClient
 from app.sync.connections import OAuth, SignIns, Syncs, TokenBox
 from app.sync.google_auth import SCOPES, OAuthClient, SyncError
+from app.teams import checkin
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/google", tags=["google"])
@@ -80,10 +81,20 @@ def _status(db, user: User) -> schemas.GoogleStatus:
 
 
 def _start_sync(google: GoogleParts, sessions: Sessions, user: User, today: date) -> None:
-    syncs.start(
-        user.id,
-        lambda: connections.sync(sessions, google.box, user.id, google.health_for, today),
-    )
+    syncs.start(user.id, lambda: sync_and_check(google, sessions, user.id, today))
+
+
+def sync_and_check(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
+    """Pulls the person's Google Health data, then, if that sync succeeded, checks the check-in
+    rule for every team they agreed to it for (app/teams/checkin.py)."""
+    started = connections.now_utc()
+    connections.sync(sessions, google.box, user_id, google.health_for, today)
+    try:
+        with sessions() as db:
+            if connections.succeeded_since(db, user_id, started):
+                checkin.after_sync(db, user_id, connections.now_utc())
+    except Exception:
+        logger.exception("Checking the check-in rule after a sync failed")
 
 
 @router.get("/status", response_model=schemas.GoogleStatus)

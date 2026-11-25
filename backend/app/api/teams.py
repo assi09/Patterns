@@ -28,8 +28,8 @@ from app.reminders import store
 from app.reminders.schedule import zone
 from app.teams import actions as team_actions
 from app.teams import agent as team_agent
+from app.teams import checkin, playbook, pulse, reports
 from app.teams import memberships as teams
-from app.teams import playbook, pulse, reports
 
 router = APIRouter(tags=["teams"])
 # Wrong codes count like wrong passwords, so codes cannot be guessed one after another.
@@ -55,6 +55,7 @@ def _team(db, team: Team) -> schemas.Team:
         members=teams.active_members(db, team),
         minimum_members=teams.MIN_MEMBERS,
         report_email=team.report_email,
+        hr_email=db.get(User, team.hr_id).email if team.hr_id else None,
         paused=teams.overlap_problem(db, team),
         created_at=team.created_at,
     )
@@ -69,6 +70,9 @@ def _membership(membership: TeamMembership, team: Team, supervisor: User) -> sch
         share_levels=membership.share_levels,
         levels_consent=teams.LEVELS_CONSENT_TEXT,
         levels_consent_version=teams.LEVELS_CONSENT_VERSION,
+        checkin_alerts=membership.checkin_alerts,
+        checkin_consent=checkin.consent_text(),
+        checkin_consent_version=checkin.CONSENT_VERSION,
     )
 
 

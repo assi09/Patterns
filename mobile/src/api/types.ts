@@ -450,7 +450,7 @@ export interface Account {
   email: string;
   status: AccountStatus; // a sign-up waits for the owner's approval
   isAdmin: boolean; // may approve sign-ups
-  role: 'member' | 'supervisor'; // a supervisor may create teams (docs/teams.md)
+  role: 'member' | 'supervisor' | 'hr'; // supervisors create teams; HR gets check-in alerts
   personalFeatures: boolean; // the individual side is on for this server (docs/pivot.md)
 }
 
@@ -495,6 +495,57 @@ export interface Membership {
   shareLevels: boolean;
   levelsConsent: string;
   levelsConsentVersion: string;
+  checkinAlerts: boolean; // the third consent: check-in alerts (docs/escalation.md)
+  checkinConsent: string;
+  checkinConsentVersion: string;
+}
+
+/** One signal behind the person's own check-in alert; only that person sees it. */
+export interface CheckinEvidence {
+  id: string;
+  metric: string;
+  direction: 'up' | 'down';
+  usualLow: number;
+  usualHigh: number;
+  margin: number;
+  daysFar: number;
+  daysWorn: number;
+  recentMean: number;
+  usual: Window;
+  recent: Window;
+}
+
+/** The person's own check-in alert: told first, with 24 hours to stop it. */
+export interface OwnCheckin {
+  id: string;
+  teamId: string;
+  team: string;
+  status: 'waiting' | 'withdrawn' | 'sent';
+  raisedAt: ISODateTime;
+  sendAfter: ISODateTime;
+  sentAt: ISODateTime | null;
+  withdrawnAt: ISODateTime | null;
+  recipients: string;
+  evidence: CheckinEvidence[];
+}
+
+export type CheckinOutcome = 'checked_in' | 'not_needed';
+
+export interface CheckinMark {
+  role: 'hr' | 'supervisor';
+  outcome: CheckinOutcome | null;
+  markedAt: ISODateTime | null;
+}
+
+/** A sent alert as HR or the supervisor sees it: who, which team, when; never why. */
+export interface ReceivedCheckin {
+  id: string;
+  person: string;
+  team: string;
+  sentAt: ISODateTime;
+  mine: CheckinMark;
+  others: CheckinMark[];
+  note: string | null;
 }
 
 /** A supervisor's team: a count of members, never who they are. */
@@ -505,6 +556,7 @@ export interface SupervisedTeam {
   members: number;
   minimumMembers: number; // no team figure is built from fewer
   reportEmail: string | null;
+  hrEmail?: string | null; // the team's HR contact for check-in alerts
   paused?: string | null; // why its figures are paused: it differs from another team by too few
   createdAt: ISODateTime;
 }
@@ -719,6 +771,14 @@ export interface ApiClient {
   joinTeam(code: string, consentVersion: string): Promise<Membership>;
   getMyTeams(): Promise<Membership[]>;
   shareTeamLevels(teamId: string, share: boolean, consentVersion?: string): Promise<Membership>;
+  shareTeamCheckin(teamId: string, share: boolean, consentVersion?: string): Promise<Membership>;
+  getMyCheckins(): Promise<OwnCheckin[]>;
+  sendCheckinNow(id: string): Promise<OwnCheckin>; // before the hour is up
+  stopCheckin(id: string): Promise<OwnCheckin>; // this alert only; the switch stays on
+  getReceivedCheckins(): Promise<ReceivedCheckin[]>; // HR and supervisors
+  openCheckin(id: string): Promise<ReceivedCheckin>;
+  markCheckin(id: string, outcome: CheckinOutcome, note?: string): Promise<ReceivedCheckin>;
+  setTeamHr(teamId: string, email: string | null): Promise<{ email: string | null }>; // supervisors
   leaveTeam(teamId: string): Promise<void>;
   getTeams(): Promise<SupervisedTeam[]>; // supervisors only
   createTeam(name: string): Promise<SupervisedTeam>;

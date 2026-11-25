@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-86 operations, grouped by area.
+94 operations, grouped by area.
 
 ### meta
 
@@ -144,6 +144,19 @@ Besides the codes listed under [Error codes](#error-codes):
 | `PUT` | `/chat/{message_id}/rating` | approved | `message_id` | [RatingIn](#ratingin) | [ChatMessage](#chatmessage) | The person's thumbs up or down on one of their answers, counted in the pilot report. |
 | `DELETE` | `/conversations/{conversation_id}` | approved | `conversation_id` |  | 204, no body | Deletes the conversation, its messages and its episode; facts and findings stay. |
 | `POST` | `/chat` | approved |  | [Question](#question) | list[[ChatMessage](#chatmessage)] |  |
+
+### checkins
+
+| Method | Path | Access | Parameters | Body | Returns | Notes |
+|---|---|---|---|---|---|---|
+| `POST` | `/me/teams/{team_id}/checkin` | approved | `team_id` | [ShareCheckin](#sharecheckin) | [Membership](#membership) | Turns check-in alerts on or off for one team; off withdraws any alert still waiting. |
+| `GET` | `/me/checkins` | approved |  |  | list[[OwnCheckin](#owncheckin)] |  |
+| `POST` | `/me/checkins/{alert_id}/send` | approved | `alert_id` |  | [OwnCheckin](#owncheckin) | The person sends their own waiting alert now, before the hour is up. |
+| `POST` | `/me/checkins/{alert_id}/stop` | approved | `alert_id` |  | [OwnCheckin](#owncheckin) | The person stops this alert. Check-in alerts stay on; the switch turns them off. |
+| `GET` | `/checkins` | approved |  |  | list[[ReceivedCheckin](#receivedcheckin)] |  |
+| `POST` | `/checkins/{alert_id}/open` | approved | `alert_id` |  | [ReceivedCheckin](#receivedcheckin) |  |
+| `POST` | `/checkins/{alert_id}/mark` | approved | `alert_id` | [MarkCheckin](#markcheckin) | [ReceivedCheckin](#receivedcheckin) |  |
+| `PUT` | `/teams/{team_id}/hr` | supervisor | `team_id` | [TeamHr](#teamhr) | [TeamHr](#teamhr) | Names the team's HR contact: an approved account with the hr role, or none. |
 
 ### google
 
@@ -269,16 +282,19 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 403 | `write_scope_needed` |
 | 404 | `no_data` |
 | 404 | `not_found` |
+| 404 | `not_hr` |
 | 404 | `unknown_code` |
 | 404 | `unknown_metric` |
 | 409 | `already_decided` |
 | 409 | `already_member` |
+| 409 | `already_sent` |
 | 409 | `busy` |
 | 409 | `consent_changed` |
 | 409 | `duplicate_log` |
 | 409 | `email_taken` |
 | 409 | `not_changeable` |
 | 409 | `not_connected` |
+| 409 | `not_in_team` |
 | 409 | `not_logged` |
 | 409 | `own_team` |
 | 409 | `reconnect_needed` |
@@ -327,7 +343,7 @@ A field not marked required may be left out.
 | `email` | string | yes |  |
 | `status` | `pending` \| `approved` \| `rejected` | yes |  |
 | `isAdmin` | boolean | yes |  |
-| `role` | `member` \| `supervisor` |  | default `member` |
+| `role` | `member` \| `supervisor` \| `hr` |  | default `member` |
 | `personalFeatures` | boolean |  | default `False` |
 
 ### Action
@@ -373,7 +389,7 @@ A field not marked required may be left out.
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
-| `role` | `member` \| `supervisor` |  | default `member` |
+| `role` | `member` \| `supervisor` \| `hr` |  | default `member` |
 
 ### AttachmentIn
 
@@ -435,6 +451,32 @@ How the team's metric went during an ended change, against the 28 days before it
 | `day` | string (date) | yes |  |
 | `rating` | integer | yes | ≥ 1.0, ≤ 5.0 |
 | `tags` | list[string] |  | default `[]` |
+
+### CheckinEvidence
+
+One signal behind a person's own check-in alert; shown to that person only.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `id` | string | yes |  |
+| `metric` | string | yes |  |
+| `direction` | `up` \| `down` | yes |  |
+| `usualLow` | number | yes |  |
+| `usualHigh` | number | yes |  |
+| `margin` | number | yes |  |
+| `daysFar` | integer | yes |  |
+| `daysWorn` | integer | yes |  |
+| `recentMean` | number | yes |  |
+| `usual` | [Window](#window) | yes |  |
+| `recent` | [Window](#window) | yes |  |
+
+### CheckinMark
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `role` | `hr` \| `supervisor` | yes |  |
+| `outcome` | `checked_in` \| `not_needed` or null | yes |  |
+| `markedAt` | string (date-time) or null | yes |  |
 
 ### ConnectOptions
 
@@ -675,6 +717,13 @@ The admin's view: who wrote it, so the team can follow up.
 | `code` | string | yes | min length 1, max length 32 |
 | `consentVersion` | string | yes |  |
 
+### MarkCheckin
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `outcome` | `checked_in` \| `not_needed` | yes |  |
+| `note` | string or null |  |  |
+
 ### Measured
 
 What the tracker recorded during the workout. Only the server fills this in.
@@ -702,6 +751,9 @@ What the tracker recorded during the workout. Only the server fills this in.
 | `shareLevels` | boolean | yes |  |
 | `levelsConsent` | string | yes |  |
 | `levelsConsentVersion` | string | yes |  |
+| `checkinAlerts` | boolean |  | default `False` |
+| `checkinConsent` | string |  | default `` |
+| `checkinConsentVersion` | string |  | default `` |
 
 ### MemoryOut
 
@@ -820,6 +872,21 @@ An exercise already recorded over part of the workout, by the tracker or another
 | `startTime` | string (date-time) | yes |  |
 | `endTime` | string (date-time) | yes |  |
 
+### OwnCheckin
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `id` | string | yes |  |
+| `teamId` | string | yes |  |
+| `team` | string | yes |  |
+| `status` | `waiting` \| `withdrawn` \| `sent` | yes |  |
+| `raisedAt` | string (date-time) | yes |  |
+| `sendAfter` | string (date-time) | yes |  |
+| `sentAt` | string (date-time) or null | yes |  |
+| `withdrawnAt` | string (date-time) or null | yes |  |
+| `recipients` | string | yes |  |
+| `evidence` | list[[CheckinEvidence](#checkinevidence)] | yes |  |
+
 ### Point
 
 | Field | Type | Required | Limits |
@@ -879,6 +946,20 @@ Thumbs up or down on an answer; null takes it back.
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `rating` | `up` \| `down` or null | yes |  |
+
+### ReceivedCheckin
+
+A sent alert as HR or the supervisor sees it: who, which team, when; never why.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `id` | string | yes |  |
+| `person` | string | yes |  |
+| `team` | string | yes |  |
+| `sentAt` | string (date-time) | yes |  |
+| `mine` | [CheckinMark](#checkinmark) | yes |  |
+| `others` | list[[CheckinMark](#checkinmark)] | yes |  |
+| `note` | string or null | yes |  |
 
 ### Recovery
 
@@ -959,6 +1040,13 @@ What the week's report leads with: a worthwhile team change, in reading order.
 | `version` | integer | yes | ≥ 1.0 |
 | `log` | any | yes |  |
 
+### ShareCheckin
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `share` | boolean | yes |  |
+| `consentVersion` | string or null |  |  |
+
 ### ShareLevels
 
 | Field | Type | Required | Limits |
@@ -1024,6 +1112,7 @@ One member who chose to share, with their week against their own usual.
 | `members` | integer | yes |  |
 | `minimumMembers` | integer | yes |  |
 | `reportEmail` | string or null | yes |  |
+| `hrEmail` | string or null |  |  |
 | `paused` | string or null |  |  |
 | `createdAt` | string (date-time) | yes |  |
 
@@ -1105,6 +1194,12 @@ Weekly highlights and upcoming event warnings, each linked to the report evidenc
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `code` | string | yes | min length 1, max length 32 |
+
+### TeamHr
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `email` | string or null | yes |  |
 
 ### TeamNote
 
