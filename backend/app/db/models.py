@@ -113,6 +113,22 @@ class AuthSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class CalendarConnection(Base):
+    """A user's Google Calendar sign-in, apart from Google Health's: Google's Health API refuses a
+    token that also carries the calendar permission, so each has its own (app/sync/calendar.py).
+    The token is stored encrypted, never in plain text."""
+
+    __tablename__ = "calendar_connections"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    encrypted_token: Mapped[bytes] = mapped_column(LargeBinary)
+    scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(32), default="active")
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class GoogleConnection(Base):
     """A user's Google Health sign-in. The token is stored encrypted, never in plain text."""
 

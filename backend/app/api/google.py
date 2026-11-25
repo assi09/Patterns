@@ -121,11 +121,15 @@ def connect(
 ) -> schemas.ConnectStart:
     scopes = set(SCOPES)
     connection = db.get(GoogleConnection, user.id)
-    if connection is not None:  # a reconnect keeps what the person allowed before
-        scopes.update(set(connection.scopes) & (set(WRITE_SCOPES.values()) | {calendar.SCOPE}))
     if body is not None and body.capability == "calendar":
-        scopes.add(calendar.SCOPE)
-    elif body is not None:
+        # The calendar gets a sign-in of its own, with that permission only: Google's Health
+        # API refuses a token that also carries it (app/sync/calendar.py).
+        return schemas.ConnectStart(
+            url=sign_ins.start(google.oauth, user.id, clock, (calendar.SCOPE,))
+        )
+    if connection is not None:  # a reconnect keeps the write permissions allowed before
+        scopes.update(set(connection.scopes) & set(WRITE_SCOPES.values()))
+    if body is not None:
         scopes.add(WRITE_SCOPES["food" if body.capability == "food_logging" else "workout"])
     return schemas.ConnectStart(
         url=sign_ins.start(google.oauth, user.id, clock, tuple(sorted(scopes)))
@@ -158,7 +162,10 @@ def callback(
         if isinstance(oauth, connections.GoogleOAuth):
             oauth = replace(oauth, scopes=pending.scopes)
         credentials = oauth.exchange(code, pending.verifier)
-        connections.save_connection(db, google.box, pending.user_id, credentials)
+        if tuple(pending.scopes or ()) == (calendar.SCOPE,):
+            calendar.save_connection(db, google.box, pending.user_id, credentials)
+        else:
+            connections.save_connection(db, google.box, pending.user_id, credentials)
     except Exception:
         logger.exception("Connecting Google Health failed")
         return back("failed")

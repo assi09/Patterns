@@ -2,6 +2,7 @@
 """Google Calendar: events reduced to daily counts (never stored as events), the privacy of what is
 asked for, the sync, and the team's meeting load under the team rules."""
 
+import json
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
@@ -196,11 +197,12 @@ def fake_client(api):
 
 
 def connected_person(engine, box):
+    """Someone who connected Google Calendar (its own sign-in)."""
     with session_scope(engine) as db:
         person = User(email="p@example.com", status="approved")
         db.add(person)
         db.flush()
-        save_connection(db, box, person.id, credentials())
+        calendar.save_connection(db, box, person.id, credentials())
         return person.id
 
 
@@ -233,8 +235,7 @@ def test_a_failed_sync_is_saved_as_failed_and_shown(engine, box, client, status)
     headers = signed_in(client, engine)
     with session_scope(engine) as db:
         person = db.scalar(select(User).where(User.email == "person@example.com"))
-        save_connection(db, box, person.id, credentials())
-        db.get(GoogleConnection, person.id).scopes = [calendar.SCOPE]
+        calendar.save_connection(db, box, person.id, credentials())
         person_id = person.id
     sessions = lambda: session_scope(engine)  # noqa: E731
     calendar.sync(
@@ -255,7 +256,7 @@ def test_a_failed_sync_is_saved_as_failed_and_shown(engine, box, client, status)
 def test_the_background_sync_records_a_failure_without_raising(engine, box):
     person_id = connected_person(engine, box)
     with session_scope(engine) as db:
-        db.get(GoogleConnection, person_id).scopes = [calendar.SCOPE]
+        calendar.save_connection(db, box, person_id, credentials())
     sessions = lambda: session_scope(engine)  # noqa: E731
     original = calendar.CalendarClient
     calendar.CalendarClient = lambda token: original(  # type: ignore[misc]
@@ -283,17 +284,60 @@ def test_without_the_calendar_scope_nothing_is_read(engine, box):
         assert db.scalar(select(SyncRun).where(SyncRun.source == calendar.SOURCE)) is None
 
 
-def test_connecting_the_calendar_asks_for_its_scope_and_keeps_it(client, engine, monkeypatch):
+def test_the_calendar_gets_its_own_sign_in_and_health_never_carries_it(client, engine):
+    """Regression: the calendar permission was added to Google Health's sign-in, and Google's
+    Health API refuses a token that carries it, so health syncs stopped. The calendar now asks
+    for that permission alone, kept in its own connection; a health sign-in never includes it."""
     headers = signed_in(client, engine)
     url = client.post("/google/connect", headers=headers, json={"capability": "calendar"})
     state = parse_qs(urlparse(url.json()["url"]).query)["state"][0]
-    assert calendar.SCOPE in google.sign_ins._pending[state].scopes
+    assert tuple(google.sign_ins._pending[state].scopes) == (calendar.SCOPE,)
+    callback = client.get("/google/callback", params={"state": state, "code": "c"})
+    assert callback.headers["location"].endswith("google=connected")
     with session_scope(engine) as db:
         person = db.scalar(select(User).where(User.email == "person@example.com"))
-        db.add(GoogleConnection(user_id=person.id, encrypted_token=b"x", scopes=[calendar.SCOPE]))
+        assert calendar.connection_for(db, person.id) is not None
+        assert db.get(GoogleConnection, person.id) is None  # health untouched
     again = client.post("/google/connect", headers=headers).json()["url"]
     state = parse_qs(urlparse(again).query)["state"][0]
-    assert calendar.SCOPE in google.sign_ins._pending[state].scopes  # a reconnect keeps it
+    assert calendar.SCOPE not in google.sign_ins._pending[state].scopes
+
+
+def test_a_shared_token_from_before_is_split_by_the_migration(tmp_path):
+    """Upgrading moves a Google Health token that carried the calendar permission to the
+    calendar's own connection and asks for Google Health to be connected again."""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine, text
+
+    url = f"sqlite:///{tmp_path / 'm.db'}"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "0035")
+    db = create_engine(url)
+    with db.begin() as conn:
+        uid = uuid.uuid4().hex
+        conn.execute(
+            text(
+                "INSERT INTO users (id, email, status, role, created_at) "
+                "VALUES (:id, 'a@x.com', 'approved', 'member', '2026-11-25')"
+            ),
+            {"id": uid},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO google_connections "
+                "(user_id, encrypted_token, scopes, status, connected_at, updated_at) "
+                "VALUES (:id, :t, :s, 'active', '2026-11-25', '2026-11-25')"
+            ),
+            {"id": uid, "t": b"sealed", "s": json.dumps(["health", calendar.SCOPE])},
+        )
+    command.upgrade(config, "head")
+    with db.begin() as conn:
+        health = conn.execute(text("SELECT status, scopes FROM google_connections")).one()
+        moved = conn.execute(text("SELECT scopes, status FROM calendar_connections")).one()
+    assert health.status == "reconnect_needed" and calendar.SCOPE not in json.loads(health.scopes)
+    assert json.loads(moved.scopes) == [calendar.SCOPE] and moved.status == "active"
 
 
 # The team's load
