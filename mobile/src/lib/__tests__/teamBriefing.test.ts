@@ -1,6 +1,6 @@
-import type { Evidence, TeamAlert, TeamReport } from '@/api/types';
+import type { Evidence, TeamReport } from '@/api/types';
 
-import { briefingContent, buildingHistory, type TeamStatus } from '../team';
+import { briefingContent, buildingHistory, lastFullWeekStart, type TeamStatus } from '../team';
 
 const READINGS = ['Median sleep last night: 7 h 10 min, based on 6 members.'];
 const unknown: TeamStatus = { level: 'unknown', title: 'Not enough yet', line: 'No report yet.' };
@@ -37,13 +37,17 @@ describe('the briefing card while a team builds history', () => {
   });
 });
 
-function report(status: 'ready' | 'withheld', sufficient: boolean[]): TeamReport {
+function report(
+  status: 'ready' | 'withheld',
+  sufficient: boolean[],
+  start = lastFullWeekStart(),
+): TeamReport {
   const evidence: Record<string, Evidence> = {};
   const sections = sufficient.map((ok, i) => {
     evidence[`e${i}`] = { sufficient: ok } as Evidence;
     return { metric: `m${i}`, text: '', evidenceId: `e${i}` };
   });
-  return { status, sections, evidence } as unknown as TeamReport;
+  return { status, sections, evidence, week: { start, end: start } } as unknown as TeamReport;
 }
 
 describe('whether a team is still building history', () => {
@@ -57,9 +61,14 @@ describe('whether a team is still building history', () => {
     expect(buildingHistory(report('ready', [false, true]))).toBe(false);
   });
 
-  it('is not once a team alert exists: an alert is itself a change from usual', () => {
-    const alert = { id: 'a1', kind: 'concern' } as TeamAlert;
-    expect(buildingHistory(undefined, [alert])).toBe(false);
-    expect(buildingHistory(report('withheld', []), [alert])).toBe(false);
+  it('judges by the current report only, so an old alert or report cannot hide new readings', () => {
+    // The reviewer's case: an alert from months ago, and five new members with readings today.
+    // Alerts are not an input at all; an older week's report counts as no current report.
+    const today = new Date(2026, 10, 25); // a Wednesday
+    const current = report('ready', [false, true], '2026-11-16');
+    const old = report('ready', [true, true], '2026-08-03');
+    expect(buildingHistory(current, today)).toBe(false);
+    expect(buildingHistory(old, today)).toBe(true);
+    expect(lastFullWeekStart(today)).toBe('2026-11-16');
   });
 });
