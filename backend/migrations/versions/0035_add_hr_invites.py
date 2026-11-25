@@ -35,9 +35,18 @@ def upgrade() -> None:
         sa.UniqueConstraint("token_hash"),
     )
     op.create_index("ix_hr_invites_team_id", "hr_invites", ["team_id"])
+    op.create_index(
+        "uq_hr_invites_open_team",
+        "hr_invites",
+        ["team_id"],
+        unique=True,
+        sqlite_where=sa.text("accepted_at IS NULL"),
+        postgresql_where=sa.text("accepted_at IS NULL"),
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_index("uq_hr_invites_open_team", table_name="hr_invites")
     op.drop_index("ix_hr_invites_team_id", table_name="hr_invites")
     op.drop_table("hr_invites")

@@ -40,6 +40,7 @@ router = APIRouter(prefix="/google", tags=["google"])
 
 sign_ins = SignIns()
 syncs = Syncs()
+calendar_syncs = Syncs()  # the calendar's own, so it never waits on, or for, Google Health
 
 # How soon the app's automatic syncs may start another one. Counted from the last attempt, not the
 # last success, so a failing sync is not retried on every refresh.
@@ -81,14 +82,24 @@ def _status(db, user: User) -> schemas.GoogleStatus:
 
 
 def _start_sync(google: GoogleParts, sessions: Sessions, user: User, today: date) -> None:
-    syncs.start(user.id, lambda: sync_everything(google, sessions, user.id, today))
+    """After connecting or "Sync now": Google Health (with the check-in rule) and the calendar,
+    each through its own registry, the one the scheduler uses too, so a person never has two
+    runs of either at once, whoever started them."""
+    syncs.start(user.id, lambda: sync_health(google, sessions, user.id, today))
+    calendar_syncs.start(user.id, lambda: sync_calendar(google, sessions, user.id, today))
 
 
-def sync_everything(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
-    """Everything that follows a person's sync, in order, each step guarded so one failing never
-    stops the next: Google Health; then, if that sync succeeded, the check-in rule for every team
-    they agreed to it for (app/teams/checkin.py); then their calendar, if they allowed it
-    (app/sync/calendar.py)."""
+def sync_calendar(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
+    """The person's calendar, if they connected it; its own sign-in, apart from Google Health's."""
+    try:
+        calendar.sync_person(sessions, google.box, user_id, today, settings.timezone)
+    except Exception:
+        logger.exception("The calendar sync failed")
+
+
+def sync_health(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
+    """Google Health; then, if that sync succeeded, the check-in rule for every team the person
+    agreed to it for (app/teams/checkin.py)."""
     started = connections.now_utc()
     try:
         connections.sync(sessions, google.box, user_id, google.health_for, today)
@@ -100,10 +111,6 @@ def sync_everything(google: GoogleParts, sessions: Sessions, user_id, today: dat
                 checkin.after_sync(db, user_id, connections.now_utc())
     except Exception:
         logger.exception("Checking the check-in rule after a sync failed")
-    try:
-        calendar.sync_person(sessions, google.box, user_id, today, settings.timezone)
-    except Exception:
-        logger.exception("The calendar sync failed")
 
 
 @router.get("/status", response_model=schemas.GoogleStatus)
@@ -121,11 +128,15 @@ def connect(
 ) -> schemas.ConnectStart:
     scopes = set(SCOPES)
     connection = db.get(GoogleConnection, user.id)
-    if connection is not None:  # a reconnect keeps what the person allowed before
-        scopes.update(set(connection.scopes) & (set(WRITE_SCOPES.values()) | {calendar.SCOPE}))
     if body is not None and body.capability == "calendar":
-        scopes.add(calendar.SCOPE)
-    elif body is not None:
+        # The calendar gets a sign-in of its own, with that permission only: Google's Health
+        # API refuses a token that also carries it (app/sync/calendar.py).
+        return schemas.ConnectStart(
+            url=sign_ins.start(google.oauth, user.id, clock, (calendar.SCOPE,))
+        )
+    if connection is not None:  # a reconnect keeps the write permissions allowed before
+        scopes.update(set(connection.scopes) & set(WRITE_SCOPES.values()))
+    if body is not None:
         scopes.add(WRITE_SCOPES["food" if body.capability == "food_logging" else "workout"])
     return schemas.ConnectStart(
         url=sign_ins.start(google.oauth, user.id, clock, tuple(sorted(scopes)))
@@ -158,7 +169,10 @@ def callback(
         if isinstance(oauth, connections.GoogleOAuth):
             oauth = replace(oauth, scopes=pending.scopes)
         credentials = oauth.exchange(code, pending.verifier)
-        connections.save_connection(db, google.box, pending.user_id, credentials)
+        if tuple(pending.scopes or ()) == (calendar.SCOPE,):
+            calendar.save_connection(db, google.box, pending.user_id, credentials)
+        else:
+            connections.save_connection(db, google.box, pending.user_id, credentials)
     except Exception:
         logger.exception("Connecting Google Health failed")
         return back("failed")

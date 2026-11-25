@@ -25,13 +25,15 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request
 from sqlalchemy.orm import Session
 
 from app.db.daily import load_daily, save_daily
-from app.db.models import GoogleConnection, SyncRun, User
+from app.db.models import CalendarConnection, SyncRun, User
 from app.sync.client import HealthClient
-from app.sync.connections import TokenBox, credentials_for
-from app.sync.google_auth import SyncError
+from app.sync.connections import TokenBox
+from app.sync.google_auth import ReconnectNeeded, SyncError
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +84,45 @@ class CalendarClient(HealthClient):
             params = {**params, "pageToken": token}
 
 
-def has_scope(connection: GoogleConnection | None) -> bool:
-    return connection is not None and SCOPE in (connection.scopes or [])
+def connection_for(session: Session, user_id: uuid.UUID) -> CalendarConnection | None:
+    """The person's own calendar sign-in, apart from Google Health's, if they made one."""
+    return session.get(CalendarConnection, user_id)
+
+
+def save_connection(
+    session: Session, box: TokenBox, user_id: uuid.UUID, credentials
+) -> CalendarConnection:
+    """Keeps the calendar sign-in on its own. Google's Health API refuses a token that also
+    carries the calendar permission, so the calendar never shares Google Health's token."""
+    if not credentials.refresh_token:
+        raise ReconnectNeeded("Google did not return a lasting sign-in; connect again.")
+    connection = session.get(CalendarConnection, user_id) or CalendarConnection(user_id=user_id)
+    connection.encrypted_token = box.seal(credentials)
+    connection.scopes = sorted(credentials.granted_scopes or credentials.scopes or [])
+    connection.status = "active"
+    session.add(connection)
+    session.flush()
+    return connection
+
+
+def credentials_for(session: Session, box: TokenBox, user_id: uuid.UUID):
+    """Valid calendar credentials, refreshed and stored again if needed; marks a dead sign-in."""
+    connection = connection_for(session, user_id)
+    if connection is None or connection.status != "active":
+        raise ReconnectNeeded("Connect Google Calendar first.")
+    credentials = box.open(connection.encrypted_token)
+    if credentials.valid:
+        return credentials
+    try:
+        credentials.refresh(Request())
+    except RefreshError as exc:
+        connection.status = "reconnect_needed"
+        session.commit()  # kept although the caller's session rolls back on the error
+        raise ReconnectNeeded(
+            "Your Google Calendar sign-in expired (in testing it lasts 7 days); connect again."
+        ) from exc
+    connection.encrypted_token = box.seal(credentials)
+    return credentials
 
 
 # --- reducing events to daily counts --------------------------------------------------------
@@ -194,7 +233,7 @@ def sync(
     user_id: uuid.UUID,
     zone: ZoneInfo,
     today: date,
-    client_for: Callable[[Callable[[], str]], CalendarClient] = CalendarClient,
+    client_for: Callable[[Callable[[], str]], CalendarClient] | None = None,
 ) -> int:
     """Reads the person's calendar from DAYS_BACK before today to DAYS_AHEAD after, stores the
     daily counts and returns the number of days written; raises what stopped it.
@@ -219,7 +258,7 @@ def sync(
     try:
         with sessions() as session:
             credentials = credentials_for(session, box, user_id)
-            client = client_for(lambda: credentials.token)
+            client = (client_for or CalendarClient)(lambda: credentials.token)
             start = datetime.combine(first, time(0), zone)
             end = datetime.combine(last + timedelta(days=1), time(0), zone)
             frame = daily_load(list(client.events(start, end)), zone, first, last)
@@ -248,8 +287,8 @@ def sync_person(
     """For background syncs: the calendar of someone who allowed it, in their own time zone.
     Failures are recorded on the sync run and logged, not raised; returns the days written."""
     with sessions() as session:
-        connection = session.get(GoogleConnection, user_id)
-        if not has_scope(connection) or connection.status != "active":
+        connection = connection_for(session, user_id)
+        if connection is None or connection.status != "active":
             return 0
         user = session.get(User, user_id)
         try:

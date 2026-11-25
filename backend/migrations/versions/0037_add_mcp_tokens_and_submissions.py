@@ -1,7 +1,7 @@
 """Add MCP access tokens and what harnesses send in, held for approval
 
-Revision ID: 0036
-Revises: 0035
+Revision ID: 0037
+Revises: 0036
 Create Date: 2026-11-25 23:00:00.000000
 
 """
@@ -11,8 +11,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0036"
-down_revision: str | Sequence[str] | None = "0035"
+revision: str = "0037"
+down_revision: str | Sequence[str] | None = "0036"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

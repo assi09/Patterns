@@ -838,6 +838,7 @@ export interface ApiClient {
   shareTeamCheckin(teamId: string, share: boolean, consentVersion?: string): Promise<Membership>;
   getMyCheckins(): Promise<OwnCheckin[]>;
   getCalendarStatus(): Promise<CalendarStatus>;
+  disconnectCalendar(): Promise<CalendarStatus>; // the calendar's sign-in only; days are kept
   getMyCalendar(): Promise<CalendarDay[]>;
   getTeamCalendar(teamId: string, week?: ISODate): Promise<TeamCalendar>; // supervisors
   sendCheckinNow(id: string): Promise<OwnCheckin>; // before the hour is up

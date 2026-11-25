@@ -277,12 +277,43 @@ def sync(
         with sessions() as session:
             return credentials_for(session, box, user_id).token
 
+    started = now_utc()
     try:
         health = health_for(token)
         for start, end in plan(last, lambda: first_day(health, today), today):
             pull(sessions, health, email, start, end)
     except SyncError as exc:
         logger.warning("Sync stopped: %s", exc)
+        _record_failure(sessions, user_id, today, started, str(exc))
+
+
+def _record_failure(
+    sessions: Sessions, user_id: uuid.UUID, today: date, started: datetime, error: str
+) -> None:
+    """A sync that stopped before pulling any day (a refused or expired sign-in, Google failing
+    while finding the first day) leaves a failed run, so the app says so instead of waiting."""
+    with sessions() as session:
+        already = session.scalar(
+            select(SyncRun.id).where(
+                SyncRun.user_id == user_id,
+                SyncRun.source == SOURCE,
+                SyncRun.started_at >= started,
+            )
+        )
+        if already is not None:
+            return  # a pull began and recorded its own run
+        session.add(
+            SyncRun(
+                user_id=user_id,
+                source=SOURCE,
+                status="failed",
+                range_start=today,
+                range_end=today + timedelta(days=1),
+                error=error[:500],
+                started_at=started,
+                finished_at=now_utc(),
+            )
+        )
 
 
 def status(session: Session, user_id: uuid.UUID) -> dict:
