@@ -17,7 +17,6 @@ from app.api import schemas
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
 from app.api.teams import Supervisor
-from app.db.daily import load_daily
 from app.db.models import DailyMetric, GoogleConnection, SyncRun, User
 from app.sync import calendar
 from app.teams import memberships as teams
@@ -57,9 +56,7 @@ def my_calendar(db: Db, user: Person, clock: Now) -> list[schemas.CalendarDay]:
     """The person's own daily counts: the last four weeks and what is planned ahead."""
     today = clock.date()
     start = today - timedelta(days=OWN_DAYS_BACK)
-    frame = load_daily(
-        db, user.id, calendar.SOURCE, start, today + timedelta(days=calendar.DAYS_AHEAD + 1)
-    )
+    frame = calendar.frame_for(db, user.id, start, today + timedelta(days=calendar.DAYS_AHEAD + 1))
     return [
         schemas.CalendarDay(date=stamp.date(), **{m: float(row[m]) for m in calendar.METRICS})
         for stamp, row in frame.fillna(0).iterrows()
@@ -80,7 +77,7 @@ def team_calendar(
     frames = [
         frame
         for uid in teams.member_ids(db, team)
-        if not (frame := load_daily(db, uid, calendar.SOURCE, start, end)).empty
+        if not (frame := calendar.frame_for(db, uid, start, end)).empty
     ]
     load = team_load(frames, span)
     return schemas.TeamCalendar(
