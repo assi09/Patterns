@@ -37,6 +37,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { SyncLine } from '@/components/SyncLine';
 import { Text } from '@/components/Text';
 import { metricOf, shiftDate } from '@/lib/day';
+import { usePersonal } from '@/lib/features';
 import { useWide } from '@/lib/layout';
 import { radius, spacing, useColors } from '@/theme';
 
@@ -45,7 +46,7 @@ const HEART = ['resting_hr', 'hrv_ms', 'respiratory_rate', 'skin_temp_variation_
 export default function TodayScreen() {
   const [date, setDate] = useState<ISODate | 'latest'>('latest');
   const day = useDay(date);
-  const report = useReport();
+  const report = useReport(usePersonal()); // findings belong to the individual side
   const noData = useNoData();
   const wide = useWide();
   const data = day.data;

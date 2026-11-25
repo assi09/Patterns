@@ -136,8 +136,8 @@ export function useMetricSeries(metric: string, days: number, end?: ISODate) {
   });
 }
 
-export function useReport() {
-  return useQuery({ queryKey: keys.report, queryFn: api.getLatestReport });
+export function useReport(enabled = true) {
+  return useQuery({ queryKey: keys.report, queryFn: api.getLatestReport, enabled });
 }
 
 export function useEvidence(id: string, enabled = true) {
@@ -286,8 +286,8 @@ export function useRateAnswer() {
   });
 }
 
-export function useReminders() {
-  return useQuery({ queryKey: keys.reminders, queryFn: api.getReminders });
+export function useReminders(enabled = true) {
+  return useQuery({ queryKey: keys.reminders, queryFn: api.getReminders, enabled });
 }
 
 export function useCreateReminder() {

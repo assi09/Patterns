@@ -220,6 +220,8 @@ class Account(ApiModel):
     status: Literal["pending", "approved", "rejected"]
     is_admin: bool
     role: Literal["member", "supervisor"] = "member"
+    # Whether this server has the individual side on (app/api/features.py); the app hides it if not.
+    personal_features: bool = False
 
 
 class SignedIn(ApiModel):

@@ -328,6 +328,7 @@ A field not marked required may be left out.
 | `status` | `pending` \| `approved` \| `rejected` | yes |  |
 | `isAdmin` | boolean | yes |  |
 | `role` | `member` \| `supervisor` |  | default `member` |
+| `personalFeatures` | boolean |  | default `False` |
 
 ### Action
 

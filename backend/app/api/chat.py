@@ -70,6 +70,7 @@ from app.analysis.habits import with_checkins
 from app.api import schemas
 from app.api.auth import Db, approved_user
 from app.api.errors import ApiError
+from app.api.features import personal_features
 from app.api.store import LoadedData, get_data
 from app.config import settings
 from app.db import chat as store
@@ -93,7 +94,7 @@ from app.reminders.store import SCHEDULE, timezone_of
 from app.reminders.tools import ALARM, listing_reply, reminder_reply, reminder_tools
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["chat"])
+router = APIRouter(tags=["chat"], dependencies=[Depends(personal_features)])
 
 HISTORY_SHOWN = 100  # messages the app gets back
 HISTORY_USED = 20  # messages the agent sees as context; the context builder trims further

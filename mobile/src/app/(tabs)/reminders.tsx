@@ -25,6 +25,7 @@ import { InboxMemoryChoice } from '@/components/MemoryPrompt';
 import { QueryState, Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Button, Chip } from '@/components/ui';
+import { usePersonal } from '@/lib/features';
 import { timeAgo } from '@/lib/format';
 import { select, success } from '@/lib/haptics';
 import { dueText } from '@/lib/reminders';
@@ -44,71 +45,74 @@ const INBOX_SHOWN = 5;
  */
 export default function RemindersScreen() {
   const colors = useColors();
-  const reminders = useReminders();
+  const personal = usePersonal(); // off: the inbox only, without reminders or smart alarms
+  const reminders = useReminders(personal);
   const inbox = useNotifications();
 
   return (
     <Screen
-      title="Reminders"
+      title={personal ? 'Reminders' : 'Inbox'}
       refreshing={reminders.isRefetching}
       onRefresh={() => {
-        reminders.refetch();
+        if (personal) reminders.refetch();
         inbox.refetch();
       }}
     >
       <Inbox items={inbox.data?.items ?? []} unread={inbox.data?.unread ?? 0} />
-      <QueryState query={reminders}>
-        {() => {
-          const all = reminders.data!;
-          const suggested = all.filter((r) => r.status === 'proposed');
-          const yours = all.filter((r) => r.status === 'active' || r.status === 'paused');
-          return (
-            <>
-              {suggested.length > 0 && (
-                <Section
-                  title="Suggested by Patterns"
-                  footer="From patterns in your data. Nothing is scheduled until you approve it."
-                >
-                  {suggested.map((r) => (
-                    <Suggestion key={r.id} reminder={r} />
-                  ))}
-                </Section>
-              )}
-
-              <Section
-                title="Your reminders"
-                action={
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => router.push('/reminder/new')}
-                    hitSlop={8}
-                    style={styles.add}
+      {personal && (
+        <QueryState query={reminders}>
+          {() => {
+            const all = reminders.data!;
+            const suggested = all.filter((r) => r.status === 'proposed');
+            const yours = all.filter((r) => r.status === 'active' || r.status === 'paused');
+            return (
+              <>
+                {suggested.length > 0 && (
+                  <Section
+                    title="Suggested by Patterns"
+                    footer="From patterns in your data. Nothing is scheduled until you approve it."
                   >
-                    <Ionicons name="add" size={16} color={colors.accent} />
-                    <Text variant="caption" color="accent">
-                      New
-                    </Text>
-                  </Pressable>
-                }
-                footer="Tip: ask in Ask, for example “remind me every weeknight at 22:30 to wind down”."
-              >
-                {yours.length === 0 ? (
-                  <Row
-                    icon="alarm-outline"
-                    title="No reminders yet"
-                    detail="Add one here, or ask Patterns to set it up."
-                    onPress={() => router.push('/reminder/new')}
-                  />
-                ) : (
-                  yours.map((r) => <ReminderRow key={r.id} reminder={r} />)
+                    {suggested.map((r) => (
+                      <Suggestion key={r.id} reminder={r} />
+                    ))}
+                  </Section>
                 )}
-              </Section>
-            </>
-          );
-        }}
-      </QueryState>
+
+                <Section
+                  title="Your reminders"
+                  action={
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => router.push('/reminder/new')}
+                      hitSlop={8}
+                      style={styles.add}
+                    >
+                      <Ionicons name="add" size={16} color={colors.accent} />
+                      <Text variant="caption" color="accent">
+                        New
+                      </Text>
+                    </Pressable>
+                  }
+                  footer="Tip: ask in Ask, for example “remind me every weeknight at 22:30 to wind down”."
+                >
+                  {yours.length === 0 ? (
+                    <Row
+                      icon="alarm-outline"
+                      title="No reminders yet"
+                      detail="Add one here, or ask Patterns to set it up."
+                      onPress={() => router.push('/reminder/new')}
+                    />
+                  ) : (
+                    yours.map((r) => <ReminderRow key={r.id} reminder={r} />)
+                  )}
+                </Section>
+              </>
+            );
+          }}
+        </QueryState>
+      )}
       <SettingsSection />
-      <AlertSettings />
+      {personal && <AlertSettings />}
     </Screen>
   );
 }

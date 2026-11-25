@@ -15,6 +15,7 @@ from app.actions.provider import GoogleWriter, Writer
 from app.actions.schemas import WRITE_SCOPES, Log, LogModel, Measured
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
+from app.api.features import personal_features
 from app.api.google import get_google
 from app.api.schemas import ApiModel
 from app.config import settings
@@ -23,7 +24,7 @@ from app.sync.client import HealthClient
 from app.sync.connections import credentials_for
 from app.sync.google_auth import SyncError
 
-router = APIRouter(prefix="/actions", tags=["actions"])
+router = APIRouter(prefix="/actions", tags=["actions"], dependencies=[Depends(personal_features)])
 Person = Annotated[User, Depends(approved_user)]
 
 

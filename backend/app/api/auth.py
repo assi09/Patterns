@@ -75,7 +75,11 @@ def approved_user(user: Annotated[User, Depends(current_user)]) -> User:
 
 def _account(user: User) -> schemas.Account:
     return schemas.Account(
-        email=user.email, status=user.status, is_admin=is_admin(user), role=user.role
+        email=user.email,
+        status=user.status,
+        is_admin=is_admin(user),
+        role=user.role,
+        personal_features=settings.personal_features,
     )
 
 

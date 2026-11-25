@@ -10,6 +10,7 @@ import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
+import { usePersonal } from '@/lib/features';
 import { shortDate, timeAgo, windowLabel } from '@/lib/format';
 import { useSession } from '@/lib/session';
 import { radius, spacing, useColors, useMetricColor, useThemePreference } from '@/theme';
@@ -22,6 +23,7 @@ const SOURCE_LABELS: Record<DataStatus['source'], string> = {
 
 export default function SettingsScreen() {
   const { account, logOut } = useSession();
+  const personal = usePersonal();
 
   // Google sends the browser back here with ?google=connected (or why it did not connect). Keep
   // the answer to show once, and clear it so a reload does not show it again.
@@ -60,14 +62,16 @@ export default function SettingsScreen() {
         ) : null}
       </Section>
 
-      <Section title="Memory">
-        <Row
-          icon="bookmark-outline"
-          title="What Patterns knows"
-          detail="See, change or remove what it keeps in mind"
-          onPress={() => router.push('/memory')}
-        />
-      </Section>
+      {personal && (
+        <Section title="Memory">
+          <Row
+            icon="bookmark-outline"
+            title="What Patterns knows"
+            detail="See, change or remove what it keeps in mind"
+            onPress={() => router.push('/memory')}
+          />
+        </Section>
+      )}
 
       <Section title="Appearance">
         <View style={styles.control}>
@@ -90,14 +94,16 @@ export default function SettingsScreen() {
         />
       </Section>
 
-      <Section title="Logging">
-        <Row
-          icon="list-outline"
-          title="Logged food and workouts"
-          detail="Drafts, entries sent to Google, and undo"
-          onPress={() => router.push('/entries')}
-        />
-      </Section>
+      {personal && (
+        <Section title="Logging">
+          <Row
+            icon="list-outline"
+            title="Logged food and workouts"
+            detail="Drafts, entries sent to Google, and undo"
+            onPress={() => router.push('/entries')}
+          />
+        </Section>
+      )}
 
       <Section
         title="About"

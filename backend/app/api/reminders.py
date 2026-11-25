@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Response
 from pydantic import Field
 
 from app.api.auth import Db, Now, approved_user
+from app.api.features import personal_features
 from app.api.schemas import ApiModel
 from app.db.models import Reminder, User
 from app.reminders import store
@@ -91,12 +92,19 @@ def response(row: Reminder) -> ReminderOut:
     )
 
 
-@router.get("/reminders", response_model=list[ReminderOut])
+@router.get(
+    "/reminders", response_model=list[ReminderOut], dependencies=[Depends(personal_features)]
+)
 def list_reminders(db: Db, user: Person) -> list[ReminderOut]:
     return [response(row) for row in store.listing(db, user.id)]
 
 
-@router.post("/reminders", response_model=ReminderOut, status_code=201)
+@router.post(
+    "/reminders",
+    response_model=ReminderOut,
+    status_code=201,
+    dependencies=[Depends(personal_features)],
+)
 def create_reminder(body: NewReminder, db: Db, user: Person, now: Now) -> ReminderOut:
     row = store.create(
         db,
@@ -110,7 +118,11 @@ def create_reminder(body: NewReminder, db: Db, user: Person, now: Now) -> Remind
     return response(row)
 
 
-@router.patch("/reminders/{reminder_id}", response_model=ReminderOut)
+@router.patch(
+    "/reminders/{reminder_id}",
+    response_model=ReminderOut,
+    dependencies=[Depends(personal_features)],
+)
 def change_reminder(
     reminder_id: uuid.UUID, body: ReminderChange, db: Db, user: Person, now: Now
 ) -> ReminderOut:
@@ -129,7 +141,9 @@ def change_reminder(
     return response(row)
 
 
-@router.delete("/reminders/{reminder_id}", status_code=204)
+@router.delete(
+    "/reminders/{reminder_id}", status_code=204, dependencies=[Depends(personal_features)]
+)
 def delete_reminder(reminder_id: uuid.UUID, db: Db, user: Person, now: Now) -> Response:
     store.cancel(db, store.get(db, user.id, reminder_id), now)
     return Response(status_code=204)

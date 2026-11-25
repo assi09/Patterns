@@ -12,12 +12,13 @@ from app.agent.facts import MAX_FACT_CHARS
 from app.agent.present import label
 from app.api.auth import Db, approved_user
 from app.api.errors import ApiError
+from app.api.features import personal_features
 from app.api.schemas import ApiModel
 from app.db import memory
 from app.db.models import MemoryEpisode, MemoryFact, User
 from app.reminders.store import utc
 
-router = APIRouter(prefix="/memory", tags=["memory"])
+router = APIRouter(prefix="/memory", tags=["memory"], dependencies=[Depends(personal_features)])
 Person = Annotated[User, Depends(approved_user)]
 EPISODES_SHOWN = 30
 
