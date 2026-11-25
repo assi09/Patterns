@@ -16,6 +16,7 @@ import {
   useCreateTeam,
   useMakeTeamReport,
   useRotateTeamCode,
+  useSetTeamHr,
   useTeamAlerts,
   useTeamPulse,
   useTeamReport,
@@ -451,7 +452,61 @@ function InviteSection({ team, card }: { team: SupervisedTeam; card: Card }) {
         onPress={() => rotate.mutate(team.id)}
       />
       {rotate.error ? <ErrorLine error={rotate.error} /> : null}
+      <HrContact team={team} />
     </Section>
+  );
+}
+
+/** Who receives the team's check-in alerts with the supervisor (docs/escalation.md). */
+function HrContact({ team }: { team: SupervisedTeam }) {
+  const colors = useColors();
+  const save = useSetTeamHr();
+  const [editing, setEditing] = useState(false);
+  const [email, setEmail] = useState('');
+  if (!editing) {
+    return (
+      <Row
+        icon="shield-checkmark-outline"
+        title={team.hrEmail ? `HR: ${team.hrEmail}` : 'No HR contact'}
+        detail="Check-in alerts go to you and HR, only for people who turned them on"
+        onPress={() => {
+          setEmail(team.hrEmail ?? '');
+          setEditing(true);
+        }}
+      />
+    );
+  }
+  const submit = () =>
+    save.mutate(
+      { teamId: team.id, email: email.trim() || null },
+      { onSuccess: () => setEditing(false) },
+    );
+  return (
+    <View>
+      <View style={styles.field}>
+        <TextInput
+          value={email}
+          onChangeText={setEmail}
+          placeholder="hr@company.com"
+          placeholderTextColor={colors.faint}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          onSubmitEditing={submit}
+          accessibilityLabel="HR contact email"
+          style={[
+            styles.input,
+            { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+          ]}
+        />
+        <Button
+          label={email.trim() ? 'Save' : 'Remove'}
+          disabled={save.isPending}
+          onPress={submit}
+        />
+      </View>
+      <Button label="Cancel" variant="secondary" onPress={() => setEditing(false)} />
+      {save.error ? <ErrorLine error={save.error} /> : null}
+    </View>
   );
 }
 

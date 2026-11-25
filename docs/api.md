@@ -1110,6 +1110,7 @@ One member who chose to share, with their week against their own usual.
 | `members` | integer | yes |  |
 | `minimumMembers` | integer | yes |  |
 | `reportEmail` | string or null | yes |  |
+| `hrEmail` | string or null |  |  |
 | `paused` | string or null |  |  |
 | `createdAt` | string (date-time) | yes |  |
 

@@ -7,6 +7,7 @@ import { api } from './index';
 import type {
   Account,
   AlarmSettings,
+  CheckinOutcome,
   ChatMessage,
   FeedbackIn,
   CheckIn,
@@ -36,6 +37,8 @@ export const keys = {
   google: ['google', 'status'] as const,
   myTeams: ['me', 'teams'] as const,
   teams: ['teams'] as const,
+  myCheckins: ['me', 'checkins'] as const,
+  checkins: ['checkins'] as const,
 };
 
 /** A day's numbers; 'latest' is the newest day with data. Kept while moving between days. */
@@ -552,6 +555,64 @@ export function useShareTeamLevels() {
       consentVersion?: string;
     }) => api.shareTeamLevels(teamId, share, consentVersion),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.myTeams }),
+  });
+}
+
+// Check-in alerts (docs/escalation.md)
+
+export function useShareTeamCheckin() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      teamId,
+      share,
+      consentVersion,
+    }: {
+      teamId: string;
+      share: boolean;
+      consentVersion?: string;
+    }) => api.shareTeamCheckin(teamId, share, consentVersion),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: keys.myTeams });
+      client.invalidateQueries({ queryKey: keys.myCheckins });
+    },
+  });
+}
+
+export function useMyCheckins() {
+  return useQuery({ queryKey: keys.myCheckins, queryFn: api.getMyCheckins });
+}
+
+export function useWithdrawCheckin() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.withdrawCheckin(id),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: keys.myCheckins });
+      client.invalidateQueries({ queryKey: keys.myTeams });
+    },
+  });
+}
+
+export function useReceivedCheckins(enabled = true) {
+  return useQuery({ queryKey: keys.checkins, queryFn: api.getReceivedCheckins, enabled });
+}
+
+export function useMarkCheckin() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, outcome, note }: { id: string; outcome: CheckinOutcome; note?: string }) =>
+      api.markCheckin(id, outcome, note),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.checkins }),
+  });
+}
+
+export function useSetTeamHr() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, email }: { teamId: string; email: string | null }) =>
+      api.setTeamHr(teamId, email),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.teams }),
   });
 }
 

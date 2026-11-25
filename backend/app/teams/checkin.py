@@ -315,7 +315,7 @@ def send_due(db: Session, now: datetime) -> int:
                 user_id,
                 RECIPIENT_TITLE.format(person=person.email),
                 RECIPIENT_BODY.format(person=person.email, team=team.name),
-                f"/checkins/{alert.id}",
+                "/checkins",
                 now,
             )
         sent += 1
@@ -344,7 +344,7 @@ def remind_due(db: Session, now: datetime) -> int:
                 mark.user_id,
                 RECIPIENT_TITLE.format(person=person.email),
                 "Still open: " + RECIPIENT_BODY.format(person=person.email, team=team.name),
-                f"/checkins/{alert.id}",
+                "/checkins",
                 now,
             )
         alert.reminded_at = now

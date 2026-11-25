@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Switch, TextInput, View } from 'react-native';
 
@@ -5,8 +6,10 @@ import { ApiError } from '@/api/http';
 import {
   useJoinTeam,
   useLeaveTeam,
+  useMyCheckins,
   useMyTeams,
   usePreviewTeam,
+  useShareTeamCheckin,
   useShareTeamLevels,
 } from '@/api/hooks';
 import type { Membership, TeamPreview } from '@/api/types';
@@ -39,10 +42,15 @@ export default function Teams() {
 function TeamSection({ membership }: { membership: Membership }) {
   const colors = useColors();
   const share = useShareTeamLevels();
+  const checkin = useShareTeamCheckin();
   const leave = useLeaveTeam();
+  const waiting = useMyCheckins().data?.find(
+    (c) => c.teamId === membership.teamId && c.status === 'waiting',
+  );
   const [askingShare, setAskingShare] = useState(false);
+  const [askingCheckin, setAskingCheckin] = useState(false);
   const [askingLeave, setAskingLeave] = useState(false);
-  const error = share.error ?? leave.error;
+  const error = share.error ?? checkin.error ?? leave.error;
 
   return (
     <Section
@@ -95,6 +103,56 @@ function TeamSection({ membership }: { membership: Membership }) {
             )
           }
           onCancel={() => setAskingShare(false)}
+        />
+      ) : null}
+      <Row
+        icon="hand-left-outline"
+        title="Check-in alerts"
+        detail={
+          membership.checkinAlerts
+            ? 'If your data shows a sustained, extreme change, you are told first; then HR and your supervisor are asked to check in. No values are shared'
+            : 'Off: nobody is ever asked to check in with you'
+        }
+        accessory={
+          <Switch
+            accessibilityLabel="Check-in alerts to HR and my supervisor"
+            value={membership.checkinAlerts} // stays off until the consent below is confirmed
+            disabled={checkin.isPending}
+            onValueChange={(on) => {
+              if (on) return setAskingCheckin(true);
+              setAskingCheckin(false);
+              checkin.mutate({ teamId: membership.teamId, share: false });
+            }}
+            trackColor={{ true: colors.accent, false: colors.track }}
+            thumbColor="#FFFFFF"
+            {...({ activeThumbColor: '#FFFFFF' } as object)}
+          />
+        }
+      />
+      {askingCheckin && !membership.checkinAlerts ? (
+        <Consent
+          text={membership.checkinConsent}
+          confirm="Turn on check-in alerts"
+          busy={checkin.isPending}
+          onConfirm={() =>
+            checkin.mutate(
+              {
+                teamId: membership.teamId,
+                share: true,
+                consentVersion: membership.checkinConsentVersion,
+              },
+              { onSuccess: () => setAskingCheckin(false) },
+            )
+          }
+          onCancel={() => setAskingCheckin(false)}
+        />
+      ) : null}
+      {waiting ? (
+        <Row
+          icon="alert-circle-outline"
+          title="A check-in alert is waiting"
+          detail="Nothing is sent yet. Open it to see why, or stop it"
+          onPress={() => router.push({ pathname: '/checkin/[id]', params: { id: waiting.id } })}
         />
       ) : null}
       {askingLeave ? (

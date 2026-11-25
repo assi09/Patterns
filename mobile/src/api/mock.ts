@@ -45,6 +45,8 @@ import type {
   Strain,
   TeamPreview,
   Membership,
+  OwnCheckin,
+  ReceivedCheckin,
   SupervisedTeam,
   PlanChange,
   TeamAction,
@@ -989,8 +991,58 @@ const MOCK_CONSENT = {
   levelsConsent:
     "Your supervisor will also see your name with your own weekly recovery, sleep, strain and stress, each as below, within or above your own usual range and as the week's average. Nothing else: no days, no other metrics, no chats. You can turn this off at any time; your row then disappears, including from past weeks.",
   levelsConsentVersion: 'team-levels-v1',
+  checkinConsent:
+    'If your own data shows a sustained, extreme change, for example several signals far outside your usual range on most days of a week, your supervisor and HR will get a message asking them to check in with you. The message has your name and nothing else: no values, no metrics, no reason. You are told first, see what raised it, and have 24 hours to turn this off before anything is sent. You can turn it off at any time.',
+  checkinConsentVersion: 'checkin-v1',
 };
 let myTeams: Membership[] = [];
+
+// Check-in alerts (docs/escalation.md), made up. Turning them on here raises a sample alert at
+// once, so the screens can be seen; the real rule needs a sustained, extreme week.
+let myCheckins: OwnCheckin[] = [];
+function sampleCheckin(membership: Membership): OwnCheckin {
+  const now = Date.now();
+  const day = (offset: number) => new Date(now + offset * 86_400_000).toISOString().slice(0, 10);
+  const signal = (metric: string, direction: 'up' | 'down', low: number, high: number, mean: number) => ({
+    id: `checkin-${metric}`,
+    metric,
+    direction,
+    usualLow: low,
+    usualHigh: high,
+    margin: high - low,
+    daysFar: 6,
+    daysWorn: 7,
+    recentMean: mean,
+    usual: { start: day(-34), end: day(-7) },
+    recent: { start: day(-6), end: day(0) },
+  });
+  return {
+    id: `checkin-${membership.teamId}`,
+    teamId: membership.teamId,
+    team: membership.team,
+    status: 'waiting',
+    raisedAt: new Date(now).toISOString(),
+    sendAfter: new Date(now + 86_400_000).toISOString(),
+    sentAt: null,
+    withdrawnAt: null,
+    recipients: `your supervisor (${membership.supervisor}) and HR (hr@example.com)`,
+    evidence: [
+      signal('sleep_minutes', 'down', 400, 445, 250),
+      signal('hrv_ms', 'down', 40, 50, 22),
+    ],
+  };
+}
+let receivedCheckins: ReceivedCheckin[] = [
+  {
+    id: 'received-1',
+    person: 'sam@example.com',
+    team: 'Design',
+    sentAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+    mine: { role: 'supervisor', outcome: null, markedAt: null },
+    others: [{ role: 'hr', outcome: null, markedAt: null }],
+    note: null,
+  },
+];
 
 function mockTeam(code: string) {
   if (code.toUpperCase().replace(/[^A-Z0-9]/g, '') !== MOCK_TEAM.code) {
@@ -1001,6 +1053,15 @@ function mockTeam(code: string) {
     );
   }
   return MOCK_TEAM;
+}
+
+function receivedCheckin(id: string): ReceivedCheckin {
+  const role = actionAccount().role;
+  const found = receivedCheckins.find((c) => c.id === id);
+  if (!found || (role !== 'supervisor' && role !== 'hr')) {
+    throw new ApiError('No such check-in alert.', 'not_found', 404);
+  }
+  return { ...found };
 }
 
 function ownMembership(teamId: string): Membership {
@@ -1631,6 +1692,9 @@ export const mockClient: ApiClient = {
         shareLevels: false,
         levelsConsent: MOCK_CONSENT.levelsConsent,
         levelsConsentVersion: MOCK_CONSENT.levelsConsentVersion,
+        checkinAlerts: false,
+        checkinConsent: MOCK_CONSENT.checkinConsent,
+        checkinConsentVersion: MOCK_CONSENT.checkinConsentVersion,
       };
       myTeams = [...myTeams, membership];
       return membership;
@@ -1649,6 +1713,67 @@ export const mockClient: ApiClient = {
     later(() => {
       ownMembership(teamId);
       myTeams = myTeams.filter((m) => m.teamId !== teamId);
+      myCheckins = myCheckins.map((c) =>
+        c.teamId === teamId && c.status === 'waiting'
+          ? { ...c, status: 'withdrawn', withdrawnAt: new Date().toISOString() }
+          : c,
+      );
+    }),
+  shareTeamCheckin: (teamId, share, consentVersion) =>
+    later<Membership>(() => {
+      const membership = ownMembership(teamId);
+      if (share && consentVersion !== membership.checkinConsentVersion) {
+        throw new ApiError('Read what check-in alerts mean first.', 'consent_changed', 409);
+      }
+      membership.checkinAlerts = share;
+      if (share && !myCheckins.some((c) => c.teamId === teamId)) {
+        myCheckins = [sampleCheckin(membership), ...myCheckins];
+      }
+      if (!share) {
+        myCheckins = myCheckins.map((c) =>
+          c.teamId === teamId && c.status === 'waiting'
+            ? { ...c, status: 'withdrawn', withdrawnAt: new Date().toISOString() }
+            : c,
+        );
+      }
+      return membership;
+    }),
+  getMyCheckins: () => later(() => myCheckins),
+  withdrawCheckin: (id) =>
+    later<OwnCheckin>(() => {
+      const found = myCheckins.find((c) => c.id === id);
+      if (!found) throw new ApiError('No such check-in alert.', 'not_found', 404);
+      if (found.status !== 'waiting') {
+        throw new ApiError('This alert was already sent or stopped.', 'already_sent', 409);
+      }
+      ownMembership(found.teamId).checkinAlerts = false;
+      found.status = 'withdrawn';
+      found.withdrawnAt = new Date().toISOString();
+      return found;
+    }),
+  getReceivedCheckins: () =>
+    later(() => {
+      const role = actionAccount().role;
+      return role === 'supervisor' || role === 'hr' ? receivedCheckins : [];
+    }),
+  openCheckin: (id) => later(() => receivedCheckin(id)),
+  markCheckin: (id, outcome, note) =>
+    later<ReceivedCheckin>(() => {
+      const found = receivedCheckin(id);
+      found.mine = { ...found.mine, outcome, markedAt: new Date().toISOString() };
+      found.note = note?.trim() || null;
+      receivedCheckins = receivedCheckins.map((c) => (c.id === id ? found : c));
+      return found;
+    }),
+  setTeamHr: (teamId, email) =>
+    later(() => {
+      const team = supervisedTeams.find((t) => t.id === teamId);
+      if (!team) throw new ApiError('No such team.', 'not_found', 404);
+      if (email !== null && !/^hr[^@]*@/i.test(email.trim())) {
+        throw new ApiError('There is no approved HR account with that email.', 'not_hr', 404);
+      }
+      team.hrEmail = email?.trim().toLowerCase() ?? null;
+      return { email: team.hrEmail };
     }),
   getActions: () =>
     later(() => {

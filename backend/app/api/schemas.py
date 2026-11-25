@@ -310,6 +310,7 @@ class Team(ApiModel):
     members: int  # active members: a count, never who
     minimum_members: int  # no team figure is built from fewer
     report_email: str | None
+    hr_email: str | None = None  # the team's HR contact for check-in alerts
     paused: str | None = None  # why its figures are paused, when they are
     created_at: datetime
 

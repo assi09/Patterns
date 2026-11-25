@@ -20,10 +20,18 @@ const TABS: {
   icon: IconName;
   iconActive: IconName;
   supervisors?: boolean; // shown only to supervisors
+  recipients?: boolean; // shown only to HR and supervisors: check-in alerts (docs/escalation.md)
   personal?: boolean; // part of the individual side, hidden when it is off (docs/pivot.md)
 }[] = [
   { name: 'index', title: 'Today', icon: 'pulse-outline', iconActive: 'pulse' },
   { name: 'team', title: 'Team', icon: 'people-outline', iconActive: 'people', supervisors: true },
+  {
+    name: 'checkins',
+    title: 'Check-ins',
+    icon: 'hand-left-outline',
+    iconActive: 'hand-left',
+    recipients: true,
+  },
   {
     name: 'ask',
     title: 'Ask',
@@ -47,6 +55,7 @@ export default function TabLayout() {
   const unread = useNotifications().data?.unread ?? 0;
   const supervisor = account?.role === 'supervisor';
   const personal = usePersonal();
+  const recipient = supervisor || account?.role === 'hr';
   const colors = useColors();
   const email = account?.email;
   // The first time an account opens the app on this device, show the guide once.
@@ -92,7 +101,7 @@ export default function TabLayout() {
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
-      {TABS.map(({ name, title, icon, iconActive, supervisors, personal: own }) => (
+      {TABS.map(({ name, title, icon, iconActive, supervisors, recipients, personal: own }) => (
         <Tabs.Screen
           key={name}
           name={name}
@@ -100,7 +109,10 @@ export default function TabLayout() {
             // With the individual side off, Reminders keeps only the inbox.
             title: name === 'reminders' && !personal ? 'Inbox' : title,
             // hidden, not just disabled
-            href: (supervisors && !supervisor) || (own && !personal) ? null : undefined,
+            href:
+              (supervisors && !supervisor) || (recipients && !recipient) || (own && !personal)
+                ? null
+                : undefined,
             // Unread notifications show on Reminders, where the inbox is.
             tabBarBadge: name === 'reminders' && unread > 0 ? Math.min(unread, 9) : undefined,
             tabBarBadgeStyle: { backgroundColor: colors.accent, fontSize: 10 },
