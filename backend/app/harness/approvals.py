@@ -29,7 +29,13 @@ def _own_pending(db: Session, user: User, submission_id: str) -> HarnessSubmissi
         key = uuid.UUID(submission_id)
     except ValueError:
         raise ApiError(404, "not_found", "Nothing like that is waiting.") from None
-    row = db.get(HarnessSubmission, key)
+    # Locked and re-read, so two taps at once cannot both apply it (PostgreSQL row lock).
+    row = db.scalar(
+        select(HarnessSubmission)
+        .where(HarnessSubmission.id == key)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if row is None or row.user_id != user.id:
         raise ApiError(404, "not_found", "Nothing like that is waiting.")
     if row.status != "pending":

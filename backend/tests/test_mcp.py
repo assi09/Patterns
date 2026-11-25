@@ -306,3 +306,20 @@ def test_account_deletion_takes_the_tokens_and_what_was_sent(engine):
     with session_scope(engine) as db:
         rows = held(db, me)
     assert rows.get("access_tokens") == 1 and rows.get("harness_submissions") == 1
+
+
+def test_a_token_is_limited_to_a_number_of_calls_a_minute(engine, monkeypatch):
+    from app.harness.server import RateLimit
+
+    limit = RateLimit(per_minute=3)
+    assert [limit.allow("t", now=0.0) for _ in range(4)] == [True, True, True, False]
+    assert limit.allow("other", now=0.0)  # each token has its own budget
+    assert limit.allow("t", now=61.0)  # a minute later it is open again
+
+    make_team(engine)
+    monkeypatch.setattr(mcp_server, "limits", RateLimit(per_minute=2))
+    server, boss = build(engine), user_id(engine, "boss@example.com")
+    assert not call(server, boss, "who_am_i")[0]
+    assert not call(server, boss, "who_am_i")[0]
+    failed, text = call(server, boss, "who_am_i")
+    assert failed and "Too many calls" in text

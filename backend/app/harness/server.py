@@ -4,7 +4,10 @@ A bearer token made in the app identifies the person; every tool then checks the
 and returns only what the app would show them (`app.harness.tools`). Check-in alerts have no tool.
 """
 
+import threading
+import time
 import uuid
+from collections import defaultdict, deque
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import UTC, date, datetime
@@ -52,10 +55,39 @@ class TokenCheck:
             )
 
 
+class RateLimit:
+    """At most `per_minute` tool calls per token, so a harness in a loop cannot load a team's data
+    hundreds of times a minute. In memory: one API process, as deployed."""
+
+    def __init__(self, per_minute: int = 60):
+        self.per_minute = per_minute
+        self._calls: dict[str, deque] = defaultdict(deque)
+        self._lock = threading.Lock()
+
+    def allow(self, key: str, now: float | None = None) -> bool:
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            calls = self._calls[key]
+            while calls and now - calls[0] >= 60:
+                calls.popleft()
+            if len(calls) >= self.per_minute:
+                return False
+            calls.append(now)
+            return True
+
+
+limits = RateLimit()
+
+
 def _caller(db: Session) -> tuple[User, uuid.UUID | None]:
     access = get_access_token()
     if access is None or access.subject is None:
         raise HarnessError("Sign in with a Patterns token.")
+    key = (access.claims or {}).get("token_id") or access.subject
+    if not limits.allow(key):
+        raise HarnessError(
+            f"Too many calls: at most {limits.per_minute} a minute per token. Try again shortly."
+        )
     user = db.get(User, uuid.UUID(access.subject))
     if user is None or user.status != "approved":
         raise HarnessError("This token's account is not active.")
