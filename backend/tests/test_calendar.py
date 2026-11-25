@@ -29,6 +29,7 @@ from app.db.models import DailyMetric, GoogleConnection, SyncRun, User
 from app.db.session import session_scope
 from app.sync import calendar
 from app.sync.connections import save_connection
+from app.sync.google_auth import SyncError
 from app.teams import memberships
 
 BEIRUT = ZoneInfo("Asia/Beirut")
@@ -181,26 +182,92 @@ def test_only_times_are_asked_for_and_every_page_is_read():
 # The sync
 
 
-def test_sync_stores_counts_under_their_own_source(engine, box):
+def fake_client(api):
+    def client_for(token):
+        return calendar.CalendarClient(
+            token,
+            http=httpx2.Client(transport=httpx2.MockTransport(api)),
+            max_retries=0,
+            sleep=lambda _: None,
+        )
+
+    return client_for
+
+
+def connected_person(engine, box):
     with session_scope(engine) as db:
         person = User(email="p@example.com", status="approved")
         db.add(person)
         db.flush()
         save_connection(db, box, person.id, credentials())
-        api = FakeCalendar({"items": [meeting(MONDAY, (9, 0), (10, 0))]})
+        return person.id
 
-        def client_for(token):
-            return calendar.CalendarClient(
-                token, http=httpx2.Client(transport=httpx2.MockTransport(api))
-            )
 
-        written = calendar.sync(db, box, person.id, BEIRUT, MONDAY, client_for)
-        assert written == calendar.DAYS_BACK + calendar.DAYS_AHEAD + 1
-        frame = load_daily(db, person.id, calendar.SOURCE)
+def test_sync_stores_counts_under_their_own_source(engine, box):
+    person_id = connected_person(engine, box)
+    api = FakeCalendar({"items": [meeting(MONDAY, (9, 0), (10, 0))]})
+    sessions = lambda: session_scope(engine)  # noqa: E731
+    written = calendar.sync(sessions, box, person_id, BEIRUT, MONDAY, fake_client(api))
+    assert written == calendar.DAYS_BACK + calendar.DAYS_AHEAD + 1
+    with session_scope(engine) as db:
+        frame = load_daily(db, person_id, calendar.SOURCE)
         assert frame.loc[pd.Timestamp(MONDAY), "meeting_minutes"] == 60
-        assert load_daily(db, person.id, "google_health").empty  # one source per history
+        assert load_daily(db, person_id, "google_health").empty  # one source per history
         run = db.scalar(select(SyncRun).where(SyncRun.source == calendar.SOURCE))
         assert run.status == "succeeded" and run.days_written == written
+
+
+class Failing:
+    def __init__(self, status: int):
+        self.status = status
+
+    def __call__(self, request):
+        return httpx2.Response(self.status, json={"error": {"message": "Backend Error"}})
+
+
+@pytest.mark.parametrize("status", [500, 403])
+def test_a_failed_sync_is_saved_as_failed_and_shown(engine, box, client, status):
+    """Regression: the failure used to roll back with the work it interrupted, so Settings kept
+    saying it was reading, or showed an older success."""
+    headers = signed_in(client, engine)
+    with session_scope(engine) as db:
+        person = db.scalar(select(User).where(User.email == "person@example.com"))
+        save_connection(db, box, person.id, credentials())
+        db.get(GoogleConnection, person.id).scopes = [calendar.SCOPE]
+        person_id = person.id
+    sessions = lambda: session_scope(engine)  # noqa: E731
+    calendar.sync(
+        sessions, box, person_id, BEIRUT, MONDAY, fake_client(FakeCalendar({"items": []}))
+    )
+    with pytest.raises(SyncError):
+        calendar.sync(sessions, box, person_id, BEIRUT, MONDAY, fake_client(Failing(status)))
+    with session_scope(engine) as db:
+        runs = db.scalars(
+            select(SyncRun).where(SyncRun.source == calendar.SOURCE).order_by(SyncRun.started_at)
+        ).all()
+        assert [r.status for r in runs] == ["succeeded", "failed"]
+        assert runs[-1].error and runs[-1].finished_at is not None
+    shown = client.get("/calendar/status", headers=headers).json()
+    assert shown["lastError"] == runs[-1].error  # Settings says the latest sync failed
+
+
+def test_the_background_sync_records_a_failure_without_raising(engine, box):
+    person_id = connected_person(engine, box)
+    with session_scope(engine) as db:
+        db.get(GoogleConnection, person_id).scopes = [calendar.SCOPE]
+    sessions = lambda: session_scope(engine)  # noqa: E731
+    original = calendar.CalendarClient
+    calendar.CalendarClient = lambda token: original(  # type: ignore[misc]
+        token, http=httpx2.Client(transport=httpx2.MockTransport(Failing(500))), max_retries=0
+    )
+    try:
+        assert calendar.sync_person(sessions, box, person_id, MONDAY, "UTC") == 0
+    finally:
+        calendar.CalendarClient = original
+    with session_scope(engine) as db:
+        assert (
+            db.scalar(select(SyncRun.status).where(SyncRun.source == calendar.SOURCE)) == "failed"
+        )
 
 
 def test_without_the_calendar_scope_nothing_is_read(engine, box):

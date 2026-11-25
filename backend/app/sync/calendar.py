@@ -25,7 +25,6 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-from sqlalchemy.orm import Session
 
 from app.db.daily import save_daily
 from app.db.models import GoogleConnection, SyncRun, User
@@ -186,7 +185,7 @@ def daily_load(events: list[dict], zone: ZoneInfo, first: date, last: date) -> p
 
 
 def sync(
-    session: Session,
+    sessions,
     box: TokenBox,
     user_id: uuid.UUID,
     zone: ZoneInfo,
@@ -194,34 +193,49 @@ def sync(
     client_for: Callable[[Callable[[], str]], CalendarClient] = CalendarClient,
 ) -> int:
     """Reads the person's calendar from DAYS_BACK before today to DAYS_AHEAD after, stores the
-    daily counts and returns the number of days written. ReconnectNeeded without a sign-in."""
-    credentials = credentials_for(session, box, user_id)
+    daily counts and returns the number of days written; raises what stopped it.
+
+    The sync run is opened and closed in transactions of its own, so a failure is recorded even
+    though the work it interrupted is rolled back: Settings then says the latest sync failed
+    instead of still reading, or showing an older success.
+    """
     first, last = today - timedelta(days=DAYS_BACK), today + timedelta(days=DAYS_AHEAD)
-    run = SyncRun(
-        user_id=user_id,
-        source=SOURCE,
-        status="running",
-        range_start=first,
-        range_end=last + timedelta(days=1),
-        started_at=datetime.now(UTC),
-    )
-    session.add(run)
-    session.flush()
+    with sessions() as session:
+        run = SyncRun(
+            user_id=user_id,
+            source=SOURCE,
+            status="running",
+            range_start=first,
+            range_end=last + timedelta(days=1),
+            started_at=datetime.now(UTC),
+        )
+        session.add(run)
+        session.flush()
+        run_id = run.id
     try:
-        client = client_for(lambda: credentials.token)
-        start = datetime.combine(first, time(0), zone)
-        end = datetime.combine(last + timedelta(days=1), time(0), zone)
-        frame = daily_load(list(client.events(start, end)), zone, first, last)
-        written = save_daily(session, user_id, SOURCE, frame)
+        with sessions() as session:
+            credentials = credentials_for(session, box, user_id)
+            client = client_for(lambda: credentials.token)
+            start = datetime.combine(first, time(0), zone)
+            end = datetime.combine(last + timedelta(days=1), time(0), zone)
+            frame = daily_load(list(client.events(start, end)), zone, first, last)
+            written = save_daily(session, user_id, SOURCE, frame)
+            done = session.get(SyncRun, run_id)
+            done.status, done.days_written, done.finished_at = "succeeded", written, _now()
+        return written
     except Exception as exc:
-        run.status = "failed"
-        run.error = str(exc)[:500] if isinstance(exc, SyncError) else "The calendar sync failed."
-        run.finished_at = datetime.now(UTC)
+        with sessions() as session:
+            failed = session.get(SyncRun, run_id)
+            failed.status = "failed"
+            failed.error = (
+                str(exc)[:500] if isinstance(exc, SyncError) else "The calendar sync failed."
+            )
+            failed.finished_at = _now()
         raise
-    run.status = "succeeded"
-    run.days_written = written
-    run.finished_at = datetime.now(UTC)
-    return written
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
 
 
 def sync_person(
@@ -239,8 +253,7 @@ def sync_person(
         except (ValueError, KeyError):
             zone = ZoneInfo("UTC")
     try:
-        with sessions() as session:
-            return sync(session, box, user_id, zone, today)
+        return sync(sessions, box, user_id, zone, today)
     except SyncError as exc:
         logger.warning("Calendar sync stopped: %s", exc)
     except Exception:

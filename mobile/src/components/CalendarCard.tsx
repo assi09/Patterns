@@ -45,10 +45,11 @@ export function CalendarCard() {
     return (
       <Row
         icon="calendar-outline"
-        title="Google Calendar connected"
+        title={calendar.lastError ? 'The latest calendar sync failed' : 'Google Calendar connected'}
+        tone={calendar.lastError ? 'danger' : undefined}
         detail={
           calendar.lastError
-            ? calendar.lastError
+            ? `${calendar.lastError}${calendar.lastSync ? ` Last good sync ${timeAgo(calendar.lastSync)}.` : ''} It tries again within three hours.`
             : calendar.lastSync
               ? `${calendar.days} days of meeting load · synced ${timeAgo(calendar.lastSync)}`
               : 'Reading your calendar…'
