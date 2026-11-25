@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     sentry_environment: str = "production"
     public_url: str = "http://127.0.0.1:8000"
     app_url: str = "http://localhost:8081"
+    # The individual side (Ask, findings, reminders, smart alarms, memory, logging), kept but off
+    # since the app moved to teams on 2026-11-25 (docs/pivot.md, app/api/features.py).
+    personal_features: bool = False
     # Send due reminders from a loop inside the API, once a minute.
     reminders_enabled: bool = True
     # Have the owning expert explain each smart alarm (one quick run each); off: the template.

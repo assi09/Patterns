@@ -9,6 +9,7 @@ from app.analysis import report as analysis_report
 from app.analysis.evidence import Evidence
 from app.api import schemas
 from app.api.auth import Db, approved_user
+from app.api.features import personal_features
 from app.api.store import LoadedData, get_data
 from app.db.chat import load_evidence
 from app.db.models import User
@@ -47,7 +48,9 @@ def _finding(finding: analysis_report.Finding) -> schemas.Finding:
     )
 
 
-@router.get("/reports/latest", response_model=schemas.Report)
+@router.get(
+    "/reports/latest", response_model=schemas.Report, dependencies=[Depends(personal_features)]
+)
 def latest_report(data: Annotated[LoadedData, Depends(get_data)]) -> schemas.Report:
     report = data.report
     return schemas.Report(

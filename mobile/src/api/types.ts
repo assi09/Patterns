@@ -451,6 +451,7 @@ export interface Account {
   status: AccountStatus; // a sign-up waits for the owner's approval
   isAdmin: boolean; // may approve sign-ups
   role: 'member' | 'supervisor'; // a supervisor may create teams (docs/teams.md)
+  personalFeatures: boolean; // the individual side is on for this server (docs/pivot.md)
 }
 
 export interface Credentials {

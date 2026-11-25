@@ -7,6 +7,9 @@
   own thread; the next pass picks up what it brought. Then memory is kept up: idle chats become
   episodes and what has outlived its lifetime goes (`app.db.memory.maintain_all`).
 
+With the individual side off (`FA_PERSONAL_FEATURES`, the default since 2026-11-25), only the
+syncs and team alerts run: reminders, smart alarms and memory belong to that side.
+
 Two copies of the API overlapping during a deploy are safe: reminder sends are claimed by a unique
 key, alarms by their cooldown, and a person's sync runs once at a time. Logs carry counts only.
 """
@@ -98,11 +101,13 @@ class Background:
     def _run(self) -> None:
         tick = 0
         while not self._stop.wait(self.tick_s):
-            run_once()
+            if settings.personal_features:  # reminders belong to the individual side
+                run_once()
             tick += 1
             if tick % ALARM_TICKS == 1:  # the first pass a minute after start, then every 15
                 self._alarms()
-                self._memory()
+                if settings.personal_features:
+                    self._memory()
 
     @staticmethod
     def _memory() -> None:
@@ -118,9 +123,11 @@ class Background:
     def _alarms() -> None:
         now = datetime.now(UTC)
         try:
-            synced = start_due_syncs(now)
-            llm, guard = _explainers()
-            counts = run_all(session_scope, now, _mailer(), settings.app_url, llm, guard)
+            synced = start_due_syncs(now)  # team figures need fresh data too
+            counts = {}
+            if settings.personal_features:  # smart alarms belong to the individual side
+                llm, guard = _explainers()
+                counts = run_all(session_scope, now, _mailer(), settings.app_url, llm, guard)
         except Exception:
             logger.exception("The alarm pass failed")
             return

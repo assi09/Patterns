@@ -843,7 +843,7 @@ export function mockNight(date: ISODate): NightStages {
 export const DEMO_OWNER = { email: 'demo@patterns.app', password: 'demo-password' };
 export const DEMO_SUPERVISOR = { email: 'lead@patterns.app', password: 'demo-password' };
 
-interface MockAccount extends Account {
+interface MockAccount extends Omit<Account, 'personalFeatures'> {
   id: string;
   password: string;
   requestedAt: string;
@@ -872,8 +872,12 @@ let accounts: MockAccount[] = [
 ];
 const sessions = new Map<string, string>(); // token -> account id
 
+// The individual side is off, as on the server since 2026-11-25 (docs/pivot.md);
+// EXPO_PUBLIC_PERSONAL_FEATURES=1 shows it again on mock data.
+const personalFeatures = process.env.EXPO_PUBLIC_PERSONAL_FEATURES === '1';
+
 function publicAccount({ email, status, isAdmin, role }: MockAccount): Account {
-  return { email, status, isAdmin, role };
+  return { email, status, isAdmin, role, personalFeatures };
 }
 
 function signedIn(account: MockAccount): SignedIn {

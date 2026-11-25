@@ -11,12 +11,13 @@ from sqlalchemy import select
 from app.alarms.run import link, save_settings, settings_of
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
+from app.api.features import personal_features
 from app.api.schemas import ApiModel
 from app.db.memory import note_interest
 from app.db.models import Alarm, User
 from app.reminders.store import utc
 
-router = APIRouter(tags=["alarms"])
+router = APIRouter(tags=["alarms"], dependencies=[Depends(personal_features)])
 Person = Annotated[User, Depends(approved_user)]
 Kind = Literal["day", "streak", "finding", "data"]
 SHOWN = 30

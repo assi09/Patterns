@@ -26,6 +26,7 @@ describe('mock accounts', () => {
       status: 'pending',
       isAdmin: false,
       role: 'member',
+      personalFeatures: false, // the individual side is off unless asked for (docs/pivot.md)
     });
     await saveToken(token);
     await expect(mockClient.getAccount()).resolves.toEqual(account);

@@ -5,6 +5,7 @@ import { type ComponentProps, useEffect } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 
 import { useAutoSync, useNotifications, useSyncTimezone } from '@/api/hooks';
+import { usePersonal } from '@/lib/features';
 import { select } from '@/lib/haptics';
 import { useSession } from '@/lib/session';
 import { tourSeen } from '@/lib/tour';
@@ -19,10 +20,17 @@ const TABS: {
   icon: IconName;
   iconActive: IconName;
   supervisors?: boolean; // shown only to supervisors
+  personal?: boolean; // part of the individual side, hidden when it is off (docs/pivot.md)
 }[] = [
   { name: 'index', title: 'Today', icon: 'pulse-outline', iconActive: 'pulse' },
   { name: 'team', title: 'Team', icon: 'people-outline', iconActive: 'people', supervisors: true },
-  { name: 'ask', title: 'Ask', icon: 'chatbubble-outline', iconActive: 'chatbubble' },
+  {
+    name: 'ask',
+    title: 'Ask',
+    icon: 'chatbubble-outline',
+    iconActive: 'chatbubble',
+    personal: true,
+  },
   {
     name: 'reminders',
     title: 'Reminders',
@@ -38,6 +46,7 @@ export default function TabLayout() {
   useSyncTimezone();
   const unread = useNotifications().data?.unread ?? 0;
   const supervisor = account?.role === 'supervisor';
+  const personal = usePersonal();
   const colors = useColors();
   const email = account?.email;
   // The first time an account opens the app on this device, show the guide once.
@@ -83,13 +92,15 @@ export default function TabLayout() {
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
-      {TABS.map(({ name, title, icon, iconActive, supervisors }) => (
+      {TABS.map(({ name, title, icon, iconActive, supervisors, personal: own }) => (
         <Tabs.Screen
           key={name}
           name={name}
           options={{
-            title,
-            href: supervisors && !supervisor ? null : undefined, // hidden, not just disabled
+            // With the individual side off, Reminders keeps only the inbox.
+            title: name === 'reminders' && !personal ? 'Inbox' : title,
+            // hidden, not just disabled
+            href: (supervisors && !supervisor) || (own && !personal) ? null : undefined,
             // Unread notifications show on Reminders, where the inbox is.
             tabBarBadge: name === 'reminders' && unread > 0 ? Math.min(unread, 9) : undefined,
             tabBarBadgeStyle: { backgroundColor: colors.accent, fontSize: 10 },
