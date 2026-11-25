@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from app.agent.llm import LLM, OpenAILLM
 from app.analysis.evidence import Evidence, Window
-from app.analysis.team import MIN_MEMBERS, team_info, week_of
+from app.analysis.team import MIN_MEMBERS, OBSERVED_LOOKBACK_DAYS, team_info, team_observed, week_of
 from app.api import schemas
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
@@ -30,6 +30,7 @@ from app.teams import actions as team_actions
 from app.teams import agent as team_agent
 from app.teams import checkin, playbook, pulse, reports
 from app.teams import memberships as teams
+from app.teams import observed as observed_text
 
 router = APIRouter(tags=["teams"])
 # Wrong codes count like wrong passwords, so codes cannot be guessed one after another.
@@ -366,6 +367,35 @@ def delete_note(team_id: str, note_id: str, db: Db, user: Supervisor) -> Respons
             team_agent.forget_note(db, team, note)
             return Response(status_code=204)
     raise ApiError(404, "not_found", "There is no such note.")
+
+
+@router.get("/teams/{team_id}/observed", response_model=schemas.TeamObserved)
+def observed(team_id: str, db: Db, clock: Now, user: Supervisor) -> schemas.TeamObserved:
+    """What the team's latest night and day looked like, from the first sync: each figure from at
+    least 5 members with a reading, none while the team's figures are paused."""
+    team = teams.supervised_team(db, user, team_id)
+    if teams.overlap_problem(db, team):
+        return schemas.TeamObserved(figures=[], minimum_members=MIN_MEMBERS)
+    try:
+        today = clock.astimezone(zone(user.timezone or settings.timezone)).date()
+    except ValueError:
+        today = clock.date()
+    start = today - timedelta(days=OBSERVED_LOOKBACK_DAYS + 1)
+    frames = reports.member_frames(db, team, start, today)
+    return schemas.TeamObserved(
+        figures=[
+            schemas.TeamObservedFigure(
+                metric=e.metrics[0],
+                day=e.windows[0].end,
+                median=e.stats["median"],
+                members=e.n,
+                text=observed_text.sentence(e, today),
+                evidence_id=e.id,
+            )
+            for e in team_observed(frames, today)
+        ],
+        minimum_members=MIN_MEMBERS,
+    )
 
 
 @router.get("/teams/{team_id}/alerts", response_model=list[schemas.TeamAlert])

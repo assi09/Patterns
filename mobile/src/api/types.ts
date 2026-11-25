@@ -253,6 +253,22 @@ export interface PulseToday {
 }
 
 /** A team's weekly pulse: a figure only from at least `minimum` people who answered that week. */
+/** What the team's latest night or day looked like, from at least `minimumMembers` people with a
+ * reading; shown from the first sync, never a change from usual. */
+export interface TeamObservedFigure {
+  metric: string;
+  day: ISODate;
+  median: number;
+  members: number;
+  text: string; // "Median sleep last night: 7 h 10 min, based on 6 members."
+  evidenceId: string;
+}
+
+export interface TeamObserved {
+  figures: TeamObservedFigure[];
+  minimumMembers: number;
+}
+
 export interface TeamPulse {
   question: string;
   minimum: number;
@@ -730,6 +746,7 @@ export interface ApiClient {
   getPulse(): Promise<PulseToday>;
   savePulse(rating: number): Promise<PulseToday>; // today only
   getTeamPulse(teamId: string): Promise<TeamPulse>; // the last five full weeks, oldest first
+  getTeamObserved(teamId: string): Promise<TeamObserved>; // supervisors: from the first sync
   getOpsMetrics(days: number): Promise<OpsMetrics>; // admins only
   sendFeedback(feedback: FeedbackIn): Promise<void>;
   getFeedback(): Promise<FeedbackRow[]>; // admins only, newest first

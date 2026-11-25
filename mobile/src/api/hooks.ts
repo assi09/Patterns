@@ -123,6 +123,15 @@ export function useSavePulse() {
   });
 }
 
+/** The team's latest night and day, from the first sync (supervisors). */
+export function useTeamObserved(teamId?: string) {
+  return useQuery({
+    queryKey: ['team-observed', teamId],
+    queryFn: () => api.getTeamObserved(teamId!),
+    enabled: !!teamId,
+  });
+}
+
 export function useTeamPulse(teamId?: string) {
   return useQuery({
     queryKey: ['team-pulse', teamId],
