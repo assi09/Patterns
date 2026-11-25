@@ -101,6 +101,7 @@ def test_sign_up_creates_a_pending_account_that_is_signed_in(client, engine):
         "status": "pending",
         "isAdmin": False,
         "role": "member",
+        "personalFeatures": True,  # on for the tests (conftest.py); off by default
     }
     assert client.get("/auth/me", headers=headers(body["token"])).json()["status"] == "pending"
     with Session(engine) as session:
