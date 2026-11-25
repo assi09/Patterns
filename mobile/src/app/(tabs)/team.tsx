@@ -18,6 +18,7 @@ import {
   useRotateTeamCode,
   useSetTeamHr,
   useTeamAlerts,
+  useTeamObserved,
   useTeamPulse,
   useTeamReport,
   useTeamReports,
@@ -43,7 +44,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { windowLabel } from '@/lib/format';
-import { areaReadings, briefingItems, changeRows, teamStatus } from '@/lib/team';
+import { areaReadings, briefingItems, buildingHistory, changeRows, teamStatus } from '@/lib/team';
 import { fonts, radius, spacing, useColors, useMetricColor } from '@/theme';
 
 // The team last looked at, for this session: switching tabs and back keeps it.
@@ -206,6 +207,7 @@ function TeamView({ team }: { team: SupervisedTeam }) {
   const latest = useTeamReport(team.id, reports.data?.[0]?.week.start);
   const alerts = useTeamAlerts(team.id);
   const pulse = useTeamPulse(team.id);
+  const observed = useTeamObserved(team.id);
 
   const status = teamStatus(alerts.data, latest.data);
   const ready = latest.data?.status === 'ready';
@@ -238,6 +240,9 @@ function TeamView({ team }: { team: SupervisedTeam }) {
                 status={status}
                 items={briefingItems(alerts.data, latest.data)}
                 briefing={latest.data?.briefing}
+                observed={
+                  buildingHistory(latest.data) ? observed.data?.figures.map((f) => f.text) : []
+                }
               />
               {ready || pulse.data?.weeks.length ? (
                 <KeyTiles teamId={team.id} report={latest.data} />

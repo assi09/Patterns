@@ -54,15 +54,26 @@ What a harness sends in is untrusted input: checked against a fixed schema (date
 kinds), free text never treated as instructions, labelled as coming from a harness, and kept apart
 from measured data until the person or supervisor approves it.
 
-## Plan
+## Status
 
 Features **Wed 25 to Fri 27 November**; **Saturday and Sunday are for testing only**; then the
 report, demo and rehearsal for 5 December. Jad works on the failure matrix, threat model and red
-team throughout, now including the MCP server and the check-in alert.
+team throughout, now including the MCP server and the check-in alert. The full list of what is
+left, with Jad's part, is in [plan.md](plan.md).
 
-| Day | Features |
+| Part | State (2026-11-25) |
 |---|---|
-| Wed 25 | this page and [escalation.md](escalation.md); the flag that hides the individual side, with today's `main` tagged `v0.9-personal`; the check-in alert's backend |
-| Thu 26 | the check-in alert's screens (HR inbox, the member's consent); calendar direct, Google and Outlook; team calendar figures |
-| Fri 27 | the MCP server; the coach using calendar load; documents |
-| Sat 28 – Sun 29 | testing only |
+| This page and [escalation.md](escalation.md); `main` tagged `v0.9-personal` | **done** (#233) |
+| The individual side behind `FA_PERSONAL_FEATURES`, off | **done**, live (#234) |
+| Check-in alerts: backend, member consent, the person's alert page, the Check-ins tab, the HR contact; four review rounds | **done** (#235) |
+| Google Calendar, direct: daily meeting load, the team "Meeting load" card | built and tested on a branch, not merged |
+| Outlook | **set aside** (Karim, 2026-11-25); a harness can still read it through its own connectors |
+| The HR invitation by email, HR-only screens | half built |
+| The MCP server | not started (Friday) |
+| The coach using calendar load | not started (Friday) |
+| Testing on real people, MCP attacks, end to end in production | the weekend |
+
+The first plan (kept for the record): Wed 25 the docs, the flag and the check-in backend; Thu 26
+its screens, the calendar (Google and Outlook) and team calendar figures; Fri 27 the MCP server,
+the coach and documents. Two changes since: the one-hour window replaced the planned 24 hours,
+and Outlook was set aside.

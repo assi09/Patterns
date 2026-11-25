@@ -11,6 +11,11 @@ agent makes must be backed by a computed statistic** (an `Evidence` record) that
 inspect. The course grades evaluation, reliability, security, AgentOps and engineering practice,
 and bonus credit needs *evidence of use*, so process matters as much as code.
 
+**Since 2026-11-25 the product is built around teams** ([docs/pivot.md](docs/pivot.md)), at the
+instructor's request: a supervisor's team figures, and a check-in alert to the supervisor and the
+team's HR contact ([docs/escalation.md](docs/escalation.md)). The individual side stays in the code
+behind `FA_PERSONAL_FEATURES` (off) and keeps its tests; do not delete it.
+
 **Start with [docs/current.md](docs/current.md)**: what is true now, every result with the
 revision it was measured on, and which documents are history. Then
 [docs/status.md](docs/status.md): the working log, the local setup (including the Google Cloud

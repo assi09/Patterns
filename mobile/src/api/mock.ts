@@ -46,6 +46,7 @@ import type {
   TeamPreview,
   CalendarStatus,
   Membership,
+  TeamObserved,
   OwnCheckin,
   ReceivedCheckin,
   SupervisedTeam,
@@ -993,7 +994,7 @@ const MOCK_CONSENT = {
     "Your supervisor will also see your name with your own weekly recovery, sleep, strain and stress, each as below, within or above your own usual range and as the week's average. Nothing else: no days, no other metrics, no chats. You can turn this off at any time; your row then disappears, including from past weeks.",
   levelsConsentVersion: 'team-levels-v1',
   checkinConsent:
-    'If your own data shows a sustained, extreme change, for example several signals far outside your usual range on most days of a week, your supervisor and HR will get a message asking them to check in with you. The message has your name and nothing else: no values, no metrics, no reason. You are told first, see what raised it, and have 24 hours to turn this off before anything is sent. You can turn it off at any time.',
+    "If your own data shows a sustained, extreme change, for example several signals far outside your usual range on most days of a week, your supervisor and the team's HR contact will get a message asking them to check in with you. The message has your name and nothing else: no values, no metrics, no reason. You are told first, at once, and see what raised it. It goes out one hour later unless you stop it; you can also send it straight away. You can turn check-in alerts off at any time. These are roles: if someone else takes one on, they receive alerts from then on, and whoever leaves it loses access at once.",
   checkinConsentVersion: 'checkin-v1',
 };
 let myTeams: Membership[] = [];
@@ -1068,10 +1069,10 @@ function sampleCheckin(membership: Membership): OwnCheckin {
     team: membership.team,
     status: 'waiting',
     raisedAt: new Date(now).toISOString(),
-    sendAfter: new Date(now + 86_400_000).toISOString(),
+    sendAfter: new Date(now + 3_600_000).toISOString(), // one hour
     sentAt: null,
     withdrawnAt: null,
-    recipients: `your supervisor (${membership.supervisor}) and HR (hr@example.com)`,
+    recipients: "your supervisor and the team's HR contact",
     evidence: [
       signal('sleep_minutes', 'down', 400, 445, 250),
       signal('hrv_ms', 'down', 40, 50, 22),
@@ -1099,6 +1100,15 @@ function mockTeam(code: string) {
     );
   }
   return MOCK_TEAM;
+}
+
+function waitingCheckin(id: string): OwnCheckin {
+  const found = myCheckins.find((c) => c.id === id);
+  if (!found) throw new ApiError('No such check-in alert.', 'not_found', 404);
+  if (found.status !== 'waiting') {
+    throw new ApiError('This alert was already sent or stopped.', 'already_sent', 409);
+  }
+  return found;
 }
 
 function receivedCheckin(id: string): ReceivedCheckin {
@@ -1794,14 +1804,16 @@ export const mockClient: ApiClient = {
       }
       return mockTeamCalendar();
     }),
-  withdrawCheckin: (id) =>
+  sendCheckinNow: (id) =>
     later<OwnCheckin>(() => {
-      const found = myCheckins.find((c) => c.id === id);
-      if (!found) throw new ApiError('No such check-in alert.', 'not_found', 404);
-      if (found.status !== 'waiting') {
-        throw new ApiError('This alert was already sent or stopped.', 'already_sent', 409);
-      }
-      ownMembership(found.teamId).checkinAlerts = false;
+      const found = waitingCheckin(id);
+      found.status = 'sent';
+      found.sentAt = new Date().toISOString();
+      return found;
+    }),
+  stopCheckin: (id) =>
+    later<OwnCheckin>(() => {
+      const found = waitingCheckin(id);
       found.status = 'withdrawn';
       found.withdrawnAt = new Date().toISOString();
       return found;
@@ -2114,6 +2126,26 @@ export const mockClient: ApiClient = {
     later(() => {
       ownTeam(teamId);
       return mockTeamPulse();
+    }),
+  getTeamObserved: (teamId) =>
+    later<TeamObserved>(() => {
+      ownTeam(teamId);
+      // Made up, as the backend writes them: medians of the latest night or day, 5 people or more.
+      return {
+        minimumMembers: 5,
+        figures: [
+          ['sleep_minutes', 0, 430, 'Median sleep last night: 7 h 10 min, based on 6 members.'],
+          ['resting_hr', 0, 61, 'Median resting heart rate last night: 61 bpm, based on 6 members.'],
+          ['steps', 1, 8240, 'Median steps yesterday: 8,240, based on 6 members.'],
+        ].map(([metric, offset, median, text]) => ({
+          metric: metric as string,
+          day: isoDate(offset as number),
+          median: median as number,
+          members: 6,
+          text: text as string,
+          evidenceId: `observed-${metric}`,
+        })),
+      };
     }),
 
   saveCheckIn: (checkIn) =>

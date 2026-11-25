@@ -30,6 +30,7 @@ import type {
   CalendarStatus,
   Membership,
   TeamCalendar,
+  TeamObserved,
   OwnCheckin,
   ReceivedCheckin,
   MetricSeries,
@@ -219,8 +220,9 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         baseUrl,
         `/teams/${encodeURIComponent(teamId)}/calendar${week ? `?week=${week}` : ''}`,
       ),
-    withdrawCheckin: (id) =>
-      post<OwnCheckin>(baseUrl, `/me/checkins/${encodeURIComponent(id)}/withdraw`),
+    sendCheckinNow: (id) =>
+      post<OwnCheckin>(baseUrl, `/me/checkins/${encodeURIComponent(id)}/send`),
+    stopCheckin: (id) => post<OwnCheckin>(baseUrl, `/me/checkins/${encodeURIComponent(id)}/stop`),
     getReceivedCheckins: () => request<ReceivedCheckin[]>(baseUrl, '/checkins'),
     openCheckin: (id) => post<ReceivedCheckin>(baseUrl, `/checkins/${encodeURIComponent(id)}/open`),
     markCheckin: (id, outcome, note) =>
@@ -306,6 +308,8 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       }),
     getTeamPulse: (teamId) =>
       request<TeamPulse>(baseUrl, `/teams/${encodeURIComponent(teamId)}/pulse`),
+    getTeamObserved: (teamId) =>
+      request<TeamObserved>(baseUrl, `/teams/${encodeURIComponent(teamId)}/observed`),
     saveCheckIn: (checkIn) =>
       request<CheckIn>(baseUrl, `/checkins/${checkIn.day}`, {
         method: 'PUT',

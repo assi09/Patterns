@@ -2,6 +2,7 @@
 """Google Calendar: events reduced to daily counts (never stored as events), the privacy of what is
 asked for, the sync, and the team's meeting load under the team rules."""
 
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
@@ -384,3 +385,59 @@ def test_calendar_rows_never_mix_with_health_rows(engine):
         save_daily(db, person.id, calendar.SOURCE, member_frame(1))
         sources = set(db.scalars(select(DailyMetric.source)))
     assert sources == {calendar.SOURCE}
+
+
+@pytest.mark.parametrize(
+    ("health", "expected"),
+    [
+        ("succeeds", ["health", "checkin", "calendar"]),
+        ("finds nothing new", ["health", "calendar"]),  # no successful run: no check-in
+        ("raises", ["health", "calendar"]),  # a crash stops neither the calendar nor the server
+    ],
+)
+def test_after_a_sync_health_then_checkin_then_calendar(monkeypatch, health, expected):
+    calls = []
+
+    def fake_health(sessions, box, user_id, health_for, today):
+        calls.append("health")
+        if health == "raises":
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(google.connections, "sync", fake_health)
+    monkeypatch.setattr(
+        google.connections, "succeeded_since", lambda db, uid, since: health == "succeeds"
+    )
+    monkeypatch.setattr(google.checkin, "after_sync", lambda db, uid, now: calls.append("checkin"))
+    monkeypatch.setattr(google.calendar, "sync_person", lambda *args: calls.append("calendar") or 0)
+
+    class Session:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *exc):
+            return False
+
+    google.sync_everything(google.GoogleParts(None, None, None), Session, uuid.uuid4(), MONDAY)
+    assert calls == expected
+
+
+def test_a_failing_check_in_does_not_stop_the_calendar(monkeypatch):
+    calls = []
+    monkeypatch.setattr(google.connections, "sync", lambda *args: calls.append("health"))
+    monkeypatch.setattr(google.connections, "succeeded_since", lambda *args: True)
+
+    def broken(*args):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(google.checkin, "after_sync", broken)
+    monkeypatch.setattr(google.calendar, "sync_person", lambda *args: calls.append("calendar") or 0)
+
+    class Session:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *exc):
+            return False
+
+    google.sync_everything(google.GoogleParts(None, None, None), Session, uuid.uuid4(), MONDAY)
+    assert calls == ["health", "calendar"]

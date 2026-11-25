@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from app.agent.llm import LLM, OpenAILLM
 from app.analysis.evidence import Evidence, Window
-from app.analysis.team import MIN_MEMBERS, team_info, week_of
+from app.analysis.team import MIN_MEMBERS, OBSERVED_LOOKBACK_DAYS, team_info, team_observed, week_of
 from app.api import schemas
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
@@ -30,6 +30,7 @@ from app.teams import actions as team_actions
 from app.teams import agent as team_agent
 from app.teams import checkin, playbook, pulse, reports
 from app.teams import memberships as teams
+from app.teams import observed as observed_text
 
 router = APIRouter(tags=["teams"])
 # Wrong codes count like wrong passwords, so codes cannot be guessed one after another.
@@ -61,9 +62,7 @@ def _team(db, team: Team) -> schemas.Team:
     )
 
 
-def _membership(
-    membership: TeamMembership, team: Team, supervisor: User, db=None
-) -> schemas.Membership:
+def _membership(membership: TeamMembership, team: Team, supervisor: User) -> schemas.Membership:
     return schemas.Membership(
         team_id=str(team.id),
         team=team.name,
@@ -73,7 +72,7 @@ def _membership(
         levels_consent=teams.LEVELS_CONSENT_TEXT,
         levels_consent_version=teams.LEVELS_CONSENT_VERSION,
         checkin_alerts=membership.checkin_alerts,
-        checkin_consent=checkin.consent_text(db, team) if db is not None else "",
+        checkin_consent=checkin.consent_text(),
         checkin_consent_version=checkin.CONSENT_VERSION,
     )
 
@@ -370,6 +369,35 @@ def delete_note(team_id: str, note_id: str, db: Db, user: Supervisor) -> Respons
     raise ApiError(404, "not_found", "There is no such note.")
 
 
+@router.get("/teams/{team_id}/observed", response_model=schemas.TeamObserved)
+def observed(team_id: str, db: Db, clock: Now, user: Supervisor) -> schemas.TeamObserved:
+    """What the team's latest night and day looked like, from the first sync: each figure from at
+    least 5 members with a reading, none while the team's figures are paused."""
+    team = teams.supervised_team(db, user, team_id)
+    if teams.overlap_problem(db, team):
+        return schemas.TeamObserved(figures=[], minimum_members=MIN_MEMBERS)
+    try:
+        today = clock.astimezone(zone(user.timezone or settings.timezone)).date()
+    except ValueError:
+        today = clock.date()
+    start = today - timedelta(days=OBSERVED_LOOKBACK_DAYS + 1)
+    frames = reports.member_frames(db, team, start, today)
+    return schemas.TeamObserved(
+        figures=[
+            schemas.TeamObservedFigure(
+                metric=e.metrics[0],
+                day=e.windows[0].end,
+                median=e.stats["median"],
+                members=e.n,
+                text=observed_text.sentence(e, today),
+                evidence_id=e.id,
+            )
+            for e in team_observed(frames, today)
+        ],
+        minimum_members=MIN_MEMBERS,
+    )
+
+
 @router.get("/teams/{team_id}/alerts", response_model=list[schemas.TeamAlert])
 def list_alerts(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamAlert]:
     team = teams.supervised_team(db, user, team_id)
@@ -498,12 +526,12 @@ def join(body: schemas.JoinTeam, db: Db, clock: Now, user: Person) -> schemas.Me
     if body.consent_version != teams.CONSENT_VERSION:
         raise ApiError(409, "consent_changed", "What joining means has changed. Read it again.")
     membership = teams.join(db, team, user, clock)
-    return _membership(membership, team, db.get(User, team.supervisor_id), db)
+    return _membership(membership, team, db.get(User, team.supervisor_id))
 
 
 @router.get("/me/teams", response_model=list[schemas.Membership])
 def my_teams(db: Db, user: Person) -> list[schemas.Membership]:
-    return [_membership(*row, db) for row in teams.memberships(db, user)]
+    return [_membership(*row) for row in teams.memberships(db, user)]
 
 
 @router.post("/me/teams/{team_id}/levels", response_model=schemas.Membership)
@@ -515,7 +543,7 @@ def share_levels(
         raise ApiError(409, "consent_changed", "Read what sharing your levels means first.")
     membership = teams.share_levels(db, user, team_id, body.share, clock)
     team = db.get(Team, membership.team_id)
-    return _membership(membership, team, db.get(User, team.supervisor_id), db)
+    return _membership(membership, team, db.get(User, team.supervisor_id))
 
 
 @router.post("/me/teams/{team_id}/leave", status_code=204)

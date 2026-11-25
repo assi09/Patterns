@@ -524,3 +524,52 @@ def _shift(week: Window, weeks: int) -> Window:
 def _week_mean(frame: pd.DataFrame, metric: str, week: Window) -> float | None:
     values = _values(frame, metric, week)
     return float(values.mean()) if len(values) >= MIN_WEEK_DAYS else None
+
+
+# Observed figures: what the team's latest night or day looked like, from at least MIN_MEMBERS
+# people with a reading. They need no history, so a team sees them from its first sync; they never
+# say that anything changed, which still needs each member's 14 earlier days (`team_change`).
+# metric -> how its latest value is dated (docs/metrics.md): "night" for sleep and HRV, measured
+# while asleep and dated by the morning the night ended; "date" for Fitbit's daily resting heart
+# rate, named by its date; "day" for activity, whole only once the day is over.
+OBSERVED = {
+    "sleep_minutes": "night",
+    "resting_hr": "date",
+    "hrv_ms": "night",
+    "steps": "day",
+    "active_zone_minutes": "day",
+}
+OBSERVED_LOOKBACK_DAYS = 3  # older than this, it is no longer "the latest"
+
+
+def team_observed(frames: list[pd.DataFrame], today: date) -> list[Evidence]:
+    """The median of the latest night or day per metric, from at least MIN_MEMBERS members with a
+    reading that day; metrics without enough people are left out."""
+    prepared = [prepare(frame) for frame in frames if not frame.empty]
+    found = []
+    for metric, kind in OBSERVED.items():
+        last = today - timedelta(days=1) if kind == "day" else today
+        for back in range(OBSERVED_LOOKBACK_DAYS):
+            day = last - timedelta(days=back)
+            stamp = pd.Timestamp(day)
+            values = [
+                float(frame.at[stamp, metric])
+                for frame in prepared
+                if metric in frame.columns
+                and stamp in frame.index
+                and pd.notna(frame.at[stamp, metric])
+            ]
+            if len(values) < MIN_MEMBERS:
+                continue
+            found.append(
+                Evidence(
+                    tool="team_observed",
+                    metrics=(metric,),
+                    windows=(Window(start=day, end=day),),
+                    n=len(values),
+                    sufficient=True,
+                    stats={"median": round(float(np.median(values)), 1), "kind": kind},
+                )
+            )
+            break
+    return found

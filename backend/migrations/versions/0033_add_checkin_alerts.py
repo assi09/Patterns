@@ -56,6 +56,14 @@ def upgrade() -> None:
     )
     op.create_index("ix_checkin_alerts_team_id", "checkin_alerts", ["team_id"])
     op.create_index("ix_checkin_alerts_user_id", "checkin_alerts", ["user_id"])
+    op.create_index(
+        "uq_checkin_alerts_waiting",
+        "checkin_alerts",
+        ["team_id", "user_id"],
+        unique=True,
+        sqlite_where=sa.text("status = 'waiting'"),
+        postgresql_where=sa.text("status = 'waiting'"),
+    )
     op.create_table(
         "checkin_marks",
         sa.Column("id", sa.Uuid(), nullable=False),
@@ -100,6 +108,7 @@ def downgrade() -> None:
     op.drop_table("checkin_events")
     op.drop_index("ix_checkin_marks_alert_id", table_name="checkin_marks")
     op.drop_table("checkin_marks")
+    op.drop_index("uq_checkin_alerts_waiting", table_name="checkin_alerts")
     op.drop_index("ix_checkin_alerts_user_id", table_name="checkin_alerts")
     op.drop_index("ix_checkin_alerts_team_id", table_name="checkin_alerts")
     op.drop_table("checkin_alerts")

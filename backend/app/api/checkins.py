@@ -54,7 +54,7 @@ def _own(db, alert: CheckinAlert, team: Team) -> schemas.OwnCheckin:
         send_after=alert.send_after,
         sent_at=alert.sent_at,
         withdrawn_at=alert.withdrawn_at,
-        recipients=checkin.recipients_text(db, team),
+        recipients=checkin.RECIPIENTS,
         evidence=[_evidence(record) for record in alert.evidence],
     )
 
@@ -86,7 +86,7 @@ def share_checkin(
         raise ApiError(409, "consent_changed", "Read what check-in alerts mean first.")
     membership, team = teams.own_membership(db, user, team_id)
     checkin.set_consent(db, membership, team, body.share, clock)
-    return _membership(membership, team, db.get(User, team.supervisor_id), db)
+    return _membership(membership, team, db.get(User, team.supervisor_id))
 
 
 @router.get("/me/checkins", response_model=list[schemas.OwnCheckin])
@@ -94,19 +94,18 @@ def my_checkins(db: Db, user: Person) -> list[schemas.OwnCheckin]:
     return [_own(db, alert, team) for alert, team in checkin.own_alerts(db, user)]
 
 
-@router.post("/me/checkins/{alert_id}/withdraw", response_model=schemas.OwnCheckin)
-def withdraw(alert_id: str, db: Db, clock: Now, user: Person) -> schemas.OwnCheckin:
-    """Stops a waiting alert by turning check-in alerts off for its team."""
-    found = {str(alert.id): (alert, team) for alert, team in checkin.own_alerts(db, user)}
-    if alert_id not in found:
-        raise ApiError(404, "not_found", "No such check-in alert.")
-    alert, team = found[alert_id]
-    if alert.status != "waiting":
-        raise ApiError(409, "already_sent", "This alert was already sent or stopped.")
-    membership, _ = teams.own_membership(db, user, str(team.id))
-    checkin.set_consent(db, membership, team, False, clock)
-    db.flush()
-    return _own(db, alert, team)
+@router.post("/me/checkins/{alert_id}/send", response_model=schemas.OwnCheckin)
+def send_now(alert_id: str, db: Db, clock: Now, user: Person) -> schemas.OwnCheckin:
+    """The person sends their own waiting alert now, before the hour is up."""
+    alert = checkin.send_now(db, user, alert_id, clock)
+    return _own(db, alert, db.get(Team, alert.team_id))
+
+
+@router.post("/me/checkins/{alert_id}/stop", response_model=schemas.OwnCheckin)
+def stop(alert_id: str, db: Db, clock: Now, user: Person) -> schemas.OwnCheckin:
+    """The person stops this alert. Check-in alerts stay on; the switch turns them off."""
+    alert = checkin.stop(db, user, alert_id, clock)
+    return _own(db, alert, db.get(Team, alert.team_id))
 
 
 # HR and the supervisor

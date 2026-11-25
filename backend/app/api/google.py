@@ -33,6 +33,7 @@ from app.sync import calendar, connections
 from app.sync.client import HealthClient
 from app.sync.connections import OAuth, SignIns, Syncs, TokenBox
 from app.sync.google_auth import SCOPES, OAuthClient, SyncError
+from app.teams import checkin
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/google", tags=["google"])
@@ -84,9 +85,25 @@ def _start_sync(google: GoogleParts, sessions: Sessions, user: User, today: date
 
 
 def sync_everything(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
-    """Google Health, then the calendar if the person allowed it (app/sync/calendar.py)."""
-    connections.sync(sessions, google.box, user_id, google.health_for, today)
-    calendar.sync_person(sessions, google.box, user_id, today, settings.timezone)
+    """Everything that follows a person's sync, in order, each step guarded so one failing never
+    stops the next: Google Health; then, if that sync succeeded, the check-in rule for every team
+    they agreed to it for (app/teams/checkin.py); then their calendar, if they allowed it
+    (app/sync/calendar.py)."""
+    started = connections.now_utc()
+    try:
+        connections.sync(sessions, google.box, user_id, google.health_for, today)
+    except Exception:
+        logger.exception("The Google Health sync failed")
+    try:
+        with sessions() as db:
+            if connections.succeeded_since(db, user_id, started):
+                checkin.after_sync(db, user_id, connections.now_utc())
+    except Exception:
+        logger.exception("Checking the check-in rule after a sync failed")
+    try:
+        calendar.sync_person(sessions, google.box, user_id, today, settings.timezone)
+    except Exception:
+        logger.exception("The calendar sync failed")
 
 
 @router.get("/status", response_model=schemas.GoogleStatus)

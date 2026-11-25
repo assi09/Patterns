@@ -35,10 +35,15 @@ describe('check-in alerts on the mock', () => {
     expect(alert.status).toBe('waiting');
     expect(alert.evidence.length).toBeGreaterThanOrEqual(2);
 
-    const stopped = await mockClient.withdrawCheckin(alert.id);
+    expect(new Date(alert.sendAfter).getTime() - new Date(alert.raisedAt).getTime()).toBe(
+      3_600_000,
+    );
+
+    const stopped = await mockClient.stopCheckin(alert.id);
     expect(stopped.status).toBe('withdrawn');
-    expect((await mockClient.getMyTeams())[0].checkinAlerts).toBe(false);
-    await expect(mockClient.withdrawCheckin(alert.id)).rejects.toBeInstanceOf(ApiError);
+    expect((await mockClient.getMyTeams())[0].checkinAlerts).toBe(true); // this alert only
+    await expect(mockClient.stopCheckin(alert.id)).rejects.toBeInstanceOf(ApiError);
+    await expect(mockClient.sendCheckinNow(alert.id)).rejects.toMatchObject({ status: 409 });
     await mockClient.leaveTeam(joined.teamId);
   });
 
@@ -72,20 +77,22 @@ describe('check-in alerts over HTTP', () => {
     const client = httpClient(BASE, mockClient);
     await client.shareTeamCheckin('t 1', true, 'checkin-v1');
     await client.getMyCheckins();
-    await client.withdrawCheckin('a1');
+    await client.sendCheckinNow('a1');
+    await client.stopCheckin('a1');
     await client.getReceivedCheckins();
     await client.markCheckin('a1', 'checked_in', 'ok');
     await client.setTeamHr('t1', null);
     expect(calls.map((c) => `${c.method} ${c.url.replace(BASE, '')}`)).toEqual([
       'POST /me/teams/t%201/checkin',
       'GET /me/checkins',
-      'POST /me/checkins/a1/withdraw',
+      'POST /me/checkins/a1/send',
+      'POST /me/checkins/a1/stop',
       'GET /checkins',
       'POST /checkins/a1/mark',
       'PUT /teams/t1/hr',
     ]);
     expect(calls[0].body).toEqual({ share: true, consentVersion: 'checkin-v1' });
-    expect(calls[4].body).toEqual({ outcome: 'checked_in', note: 'ok' });
-    expect(calls[5].body).toEqual({ email: null });
+    expect(calls[5].body).toEqual({ outcome: 'checked_in', note: 'ok' });
+    expect(calls[6].body).toEqual({ email: null });
   });
 });

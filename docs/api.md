@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-96 operations, grouped by area.
+98 operations, grouped by area.
 
 ### meta
 
@@ -159,7 +159,8 @@ Besides the codes listed under [Error codes](#error-codes):
 |---|---|---|---|---|---|---|
 | `POST` | `/me/teams/{team_id}/checkin` | approved | `team_id` | [ShareCheckin](#sharecheckin) | [Membership](#membership) | Turns check-in alerts on or off for one team; off withdraws any alert still waiting. |
 | `GET` | `/me/checkins` | approved |  |  | list[[OwnCheckin](#owncheckin)] |  |
-| `POST` | `/me/checkins/{alert_id}/withdraw` | approved | `alert_id` |  | [OwnCheckin](#owncheckin) | Stops a waiting alert by turning check-in alerts off for its team. |
+| `POST` | `/me/checkins/{alert_id}/send` | approved | `alert_id` |  | [OwnCheckin](#owncheckin) | The person sends their own waiting alert now, before the hour is up. |
+| `POST` | `/me/checkins/{alert_id}/stop` | approved | `alert_id` |  | [OwnCheckin](#owncheckin) | The person stops this alert. Check-in alerts stay on; the switch turns them off. |
 | `GET` | `/checkins` | approved |  |  | list[[ReceivedCheckin](#receivedcheckin)] |  |
 | `POST` | `/checkins/{alert_id}/open` | approved | `alert_id` |  | [ReceivedCheckin](#receivedcheckin) |  |
 | `POST` | `/checkins/{alert_id}/mark` | approved | `alert_id` | [MarkCheckin](#markcheckin) | [ReceivedCheckin](#receivedcheckin) |  |
@@ -264,6 +265,7 @@ Besides the codes listed under [Error codes](#error-codes):
 | `GET` | `/teams/{team_id}/notes` | supervisor | `team_id` |  | list[[TeamNote](#teamnote)] |  |
 | `POST` | `/teams/{team_id}/notes` | supervisor | `team_id` | [TeamNoteIn](#teamnotein) | 201: [TeamNote](#teamnote) |  |
 | `DELETE` | `/teams/{team_id}/notes/{note_id}` | supervisor | `team_id`, `note_id` |  | 204, no body |  |
+| `GET` | `/teams/{team_id}/observed` | supervisor | `team_id` |  | [TeamObserved](#teamobserved) | What the team's latest night and day looked like, from the first sync: each figure from at least 5 members with a reading, none while the team's figures are paused. |
 | `GET` | `/teams/{team_id}/alerts` | supervisor | `team_id` |  | list[[TeamAlert](#teamalert)] |  |
 | `GET` | `/teams/{team_id}/actions` | supervisor | `team_id` |  | list[[TeamAction](#teamaction)] |  |
 | `GET` | `/teams/{team_id}/playbook` | supervisor | `team_id` |  | list[[TeamPlay](#teamplay)] | The changes a supervisor can start; their own is also possible (play "custom"). |
@@ -301,6 +303,7 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 409 | `email_taken` |
 | 409 | `not_changeable` |
 | 409 | `not_connected` |
+| 409 | `not_in_team` |
 | 409 | `not_logged` |
 | 409 | `own_team` |
 | 409 | `paused` |
@@ -1274,6 +1277,26 @@ Weekly highlights and upcoming event warnings, each linked to the report evidenc
 | `text` | string | yes | min length 1, max length 300 |
 | `startsOn` | string (date) or null |  |  |
 | `endsOn` | string (date) or null |  |  |
+
+### TeamObserved
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `figures` | list[[TeamObservedFigure](#teamobservedfigure)] | yes |  |
+| `minimumMembers` | integer | yes |  |
+
+### TeamObservedFigure
+
+What the team's latest night or day looked like; never a change from usual.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `metric` | string | yes |  |
+| `day` | string (date) | yes |  |
+| `median` | number | yes |  |
+| `members` | integer | yes |  |
+| `text` | string | yes |  |
+| `evidenceId` | string | yes |  |
 
 ### TeamPlay
 

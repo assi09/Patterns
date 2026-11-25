@@ -102,6 +102,7 @@ class Background:
     def _run(self) -> None:
         tick = 0
         while not self._stop.wait(self.tick_s):
+            self._checkins()  # every minute: a check-in alert goes out when its hour is up
             if settings.personal_features:  # reminders belong to the individual side
                 run_once()
             tick += 1
@@ -109,6 +110,16 @@ class Background:
                 self._alarms()
                 if settings.personal_features:
                     self._memory()
+
+    @staticmethod
+    def _checkins() -> None:
+        try:
+            counts = run_checkins(session_scope, datetime.now(UTC))
+        except Exception:
+            logger.exception("The check-in alert pass failed")
+            return
+        if counts:
+            logger.info("Check-in alerts: %s", dict(counts))
 
     @staticmethod
     def _memory() -> None:
@@ -141,10 +152,3 @@ class Background:
             return
         if team_counts:
             logger.info("Team alerts: %s", dict(team_counts))
-        try:
-            checkin_counts = run_checkins(session_scope, now)
-        except Exception:
-            logger.exception("The check-in alert pass failed")
-            return
-        if checkin_counts:
-            logger.info("Check-in alerts: %s", dict(checkin_counts))

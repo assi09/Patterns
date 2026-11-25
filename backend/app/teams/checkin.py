@@ -5,15 +5,20 @@ reads, writes or explains an alert:
 
 1. **Consent.** Only members who turned on check-in alerts for a team, a third consent after
    joining and showing their weekly levels.
-2. **The rule** (`detect`), on the person's own history: the last 7 days against the 28 before.
-   In at least `MIN_SIGNALS` of the signals, at least `DAYS_FAR` of the 7 days sit past the worse
-   edge of the person's usual range (the middle half of the 28 days) by its full width, or by a
-   floor when the range is narrow. One bad night, one cold or one trip does not raise it.
-3. **The person first.** The alert waits `WAIT`; they see the evidence behind it and can turn
-   check-in alerts off, which withdraws it.
-4. **Then HR and the supervisor**, each told only "please check in with <person>", never a
-   metric, value or reason. Each marks it checked in or not needed; an alert nobody has marked
-   after `REMIND_AFTER` is shown to them once more.
+2. **The rule** (`detect`), checked after each successful Google Health sync (`after_sync`), on
+   the person's own history: the last 7 days against the 28 before. Only days with a recorded
+   wear time of at least 10 hours count as worn, and at least `MIN_WORN` of the 7 must be. In at
+   least `MIN_SIGNALS` of the signals, at least `DAYS_FAR` worn days sit past the worse edge of
+   the person's usual range (the middle half of the 28 days) by its full width, or by a floor
+   when the range is narrow. One bad night, one cold or one trip does not raise it.
+3. **The person first, for one hour** (`WAIT`). They are told at once with the exact time it
+   will go out, see the evidence behind it, and can send it now or stop it. A later sync never
+   restarts the hour or raises a second one (`COOLDOWN`, and one waiting alert per person and
+   team in the database).
+4. **Then the supervisor and the team's HR contact**: whoever holds those roles when it goes out,
+   each told only "please check in with <person>", never a metric, value or reason. Each marks it
+   checked in or not needed; an alert nobody has marked after `REMIND_AFTER` is shown once more
+   to whoever still holds the role. Someone who leaves a role loses access to its alerts at once.
 
 Every step is written to `checkin_events` with who and when, and no health data.
 """
@@ -23,6 +28,7 @@ import uuid
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from sqlalchemy import select
@@ -64,41 +70,48 @@ SIGNALS = {
     "stress_score": ("up", 15.0),
 }
 FRESH_DAYS = 1  # the window ends yesterday or today, not on old data
-WAIT = timedelta(hours=24)
+WAIT = timedelta(hours=1)  # the person's time to send it themselves or stop it
 COOLDOWN = timedelta(days=28)
 REMIND_AFTER = timedelta(days=3)
-FIRST_HOUR_UTC = 6  # after the morning's syncs, as the team alerts
 
+# Consent is given to roles, not people: whoever holds them when an alert is sent receives it, so
+# a new supervisor or HR contact needs no fresh consent (docs/escalation.md).
+RECIPIENTS = "your supervisor and the team's HR contact"
 CONSENT_VERSION = "checkin-v1"
 CONSENT_TEXT = (
     "If your own data shows a sustained, extreme change, for example several signals far outside "
-    "your usual range on most days of a week, {recipients} will get a message asking them to "
+    f"your usual range on most days of a week, {RECIPIENTS} will get a message asking them to "
     "check in with you. The message has your name and nothing else: no values, no metrics, no "
-    "reason. You are told first, see what raised it, and have 24 hours to turn this off before "
-    "anything is sent. You can turn it off at any time."
+    "reason. You are told first, at once, and see what raised it. It goes out one hour later "
+    "unless you stop it; you can also send it straight away. You can turn check-in alerts off "
+    "at any time. These are roles: if someone else takes "
+    "one on, they receive alerts from then on, and whoever leaves it loses access at once."
 )
 
 PERSON_TITLE = "Check-in alert: you can still stop it"
 PERSON_BODY = (
-    "Your data in the last 7 days met the check-in rule you agreed to. In 24 hours {recipients} "
-    "will be asked to check in with you. Open it to see why, or turn check-in alerts off."
+    "Your data in the last 7 days met the check-in rule you agreed to. At {at}, one hour from now, "
+    f"{RECIPIENTS} will be asked to check in with you. Open it to see why, send it now, or stop it."
 )
-RECIPIENT_TITLE = "Please check in with {person}"
-RECIPIENT_BODY = (
-    "{person} agreed to check-in alerts in {team}, and their own data met the agreed rule. No "
-    "details are shared. Mark it in the app once you have checked in."
-)
+# What lands in a recipient's inbox (and email): never the person's name. The name is shown only on
+# the Check-ins screen, after checking that the reader still holds the role, so someone who leaves
+# the role cannot read it back from an old notification.
+RECIPIENT_TITLE = "You have a check-in request"
+RECIPIENT_BODY = "Open Check-ins to see who it is about. It was raised by the agreed rule."
+REMINDER_BODY = "Still open: " + RECIPIENT_BODY
 
 
 # --- the rule -------------------------------------------------------------------------------
 
 
 def _worn(frame: pd.DataFrame, days: pd.DatetimeIndex) -> pd.Series:
-    """True for each day worn long enough to count (no wear column: every day counts)."""
+    """True for each day with confirmed wear: a recorded wear time of at least LOW_WEAR_MINUTES.
+    A day without a wear time is not counted as worn, even when it has other readings: the rule
+    can send a person's name to HR, so it rests only on days known to be worn."""
     if "wear_minutes" not in frame.columns:
-        return pd.Series(True, index=days)
+        return pd.Series(False, index=days)
     wear = frame["wear_minutes"].reindex(days)
-    return wear.isna() | (wear >= LOW_WEAR_MINUTES)
+    return wear.notna() & (wear >= LOW_WEAR_MINUTES)
 
 
 def detect(frame: pd.DataFrame, today: date) -> list[Evidence]:
@@ -156,17 +169,8 @@ def detect(frame: pd.DataFrame, today: date) -> list[Evidence]:
 # --- consent --------------------------------------------------------------------------------
 
 
-def recipients_text(db: Session, team: Team) -> str:
-    supervisor = db.get(User, team.supervisor_id)
-    hr = db.get(User, team.hr_id) if team.hr_id else None
-    named = [f"your supervisor ({supervisor.email})"] if supervisor else []
-    if hr:
-        named.append(f"HR ({hr.email})")
-    return " and ".join(named) or "your supervisor"
-
-
-def consent_text(db: Session, team: Team) -> str:
-    return CONSENT_TEXT.format(recipients=recipients_text(db, team))
+def consent_text() -> str:
+    return CONSENT_TEXT
 
 
 def set_consent(
@@ -180,15 +184,7 @@ def set_consent(
     if on:
         membership.checkin_consent_version = CONSENT_VERSION
         return membership
-    waiting = db.scalars(
-        select(CheckinAlert).where(
-            CheckinAlert.team_id == team.id,
-            CheckinAlert.user_id == membership.user_id,
-            CheckinAlert.status == "waiting",
-        )
-    )
-    for alert in waiting:
-        _withdraw(db, alert, membership.user_id, now)
+    withdraw_waiting(db, team.id, membership.user_id, membership.user_id, now)
     return membership
 
 
@@ -233,56 +229,96 @@ def _recent_alert(db: Session, team: Team, user_id: uuid.UUID, now: datetime) ->
     )
 
 
-def raise_for_team(db: Session, team: Team, now: datetime) -> int:
-    """Checks every consenting member of the team; returns how many alerts were raised."""
-    members = db.scalars(
-        select(TeamMembership).where(
-            TeamMembership.team_id == team.id,
-            TeamMembership.left_at.is_(None),
-            TeamMembership.checkin_alerts.is_(True),
-        )
-    ).all()
-    raised = 0
+def _local_time(db: Session, user_id: uuid.UUID, moment: datetime) -> str:
+    """ "14:32 (Asia/Beirut)": the exact time in the person's own zone, named."""
+    user = db.get(User, user_id)
+    try:
+        zone = ZoneInfo(user.timezone or "UTC")
+    except (ValueError, KeyError):
+        zone = ZoneInfo("UTC")
+    return f"{moment.astimezone(zone):%H:%M} ({zone.key})"
+
+
+def _raise(db: Session, team: Team, membership: TeamMembership, now: datetime) -> bool:
+    """Raises an alert for one consenting member if the rule qualifies and none was raised in the
+    last COOLDOWN, whatever became of it: a repeat sync never restarts the hour or adds another."""
+    if _recent_alert(db, team, membership.user_id, now):
+        return False
     today = now.date()
     start = today - timedelta(days=WINDOW_DAYS + BASELINE_DAYS + FRESH_DAYS)
-    for membership in members:
-        if _recent_alert(db, team, membership.user_id, now):
-            continue
-        frame = load_daily(db, membership.user_id, SOURCE, start, today + timedelta(days=1))
-        if frame.empty:
-            continue
-        evidence = detect(with_scores(frame), today)
-        if not evidence:
-            continue
-        alert = CheckinAlert(
-            team_id=team.id,
-            user_id=membership.user_id,
-            rule=RULE,
-            last_day=evidence[0].windows[1].end,
-            evidence=[e.model_dump(mode="json") for e in evidence],
-            status="waiting",
-            raised_at=now,
-            send_after=now + WAIT,
-        )
-        db.add(alert)
-        db.flush()
-        _log(db, alert, None, "raised", now)
-        _notify(
-            db,
-            membership.user_id,
-            PERSON_TITLE,
-            PERSON_BODY.format(recipients=recipients_text(db, team)),
-            f"/checkin/{alert.id}",
-            now,
-        )
-        raised += 1
-    return raised
+    frame = load_daily(db, membership.user_id, SOURCE, start, today + timedelta(days=1))
+    if frame.empty:
+        return False
+    evidence = detect(with_scores(frame), today)
+    if not evidence:
+        return False
+    alert = CheckinAlert(
+        team_id=team.id,
+        user_id=membership.user_id,
+        rule=RULE,
+        last_day=evidence[0].windows[1].end,
+        evidence=[e.model_dump(mode="json") for e in evidence],
+        status="waiting",
+        raised_at=now,
+        send_after=now + WAIT,
+    )
+    db.add(alert)
+    db.flush()
+    _log(db, alert, None, "raised", now)
+    _notify(
+        db,
+        membership.user_id,
+        PERSON_TITLE,
+        PERSON_BODY.format(at=_local_time(db, membership.user_id, alert.send_after)),
+        f"/checkin/{alert.id}",
+        now,
+    )
+    return True
 
 
-def _recipients(team: Team) -> list[tuple[uuid.UUID, str]]:
-    found = [(team.supervisor_id, "supervisor")]
-    if team.hr_id and team.hr_id != team.supervisor_id:
-        found.append((team.hr_id, "hr"))
+def _consenting(db: Session, **where) -> list[TeamMembership]:
+    query = select(TeamMembership).where(
+        TeamMembership.left_at.is_(None), TeamMembership.checkin_alerts.is_(True)
+    )
+    for column, value in where.items():
+        query = query.where(getattr(TeamMembership, column) == value)
+    return list(db.scalars(query))
+
+
+def raise_for_team(db: Session, team: Team, now: datetime) -> int:
+    """Checks every consenting member of the team; returns how many alerts were raised."""
+    return sum(_raise(db, team, m, now) for m in _consenting(db, team_id=team.id))
+
+
+def after_sync(db: Session, user_id: uuid.UUID, now: datetime) -> int:
+    """Run after each successful health sync: checks the person in every team they agreed to
+    check-in alerts for, and raises what qualifies for the first time."""
+    return sum(
+        _raise(db, db.get(Team, m.team_id), m, now) for m in _consenting(db, user_id=user_id)
+    )
+
+
+# The one rule for who holds a recipient role, used for delivery and for every later access: the
+# account assigned to the team for that role, still carrying the matching account role.
+ASSIGNED = {"supervisor": "supervisor_id", "hr": "hr_id"}
+
+
+def current_holder(db: Session, team: Team, role: str) -> uuid.UUID | None:
+    """Who holds `role` for the team now, or None: assigned to it on the team, and their account
+    still has that role. A demoted account holds nothing, even while still assigned."""
+    user_id = getattr(team, ASSIGNED[role]) if role in ASSIGNED else None
+    user = db.get(User, user_id) if user_id else None
+    return user.id if user is not None and user.role == role else None
+
+
+def _recipients(db: Session, team: Team) -> list[tuple[uuid.UUID, str]]:
+    """Whoever holds each role at the moment of sending, so a demotion during the hour means
+    nothing reaches that account."""
+    found = []
+    for role in ("supervisor", "hr"):
+        holder = current_holder(db, team, role)
+        if holder is not None and holder not in {user_id for user_id, _ in found}:
+            found.append((holder, role))
     return found
 
 
@@ -294,32 +330,31 @@ def send_due(db: Session, now: datetime) -> int:
     ).all()
     for alert in due:
         team = db.get(Team, alert.team_id)
-        membership = db.scalar(
-            select(TeamMembership).where(
-                TeamMembership.team_id == alert.team_id,
-                TeamMembership.user_id == alert.user_id,
-                TeamMembership.left_at.is_(None),
-            )
-        )
-        if team is None or membership is None or not membership.checkin_alerts:
+        if team is None or not _still_agrees(db, alert):
             _withdraw(db, alert, None, now)  # left the team or turned it off: nothing goes
             continue
-        person = db.get(User, alert.user_id)
-        alert.status = "sent"
-        alert.sent_at = now
-        _log(db, alert, None, "sent", now)
-        for user_id, role in _recipients(team):
-            db.add(CheckinMark(alert_id=alert.id, user_id=user_id, role=role))
-            _notify(
-                db,
-                user_id,
-                RECIPIENT_TITLE.format(person=person.email),
-                RECIPIENT_BODY.format(person=person.email, team=team.name),
-                "/checkins",
-                now,
-            )
+        _deliver(db, alert, team, None, now)
         sent += 1
     return sent
+
+
+def _deliver(
+    db: Session, alert: CheckinAlert, team: Team, actor: uuid.UUID | None, now: datetime
+) -> None:
+    """Sends the alert to whoever holds the supervisor and HR roles now; once only."""
+    alert.status = "sent"
+    alert.sent_at = now
+    _log(db, alert, actor, "sent", now)
+    for user_id, role in _recipients(db, team):
+        db.add(CheckinMark(alert_id=alert.id, user_id=user_id, role=role))
+        _notify(db, user_id, RECIPIENT_TITLE, RECIPIENT_BODY, "/checkins", now)
+
+
+def holds_role(db: Session, mark: CheckinMark, team: Team) -> bool:
+    """Whether the mark's person still holds the role it was sent to them for, by the same rule
+    as delivery (`current_holder`). Someone who left it, or whose account was demoted, loses
+    every access at once; their mark stays as the record of what was delivered."""
+    return current_holder(db, team, mark.role) == mark.user_id
 
 
 def remind_due(db: Session, now: datetime) -> int:
@@ -336,42 +371,21 @@ def remind_due(db: Session, now: datetime) -> int:
         marks = db.scalars(select(CheckinMark).where(CheckinMark.alert_id == alert.id)).all()
         if any(mark.outcome for mark in marks):
             continue
-        person = db.get(User, alert.user_id)
         team = db.get(Team, alert.team_id)
         for mark in marks:
-            _notify(
-                db,
-                mark.user_id,
-                RECIPIENT_TITLE.format(person=person.email),
-                "Still open: " + RECIPIENT_BODY.format(person=person.email, team=team.name),
-                "/checkins",
-                now,
-            )
+            if not holds_role(db, mark, team):
+                continue  # left the role: no reminder, though their delivery record stays
+            _notify(db, mark.user_id, RECIPIENT_TITLE, REMINDER_BODY, "/checkins", now)
         alert.reminded_at = now
         _log(db, alert, None, "reminded", now)
         reminded += 1
     return reminded
 
 
-_last_raise: date | None = None
-
-
 def run_due(sessions: Sessions, now: datetime) -> Counter:
-    """From the background loop: raise once a day after the syncs, send and remind every pass.
-    One team failing stops no other."""
-    global _last_raise
+    """From the background loop, every minute: sends what is due and reminds what is unmarked.
+    Alerts are raised after each successful health sync (`after_sync`), not here."""
     counts: Counter = Counter()
-    if now.hour >= FIRST_HOUR_UTC and _last_raise != now.date():
-        _last_raise = now.date()
-        with sessions() as db:
-            teams = list(db.scalars(select(Team.id)))
-        for team_id in teams:
-            try:
-                with sessions() as db:
-                    counts["raised"] += raise_for_team(db, db.get(Team, team_id), now)
-            except Exception:
-                logger.exception("Checking one team for check-in alerts failed")
-                counts["errors"] += 1
     with sessions() as db:
         counts["sent"] += send_due(db, now)
         counts["reminded"] += remind_due(db, now)
@@ -423,6 +437,8 @@ def received(db: Session, user: User) -> list[Received]:
     ).all()
     out = []
     for mark, alert, team, person in rows:
+        if not holds_role(db, mark, team):
+            continue
         others = db.scalars(
             select(CheckinMark).where(
                 CheckinMark.alert_id == alert.id, CheckinMark.user_id != user.id
@@ -456,7 +472,9 @@ def _my_mark(db: Session, user: User, alert_id: str) -> tuple[CheckinMark, Check
             CheckinAlert.status == "sent",
         )
     ).first()
-    if row is None:  # someone else's alert looks like one that does not exist
+    if row is None or not holds_role(db, row[0], db.get(Team, row[1].team_id)):
+        # Someone else's alert, or one from a role this person no longer holds, looks like one
+        # that does not exist.
         raise ApiError(404, "not_found", "No such check-in alert.")
     return row[0], row[1]
 
@@ -480,6 +498,69 @@ def mark_alert(
     _log(db, alert, user.id, "marked", now)
     db.flush()
     return next(r for r in received(db, user) if r.id == alert.id)
+
+
+def _own_waiting(db: Session, user: User, alert_id: str) -> tuple[CheckinAlert, Team]:
+    try:
+        key = uuid.UUID(alert_id)
+    except ValueError:
+        raise ApiError(404, "not_found", "No such check-in alert.") from None
+    alert = db.get(CheckinAlert, key)
+    if alert is None or alert.user_id != user.id:
+        raise ApiError(404, "not_found", "No such check-in alert.")
+    if alert.status != "waiting":
+        raise ApiError(409, "already_sent", "This alert was already sent or stopped.")
+    return alert, db.get(Team, alert.team_id)
+
+
+def _still_agrees(db: Session, alert: CheckinAlert) -> bool:
+    """Whether the person is still an active member of the alert's team with check-in alerts on."""
+    membership = db.scalar(
+        select(TeamMembership).where(
+            TeamMembership.team_id == alert.team_id,
+            TeamMembership.user_id == alert.user_id,
+            TeamMembership.left_at.is_(None),
+        )
+    )
+    return membership is not None and membership.checkin_alerts
+
+
+def withdraw_waiting(
+    db: Session, team_id: uuid.UUID, user_id: uuid.UUID, actor: uuid.UUID | None, now: datetime
+) -> int:
+    """Withdraws the person's waiting alerts in a team, at once (leaving it, turning alerts off)."""
+    waiting = db.scalars(
+        select(CheckinAlert).where(
+            CheckinAlert.team_id == team_id,
+            CheckinAlert.user_id == user_id,
+            CheckinAlert.status == "waiting",
+        )
+    ).all()
+    for alert in waiting:
+        _withdraw(db, alert, actor, now)
+    return len(waiting)
+
+
+def send_now(db: Session, user: User, alert_id: str, now: datetime) -> CheckinAlert:
+    """The person sends their own waiting alert before the hour is up, if they are still in the
+    team with check-in alerts on; from an old screen after leaving, nothing goes."""
+    alert, team = _own_waiting(db, user, alert_id)
+    if team is None or not _still_agrees(db, alert):
+        # Refused (the request rolls back); when its hour ends, the timer withdraws it unsent.
+        raise ApiError(
+            409, "not_in_team", "You are no longer in this team with check-in alerts on."
+        )
+    _deliver(db, alert, team, user.id, now)
+    db.flush()
+    return alert
+
+
+def stop(db: Session, user: User, alert_id: str, now: datetime) -> CheckinAlert:
+    """The person stops this alert; check-in alerts stay on for later ones."""
+    alert, _ = _own_waiting(db, user, alert_id)
+    _withdraw(db, alert, user.id, now)
+    db.flush()
+    return alert
 
 
 def own_alerts(db: Session, user: User) -> list[tuple[CheckinAlert, Team]]:

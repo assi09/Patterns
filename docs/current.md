@@ -1,10 +1,11 @@
 # Current state and results
 
-> **Scope change, 2026-11-25:** the app is being rebuilt around the team feature (two gateways,
-> calendar, an MCP server); the individual side is kept behind a flag. See [pivot.md](pivot.md)
-> and [escalation.md](escalation.md). The results below stand for the code they were measured on.
+> **Scope change, 2026-11-25:** the app is built around the team feature (two gateways, the
+> calendar, an MCP server); the individual side is kept behind a flag, off. See [pivot.md](pivot.md)
+> and [escalation.md](escalation.md). The agent results below stand for the code they were measured
+> on; they describe the individual side and the analysis tools the team figures share.
 
-**The one page for what is true now.** As of `main` at `c507f83` (2026-11-23). Every result below
+**The one page for what is true now.** As of `main` after #235 (2026-11-25). Every result below
 names the revision it was measured on and whether it still describes today's code. The history
 (audits, plans, negative results, superseded numbers) is kept as it was written, in the documents
 listed at the end; where one of them contradicts this page, this page is current.
@@ -13,6 +14,10 @@ listed at the end; where one of them contradicts this page, this page is current
 
 | Part | Now | Since |
 |---|---|---|
+| **Product** | **Team first.** Members connect Google Health and join a team; supervisors see the team; HR sees check-in alerts. The individual side (Ask, findings, reminders, smart alarms, memory, logging) is off behind `FA_PERSONAL_FEATURES`; `v0.9-personal` tags the last version with it on | #233, #234, 2026-11-25 |
+| **Check-in alerts** | Code only. After each successful sync, for members who opted in; one hour for the person to send or stop; then a nameless notice to whoever holds the supervisor and HR-contact roles, the name on the Check-ins screen only ([escalation.md](escalation.md)) | #235, 2026-11-25 |
+| **Calendar** | *Not merged yet*: Google Calendar as daily meeting load, and a team "Meeting load" card (branch `feat/google-calendar`) | — |
+| **MCP server, coach** | *Not built yet* ([plan.md](plan.md)) | — |
 | Routing | Jev router (`jev-latest`), keyword rule as fallback | — |
 | Reading a message | One typed reading per message by the small model (`gpt-5.4-mini`, API default sampling); code resolves dates, references and capabilities. The small-model read-back check exists but is **off** (`read_back_enabled` defaults to False) | #195, merged 2026-11-22 as `2ce08b5` |
 | Precise data answers | Deterministic tools build evidence; code writes the answer from it (`app/agent/requested.py`); every number cites an evidence id | #195 |
@@ -21,7 +26,7 @@ listed at the end; where one of them contradicts this page, this page is current
 | Memory | Running chat summary; long-term facts only after a tap; "already kept" only when kept in those words; statements in conversation are listened to | #115–#121, #218, #231 |
 | Guidance | 1,083 public passages, ranked by embeddings, cited by source | #130–#133 |
 | Logging | Food and workout drafts on a card; nothing written without a tap | — |
-| Teams | Weekly report with k = 5 aggregates and opt-in named levels, Monday briefing, crunch warning. **The supervisor chat is retired** (#213): `POST /teams/{id}/chat` no longer exists | #145–#148, #169, #173, #213 |
+| Teams | Weekly report with k = 5 aggregates and opt-in named levels, Monday briefing, crunch warning, daily team alerts. **The supervisor chat is retired** (#213): `POST /teams/{id}/chat` no longer exists | #145–#148, #169, #173, #213 |
 
 Added to the reading on 2026-11-23 (all merged): exact missing dates (#217); protected retry
 lengths and the message's own flags kept when a repeat leads (#220); "where did that come from?"
@@ -53,6 +58,16 @@ the result. "Changed since" means it has, and the result has not been re-measure
 | Real data end to end (PMData) | **82.4%**; on 111 shared questions 84.7% vs chatbot 62.2% | 2026-11-10, restated 11-17 | Changed since (#195 and later); historical |
 | Team privacy attacks, team planted changes | 33/33, 6/6 | 2026-11-12 | **Retired feature** (supervisor chat, #213); the weekly report's k = 5 rule is unchanged |
 
+### Check-in alerts
+
+| Test | Result | Measured on | Valid now? |
+|---|---|---|---|
+| Alerts on calm synthetic people | **0 of 11,400** overlapping 7-day windows (100 people, the window moved 3 days at a time); the test requires under 0.5% | #235 final commit `19725f9`, 2026-11-25 | Valid; synthetic noise is mild, so this is not a false-alarm rate for real people |
+| Planted extreme week (sleep −3 h and HRV −30 ms for 7 days) | found in **100 of 100**; the test requires at least 95 | same | Valid |
+| What must not raise one | **0** in every case: one signal only, one bad night, three bad days (0 of 30 each; the test allows 1 of 30); a barely worn week, wear time missing all week, no wear column, four confirmed days, old data, 20 days of history (0 of 20 each; the test allows none) | same | Valid |
+| Privacy and roles | consent to roles; a replaced or demoted HR contact or supervisor loses access at once and gets no reminder; nameless notifications; leaving withdraws at once; one waiting alert per person and team | same, 42 tests, each review finding with a regression test | Valid |
+| On real people | **not measured yet**: weekend testing on PMData and LifeSnaps, defined in [plan.md](plan.md): eligibility, how often it fires on ordinary weeks, detection of planted changes | — | — |
+
 ### Conversations (follow-ups)
 
 | Test | Result | Measured on | Valid now? |
@@ -64,6 +79,11 @@ the result. "Changed since" means it has, and the result has not been re-measure
 | Replay third turns, 219 readings, regression check | heart-rate weekend kept in **59/62** with calendar weeks (dropped in 20/62 on the previous main) | 2026-11-23 | Valid |
 
 ### Known limitations now
+
+- **Check-in alerts are tuned on synthetic people only**, until the weekend's run on real people.
+- **Fitbit's wear time counts awake hours**, so someone who wears the watch only at night never
+  reaches the 10-hour "worn" bar, and the check-in rule cannot fire for them.
+- **No emails to HR yet**: check-in notices are in the app only until the HR invitation PR.
 
 - **"That earlier week"** after "and the week before?" is usually read as the opening week: right
   week in 2 of 66 on the small reader, about 60% on the large one; calendar weeks make the days
