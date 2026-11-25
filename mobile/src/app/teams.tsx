@@ -110,12 +110,12 @@ function TeamSection({ membership }: { membership: Membership }) {
         title="Check-in alerts"
         detail={
           membership.checkinAlerts
-            ? 'If your data shows a sustained, extreme change, you are told first; then HR and your supervisor are asked to check in. No values are shared'
+            ? "If your data shows a sustained, extreme change, you are told first; then your supervisor and the team's HR contact are asked to check in. No values are shared"
             : 'Off: nobody is ever asked to check in with you'
         }
         accessory={
           <Switch
-            accessibilityLabel="Check-in alerts to HR and my supervisor"
+            accessibilityLabel="Check-in alerts to my supervisor and the team's HR contact"
             value={membership.checkinAlerts} // stays off until the consent below is confirmed
             disabled={checkin.isPending}
             onValueChange={(on) => {

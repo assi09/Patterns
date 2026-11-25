@@ -54,7 +54,7 @@ def _own(db, alert: CheckinAlert, team: Team) -> schemas.OwnCheckin:
         send_after=alert.send_after,
         sent_at=alert.sent_at,
         withdrawn_at=alert.withdrawn_at,
-        recipients=checkin.recipients_text(db, team),
+        recipients=checkin.RECIPIENTS,
         evidence=[_evidence(record) for record in alert.evidence],
     )
 
@@ -86,7 +86,7 @@ def share_checkin(
         raise ApiError(409, "consent_changed", "Read what check-in alerts mean first.")
     membership, team = teams.own_membership(db, user, team_id)
     checkin.set_consent(db, membership, team, body.share, clock)
-    return _membership(membership, team, db.get(User, team.supervisor_id), db)
+    return _membership(membership, team, db.get(User, team.supervisor_id))
 
 
 @router.get("/me/checkins", response_model=list[schemas.OwnCheckin])

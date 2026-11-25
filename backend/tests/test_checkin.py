@@ -16,7 +16,15 @@ from app.api import auth
 from app.api.main import create_app
 from app.auth import accounts
 from app.db.daily import save_daily
-from app.db.models import CheckinAlert, CheckinEvent, CheckinMark, Notification, Team, User
+from app.db.models import (
+    CheckinAlert,
+    CheckinEvent,
+    CheckinMark,
+    Notification,
+    Team,
+    TeamMembership,
+    User,
+)
 from app.db.session import session_scope
 from app.synthetic import LowWear, Step, generate
 from app.teams import checkin, memberships
@@ -185,7 +193,9 @@ def test_only_the_person_who_agreed_gets_one_and_is_told_first(engine, client):
     [alert] = mine.json()
     assert alert["status"] == "waiting"
     assert len(alert["evidence"]) >= 2
-    assert "hr@example.com" in alert["recipients"] and "boss@example.com" in alert["recipients"]
+    # Consent is to roles, so the person reads the roles, never who holds them.
+    assert alert["recipients"] == "your supervisor and the team's HR contact"
+    assert "@" not in alert["recipients"]
 
 
 def test_after_the_wait_hr_and_the_supervisor_are_asked_to_check_in_and_nothing_more(
@@ -310,7 +320,8 @@ def test_consent_needs_the_current_text(engine, client):
     )
     assert stale.status_code == 409
     [membership] = client.get("/me/teams", headers=me).json()
-    assert "hr@example.com" in membership["checkinConsent"]
+    assert "the team's HR contact" in membership["checkinConsent"]
+    assert "@" not in membership["checkinConsent"]
     on = client.post(
         f"/me/teams/{team_id}/checkin",
         headers=me,
@@ -345,3 +356,76 @@ def test_hr_sees_no_team_reports(engine, client):
 def test_numbers_are_finite():
     for e in checkin.detect(frame(EXTREME, 5), TODAY):
         assert all(np.isfinite(v) for v in e.stats.values() if isinstance(v, float))
+
+
+# Leaving the role
+
+
+def replace_hr(engine, team_id: str, new_email: str = "new.hr@example.com") -> None:
+    with session_scope(engine) as db:
+        new = User(email=new_email, status="approved", role="hr")
+        db.add(new)
+        db.flush()
+        db.get(Team, uuid.UUID(team_id)).hr_id = new.id
+
+
+def demote_hr(engine, team_id: str) -> None:
+    with session_scope(engine) as db:
+        db.scalar(select(User).where(User.email == "hr@example.com")).role = "member"
+
+
+@pytest.mark.parametrize("leave", [replace_hr, demote_hr])
+def test_a_former_hr_contact_loses_access_at_once_and_gets_no_reminder(engine, client, leave):
+    """Regression: an alert is sent, then HR changes. The former contact can no longer list,
+    open or mark it, even with its id from before, and is not reminded; their delivery record
+    stays for the audit, and the supervisor keeps full access."""
+    team_id = make_team(engine)
+    raise_now(engine, team_id)
+    assert send(engine, NOW + timedelta(hours=25)) == 1
+    old = signed_in(client, engine, "hr@example.com")
+    [before] = client.get("/checkins", headers=old).json()
+    alert_id = before["id"]
+
+    leave(engine, team_id)
+
+    assert client.get("/checkins", headers=old).json() == []
+    assert client.post(f"/checkins/{alert_id}/open", headers=old).status_code == 404
+    marked = client.post(f"/checkins/{alert_id}/mark", headers=old, json={"outcome": "checked_in"})
+    assert marked.status_code == 404
+
+    with session_scope(engine) as db:
+        assert checkin.remind_due(db, NOW + timedelta(days=5)) == 1  # the supervisor is reminded
+    assert len(inbox(engine, "hr@example.com")) == 1  # only the first delivery, no reminder
+    assert len(inbox(engine, "boss@example.com")) == 2
+
+    with session_scope(engine) as db:
+        former = db.scalar(select(User).where(User.email == "hr@example.com"))
+        record = db.scalar(select(CheckinMark).where(CheckinMark.user_id == former.id))
+        assert record is not None and record.role == "hr" and record.outcome is None
+        acted = db.scalars(select(CheckinEvent).where(CheckinEvent.actor_id == former.id)).all()
+        assert acted == []  # nothing they tried after leaving was logged as done
+
+    boss = signed_in(client, engine, "boss@example.com")
+    assert len(client.get("/checkins", headers=boss).json()) == 1
+    assert (
+        client.post(
+            f"/checkins/{alert_id}/mark", headers=boss, json={"outcome": "checked_in"}
+        ).status_code
+        == 200
+    )
+
+
+def test_changing_who_is_hr_needs_no_fresh_consent(engine):
+    team_id = make_team(engine)
+    replace_hr(engine, team_id)
+    with session_scope(engine) as db:
+        consenting = db.scalars(
+            select(TeamMembership).where(TeamMembership.checkin_alerts.is_(True))
+        ).all()
+        assert len(consenting) == 5  # nobody's consent was reset
+    assert raise_now(engine, team_id) == 1
+    send(engine, NOW + timedelta(hours=25))
+    assert [n.title for n in inbox(engine, "new.hr@example.com")] == [
+        "Please check in with member00@example.com"
+    ]
+    assert inbox(engine, "hr@example.com") == []

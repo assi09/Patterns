@@ -992,7 +992,7 @@ const MOCK_CONSENT = {
     "Your supervisor will also see your name with your own weekly recovery, sleep, strain and stress, each as below, within or above your own usual range and as the week's average. Nothing else: no days, no other metrics, no chats. You can turn this off at any time; your row then disappears, including from past weeks.",
   levelsConsentVersion: 'team-levels-v1',
   checkinConsent:
-    'If your own data shows a sustained, extreme change, for example several signals far outside your usual range on most days of a week, your supervisor and HR will get a message asking them to check in with you. The message has your name and nothing else: no values, no metrics, no reason. You are told first, see what raised it, and have 24 hours to turn this off before anything is sent. You can turn it off at any time.',
+    "If your own data shows a sustained, extreme change, for example several signals far outside your usual range on most days of a week, your supervisor and the team's HR contact will get a message asking them to check in with you. The message has your name and nothing else: no values, no metrics, no reason. You are told first, see what raised it, and have 24 hours to turn this off before anything is sent. You can turn it off at any time. These are roles: if someone else takes one on, they receive alerts from then on, and whoever leaves it loses access at once.",
   checkinConsentVersion: 'checkin-v1',
 };
 let myTeams: Membership[] = [];
@@ -1025,7 +1025,7 @@ function sampleCheckin(membership: Membership): OwnCheckin {
     sendAfter: new Date(now + 86_400_000).toISOString(),
     sentAt: null,
     withdrawnAt: null,
-    recipients: `your supervisor (${membership.supervisor}) and HR (hr@example.com)`,
+    recipients: "your supervisor and the team's HR contact",
     evidence: [
       signal('sleep_minutes', 'down', 400, 445, 250),
       signal('hrv_ms', 'down', 40, 50, 22),

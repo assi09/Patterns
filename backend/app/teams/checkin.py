@@ -69,18 +69,22 @@ COOLDOWN = timedelta(days=28)
 REMIND_AFTER = timedelta(days=3)
 FIRST_HOUR_UTC = 6  # after the morning's syncs, as the team alerts
 
+# Consent is given to roles, not people: whoever holds them when an alert is sent receives it, so
+# a new supervisor or HR contact needs no fresh consent (docs/escalation.md).
+RECIPIENTS = "your supervisor and the team's HR contact"
 CONSENT_VERSION = "checkin-v1"
 CONSENT_TEXT = (
     "If your own data shows a sustained, extreme change, for example several signals far outside "
-    "your usual range on most days of a week, {recipients} will get a message asking them to "
+    f"your usual range on most days of a week, {RECIPIENTS} will get a message asking them to "
     "check in with you. The message has your name and nothing else: no values, no metrics, no "
     "reason. You are told first, see what raised it, and have 24 hours to turn this off before "
-    "anything is sent. You can turn it off at any time."
+    "anything is sent. You can turn it off at any time. These are roles: if someone else takes "
+    "one on, they receive alerts from then on, and whoever leaves it loses access at once."
 )
 
 PERSON_TITLE = "Check-in alert: you can still stop it"
 PERSON_BODY = (
-    "Your data in the last 7 days met the check-in rule you agreed to. In 24 hours {recipients} "
+    f"Your data in the last 7 days met the check-in rule you agreed to. In 24 hours {RECIPIENTS} "
     "will be asked to check in with you. Open it to see why, or turn check-in alerts off."
 )
 RECIPIENT_TITLE = "Please check in with {person}"
@@ -156,17 +160,8 @@ def detect(frame: pd.DataFrame, today: date) -> list[Evidence]:
 # --- consent --------------------------------------------------------------------------------
 
 
-def recipients_text(db: Session, team: Team) -> str:
-    supervisor = db.get(User, team.supervisor_id)
-    hr = db.get(User, team.hr_id) if team.hr_id else None
-    named = [f"your supervisor ({supervisor.email})"] if supervisor else []
-    if hr:
-        named.append(f"HR ({hr.email})")
-    return " and ".join(named) or "your supervisor"
-
-
-def consent_text(db: Session, team: Team) -> str:
-    return CONSENT_TEXT.format(recipients=recipients_text(db, team))
+def consent_text() -> str:
+    return CONSENT_TEXT
 
 
 def set_consent(
@@ -271,7 +266,7 @@ def raise_for_team(db: Session, team: Team, now: datetime) -> int:
             db,
             membership.user_id,
             PERSON_TITLE,
-            PERSON_BODY.format(recipients=recipients_text(db, team)),
+            PERSON_BODY,
             f"/checkin/{alert.id}",
             now,
         )
@@ -322,6 +317,17 @@ def send_due(db: Session, now: datetime) -> int:
     return sent
 
 
+def holds_role(db: Session, mark: CheckinMark, team: Team) -> bool:
+    """Whether the mark's person still holds the role it was sent to them for. Someone who left
+    it loses every access at once; their mark stays as the record of what was delivered."""
+    if mark.role == "supervisor":
+        return team.supervisor_id == mark.user_id
+    if mark.role == "hr":
+        user = db.get(User, mark.user_id)
+        return team.hr_id == mark.user_id and user is not None and user.role == "hr"
+    return False
+
+
 def remind_due(db: Session, now: datetime) -> int:
     """Shows an alert nobody has marked after REMIND_AFTER once more to its recipients."""
     reminded = 0
@@ -339,6 +345,8 @@ def remind_due(db: Session, now: datetime) -> int:
         person = db.get(User, alert.user_id)
         team = db.get(Team, alert.team_id)
         for mark in marks:
+            if not holds_role(db, mark, team):
+                continue  # left the role: no reminder, though their delivery record stays
             _notify(
                 db,
                 mark.user_id,
@@ -423,6 +431,8 @@ def received(db: Session, user: User) -> list[Received]:
     ).all()
     out = []
     for mark, alert, team, person in rows:
+        if not holds_role(db, mark, team):
+            continue
         others = db.scalars(
             select(CheckinMark).where(
                 CheckinMark.alert_id == alert.id, CheckinMark.user_id != user.id
@@ -456,7 +466,9 @@ def _my_mark(db: Session, user: User, alert_id: str) -> tuple[CheckinMark, Check
             CheckinAlert.status == "sent",
         )
     ).first()
-    if row is None:  # someone else's alert looks like one that does not exist
+    if row is None or not holds_role(db, row[0], db.get(Team, row[1].team_id)):
+        # Someone else's alert, or one from a role this person no longer holds, looks like one
+        # that does not exist.
         raise ApiError(404, "not_found", "No such check-in alert.")
     return row[0], row[1]
 
