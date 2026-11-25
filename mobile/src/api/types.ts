@@ -597,6 +597,29 @@ export interface TeamCalendar {
   generatedAt: ISODateTime;
 }
 
+/** A personal access token for the MCP server (docs/mcp.md); the token itself is shown once. */
+export interface AccessTokenInfo {
+  id: string;
+  name: string;
+  createdAt: ISODateTime;
+  lastUsedAt: ISODateTime | null;
+  revokedAt: ISODateTime | null;
+}
+
+export interface MadeAccessToken extends AccessTokenInfo {
+  token: string; // shown once, never again
+}
+
+/** What a harness sent through MCP, held until the person approves it. */
+export interface HarnessSubmission {
+  id: string;
+  kind: 'calendar_days' | 'team_event';
+  status: 'pending' | 'approved' | 'declined';
+  payload: Record<string, unknown>;
+  teamId: string | null;
+  createdAt: ISODateTime;
+}
+
 /** A sent alert as HR or the supervisor sees it: who, which team, when; never why. */
 export interface ReceivedCheckin {
   id: string;
@@ -838,6 +861,11 @@ export interface ApiClient {
   shareTeamCheckin(teamId: string, share: boolean, consentVersion?: string): Promise<Membership>;
   getMyCheckins(): Promise<OwnCheckin[]>;
   getCalendarStatus(): Promise<CalendarStatus>;
+  getAccessTokens(): Promise<AccessTokenInfo[]>;
+  makeAccessToken(name: string): Promise<MadeAccessToken>;
+  revokeAccessToken(id: string): Promise<void>;
+  getHarnessSubmissions(): Promise<HarnessSubmission[]>; // waiting for this person's approval
+  decideHarnessSubmission(id: string, approve: boolean): Promise<HarnessSubmission>;
   disconnectCalendar(): Promise<CalendarStatus>; // the calendar's sign-in only; days are kept
   getMyCalendar(): Promise<CalendarDay[]>;
   getTeamCalendar(teamId: string, week?: ISODate): Promise<TeamCalendar>; // supervisors

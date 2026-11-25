@@ -6,6 +6,7 @@ import { useDataStatus, useNoData } from '@/api/hooks';
 import type { DataStatus, MetricCoverage } from '@/api/types';
 import { CalendarCard } from '@/components/CalendarCard';
 import { GoogleHealthCard } from '@/components/GoogleHealthCard';
+import { HarnessCard } from '@/components/HarnessCard';
 import { Row, Section } from '@/components/list';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -87,6 +88,12 @@ export default function SettingsScreen() {
       <Section title="Google Calendar">
         <CalendarCard />
       </Section>
+
+      {account?.role === 'hr' ? null : (
+        <Section title="Claude, Codex and other harnesses">
+          <HarnessCard />
+        </Section>
+      )}
 
       <YourData />
 

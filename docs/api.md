@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-99 operations, grouped by area.
+105 operations, grouped by area.
 
 ### meta
 
@@ -278,6 +278,17 @@ Besides the codes listed under [Error codes](#error-codes):
 | `POST` | `/me/teams/{team_id}/levels` | approved | `team_id` | [ShareLevels](#sharelevels) | [Membership](#membership) | Turns on or off showing one's own named weekly levels to the supervisor. |
 | `POST` | `/me/teams/{team_id}/leave` | approved | `team_id` |  | 204, no body |  |
 
+### harness
+
+| Method | Path | Access | Parameters | Body | Returns | Notes |
+|---|---|---|---|---|---|---|
+| `POST` | `/me/tokens` | approved |  | [NewToken](#newtoken) | 201: [MadeToken](#madetoken) |  |
+| `GET` | `/me/tokens` | approved |  |  | list[[TokenOut](#tokenout)] |  |
+| `DELETE` | `/me/tokens/{token_id}` | approved | `token_id` |  | 204, no body |  |
+| `GET` | `/me/harness` | approved |  |  | list[[SubmissionOut](#submissionout)] | What a harness sent that waits for this person's approval. |
+| `POST` | `/me/harness/{submission_id}/approve` | approved | `submission_id` |  | [SubmissionOut](#submissionout) |  |
+| `POST` | `/me/harness/{submission_id}/decline` | approved | `submission_id` |  | [SubmissionOut](#submissionout) |  |
+
 ## Error codes
 
 Raised in the code with a fixed status and code (the message varies by case).
@@ -309,11 +320,13 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 409 | `not_hr` |
 | 409 | `not_in_team` |
 | 409 | `not_logged` |
+| 409 | `not_supervisor` |
 | 409 | `own_team` |
 | 409 | `paused` |
 | 409 | `reconnect_needed` |
 | 409 | `request_conflict` |
 | 409 | `stale_action` |
+| 409 | `too_many_tokens` |
 | 409 | `version_conflict` |
 | 409 | `week_not_over` |
 | 422 | `bad_change` |
@@ -754,6 +767,17 @@ The admin's view: who wrote it, so the team can follow up.
 | `code` | string | yes | min length 1, max length 32 |
 | `consentVersion` | string | yes |  |
 
+### MadeToken
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `id` | string | yes |  |
+| `name` | string | yes |  |
+| `createdAt` | string (date-time) | yes |  |
+| `lastUsedAt` | string (date-time) or null | yes |  |
+| `revokedAt` | string (date-time) or null | yes |  |
+| `token` | string | yes |  |
+
 ### MarkCheckin
 
 | Field | Type | Required | Limits |
@@ -849,6 +873,12 @@ What the tracker recorded during the workout. Only the server fills this in.
 |---|---|---|---|
 | `name` | string | yes | min length 1, max length 80 |
 | `reportEmail` | string or null |  |  |
+
+### NewToken
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `name` | string | yes | min length 1, max length 60 |
 
 ### NightStages
 
@@ -1139,6 +1169,17 @@ One member who chose to share, with their week against their own usual.
 | `score` | number | yes |  |
 | `parts` | map[string, number] | yes |  |
 
+### SubmissionOut
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `id` | string | yes |  |
+| `kind` | `calendar_days` \| `team_event` | yes |  |
+| `status` | `pending` \| `approved` \| `declined` | yes |  |
+| `payload` | object | yes |  |
+| `teamId` | string or null | yes |  |
+| `createdAt` | string (date-time) | yes |  |
+
 ### Team
 
 | Field | Type | Required | Limits |
@@ -1379,6 +1420,16 @@ What joining means, shown before the person agrees.
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `timezone` | string | yes | min length 1, max length 64 |
+
+### TokenOut
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `id` | string | yes |  |
+| `name` | string | yes |  |
+| `createdAt` | string (date-time) | yes |  |
+| `lastUsedAt` | string (date-time) or null | yes |  |
+| `revokedAt` | string (date-time) or null | yes |  |
 
 ### Usual
 

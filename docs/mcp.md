@@ -1,6 +1,6 @@
 # The MCP server: Patterns for Claude, Codex and other harnesses
 
-Status: **being built, 2026-11-25** (branch `feat/mcp-server`). Proposed by the instructor
+Status: **built, 2026-11-26**: the server at `/mcp/`, its tools, tokens and approvals (`backend/app/harness/`, `backend/app/api/harness.py`, migration 0037) and the Settings card "Claude, Codex and other harnesses". Tested by direct tool calls and by a real MCP client over HTTP for each role. Proposed by the instructor
 ([pivot.md](pivot.md)): a person who already works in an MCP harness (Claude Code, Claude
 Desktop, Codex) connects it to Patterns. The harness can read what that person may see, and send
 in what it knows that Patterns cannot read itself, such as calendar findings from its own

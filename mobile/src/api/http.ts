@@ -28,6 +28,9 @@ import type {
   Inbox,
   CalendarDay,
   CalendarStatus,
+  AccessTokenInfo,
+  HarnessSubmission,
+  MadeAccessToken,
   Membership,
   TeamCalendar,
   TeamObserved,
@@ -214,6 +217,16 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       }),
     getMyCheckins: () => request<OwnCheckin[]>(baseUrl, '/me/checkins'),
     getCalendarStatus: () => request<CalendarStatus>(baseUrl, '/calendar/status'),
+    getAccessTokens: () => request<AccessTokenInfo[]>(baseUrl, '/me/tokens'),
+    makeAccessToken: (name) => post<MadeAccessToken>(baseUrl, '/me/tokens', { name }),
+    revokeAccessToken: (id) =>
+      request<void>(baseUrl, `/me/tokens/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    getHarnessSubmissions: () => request<HarnessSubmission[]>(baseUrl, '/me/harness'),
+    decideHarnessSubmission: (id, approve) =>
+      post<HarnessSubmission>(
+        baseUrl,
+        `/me/harness/${encodeURIComponent(id)}/${approve ? 'approve' : 'decline'}`,
+      ),
     disconnectCalendar: () => post<CalendarStatus>(baseUrl, '/calendar/disconnect'),
     getMyCalendar: () => request<CalendarDay[]>(baseUrl, '/me/calendar'),
     getTeamCalendar: (teamId, week) =>
