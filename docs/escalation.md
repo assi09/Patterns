@@ -1,7 +1,8 @@
 # The individual check-in alert: design choices
 
-Status: **decided 2026-11-25; the backend is built** (`app/teams/checkin.py`, `app/api/checkins.py`,
-migration 0033); the screens come next. The second gateway of the team product
+Status: **built and merged, 2026-11-25** (#235: `app/teams/checkin.py`, `app/api/checkins.py`,
+migration 0033, the member and recipient screens), after four review rounds recorded in
+[status.md](status.md). The second gateway of the team product
 ([pivot.md](pivot.md)): when one person's own data shows a sustained, extreme change, the people
 responsible for them are asked to check in. The first gateway, team aggregates with at least 5
 people, is unchanged ([teams.md](teams.md)).

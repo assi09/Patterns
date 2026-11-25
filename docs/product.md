@@ -3,6 +3,19 @@
 What the app does for its user and the decisions behind it. [architecture.md](architecture.md)
 covers how it is built. Sections marked *open* are not decided yet.
 
+> **2026-11-25: the product is now the team** ([pivot.md](pivot.md)). Its users are a supervisor
+> and the team's HR contact; members connect their data and choose what to share. The sections
+> below describe the individual app as designed and built until then; it is kept in the code
+> behind `FA_PERSONAL_FEATURES` (off) and tagged `v0.9-personal`.
+
+## Screens now (since 2026-11-25)
+
+| Who | Screens |
+|---|---|
+| **Member** | Today (their own data), Inbox, Settings: Google Health, Your teams (join with a code, the three consents: team figures, named weekly levels, check-in alerts), and their own check-in alert page with Send it now and Stop this alert |
+| **Supervisor** | Today, **Team** (briefing, team board, weekly report, invite, the HR contact), **Check-ins**, Inbox, Settings |
+| **HR contact** | **Check-ins**, Inbox, Settings, and Today; Today goes away with the HR invitation work (planned, [plan.md](plan.md)) |
+
 ## User and problem
 
 The user wears a Fitbit (Fitbit Air) and has months of data. The Fitbit app shows daily scores and
@@ -13,7 +26,7 @@ connects one metric to another, or the present to the user's own past.
 The app answers those questions from the user's own data, and every number it shows can be traced
 to a computed statistic.
 
-## Screens
+## Screens of the individual app (until 2026-11-25, kept behind the flag)
 
 | Screen | What the user does |
 |---|---|

@@ -11,6 +11,47 @@ applicable bonus practice is in it.
 Each item is its own small PR, per [AGENTS.md](../AGENTS.md). Open issues are the numbered list in
 [status.md](status.md#open-issues); they are referred to here as "issue n".
 
+## Where we are (2026-11-25): the team product
+
+**This section replaces the earlier ones below**, which are kept for the record. On 2026-11-25 the
+instructor narrowed the project to the team feature ([pivot.md](pivot.md); what was done that day
+is in [status.md](status.md)). Features are built **Wednesday 25 to Friday 27 November**;
+**Saturday 28 and Sunday 29 are for testing only**; then the report, demo and rehearsal for the
+presentations on **5 December**.
+
+**Done on 2026-11-25:** the new scope and the check-in alert's design (#233), the individual side
+behind a flag (#234, live), check-in alerts with four review rounds (#235). Details and numbers in
+[status.md](status.md).
+
+**Left for Karim (with Claude Code), in order:**
+
+| When | What | Notes |
+|---|---|---|
+| Thu 26 | Check #235 in production with three accounts (supervisor, `+member`, `+hr`) | the `hr` role set on the server, the HR contact named on the pilot team |
+| Thu 26 | **Google Calendar** PR: built and tested on a branch; joined with the after-sync check, then merged | Karim connects his own calendar to check the daily counts on real events |
+| Thu 26 | **HR invitation**: the supervisor types HR's email, HR signs up through the link as that team's HR; HR sees Check-ins, Inbox and Settings only; a generic email notice | cut first if Friday is tight: HR can be set on the server |
+| Fri 27 | **MCP server**: personal tokens; supervisors read their own teams' aggregates; members read their own data and send in calendar findings, checked against a schema and held until approved; check-in alerts never pass through it | tried for real from Claude Code and Codex |
+| Fri 27 | **The coach**: the Monday briefing uses calendar load next to sleep and recovery, computed in code and verified | |
+| Sat 28 – Sun 29 | **Testing only**: the check-in rule on real people (PMData, LifeSnaps) for false alarms and detection; MCP access and prompt-injection attacks; end to end in production; `current.md` updated with every result | |
+| Dec 1–4 | Final report (results from [evaluation.md](evaluation.md) and the weekend), demo script with failure cases, rehearsal, a `v1.0-demo` tag | |
+
+**Left for Jad** (none of it is in the repository yet, as of 2026-11-25; it is 15% of the grade,
+reliability, QA and security):
+
+| What | Now also covering |
+|---|---|
+| **Threat model** (assets, actors, trust boundaries, mitigations) | the MCP server (tokens, what a harness may read and send in) and check-in alerts (a name reaching HR) |
+| **Failure Matrix** (each component's failures, detection, behaviour, test) | calendar sync failures, the one-hour timer, a recipient leaving their role |
+| **Red-team set** with expected outcomes, run against the app | prompt injection through MCP send-ins and team notes; a member asking the MCP for team data; a former HR contact or a member reaching a check-in alert |
+| **Chaos tests** (each external call failing or slow) | Google Calendar and Health failing during a sync |
+| **Load test** (k6 or Locust) with its write-up | the per-minute check-in pass and the MCP endpoints |
+| **Contract tests** (backend schemas against `mobile/src/api/types.ts`) | the check-in and calendar endpoints |
+| **Fresh-clone run** of the README quickstart | the flag (`FA_PERSONAL_FEATURES`) and the new roles |
+| **Reviews** of Karim's PRs, and the project board if the brief needs one | |
+
+The deferred agent issues ([pr-195-followup-issues.md](pr-195-followup-issues.md)) stay deferred:
+the individual chat is behind the flag.
+
 ## Update (2026-11-23)
 
 The agent's follow-up fixes from the Fitbit replay landed (#217–#229; [current.md](current.md)
@@ -552,6 +593,8 @@ reading the router and guard prompts, so it measures them rather than mirroring 
   app's daily caps. Hard caps stay in code.
 - **The healthcare exclusion** in the brief: Patterns is framed and built as performance and habit
   analytics for people who train; it never diagnoses or advises, and experiments exclude anything
-  medical. Keep that framing in every deliverable.
+  medical. Keep that framing in every deliverable. *Update 2026-11-25:* the instructor proposed
+  the team product and its check-in alert to HR himself, and approved the direction; the app
+  still never diagnoses, and recipients see a name only, never a value or reason.
 - **Scope**: if a week slips, cut in this order: fitness age, weekly workout summary, team
   challenge, web push, the journal (keeping `habit_impact` on check-in tags).

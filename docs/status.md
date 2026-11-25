@@ -1,8 +1,62 @@
 # Project status
 
-The working log of the project, with [plan.md](plan.md) for what is left. Updated 2026-11-23.
+The working log of the project, with [plan.md](plan.md) for what is left. Updated 2026-11-25.
 **For what is true now, with the revision behind every result, read [current.md](current.md)
 first**; the sections below are dated and kept as they were written.
+
+## 2026-11-25: the move to a team product (milestone)
+
+**What changed and why.** On 2026-11-25 the instructor asked us to narrow the project: the app is
+now built around the team feature, for the supervisor and HR responsible for a group of employees,
+instead of one person's own chat. Two gateways ([pivot.md](pivot.md)):
+
+1. **The team**: weekly aggregates from at least 5 people, daily team alerts, and a Monday
+   briefing that becomes a coach for the department, next to the team's calendar load.
+2. **One person**: a check-in alert to the supervisor and the team's HR contact when someone who
+   opted in shows a sustained, extreme change in their own data ([escalation.md](escalation.md),
+   with every design choice and its alternatives).
+
+The instructor also proposed an MCP server, so a harness such as Claude Code or Codex can read
+team findings out and send calendar findings in, and a direct calendar connection. He approved
+this direction against the brief's healthcare exclusion, and said more deterministic than model
+features is fine if it solves the real problem.
+
+| PR | Change |
+|---|---|
+| #233 | `docs/pivot.md` and `docs/escalation.md`: the new scope and the check-in alert's choices with their options; `main` tagged **`v0.9-personal`** (the whole individual app, one checkout away) |
+| #234 | The individual side (Ask, findings, reminders, smart alarms, memory, logging) kept but off by default behind `FA_PERSONAL_FEATURES`: its endpoints answer 404, its background jobs stop, the app hides its screens (Reminders becomes Inbox). Live in production the same day; the pilot moved to the team product |
+| #235 | **Check-in alerts**, backend and screens (below) |
+
+**Check-in alerts (#235).** Code only, no model. For members who opted in, the rule runs after
+each successful Google Health sync: at least 2 of sleep, recovery, HRV, resting heart rate and
+stress far outside the person's own usual range on at least 5 of the last 7 **confirmed-worn**
+days. The person is told at once with the exact time it goes out, **one hour** later, and can send
+it now or stop it. Then the supervisor and the team's HR contact get "You have a check-in request"
+and, on the Check-ins screen only, the person's name: never a value, metric or reason. They mark
+it checked in or not needed. Consent is to the **roles**, so a new holder needs no fresh consent;
+one rule (`current_holder`) decides who holds a role for delivery and every later access.
+
+**Review rounds.** The check-in PR went through four review findings before merging, each fixed
+with a regression test confirmed to fail without the fix:
+
+| Finding | Fix |
+|---|---|
+| Unknown wear counted as worn | only days with a recorded wear time of at least 10 hours count |
+| A failed calendar sync rolled back its own failure record | sync runs written in their own transactions (calendar branch) |
+| A demoted HR contact still received a request sent at the end of the hour | recipients checked for their current role at send time |
+| A former HR contact could read the name in their inbox | notifications carry no name |
+| Send now worked after leaving the team | leaving withdraws at once; Send now re-checks |
+| A supervisor demoted after sending kept access | one role rule for delivery and access |
+| A replaced HR contact kept access and reminders | the same rule; their delivery record stays for the audit |
+
+**Measured** (`tests/test_checkin.py`, 42 tests, on synthetic people): under 0.5% of 10,000 calm
+weekly windows raise an alert; at least 95 of 100 planted extreme weeks are found; one signal, one
+night, three days, missing wear, old data and short history raise nothing. Full backend suite
+2,931 passed; app 198 tests; browser runs of every check-in screen in light and dark mode.
+
+**Built, not merged yet:** Google Calendar as daily meeting load (only event times are read;
+titles, notes and attendees never leave Google), with a team "Meeting load" card from at least 5
+people; the HR invitation by email (half built). Outlook is set aside (Karim, 2026-11-25).
 
 ## 2026-11-23: follow-ups, checked at scale
 
