@@ -241,7 +241,7 @@ function TeamView({ team }: { team: SupervisedTeam }) {
                 items={briefingItems(alerts.data, latest.data)}
                 briefing={latest.data?.briefing}
                 observed={
-                  buildingHistory(latest.data, alerts.data) ? observed.data?.figures.map((f) => f.text) : []
+                  buildingHistory(latest.data) ? observed.data?.figures.map((f) => f.text) : []
                 }
               />
               {ready || pulse.data?.weeks.length ? (

@@ -1,4 +1,11 @@
-import type { Evidence, ReportSection, TeamAlert, TeamLevel, TeamReport } from '@/api/types';
+import type {
+  Evidence,
+  ISODate,
+  ReportSection,
+  TeamAlert,
+  TeamLevel,
+  TeamReport,
+} from '@/api/types';
 import { formatWithUnit, metricLabel } from '@/lib/format';
 
 /** A signed change in the metric's units: "-1 h 4 min", "+12 min" for bedtime, "-1,148 steps". */
@@ -251,15 +258,24 @@ export function latestTeamWeek(evidence: Evidence | undefined): TeamWeekFigures 
   return typeof stats?.median_change === 'number' ? (stats as unknown as TeamWeekFigures) : null;
 }
 
+/** The Monday of the last full week (Monday to Sunday), as the backend's reports use, local. */
+export function lastFullWeekStart(today: Date = new Date()): ISODate {
+  const monday = new Date(today);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7) - 7);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`;
+}
+
 /**
- * Whether the team is still building the history a change needs: no team alert (an alert is
- * itself a change from usual, so it proves the history exists), and no weekly report yet, a
- * withheld one, or one where no metric had enough members with 14 earlier days. While it is,
- * the briefing card keeps showing the team's observed readings next to anything else.
+ * Whether the team is still building the history a change needs, judged by the current weekly
+ * report only (the last full week's): none yet, a withheld one, one for an older week, or one
+ * where no metric had enough members with 14 earlier days. Older reports and alerts say nothing
+ * about who is in the team now: five new members can have readings today. While it is, the
+ * briefing card keeps showing the team's observed readings next to anything else.
  */
-export function buildingHistory(report?: TeamReport, alerts: TeamAlert[] = []): boolean {
-  if (alerts.length) return false;
+export function buildingHistory(report?: TeamReport, today: Date = new Date()): boolean {
   if (!report || report.status !== 'ready') return true;
+  if (report.week.start < lastFullWeekStart(today)) return true;
   return report.sections.every((s) => report.evidence[s.evidenceId]?.sufficient === false);
 }
 

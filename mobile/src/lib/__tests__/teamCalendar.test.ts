@@ -1,7 +1,7 @@
 import { httpClient } from '@/api/http';
 import { mockClient } from '@/api/mock';
-import type { TeamCalendarMetric } from '@/api/types';
-import { loadChange, loadValue } from '@/lib/calendar';
+import type { TeamCalendar, TeamCalendarMetric } from '@/api/types';
+import { calendarEmpty, loadChange, loadValue, plannedWeek } from '@/lib/calendar';
 
 const metric = (change: number, unit: 'min' | 'count' = 'min'): TeamCalendarMetric => ({
   metric: 'meeting_minutes',
@@ -54,5 +54,38 @@ describe('calendar over HTTP', () => {
       'GET /calendar/status ',
       'GET /teams/t1/calendar?week=2026-11-16 ',
     ]);
+  });
+});
+
+describe('the meeting load card says which week and why figures are missing', () => {
+  const week = { start: '2026-11-16', end: '2026-11-22' };
+  const calendar = (connected: number, members: number, sufficient: boolean): TeamCalendar => ({
+    week,
+    connected,
+    minimumMembers: 5,
+    generatedAt: '2026-11-25T10:00:00Z',
+    metrics: [{ ...metric(0), members, sufficient }],
+  });
+
+  it('names the planned week by its dates, the week after the one shown', () => {
+    expect(plannedWeek(week)).toEqual({ start: '2026-11-23', end: '2026-11-29' });
+    expect(plannedWeek({ start: '2026-12-28', end: '2027-01-03' })).toEqual({
+      start: '2027-01-04',
+      end: '2027-01-10',
+    });
+  });
+
+  it('says too few connected when fewer than five did', () => {
+    expect(calendarEmpty(calendar(3, 3, false))).toMatch(/^Fewer than 5 members have connected/);
+  });
+
+  it('says too little history when five or more connected but cannot be compared', () => {
+    const text = calendarEmpty(calendar(6, 3, false))!;
+    expect(text).toMatch(/^6 members have connected a calendar, but only 3 have/);
+    expect(text).not.toMatch(/Fewer than 5 members have connected/);
+  });
+
+  it('says nothing when there are figures', () => {
+    expect(calendarEmpty(calendar(6, 6, true))).toBeNull();
   });
 });

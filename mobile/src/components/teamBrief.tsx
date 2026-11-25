@@ -119,8 +119,7 @@ export function BriefingCard({
             <Text key={line}>{line}</Text>
           ))}
           <Text variant="caption" color="faint">
-            What changed from usual comes once members have enough history: at least 14 earlier days
-            each.
+            Readings only: what changed from usual needs each member&apos;s 14 earlier days.
           </Text>
         </View>
       ) : null}
