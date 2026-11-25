@@ -1,6 +1,7 @@
 # The individual check-in alert: design choices
 
-Status: **decided 2026-11-25, not built yet.** The second gateway of the team product
+Status: **decided 2026-11-25; the backend is built** (`app/teams/checkin.py`, `app/api/checkins.py`,
+migration 0033); the screens come next. The second gateway of the team product
 ([pivot.md](pivot.md)): when one person's own data shows a sustained, extreme change, the people
 responsible for them are asked to check in. The first gateway, team aggregates with at least 5
 people, is unchanged ([teams.md](teams.md)).
@@ -18,8 +19,8 @@ without redesigning the rest. **Current** marks what is built; the others are ke
 | D. A contact the person picks | a colleague, HR or the supervisor | the most respectful of the person | the person may pick no one |
 | E. The person only | a nudge to themselves | no one else learns anything | not a team feature; Today already does this (smart alarms) |
 
-The HR contact is set per team by the owner (`python -m app.auth set-role <email> hr`, then the
-team's HR contact). An HR account sees only the check-in alerts of teams it is the contact for,
+The owner gives an account the HR role (`python -m app.auth set-role <email> hr`); the team's
+supervisor then names it as the team's HR contact (`PUT /teams/{id}/hr`). An HR account sees only the check-in alerts of teams it is the contact for,
 never team reports or named levels.
 
 ## 2. Consent
@@ -55,9 +56,15 @@ one trip does not raise it:
   higher resting heart rate and stress);
 - not again within 28 days of the last one.
 
-The thresholds are tuned on real people (PMData, LifeSnaps) and calm synthetic people for a false
-alarm rate, reported per person-year, and on planted sustained drops for detection. The rule and
-its numbers live in one place in the code so a change is one diff with its test results.
+The rule and its numbers live in one place (`app/teams/checkin.py`, rule `checkin-v1`), so a
+change is one diff with its test results. The gap counted as "far" has a floor per signal for
+narrow ranges: 45 minutes of sleep, 15 recovery points, 8 ms of HRV, 5 bpm, 15 stress points.
+
+Measured in `tests/test_checkin.py` on synthetic people: on 100 calm people and over 10,000 weekly
+windows, under 0.5% of windows raise one; a planted week of sleep 3 hours and HRV 30 ms below
+usual is found in at least 95 of 100. One signal alone, one bad night, three bad days, a barely
+worn week, old data and under 14 days of history raise nothing. The same check on real people
+(PMData, LifeSnaps) is part of the weekend's testing.
 
 ## 5. What the recipients see
 
