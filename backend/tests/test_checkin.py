@@ -401,7 +401,7 @@ def test_the_rule_runs_after_a_successful_sync_only(engine, monkeypatch, synced)
     monkeypatch.setattr(google_api.connections, "sync", fake_sync)
     monkeypatch.setattr(google_api.connections, "now_utc", lambda: NOW)  # the data's own today
     parts = google_api.GoogleParts(None, None, None)
-    google_api.sync_everything(parts, lambda: session_scope(engine), person_id, TODAY)
+    google_api.sync_health(parts, lambda: session_scope(engine), person_id, TODAY)
     with session_scope(engine) as db:
         assert len(db.scalars(select(CheckinAlert)).all()) == (1 if synced else 0)
 

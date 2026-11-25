@@ -82,14 +82,11 @@ def _status(db, user: User) -> schemas.GoogleStatus:
 
 
 def _start_sync(google: GoogleParts, sessions: Sessions, user: User, today: date) -> None:
-    syncs.start(user.id, lambda: sync_everything(google, sessions, user.id, today))
-
-
-def sync_everything(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
-    """After connecting or "Sync now": Google Health with the check-in rule, then the calendar,
-    each step guarded so one failing never stops the next."""
-    sync_health(google, sessions, user_id, today)
-    sync_calendar(google, sessions, user_id, today)
+    """After connecting or "Sync now": Google Health (with the check-in rule) and the calendar,
+    each through its own registry, the one the scheduler uses too, so a person never has two
+    runs of either at once, whoever started them."""
+    syncs.start(user.id, lambda: sync_health(google, sessions, user.id, today))
+    calendar_syncs.start(user.id, lambda: sync_calendar(google, sessions, user.id, today))
 
 
 def sync_calendar(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:

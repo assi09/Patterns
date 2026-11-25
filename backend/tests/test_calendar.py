@@ -434,12 +434,12 @@ def test_calendar_rows_never_mix_with_health_rows(engine):
 @pytest.mark.parametrize(
     ("health", "expected"),
     [
-        ("succeeds", ["health", "checkin", "calendar"]),
-        ("finds nothing new", ["health", "calendar"]),  # no successful run: no check-in
-        ("raises", ["health", "calendar"]),  # a crash stops neither the calendar nor the server
+        ("succeeds", ["health", "checkin"]),
+        ("finds nothing new", ["health"]),  # no successful run: no check-in
+        ("raises", ["health"]),  # a crash stops neither the server nor the calendar's own run
     ],
 )
-def test_after_a_sync_health_then_checkin_then_calendar(monkeypatch, health, expected):
+def test_after_a_health_sync_the_check_in_rule_only_if_it_succeeded(monkeypatch, health, expected):
     calls = []
 
     def fake_health(sessions, box, user_id, health_for, today):
@@ -452,7 +452,6 @@ def test_after_a_sync_health_then_checkin_then_calendar(monkeypatch, health, exp
         google.connections, "succeeded_since", lambda db, uid, since: health == "succeeds"
     )
     monkeypatch.setattr(google.checkin, "after_sync", lambda db, uid, now: calls.append("checkin"))
-    monkeypatch.setattr(google.calendar, "sync_person", lambda *args: calls.append("calendar") or 0)
 
     class Session:
         def __enter__(self):
@@ -461,30 +460,16 @@ def test_after_a_sync_health_then_checkin_then_calendar(monkeypatch, health, exp
         def __exit__(self, *exc):
             return False
 
-    google.sync_everything(google.GoogleParts(None, None, None), Session, uuid.uuid4(), MONDAY)
+    google.sync_health(google.GoogleParts(None, None, None), Session, uuid.uuid4(), MONDAY)
     assert calls == expected
 
 
-def test_a_failing_check_in_does_not_stop_the_calendar(monkeypatch):
-    calls = []
-    monkeypatch.setattr(google.connections, "sync", lambda *args: calls.append("health"))
-    monkeypatch.setattr(google.connections, "succeeded_since", lambda *args: True)
-
+def test_a_failing_calendar_sync_is_contained(monkeypatch):
     def broken(*args):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(google.checkin, "after_sync", broken)
-    monkeypatch.setattr(google.calendar, "sync_person", lambda *args: calls.append("calendar") or 0)
-
-    class Session:
-        def __enter__(self):
-            return None
-
-        def __exit__(self, *exc):
-            return False
-
-    google.sync_everything(google.GoogleParts(None, None, None), Session, uuid.uuid4(), MONDAY)
-    assert calls == ["health", "calendar"]
+    monkeypatch.setattr(google.calendar, "sync_person", broken)
+    google.sync_calendar(google.GoogleParts(None, None, None), None, uuid.uuid4(), MONDAY)
 
 
 # Two sign-ins, scheduled and disconnected apart
@@ -582,3 +567,46 @@ def test_disconnecting_google_health_leaves_the_calendar(client, engine, box):
         calendar.save_connection(db, box, person.id, credentials())
     client.post("/google/disconnect", headers=headers)
     assert client.get("/calendar/status", headers=headers).json()["connected"] is True
+
+
+def test_sync_now_does_not_start_a_second_calendar_run_while_one_is_running(
+    client, engine, box, oauth, monkeypatch
+):
+    """Regression: connecting or "Sync now" ran the calendar outside the calendar registry, so
+    a scheduled calendar run already in progress could be joined by a second, both fetching and
+    writing the same person's calendar. Every start now goes through the one registry."""
+    import threading
+
+    release, entered = threading.Event(), threading.Event()
+    fetches: list[int] = []
+
+    def held_api(request):
+        fetches.append(1)
+        entered.set()
+        release.wait(5)  # the scheduled run stays inside its fetch until released
+        return httpx2.Response(200, json={"items": []})
+
+    background = scheduler_parts(monkeypatch, oauth, box, held_api)
+    headers = signed_in(client, engine)
+    with session_scope(engine) as db:
+        person = db.scalar(select(User).where(User.email == "person@example.com"))
+        save_connection(db, box, person.id, credentials())
+        calendar.save_connection(db, box, person.id, credentials())
+        person_id = person.id
+    sessions = lambda: session_scope(engine)  # noqa: E731
+    background.start_due_syncs(datetime.now(UTC), sessions)
+    assert entered.wait(5)  # the scheduled calendar run is fetching
+    assert google.calendar_syncs.running(person_id)
+
+    synced = client.post("/google/sync", headers=headers, json={"force": True})
+    assert synced.status_code == 202
+    release.set()
+    wait_for(google.calendar_syncs)
+    wait_for(google.syncs)
+
+    assert len(fetches) == 1  # one calendar fetch, not two
+    with session_scope(engine) as db:
+        runs = db.scalars(
+            select(SyncRun).where(SyncRun.user_id == person_id, SyncRun.source == calendar.SOURCE)
+        ).all()
+    assert len(runs) == 1
