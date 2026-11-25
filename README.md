@@ -8,6 +8,13 @@ numbers by hand. This project builds an agent that analyzes months of a user's F
 which metrics and time windows are worth investigating, and reports trends, changes and relationships —
 with every insight backed by a computed statistic the user can inspect.
 
+**Since 2026-11-25 the product is built around teams** ([docs/pivot.md](docs/pivot.md)): a
+supervisor sees the team's weekly figures, never anyone's own data, and the supervisor and the
+team's HR contact get a check-in alert when someone who opted in shows a sustained, extreme change
+([docs/escalation.md](docs/escalation.md)). The individual app described above is kept behind
+`FA_PERSONAL_FEATURES` (off), and tagged `v0.9-personal`. What is true now, with every result:
+[docs/current.md](docs/current.md).
+
 ## Quickstart
 
 Needs Python 3.12+, Node 22 and Docker. Commands run from the repository root unless they `cd`.

@@ -1,7 +1,8 @@
 # The individual check-in alert: design choices
 
-Status: **decided 2026-11-25; the backend is built** (`app/teams/checkin.py`, `app/api/checkins.py`,
-migration 0033); the screens come next. The second gateway of the team product
+Status: **built and merged, 2026-11-25** (#235: `app/teams/checkin.py`, `app/api/checkins.py`,
+migration 0033, the member and recipient screens), after four review rounds recorded in
+[status.md](status.md). The second gateway of the team product
 ([pivot.md](pivot.md)): when one person's own data shows a sustained, extreme change, the people
 responsible for them are asked to check in. The first gateway, team aggregates with at least 5
 people, is unchanged ([teams.md](teams.md)).
@@ -72,11 +73,21 @@ The rule and its numbers live in one place (`app/teams/checkin.py`, rule `checki
 change is one diff with its test results. The gap counted as "far" has a floor per signal for
 narrow ranges: 45 minutes of sleep, 15 recovery points, 8 ms of HRV, 5 bpm, 15 stress points.
 
-Measured in `tests/test_checkin.py` on synthetic people: on 100 calm people and over 10,000 weekly
-windows, under 0.5% of windows raise one; a planted week of sleep 3 hours and HRV 30 ms below
-usual is found in at least 95 of 100. One signal alone, one bad night, three bad days, a barely
-worn week, old data and under 14 days of history raise nothing. The same check on real people
-(PMData, LifeSnaps) is part of the weekend's testing.
+Measured on the synthetic people of `tests/test_checkin.py` (observed, with the bound each test
+enforces): 0 of 11,400 overlapping 7-day windows of 100 calm people raised one (bound: under
+0.5%); a planted week of sleep 3 hours and HRV 30 ms below usual was found in 100 of 100 (bound:
+95); one signal alone, one bad night and three bad days raised 0 of 30 each (bound: 1); a barely
+worn week, missing wear, old data and under 14 days of history 0 of 20 each (bound: 0).
+Synthetic people have mild, well-behaved noise, so zero alerts on them shows the rule is not trigger-happy by construction; it is not a false-alarm rate for real people.
+
+**What the real-data run can and cannot measure** (PMData, LifeSnaps, the weekend):
+1. **Eligibility first**: how many participants, and how many of their weeks, have at least 5
+   confirmed-worn days and 14 days of history, since the rule cannot fire on anyone else.
+2. **How often it fires on ordinary weeks**: alerts per eligible person-week. These weeks are
+   unlabelled, so a natural alert is reported as an alert, not called false: calling it false
+   would need independent evidence that it was unwarranted, which these datasets do not have.
+3. **Detection**: a known sustained change planted into real histories, and how often the rule
+   finds it, by size of change.
 
 ## 5. What the recipients see
 

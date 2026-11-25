@@ -1,5 +1,10 @@
 # Teams: a weekly report for a supervisor
 
+> **2026-11-25:** teams are now the whole product ([pivot.md](pivot.md)). This page is the first
+> gateway, team aggregates. The second, a check-in alert about one person to the supervisor and
+> the team's HR contact, is in [escalation.md](escalation.md); the calendar's meeting load joins
+> the team figures under the same 5-person rule.
+
 A supervisor (a manager, a department head) invites a group of employees into a **team**. Every
 week the system writes the supervisor a report on how the team's sleep, activity and recovery
 changed, from the members' own data. The supervisor has their own view in the app; they need no

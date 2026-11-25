@@ -1,7 +1,8 @@
 # Architecture
 
 This document covers the parts of the design that are settled. Components marked *planned* are
-not implemented yet.
+not implemented yet. Since 2026-11-25 the product is the team ([pivot.md](pivot.md)); the
+components of the individual side below are kept behind a flag.
 
 ## Principle
 
@@ -46,6 +47,10 @@ verifier rejects statements it cannot match to one.
 | Mobile app | `mobile/` | landing, sign-up and sign-in, waiting for approval, Access requests (owner); Today, Ask (real agent), Reminders (API), Data (Connect Google Health) |
 | Advice guard and the Jev client | `backend/app/agent/guard.py`, `jev.py` | checks shown text by meaning |
 | Evaluation suite | `eval/` | PHIA and baselines, planted-effect tests, router, RAG, verifier, team and conversation evaluations; [results](evaluation.md) |
+| The individual side's switch | `backend/app/api/features.py`, `mobile/src/lib/features.ts` | done (#234): `FA_PERSONAL_FEATURES`, off; the individual endpoints answer 404 and its background jobs stop; the account tells the app |
+| Check-in alerts | `backend/app/teams/checkin.py`, `backend/app/api/checkins.py` | done (#235): the rule after each successful sync, one hour for the person, delivery and access by the current role holder, an append-only log ([escalation.md](escalation.md)) |
+| Google Calendar | `backend/app/sync/calendar.py`, `backend/app/analysis/team_calendar.py` | *built on a branch, not merged*: daily meeting counts under the source `google_calendar`, the team's meeting load from at least 5 people |
+| MCP server | — | *planned* ([pivot.md](pivot.md)) |
 
 ### Ingestion
 
