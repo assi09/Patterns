@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-93 operations, grouped by area.
+94 operations, grouped by area.
 
 ### meta
 
@@ -151,7 +151,8 @@ Besides the codes listed under [Error codes](#error-codes):
 |---|---|---|---|---|---|---|
 | `POST` | `/me/teams/{team_id}/checkin` | approved | `team_id` | [ShareCheckin](#sharecheckin) | [Membership](#membership) | Turns check-in alerts on or off for one team; off withdraws any alert still waiting. |
 | `GET` | `/me/checkins` | approved |  |  | list[[OwnCheckin](#owncheckin)] |  |
-| `POST` | `/me/checkins/{alert_id}/withdraw` | approved | `alert_id` |  | [OwnCheckin](#owncheckin) | Stops a waiting alert by turning check-in alerts off for its team. |
+| `POST` | `/me/checkins/{alert_id}/send` | approved | `alert_id` |  | [OwnCheckin](#owncheckin) | The person sends their own waiting alert now, before the hour is up. |
+| `POST` | `/me/checkins/{alert_id}/stop` | approved | `alert_id` |  | [OwnCheckin](#owncheckin) | The person stops this alert. Check-in alerts stay on; the switch turns them off. |
 | `GET` | `/checkins` | approved |  |  | list[[ReceivedCheckin](#receivedcheckin)] |  |
 | `POST` | `/checkins/{alert_id}/open` | approved | `alert_id` |  | [ReceivedCheckin](#receivedcheckin) |  |
 | `POST` | `/checkins/{alert_id}/mark` | approved | `alert_id` | [MarkCheckin](#markcheckin) | [ReceivedCheckin](#receivedcheckin) |  |

@@ -992,7 +992,7 @@ const MOCK_CONSENT = {
     "Your supervisor will also see your name with your own weekly recovery, sleep, strain and stress, each as below, within or above your own usual range and as the week's average. Nothing else: no days, no other metrics, no chats. You can turn this off at any time; your row then disappears, including from past weeks.",
   levelsConsentVersion: 'team-levels-v1',
   checkinConsent:
-    "If your own data shows a sustained, extreme change, for example several signals far outside your usual range on most days of a week, your supervisor and the team's HR contact will get a message asking them to check in with you. The message has your name and nothing else: no values, no metrics, no reason. You are told first, see what raised it, and have 24 hours to turn this off before anything is sent. You can turn it off at any time. These are roles: if someone else takes one on, they receive alerts from then on, and whoever leaves it loses access at once.",
+    "If your own data shows a sustained, extreme change, for example several signals far outside your usual range on most days of a week, your supervisor and the team's HR contact will get a message asking them to check in with you. The message has your name and nothing else: no values, no metrics, no reason. You are told first, at once, and see what raised it. It goes out one hour later unless you stop it; you can also send it straight away. You can turn check-in alerts off at any time. These are roles: if someone else takes one on, they receive alerts from then on, and whoever leaves it loses access at once.",
   checkinConsentVersion: 'checkin-v1',
 };
 let myTeams: Membership[] = [];
@@ -1022,7 +1022,7 @@ function sampleCheckin(membership: Membership): OwnCheckin {
     team: membership.team,
     status: 'waiting',
     raisedAt: new Date(now).toISOString(),
-    sendAfter: new Date(now + 86_400_000).toISOString(),
+    sendAfter: new Date(now + 3_600_000).toISOString(), // one hour
     sentAt: null,
     withdrawnAt: null,
     recipients: "your supervisor and the team's HR contact",
@@ -1053,6 +1053,15 @@ function mockTeam(code: string) {
     );
   }
   return MOCK_TEAM;
+}
+
+function waitingCheckin(id: string): OwnCheckin {
+  const found = myCheckins.find((c) => c.id === id);
+  if (!found) throw new ApiError('No such check-in alert.', 'not_found', 404);
+  if (found.status !== 'waiting') {
+    throw new ApiError('This alert was already sent or stopped.', 'already_sent', 409);
+  }
+  return found;
 }
 
 function receivedCheckin(id: string): ReceivedCheckin {
@@ -1739,14 +1748,16 @@ export const mockClient: ApiClient = {
       return membership;
     }),
   getMyCheckins: () => later(() => myCheckins),
-  withdrawCheckin: (id) =>
+  sendCheckinNow: (id) =>
     later<OwnCheckin>(() => {
-      const found = myCheckins.find((c) => c.id === id);
-      if (!found) throw new ApiError('No such check-in alert.', 'not_found', 404);
-      if (found.status !== 'waiting') {
-        throw new ApiError('This alert was already sent or stopped.', 'already_sent', 409);
-      }
-      ownMembership(found.teamId).checkinAlerts = false;
+      const found = waitingCheckin(id);
+      found.status = 'sent';
+      found.sentAt = new Date().toISOString();
+      return found;
+    }),
+  stopCheckin: (id) =>
+    later<OwnCheckin>(() => {
+      const found = waitingCheckin(id);
       found.status = 'withdrawn';
       found.withdrawnAt = new Date().toISOString();
       return found;

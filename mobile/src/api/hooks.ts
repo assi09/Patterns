@@ -583,15 +583,22 @@ export function useMyCheckins() {
   return useQuery({ queryKey: keys.myCheckins, queryFn: api.getMyCheckins });
 }
 
-export function useWithdrawCheckin() {
+function useOwnCheckinAction(action: (id: string) => Promise<unknown>) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.withdrawCheckin(id),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: keys.myCheckins });
-      client.invalidateQueries({ queryKey: keys.myTeams });
-    },
+    mutationFn: action,
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.myCheckins }),
   });
+}
+
+/** Sends the person's own waiting check-in alert now, before its hour is up. */
+export function useSendCheckinNow() {
+  return useOwnCheckinAction((id) => api.sendCheckinNow(id));
+}
+
+/** Stops this alert only; check-in alerts stay on. */
+export function useStopCheckin() {
+  return useOwnCheckinAction((id) => api.stopCheckin(id));
 }
 
 export function useReceivedCheckins(enabled = true) {

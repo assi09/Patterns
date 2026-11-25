@@ -1,12 +1,13 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import { useMyCheckins, useWithdrawCheckin } from '@/api/hooks';
+import { useMyCheckins, useSendCheckinNow, useStopCheckin } from '@/api/hooks';
 import type { CheckinEvidence, OwnCheckin } from '@/api/types';
 import { Row, Section } from '@/components/list';
 import { QueryState, Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
+import { goesOut } from '@/lib/checkin';
 import { formatWithUnit, metricLabel, timeAgo, windowLabel } from '@/lib/format';
 import { spacing } from '@/theme';
 
@@ -30,29 +31,17 @@ export default function CheckinScreen() {
   );
 }
 
-/** "Tomorrow at 13:34", in the device's own time. */
-function sendTime(iso: string): string {
-  const when = new Date(iso);
-  const time = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const day =
-    when.toDateString() === new Date().toDateString()
-      ? 'Today'
-      : when.toDateString() === tomorrow.toDateString()
-        ? 'Tomorrow'
-        : when.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' });
-  return `${day} at ${time}`;
-}
-
 function Alert({ alert }: { alert: OwnCheckin }) {
-  const withdraw = useWithdrawCheckin();
+  const sendNow = useSendCheckinNow();
+  const stop = useStopCheckin();
+  const busy = sendNow.isPending || stop.isPending;
+  const error = sendNow.error ?? stop.error;
   const status =
     alert.status === 'waiting'
-      ? `Nothing is sent yet. ${sendTime(alert.sendAfter)}, ${alert.recipients} will be asked to check in with you.`
+      ? `Nothing is sent yet. It goes out ${goesOut(alert.sendAfter)}: ${alert.recipients} will be asked to check in with you, and will see your name only.`
       : alert.status === 'sent'
         ? `Sent ${timeAgo(alert.sentAt!)} to ${alert.recipients}. They saw your name only, no values or reasons.`
-        : `Stopped ${timeAgo(alert.withdrawnAt!)}. Nothing was sent, and check-in alerts are off for ${alert.team}.`;
+        : `Stopped ${timeAgo(alert.withdrawnAt!)}. Nothing was sent. Check-in alerts stay on; you can turn them off in Your teams.`;
   return (
     <>
       <Section title={alert.team}>
@@ -68,13 +57,14 @@ function Alert({ alert }: { alert: OwnCheckin }) {
         </View>
         {alert.status === 'waiting' ? (
           <View style={styles.block}>
+            <Button label="Send it now" disabled={busy} onPress={() => sendNow.mutate(alert.id)} />
             <Button
-              label="Stop it and turn check-in alerts off"
+              label="Stop this alert"
               variant="secondary"
-              disabled={withdraw.isPending}
-              onPress={() => withdraw.mutate(alert.id)}
+              disabled={busy}
+              onPress={() => stop.mutate(alert.id)}
             />
-            {withdraw.error ? <Text color="danger">{withdraw.error.message}</Text> : null}
+            {error ? <Text color="danger">{error.message}</Text> : null}
           </View>
         ) : null}
       </Section>

@@ -302,5 +302,19 @@ def status(session: Session, user_id: uuid.UUID) -> dict:
     }
 
 
+def succeeded_since(session: Session, user_id: uuid.UUID, since: datetime) -> bool:
+    """Whether a Google Health sync of this person finished successfully at or after `since`."""
+    finished = session.scalar(
+        select(func.max(SyncRun.finished_at)).where(
+            SyncRun.user_id == user_id, SyncRun.source == SOURCE, SyncRun.status == "succeeded"
+        )
+    )
+    if finished is None:
+        return False
+    if finished.tzinfo is None:  # SQLite keeps naive UTC
+        finished = finished.replace(tzinfo=UTC)
+    return finished >= since
+
+
 def now_utc() -> datetime:
     return datetime.now(UTC)

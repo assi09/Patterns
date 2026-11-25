@@ -773,7 +773,8 @@ export interface ApiClient {
   shareTeamLevels(teamId: string, share: boolean, consentVersion?: string): Promise<Membership>;
   shareTeamCheckin(teamId: string, share: boolean, consentVersion?: string): Promise<Membership>;
   getMyCheckins(): Promise<OwnCheckin[]>;
-  withdrawCheckin(id: string): Promise<OwnCheckin>;
+  sendCheckinNow(id: string): Promise<OwnCheckin>; // before the hour is up
+  stopCheckin(id: string): Promise<OwnCheckin>; // this alert only; the switch stays on
   getReceivedCheckins(): Promise<ReceivedCheckin[]>; // HR and supervisors
   openCheckin(id: string): Promise<ReceivedCheckin>;
   markCheckin(id: string, outcome: CheckinOutcome, note?: string): Promise<ReceivedCheckin>;

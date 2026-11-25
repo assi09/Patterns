@@ -209,8 +209,9 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         consentVersion,
       }),
     getMyCheckins: () => request<OwnCheckin[]>(baseUrl, '/me/checkins'),
-    withdrawCheckin: (id) =>
-      post<OwnCheckin>(baseUrl, `/me/checkins/${encodeURIComponent(id)}/withdraw`),
+    sendCheckinNow: (id) =>
+      post<OwnCheckin>(baseUrl, `/me/checkins/${encodeURIComponent(id)}/send`),
+    stopCheckin: (id) => post<OwnCheckin>(baseUrl, `/me/checkins/${encodeURIComponent(id)}/stop`),
     getReceivedCheckins: () => request<ReceivedCheckin[]>(baseUrl, '/checkins'),
     openCheckin: (id) => post<ReceivedCheckin>(baseUrl, `/checkins/${encodeURIComponent(id)}/open`),
     markCheckin: (id, outcome, note) =>

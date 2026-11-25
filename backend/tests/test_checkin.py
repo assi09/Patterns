@@ -5,11 +5,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
+import pandas as pd
 import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
+from sqlalchemy.exc import IntegrityError
 
 from app.analysis.day import with_scores
 from app.api import auth
@@ -90,6 +92,30 @@ def test_one_signal_or_a_short_spell_is_not_enough(effects):
 def test_a_barely_worn_week_raises_nothing():
     effects = EXTREME + (LowWear(WEEK_START, TODAY, wear_minutes=300),)
     assert not any(checkin.detect(frame(effects, seed), TODAY) for seed in range(20))
+
+
+def test_days_without_a_recorded_wear_time_do_not_count_as_worn():
+    """Only confirmed wear counts: other readings on a day without a wear time are not enough,
+    because the rule can send a name to HR."""
+    week = slice(pd.Timestamp(WEEK_START), pd.Timestamp(TODAY))
+    for seed in range(20):
+        data = frame(EXTREME, seed)
+        unknown = data.copy()
+        unknown.loc[week, "wear_minutes"] = np.nan  # sleep and heart readings stay
+        assert checkin.detect(unknown, TODAY) == []
+        assert checkin.detect(data.drop(columns="wear_minutes"), TODAY) == []
+        three = data.copy()
+        three.loc[
+            pd.Timestamp(WEEK_START) : pd.Timestamp(WEEK_START + timedelta(days=2)), "wear_minutes"
+        ] = np.nan
+        assert checkin.detect(three, TODAY) == []  # four confirmed days are not five
+
+
+def test_days_worn_reports_confirmed_wear_only():
+    data = frame(EXTREME, 3)
+    data.loc[pd.Timestamp(TODAY), "wear_minutes"] = np.nan
+    evidence = checkin.detect(data, TODAY)
+    assert evidence and all(e.stats["days_worn"] == 6 for e in evidence)
 
 
 def test_old_data_raises_nothing():
@@ -203,8 +229,8 @@ def test_after_the_wait_hr_and_the_supervisor_are_asked_to_check_in_and_nothing_
 ):
     team_id = make_team(engine)
     raise_now(engine, team_id)
-    assert send(engine, NOW + timedelta(hours=23)) == 0
-    assert send(engine, NOW + timedelta(hours=25)) == 1
+    assert send(engine, NOW + timedelta(minutes=59)) == 0
+    assert send(engine, NOW + timedelta(minutes=61)) == 1
     for email in ("boss@example.com", "hr@example.com"):
         [note] = inbox(engine, email)
         assert note.title == "Please check in with member00@example.com"
@@ -222,7 +248,7 @@ def test_after_the_wait_hr_and_the_supervisor_are_asked_to_check_in_and_nothing_
 def test_nobody_else_sees_or_marks_it(engine, client):
     team_id = make_team(engine)
     raise_now(engine, team_id)
-    send(engine, NOW + timedelta(hours=25))
+    send(engine, NOW + timedelta(minutes=61))
     hr = signed_in(client, engine, "hr@example.com")
     alert_id = client.get("/checkins", headers=hr).json()[0]["id"]
     for email in ("member02@example.com", "member00@example.com"):
@@ -237,7 +263,7 @@ def test_nobody_else_sees_or_marks_it(engine, client):
 def test_marks_and_every_step_are_logged(engine, client):
     team_id = make_team(engine)
     raise_now(engine, team_id)
-    send(engine, NOW + timedelta(hours=25))
+    send(engine, NOW + timedelta(minutes=61))
     hr = signed_in(client, engine, "hr@example.com")
     alert_id = client.get("/checkins", headers=hr).json()[0]["id"]
     client.post(f"/checkins/{alert_id}/open", headers=hr)
@@ -265,14 +291,119 @@ def test_the_person_can_stop_it_while_it_waits(engine, client):
     raise_now(engine, team_id)
     me = signed_in(client, engine, "member00@example.com")
     alert_id = client.get("/me/checkins", headers=me).json()[0]["id"]
-    stopped = client.post(f"/me/checkins/{alert_id}/withdraw", headers=me).json()
+    stopped = client.post(f"/me/checkins/{alert_id}/stop", headers=me).json()
     assert stopped["status"] == "withdrawn"
-    assert send(engine, NOW + timedelta(hours=25)) == 0
+    assert send(engine, NOW + timedelta(minutes=61)) == 0
     assert inbox(engine, "hr@example.com") == []
     teams = client.get("/me/teams", headers=me).json()
-    assert teams[0]["checkinAlerts"] is False
-    again = client.post(f"/me/checkins/{alert_id}/withdraw", headers=me)
+    assert teams[0]["checkinAlerts"] is True  # stops this alert only; the switch stays on
+    again = client.post(f"/me/checkins/{alert_id}/stop", headers=me)
     assert again.status_code == 409
+    other = signed_in(client, engine, "member02@example.com")
+    assert client.post(f"/me/checkins/{alert_id}/stop", headers=other).status_code == 404
+
+
+def test_the_person_can_send_it_now(engine, client):
+    team_id = make_team(engine)
+    raise_now(engine, team_id)
+    me = signed_in(client, engine, "member00@example.com")
+    alert_id = client.get("/me/checkins", headers=me).json()[0]["id"]
+    other = signed_in(client, engine, "member02@example.com")
+    assert client.post(f"/me/checkins/{alert_id}/send", headers=other).status_code == 404
+    sent = client.post(f"/me/checkins/{alert_id}/send", headers=me).json()
+    assert sent["status"] == "sent"
+    assert len(inbox(engine, "hr@example.com")) == 1 and len(inbox(engine, "boss@example.com")) == 1
+    assert client.post(f"/me/checkins/{alert_id}/send", headers=me).status_code == 409
+    assert send(engine, NOW + timedelta(minutes=61)) == 0  # never twice
+    assert len(inbox(engine, "hr@example.com")) == 1
+
+
+def test_the_person_is_told_the_exact_time_one_hour_later(engine, client):
+    team_id = make_team(engine)
+    with session_scope(engine) as db:
+        db.scalar(select(User).where(User.email == "member00@example.com")).timezone = "Asia/Beirut"
+    raise_now(engine, team_id)  # NOW is 09:00 UTC, 11:00 in Beirut
+    [note] = inbox(engine, "member00@example.com")
+    assert "At 12:00 (Asia/Beirut), one hour from now" in note.body
+    me = signed_in(client, engine, "member00@example.com")
+    [alert] = client.get("/me/checkins", headers=me).json()
+    assert alert["sendAfter"].startswith("2026-10-26T10:00")
+
+
+def test_the_consent_says_one_hour():
+    assert "one hour later" in checkin.CONSENT_TEXT
+    assert timedelta(hours=1) == checkin.WAIT
+
+
+def test_repeat_syncs_neither_restart_the_hour_nor_send_twice(engine):
+    make_team(engine)
+    with session_scope(engine) as db:
+        person = db.scalar(select(User).where(User.email == "member00@example.com"))
+        person_id = person.id
+        assert checkin.after_sync(db, person_id, NOW) == 1
+    for later in (timedelta(minutes=20), timedelta(minutes=50)):
+        with session_scope(engine) as db:
+            assert checkin.after_sync(db, person_id, NOW + later) == 0
+    with session_scope(engine) as db:
+        [alert] = db.scalars(select(CheckinAlert)).all()
+        assert alert.send_after.replace(tzinfo=UTC) == NOW + checkin.WAIT  # not restarted
+    assert send(engine, NOW + timedelta(minutes=61)) == 1
+    with session_scope(engine) as db:
+        assert checkin.after_sync(db, person_id, NOW + timedelta(hours=2)) == 0
+    assert send(engine, NOW + timedelta(hours=3)) == 0
+    assert len(inbox(engine, "hr@example.com")) == 1
+
+
+def test_the_database_holds_one_waiting_alert_per_person(engine):
+    team_id = make_team(engine)
+    raise_now(engine, team_id)
+    with pytest.raises(IntegrityError), session_scope(engine) as db:
+        first = db.scalar(select(CheckinAlert))
+        db.add(
+            CheckinAlert(
+                team_id=first.team_id,
+                user_id=first.user_id,
+                rule=checkin.RULE,
+                last_day=first.last_day,
+                evidence=[],
+                status="waiting",
+                raised_at=NOW,
+                send_after=NOW,
+            )
+        )
+        db.flush()
+
+
+@pytest.mark.parametrize("synced", [True, False])
+def test_the_rule_runs_after_a_successful_sync_only(engine, monkeypatch, synced):
+    from app.api import google as google_api
+    from app.db.models import SyncRun
+
+    make_team(engine)
+    with session_scope(engine) as db:
+        person_id = db.scalar(select(User.id).where(User.email == "member00@example.com"))
+
+    def fake_sync(sessions, box, user_id, health_for, today):
+        if synced:
+            with sessions() as db:
+                db.add(
+                    SyncRun(
+                        user_id=user_id,
+                        source="google_health",
+                        status="succeeded",
+                        range_start=today,
+                        range_end=today,
+                        started_at=datetime.now(UTC),
+                        finished_at=datetime.now(UTC),
+                    )
+                )
+
+    monkeypatch.setattr(google_api.connections, "sync", fake_sync)
+    monkeypatch.setattr(google_api.connections, "now_utc", lambda: NOW)  # the data's own today
+    parts = google_api.GoogleParts(None, None, None)
+    google_api.sync_and_check(parts, lambda: session_scope(engine), person_id, TODAY)
+    with session_scope(engine) as db:
+        assert len(db.scalars(select(CheckinAlert)).all()) == (1 if synced else 0)
 
 
 def test_leaving_the_team_stops_it_too(engine, client):
@@ -280,7 +411,7 @@ def test_leaving_the_team_stops_it_too(engine, client):
     raise_now(engine, team_id)
     me = signed_in(client, engine, "member00@example.com")
     assert client.post(f"/me/teams/{team_id}/leave", headers=me).status_code == 204
-    assert send(engine, NOW + timedelta(hours=25)) == 0
+    assert send(engine, NOW + timedelta(minutes=61)) == 0
     with session_scope(engine) as db:
         assert db.scalar(select(CheckinAlert.status)) == "withdrawn"
 
@@ -296,7 +427,7 @@ def test_without_an_hr_contact_only_the_supervisor_gets_it(engine):
     with session_scope(engine) as db:
         db.get(Team, uuid.UUID(team_id)).hr_id = None
     raise_now(engine, team_id)
-    send(engine, NOW + timedelta(hours=25))
+    send(engine, NOW + timedelta(minutes=61))
     with session_scope(engine) as db:
         assert [m.role for m in db.scalars(select(CheckinMark))] == ["supervisor"]
 
@@ -304,7 +435,7 @@ def test_without_an_hr_contact_only_the_supervisor_gets_it(engine):
 def test_an_unmarked_alert_is_shown_once_more(engine):
     team_id = make_team(engine)
     raise_now(engine, team_id)
-    send(engine, NOW + timedelta(hours=25))
+    send(engine, NOW + timedelta(minutes=61))
     with session_scope(engine) as db:
         assert checkin.remind_due(db, NOW + timedelta(days=2)) == 0
         assert checkin.remind_due(db, NOW + timedelta(days=5)) == 1
@@ -381,7 +512,7 @@ def test_a_former_hr_contact_loses_access_at_once_and_gets_no_reminder(engine, c
     stays for the audit, and the supervisor keeps full access."""
     team_id = make_team(engine)
     raise_now(engine, team_id)
-    assert send(engine, NOW + timedelta(hours=25)) == 1
+    assert send(engine, NOW + timedelta(minutes=61)) == 1
     old = signed_in(client, engine, "hr@example.com")
     [before] = client.get("/checkins", headers=old).json()
     alert_id = before["id"]
@@ -424,7 +555,7 @@ def test_changing_who_is_hr_needs_no_fresh_consent(engine):
         ).all()
         assert len(consenting) == 5  # nobody's consent was reset
     assert raise_now(engine, team_id) == 1
-    send(engine, NOW + timedelta(hours=25))
+    send(engine, NOW + timedelta(minutes=61))
     assert [n.title for n in inbox(engine, "new.hr@example.com")] == [
         "Please check in with member00@example.com"
     ]

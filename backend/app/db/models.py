@@ -1002,6 +1002,15 @@ class CheckinAlert(Base):
             f"status IN ({', '.join(repr(s) for s in CHECKIN_STATUSES)})",
             name="ck_checkin_alerts_status",
         ),
+        # At most one waiting alert per person and team, whatever runs at the same time.
+        Index(
+            "uq_checkin_alerts_waiting",
+            "team_id",
+            "user_id",
+            unique=True,
+            sqlite_where=text("status = 'waiting'"),
+            postgresql_where=text("status = 'waiting'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
