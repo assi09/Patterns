@@ -314,3 +314,11 @@ def test_the_name_an_assistant_gives_itself_is_shortened_and_never_trusted():
     assert oauth.client_name({"client_name": "x" * 80}) == "x" * 40
     assert oauth.client_name({}) == "An assistant"
     assert oauth.client_name({"client_name": "   "}) == "An assistant"
+
+
+def test_sign_in_is_off_rather_than_crashing_on_a_plain_http_address(engine):
+    from app.harness.server import oauth_routes
+
+    assert oauth_routes(lambda: session_scope(engine), "http://192.168.1.20:8000", "x") == []
+    assert oauth_routes(lambda: session_scope(engine), "http://localhost:8000", "x")
+    assert oauth_routes(lambda: session_scope(engine), "https://api.example", "x")

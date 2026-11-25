@@ -12,6 +12,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import UTC, date, datetime
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -224,6 +225,12 @@ def oauth_routes(sessions: Sessions, public_url: str, app_url: str) -> list:
     from app.harness import oauth
 
     base = public_url.rstrip("/")
+    parsed = urlparse(base)
+    if parsed.scheme != "https" and parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
+        # OAuth requires an https issuer outside local development (RFC 8414), and the SDK
+        # refuses to start otherwise; pasted tokens still work.
+        logger.warning("OAuth sign-in is off: FA_PUBLIC_URL is not https (%s)", parsed.scheme)
+        return []
     return create_auth_routes(
         provider=oauth.PatternsOAuth(sessions, app_url),
         issuer_url=AnyHttpUrl(base),
