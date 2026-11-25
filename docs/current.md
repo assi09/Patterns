@@ -1,5 +1,9 @@
 # Current state and results
 
+> **Scope change, 2026-11-25:** the app is being rebuilt around the team feature (two gateways,
+> calendar, an MCP server); the individual side is kept behind a flag. See [pivot.md](pivot.md)
+> and [escalation.md](escalation.md). The results below stand for the code they were measured on.
+
 **The one page for what is true now.** As of `main` at `c507f83` (2026-11-23). Every result below
 names the revision it was measured on and whether it still describes today's code. The history
 (audits, plans, negative results, superseded numbers) is kept as it was written, in the documents
