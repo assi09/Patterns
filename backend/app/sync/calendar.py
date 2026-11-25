@@ -230,7 +230,7 @@ def sync(
     user_id: uuid.UUID,
     zone: ZoneInfo,
     today: date,
-    client_for: Callable[[Callable[[], str]], CalendarClient] = CalendarClient,
+    client_for: Callable[[Callable[[], str]], CalendarClient] | None = None,
 ) -> int:
     """Reads the person's calendar from DAYS_BACK before today to DAYS_AHEAD after, stores the
     daily counts and returns the number of days written; raises what stopped it.
@@ -255,7 +255,7 @@ def sync(
     try:
         with sessions() as session:
             credentials = credentials_for(session, box, user_id)
-            client = client_for(lambda: credentials.token)
+            client = (client_for or CalendarClient)(lambda: credentials.token)
             start = datetime.combine(first, time(0), zone)
             end = datetime.combine(last + timedelta(days=1), time(0), zone)
             frame = daily_load(list(client.events(start, end)), zone, first, last)

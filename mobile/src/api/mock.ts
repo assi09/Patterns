@@ -1803,6 +1803,11 @@ export const mockClient: ApiClient = {
     }),
   getMyCheckins: () => later(() => myCheckins),
   getCalendarStatus: () => later(() => calendarStatus),
+  disconnectCalendar: () =>
+    later(() => {
+      calendarStatus = { ...calendarStatus, connected: false, lastError: null };
+      return calendarStatus;
+    }),
   getMyCalendar: () => later(() => []),
   getTeamCalendar: (teamId) =>
     later(() => {

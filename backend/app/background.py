@@ -23,7 +23,7 @@ from sqlalchemy import func, select
 from app.alarms.run import run_all
 from app.config import settings
 from app.db.memory import maintain_all
-from app.db.models import GoogleConnection, SyncRun
+from app.db.models import CalendarConnection, GoogleConnection, SyncRun
 from app.db.session import session_scope
 from app.reminders.loop import _mailer, run_once
 from app.teams.alerts import run_due as run_team_alerts
@@ -36,38 +36,59 @@ ALARM_TICKS = 15  # alarms and background syncs every 15 minutes
 SYNC_EVERY = timedelta(hours=3)
 
 
-def start_due_syncs(now: datetime) -> int:
-    """Starts a sync for each connected person whose last attempt is older than `SYNC_EVERY`."""
-    from app.api import google  # the API's Google wiring and its one-sync-per-person registry
+def _due(last: dict, user_id, now: datetime) -> bool:
+    attempted = last.get(user_id)
+    if attempted is not None and attempted.tzinfo is None:
+        attempted = attempted.replace(tzinfo=UTC)
+    return attempted is None or now - attempted >= SYNC_EVERY
+
+
+def _last_attempts(db, source: str) -> dict:
+    return dict(
+        db.execute(
+            select(SyncRun.user_id, func.max(SyncRun.started_at))
+            .where(SyncRun.source == source)
+            .group_by(SyncRun.user_id)
+        ).all()
+    )
+
+
+def start_due_syncs(now: datetime, sessions=session_scope) -> int:
+    """Starts a sync for each connection whose last attempt is older than `SYNC_EVERY`: Google
+    Health (with the check-in rule) and Google Calendar each on their own, from their own sign-in
+    and their own last attempt, so one expired or disconnected never stops the other."""
+    from app.api import google  # the API's Google wiring and its one-sync-per-person registries
     from app.api.errors import ApiError
-    from app.sync import connections
+    from app.sync import calendar, connections
 
     try:
         parts = google.get_google()
     except ApiError:
         return 0  # Google is not set up on this server
-    started = 0
-    with session_scope() as db:
-        people = list(
+    with sessions() as db:
+        health = list(
             db.scalars(select(GoogleConnection.user_id).where(GoogleConnection.status == "active"))
         )
-        last = dict(
-            db.execute(
-                select(SyncRun.user_id, func.max(SyncRun.started_at))
-                .where(SyncRun.source == connections.SOURCE)
-                .group_by(SyncRun.user_id)
-            ).all()
+        diaries = list(
+            db.scalars(
+                select(CalendarConnection.user_id).where(CalendarConnection.status == "active")
+            )
         )
-    for user_id in people:
-        attempted = last.get(user_id)
-        if attempted is not None and attempted.tzinfo is None:
-            attempted = attempted.replace(tzinfo=UTC)
-        if attempted is not None and now - attempted < SYNC_EVERY:
-            continue
-        work = lambda uid=user_id: google.sync_everything(  # noqa: E731
-            parts, session_scope, uid, now.date()
-        )
-        started += google.syncs.start(user_id, work)
+        health_last = _last_attempts(db, connections.SOURCE)
+        calendar_last = _last_attempts(db, calendar.SOURCE)
+    started = 0
+    for user_id in health:
+        if _due(health_last, user_id, now):
+            work = lambda uid=user_id: google.sync_health(  # noqa: E731
+                parts, sessions, uid, now.date()
+            )
+            started += google.syncs.start(user_id, work)
+    for user_id in diaries:
+        if _due(calendar_last, user_id, now):
+            work = lambda uid=user_id: google.sync_calendar(  # noqa: E731
+                parts, sessions, uid, now.date()
+            )
+            started += google.calendar_syncs.start(user_id, work)
     return started
 
 

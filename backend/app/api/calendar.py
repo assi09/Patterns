@@ -52,6 +52,17 @@ def calendar_status(db: Db, user: Person) -> schemas.CalendarStatus:
     )
 
 
+@router.post("/calendar/disconnect", response_model=schemas.CalendarStatus)
+def disconnect(db: Db, user: Person) -> schemas.CalendarStatus:
+    """Forgets the calendar sign-in only; Google Health is left alone. The days already synced
+    stay, as for Google Health."""
+    connection = calendar.connection_for(db, user.id)
+    if connection is not None:
+        db.delete(connection)
+        db.flush()
+    return calendar_status(db, user)
+
+
 @router.get("/me/calendar", response_model=list[schemas.CalendarDay])
 def my_calendar(db: Db, user: Person, clock: Now) -> list[schemas.CalendarDay]:
     """The person's own daily counts: the last four weeks and what is planned ahead."""

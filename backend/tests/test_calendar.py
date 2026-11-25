@@ -485,3 +485,100 @@ def test_a_failing_check_in_does_not_stop_the_calendar(monkeypatch):
 
     google.sync_everything(google.GoogleParts(None, None, None), Session, uuid.uuid4(), MONDAY)
     assert calls == ["health", "calendar"]
+
+
+# Two sign-ins, scheduled and disconnected apart
+
+
+def wait_for(registry):
+    import time
+
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and registry._running:
+        time.sleep(0.02)
+    assert not registry._running
+
+
+def scheduler_parts(monkeypatch, oauth, box, api):
+    from test_google_connect import FakeHealth
+
+    from app import background
+    from app.api.google import GoogleParts
+    from app.sync.connections import Syncs
+
+    monkeypatch.setattr(google, "get_google", lambda: GoogleParts(oauth, box, FakeHealth))
+    monkeypatch.setattr(google, "syncs", Syncs())
+    monkeypatch.setattr(google, "calendar_syncs", Syncs())
+    original = calendar.CalendarClient
+    monkeypatch.setattr(
+        calendar,
+        "CalendarClient",
+        lambda token: original(
+            token, http=httpx2.Client(transport=httpx2.MockTransport(api)), max_retries=0
+        ),
+    )
+    return background
+
+
+def test_the_calendar_keeps_syncing_when_google_health_has_expired(engine, box, oauth, monkeypatch):
+    """Regression: the scheduler only picked people with an active Google Health sign-in, so a
+    calendar that was still connected stopped updating once Health expired."""
+    background = scheduler_parts(
+        monkeypatch, oauth, box, FakeCalendar({"items": [meeting(MONDAY, (9, 0), (10, 0))]})
+    )
+    with session_scope(engine) as db:
+        person = User(email="p@example.com", status="approved")
+        db.add(person)
+        db.flush()
+        save_connection(db, box, person.id, credentials())
+        db.get(GoogleConnection, person.id).status = "reconnect_needed"  # Health expired
+        calendar.save_connection(db, box, person.id, credentials())
+        person_id = person.id
+    sessions = lambda: session_scope(engine)  # noqa: E731
+    now = datetime.now(UTC)
+    assert background.start_due_syncs(now, sessions) == 1  # the calendar, on its own
+    wait_for(google.calendar_syncs)
+    with session_scope(engine) as db:
+        runs = db.scalars(select(SyncRun).where(SyncRun.user_id == person_id)).all()
+    assert [(r.source, r.status) for r in runs] == [(calendar.SOURCE, "succeeded")]
+    assert background.start_due_syncs(now + timedelta(hours=1), sessions) == 0  # not again so soon
+    assert background.start_due_syncs(now + timedelta(hours=4), sessions) == 1  # but later, yes
+
+
+def test_google_health_keeps_syncing_after_the_calendar_is_disconnected(
+    client, engine, box, oauth, monkeypatch
+):
+    """Disconnecting the calendar removes only its sign-in; Google Health stays connected and is
+    still scheduled, and the calendar is no longer read."""
+    background = scheduler_parts(monkeypatch, oauth, box, FakeCalendar())
+    headers = signed_in(client, engine)
+    with session_scope(engine) as db:
+        person = db.scalar(select(User).where(User.email == "person@example.com"))
+        save_connection(db, box, person.id, credentials())
+        calendar.save_connection(db, box, person.id, credentials())
+        person_id = person.id
+    assert client.get("/calendar/status", headers=headers).json()["connected"] is True
+    off = client.post("/calendar/disconnect", headers=headers)
+    assert off.status_code == 200 and off.json()["connected"] is False
+    assert client.get("/google/status", headers=headers).json()["status"] == "active"
+    with session_scope(engine) as db:
+        assert calendar.connection_for(db, person_id) is None
+        assert db.get(GoogleConnection, person_id) is not None
+    sessions = lambda: session_scope(engine)  # noqa: E731
+    assert background.start_due_syncs(datetime.now(UTC), sessions) == 1  # Google Health only
+    wait_for(google.syncs)
+    with session_scope(engine) as db:
+        sources = {
+            r.source for r in db.scalars(select(SyncRun).where(SyncRun.user_id == person_id))
+        }
+    assert sources == {"google_health"}
+
+
+def test_disconnecting_google_health_leaves_the_calendar(client, engine, box):
+    headers = signed_in(client, engine)
+    with session_scope(engine) as db:
+        person = db.scalar(select(User).where(User.email == "person@example.com"))
+        save_connection(db, box, person.id, credentials())
+        calendar.save_connection(db, box, person.id, credentials())
+    client.post("/google/disconnect", headers=headers)
+    assert client.get("/calendar/status", headers=headers).json()["connected"] is True

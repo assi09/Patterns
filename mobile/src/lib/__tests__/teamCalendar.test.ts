@@ -1,5 +1,6 @@
 import { httpClient } from '@/api/http';
-import { mockClient } from '@/api/mock';
+import { DEMO_OWNER, mockClient } from '@/api/mock';
+import { saveToken } from '@/api/token';
 import type { TeamCalendar, TeamCalendarMetric } from '@/api/types';
 import { calendarEmpty, loadChange, loadValue, plannedWeek } from '@/lib/calendar';
 
@@ -49,10 +50,12 @@ describe('calendar over HTTP', () => {
     await client.connectGoogle('calendar');
     await client.getCalendarStatus();
     await client.getTeamCalendar('t1', '2026-11-16');
+    await client.disconnectCalendar();
     expect(calls).toEqual([
       'POST /google/connect {"capability":"calendar"}',
       'GET /calendar/status ',
       'GET /teams/t1/calendar?week=2026-11-16 ',
+      'POST /calendar/disconnect ',
     ]);
   });
 });
@@ -87,5 +90,17 @@ describe('the meeting load card says which week and why figures are missing', ()
 
   it('says nothing when there are figures', () => {
     expect(calendarEmpty(calendar(6, 6, true))).toBeNull();
+  });
+});
+
+describe('disconnecting the calendar on the mock', () => {
+  it('stops the calendar and nothing else', async () => {
+    await saveToken((await mockClient.logIn(DEMO_OWNER)).token);
+    await mockClient.connectGoogle('calendar');
+    expect((await mockClient.getCalendarStatus()).connected).toBe(true);
+    const health = await mockClient.getGoogleStatus();
+    expect((await mockClient.disconnectCalendar()).connected).toBe(false);
+    expect(await mockClient.getGoogleStatus()).toEqual(health);
+    await saveToken(null);
   });
 });

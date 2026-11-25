@@ -40,6 +40,7 @@ router = APIRouter(prefix="/google", tags=["google"])
 
 sign_ins = SignIns()
 syncs = Syncs()
+calendar_syncs = Syncs()  # the calendar's own, so it never waits on, or for, Google Health
 
 # How soon the app's automatic syncs may start another one. Counted from the last attempt, not the
 # last success, so a failing sync is not retried on every refresh.
@@ -85,10 +86,23 @@ def _start_sync(google: GoogleParts, sessions: Sessions, user: User, today: date
 
 
 def sync_everything(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
-    """Everything that follows a person's sync, in order, each step guarded so one failing never
-    stops the next: Google Health; then, if that sync succeeded, the check-in rule for every team
-    they agreed to it for (app/teams/checkin.py); then their calendar, if they allowed it
-    (app/sync/calendar.py)."""
+    """After connecting or "Sync now": Google Health with the check-in rule, then the calendar,
+    each step guarded so one failing never stops the next."""
+    sync_health(google, sessions, user_id, today)
+    sync_calendar(google, sessions, user_id, today)
+
+
+def sync_calendar(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
+    """The person's calendar, if they connected it; its own sign-in, apart from Google Health's."""
+    try:
+        calendar.sync_person(sessions, google.box, user_id, today, settings.timezone)
+    except Exception:
+        logger.exception("The calendar sync failed")
+
+
+def sync_health(google: GoogleParts, sessions: Sessions, user_id, today: date) -> None:
+    """Google Health; then, if that sync succeeded, the check-in rule for every team the person
+    agreed to it for (app/teams/checkin.py)."""
     started = connections.now_utc()
     try:
         connections.sync(sessions, google.box, user_id, google.health_for, today)
@@ -100,10 +114,6 @@ def sync_everything(google: GoogleParts, sessions: Sessions, user_id, today: dat
                 checkin.after_sync(db, user_id, connections.now_utc())
     except Exception:
         logger.exception("Checking the check-in rule after a sync failed")
-    try:
-        calendar.sync_person(sessions, google.box, user_id, today, settings.timezone)
-    except Exception:
-        logger.exception("The calendar sync failed")
 
 
 @router.get("/status", response_model=schemas.GoogleStatus)
