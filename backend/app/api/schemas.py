@@ -213,6 +213,7 @@ class Credentials(ApiModel):
     # Loose limits here; the account rules give the person a specific message.
     email: str = Field(max_length=1000)
     password: str = Field(max_length=1000)
+    hr_invite: str | None = Field(default=None, max_length=200)  # from an HR invitation link
 
 
 class Account(ApiModel):
@@ -311,6 +312,7 @@ class Team(ApiModel):
     minimum_members: int  # no team figure is built from fewer
     report_email: str | None
     hr_email: str | None = None  # the team's HR contact for check-in alerts
+    hr_invited: str | None = None  # invited, not signed up yet
     paused: str | None = None  # why its figures are paused, when they are
     created_at: datetime
 
@@ -578,6 +580,7 @@ class ShareCheckin(ApiModel):
 
 class TeamHr(ApiModel):
     email: str | None  # None removes the HR contact
+    invited: bool = False  # True: no HR account yet, so an invitation was emailed
 
 
 # Calendar (app/sync/calendar.py): daily counts only, never events

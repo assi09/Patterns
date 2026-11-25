@@ -96,3 +96,18 @@ describe('check-in alerts over HTTP', () => {
     expect(calls[6].body).toEqual({ email: null });
   });
 });
+
+describe('the HR contact on the mock', () => {
+  it('keeps the current contact while a replacement is invited', async () => {
+    await signInAs(DEMO_SUPERVISOR);
+    const team = await mockClient.createTeam('Design');
+    await mockClient.setTeamHr(team.id, 'hr@example.com');
+    expect(await mockClient.setTeamHr(team.id, 'next@example.com')).toEqual({
+      email: 'next@example.com',
+      invited: true,
+    });
+    const [after] = (await mockClient.getTeams()).filter((t) => t.id === team.id);
+    expect(after.hrEmail).toBe('hr@example.com');
+    expect(after.hrInvited).toBe('next@example.com');
+  });
+});

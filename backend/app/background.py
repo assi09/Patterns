@@ -114,7 +114,7 @@ class Background:
     @staticmethod
     def _checkins() -> None:
         try:
-            counts = run_checkins(session_scope, datetime.now(UTC))
+            counts = run_checkins(session_scope, datetime.now(UTC), _mailer(), settings.app_url)
         except Exception:
             logger.exception("The check-in alert pass failed")
             return

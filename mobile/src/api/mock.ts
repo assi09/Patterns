@@ -1843,11 +1843,21 @@ export const mockClient: ApiClient = {
     later(() => {
       const team = supervisedTeams.find((t) => t.id === teamId);
       if (!team) throw new ApiError('No such team.', 'not_found', 404);
-      if (email !== null && !/^hr[^@]*@/i.test(email.trim())) {
-        throw new ApiError('There is no approved HR account with that email.', 'not_hr', 404);
+      const address = email?.trim().toLowerCase() || null;
+      if (address && accounts.some((a) => a.email === address && a.role !== 'hr')) {
+        throw new ApiError(
+          'This person already has a Patterns account that is not an HR account.',
+          'not_hr',
+          409,
+        );
       }
-      team.hrEmail = email?.trim().toLowerCase() ?? null;
-      return { email: team.hrEmail };
+      // Made up: an address starting with "hr" stands for an existing HR account; any other
+      // address gets an invitation, as the backend emails one.
+      const linked = !address || /^hr[^@]*@/.test(address);
+      // An invitation leaves the current contact in place until the new person signs up.
+      if (linked) team.hrEmail = address;
+      team.hrInvited = linked ? null : address;
+      return { email: address, invited: !linked };
     }),
   getActions: () =>
     later(() => {

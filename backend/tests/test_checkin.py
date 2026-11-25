@@ -465,16 +465,17 @@ def test_the_supervisor_names_an_hr_account_and_nothing_else(engine, client):
     team_id = make_team(engine)
     boss = signed_in(client, engine, "boss@example.com")
     ok = client.put(f"/teams/{team_id}/hr", headers=boss, json={"email": "HR@example.com"})
-    assert ok.json() == {"email": "hr@example.com"}
+    assert ok.json() == {"email": "hr@example.com", "invited": False}
     member = client.put(
         f"/teams/{team_id}/hr", headers=boss, json={"email": "member02@example.com"}
     )
-    assert member.status_code == 404
+    assert member.status_code == 409 and member.json()["error"]["code"] == "not_hr"
     someone = signed_in(client, engine, "member02@example.com")
     refused = client.put(f"/teams/{team_id}/hr", headers=someone, json={"email": None})
     assert refused.status_code == 403
     assert client.put(f"/teams/{team_id}/hr", headers=boss, json={"email": None}).json() == {
-        "email": None
+        "email": None,
+        "invited": False,
     }
 
 

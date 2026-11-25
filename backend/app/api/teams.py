@@ -28,7 +28,7 @@ from app.reminders import store
 from app.reminders.schedule import zone
 from app.teams import actions as team_actions
 from app.teams import agent as team_agent
-from app.teams import checkin, playbook, pulse, reports
+from app.teams import checkin, hr, playbook, pulse, reports
 from app.teams import memberships as teams
 from app.teams import observed as observed_text
 
@@ -57,6 +57,7 @@ def _team(db, team: Team) -> schemas.Team:
         minimum_members=teams.MIN_MEMBERS,
         report_email=team.report_email,
         hr_email=db.get(User, team.hr_id).email if team.hr_id else None,
+        hr_invited=(invite.email if (invite := hr.pending(db, team)) else None),
         paused=teams.overlap_problem(db, team),
         created_at=team.created_at,
     )

@@ -12,18 +12,30 @@ Everything here is code; no model is involved.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
 
+from app import email as mail
 from app.api import schemas
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
 from app.api.teams import Supervisor, _membership
+from app.config import settings
 from app.db.models import CheckinAlert, Team, User
-from app.teams import checkin
+from app.email import Mailer
+from app.reminders.loop import _NoMail
+from app.teams import checkin, hr
 from app.teams import memberships as teams
 
 router = APIRouter(tags=["checkins"])
 Person = Annotated[User, Depends(approved_user)]
+
+
+def get_mailer() -> Mailer:
+    """The configured mailer; FastAPI dependency so tests can catch what would be sent. Without
+    one, sending fails with a clear error while linking an existing HR account still works."""
+    try:
+        return mail.mailer_from_settings(settings)
+    except mail.MailError as error:
+        return _NoMail(str(error))
 
 
 def _evidence(record: dict) -> schemas.CheckinEvidence:
@@ -95,9 +107,15 @@ def my_checkins(db: Db, user: Person) -> list[schemas.OwnCheckin]:
 
 
 @router.post("/me/checkins/{alert_id}/send", response_model=schemas.OwnCheckin)
-def send_now(alert_id: str, db: Db, clock: Now, user: Person) -> schemas.OwnCheckin:
+def send_now(
+    alert_id: str,
+    db: Db,
+    clock: Now,
+    user: Person,
+    mailer: Annotated[Mailer, Depends(get_mailer)],
+) -> schemas.OwnCheckin:
     """The person sends their own waiting alert now, before the hour is up."""
-    alert = checkin.send_now(db, user, alert_id, clock)
+    alert = checkin.send_now(db, user, alert_id, clock, mailer, settings.app_url)
     return _own(db, alert, db.get(Team, alert.team_id))
 
 
@@ -132,14 +150,16 @@ def mark_checkin(
 
 
 @router.put("/teams/{team_id}/hr", response_model=schemas.TeamHr)
-def set_hr(team_id: str, body: schemas.TeamHr, db: Db, user: Supervisor) -> schemas.TeamHr:
-    """Names the team's HR contact: an approved account with the hr role, or none."""
+def set_hr(
+    team_id: str,
+    body: schemas.TeamHr,
+    db: Db,
+    clock: Now,
+    user: Supervisor,
+    mailer: Annotated[Mailer, Depends(get_mailer)],
+) -> schemas.TeamHr:
+    """Names the team's HR contact. An existing HR account is linked at once; an address
+    without an account is emailed an invitation to sign up as this team's HR; none removes it."""
     team = teams.supervised_team(db, user, team_id)
-    if body.email is None:
-        team.hr_id = None
-        return schemas.TeamHr(email=None)
-    hr = db.scalar(select(User).where(func.lower(User.email) == body.email.strip().lower()))
-    if hr is None or hr.status != "approved" or hr.role != "hr":
-        raise ApiError(404, "not_hr", "There is no approved HR account with that email.")
-    team.hr_id = hr.id
-    return schemas.TeamHr(email=hr.email)
+    email, invited = hr.set_contact(db, team, user, body.email, clock, mailer, settings.app_url)
+    return schemas.TeamHr(email=email, invited=invited)

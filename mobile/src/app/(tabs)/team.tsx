@@ -44,7 +44,14 @@ import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { windowLabel } from '@/lib/format';
-import { areaReadings, briefingItems, buildingHistory, changeRows, teamStatus } from '@/lib/team';
+import {
+  areaReadings,
+  briefingItems,
+  buildingHistory,
+  changeRows,
+  hrDetail,
+  teamStatus,
+} from '@/lib/team';
 import { fonts, radius, spacing, useColors, useMetricColor } from '@/theme';
 
 // The team last looked at, for this session: switching tabs and back keeps it.
@@ -475,9 +482,9 @@ function HrContact({ team }: { team: SupervisedTeam }) {
       <Row
         icon="shield-checkmark-outline"
         title={team.hrEmail ? `HR: ${team.hrEmail}` : 'No HR contact'}
-        detail="Check-in alerts go to you and HR, only for people who turned them on"
+        detail={hrDetail(team)}
         onPress={() => {
-          setEmail(team.hrEmail ?? '');
+          setEmail(team.hrInvited ?? team.hrEmail ?? '');
           setEditing(true);
         }}
       />
@@ -511,11 +518,17 @@ function HrContact({ team }: { team: SupervisedTeam }) {
           onPress={submit}
         />
       </View>
+      <Text variant="caption" color="muted">
+        An HR account is linked at once. Anyone else is emailed an invitation to sign up as this
+        team&apos;s HR contact; until they do, the current contact stays. HR sees check-in alerts
+        only, never team figures.
+      </Text>
       <Button label="Cancel" variant="secondary" onPress={() => setEditing(false)} />
       {save.error ? <ErrorLine error={save.error} /> : null}
     </View>
   );
 }
+
 
 function PastWeeks({
   reports,

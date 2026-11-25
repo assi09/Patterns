@@ -22,8 +22,9 @@ const TABS: {
   supervisors?: boolean; // shown only to supervisors
   recipients?: boolean; // shown only to HR and supervisors: check-in alerts (docs/escalation.md)
   personal?: boolean; // part of the individual side, hidden when it is off (docs/pivot.md)
+  notHr?: boolean; // hidden from HR accounts, which see check-in alerts only
 }[] = [
-  { name: 'index', title: 'Today', icon: 'pulse-outline', iconActive: 'pulse' },
+  { name: 'index', title: 'Today', icon: 'pulse-outline', iconActive: 'pulse', notHr: true },
   { name: 'team', title: 'Team', icon: 'people-outline', iconActive: 'people', supervisors: true },
   {
     name: 'checkins',
@@ -55,12 +56,18 @@ export default function TabLayout() {
   const unread = useNotifications().data?.unread ?? 0;
   const supervisor = account?.role === 'supervisor';
   const personal = usePersonal();
-  const recipient = supervisor || account?.role === 'hr';
+  const hr = account?.role === 'hr';
+  const recipient = supervisor || hr;
+  // HR opens on Check-ins: Today is someone's own data, which an HR account does not have.
+  useEffect(() => {
+    if (hr) router.replace('/checkins');
+  }, [hr]);
   const colors = useColors();
   const email = account?.email;
-  // The first time an account opens the app on this device, show the guide once.
+  // The first time an account opens the app on this device, show the guide once. Not for HR: the
+  // guide is about one's own Fitbit data, and an HR account has none here.
   useEffect(() => {
-    if (!email) return;
+    if (!email || hr) return;
     let live = true;
     void tourSeen(email).then((seen) => {
       if (live && !seen) router.push('/tour');
@@ -68,7 +75,7 @@ export default function TabLayout() {
     return () => {
       live = false;
     };
-  }, [email]);
+  }, [email, hr]);
   const scheme = useScheme();
   // On wide screens keep the tabs within the content column instead of spread edge to edge.
   const { width } = useWindowDimensions();
@@ -101,7 +108,7 @@ export default function TabLayout() {
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
-      {TABS.map(({ name, title, icon, iconActive, supervisors, recipients, personal: own }) => (
+      {TABS.map(({ name, title, icon, iconActive, supervisors, recipients, personal: own, notHr }) => (
         <Tabs.Screen
           key={name}
           name={name}
@@ -110,7 +117,8 @@ export default function TabLayout() {
             title: name === 'reminders' && !personal ? 'Inbox' : title,
             // hidden, not just disabled
             href:
-              (supervisors && !supervisor) || (recipients && !recipient) || (own && !personal)
+              (supervisors && !supervisor) || (recipients && !recipient) || (own && !personal) ||
+              (notHr && hr)
                 ? null
                 : undefined,
             // Unread notifications show on Reminders, where the inbox is.
