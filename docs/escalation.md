@@ -24,8 +24,10 @@ supervisor then names it as the team's HR contact (`PUT /teams/{id}/hr`). An HR 
 only the check-in alerts of teams it is the contact for, never team reports or named levels.
 
 **Roles, not people.** Alerts go to whoever holds the supervisor and HR-contact roles when the
-alert goes out. Someone who leaves a role (replaced as the team's HR contact, or no longer an HR
-account) loses access to that team's alerts at once: they can no longer list, open or mark them,
+alert goes out. One rule decides who holds a role, for delivery and for every later access
+(`current_holder`): the account assigned to the team for it, still carrying the matching account
+role. Someone who leaves a role (replaced as the team's HR contact, or an HR or supervisor account
+demoted while still assigned) loses access to that team's alerts at once: they can no longer list, open or mark them,
 even through an old link, and get no reminder. Their delivery record (the mark) stays for the
 audit. `tests/test_checkin.py` covers this as a regression test.
 

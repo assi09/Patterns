@@ -632,3 +632,44 @@ def test_send_now_rechecks_membership_and_consent(engine, client):
     with session_scope(engine) as db:
         assert db.scalar(select(CheckinAlert.status)) == "withdrawn"
     assert inbox(engine, "boss@example.com") == [] and inbox(engine, "hr@example.com") == []
+
+
+def test_a_supervisor_demoted_after_sending_loses_access_at_once(engine, client):
+    """Regression: later access checked only the team assignment for supervisors, so a demoted
+    supervisor still assigned to the team could open and mark the named alert and be reminded.
+    Delivery and access now use one rule (`current_holder`)."""
+    team_id = make_team(engine)
+    raise_now(engine, team_id)
+    send(engine, NOW + timedelta(minutes=61))
+    boss = signed_in(client, engine, "boss@example.com")
+    alert_id = client.get("/checkins", headers=boss).json()[0]["id"]
+    with session_scope(engine) as db:  # demoted; still assigned as the team's supervisor
+        demoted = db.scalar(select(User).where(User.email == "boss@example.com"))
+        demoted.role = "member"
+        assert db.get(Team, uuid.UUID(team_id)).supervisor_id == demoted.id
+
+    assert client.get("/checkins", headers=boss).json() == []
+    assert client.post(f"/checkins/{alert_id}/open", headers=boss).status_code == 404
+    marked = client.post(f"/checkins/{alert_id}/mark", headers=boss, json={"outcome": "checked_in"})
+    assert marked.status_code == 404
+
+    with session_scope(engine) as db:
+        assert checkin.remind_due(db, NOW + timedelta(days=5)) == 1  # HR is reminded
+    assert len(inbox(engine, "boss@example.com")) == 1  # the first notice only, no reminder
+    assert len(inbox(engine, "hr@example.com")) == 2
+    with session_scope(engine) as db:
+        record = db.scalar(select(CheckinMark).where(CheckinMark.role == "supervisor"))
+        assert record is not None and record.outcome is None  # the delivery record stays
+
+
+def test_delivery_and_access_use_the_same_rule(engine):
+    team_id = make_team(engine)
+    with session_scope(engine) as db:
+        team = db.get(Team, uuid.UUID(team_id))
+        for email, role in (("boss@example.com", "supervisor"), ("hr@example.com", "hr")):
+            user = db.scalar(select(User).where(User.email == email))
+            mark = CheckinMark(alert_id=uuid.uuid4(), user_id=user.id, role=role)
+            for account_role in ("member", "supervisor", "hr"):
+                user.role = account_role
+                delivered = (user.id, role) in checkin._recipients(db, team)
+                assert delivered == checkin.holds_role(db, mark, team) == (account_role == role)

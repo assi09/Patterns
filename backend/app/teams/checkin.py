@@ -298,17 +298,27 @@ def after_sync(db: Session, user_id: uuid.UUID, now: datetime) -> int:
     )
 
 
+# The one rule for who holds a recipient role, used for delivery and for every later access: the
+# account assigned to the team for that role, still carrying the matching account role.
+ASSIGNED = {"supervisor": "supervisor_id", "hr": "hr_id"}
+
+
+def current_holder(db: Session, team: Team, role: str) -> uuid.UUID | None:
+    """Who holds `role` for the team now, or None: assigned to it on the team, and their account
+    still has that role. A demoted account holds nothing, even while still assigned."""
+    user_id = getattr(team, ASSIGNED[role]) if role in ASSIGNED else None
+    user = db.get(User, user_id) if user_id else None
+    return user.id if user is not None and user.role == role else None
+
+
 def _recipients(db: Session, team: Team) -> list[tuple[uuid.UUID, str]]:
-    """Whoever holds each role now: the team's supervisor if their account is still a supervisor,
-    and its HR contact if theirs is still an HR account. Checked at the moment of sending, so a
-    demotion during the hour means nothing reaches that account."""
+    """Whoever holds each role at the moment of sending, so a demotion during the hour means
+    nothing reaches that account."""
     found = []
-    supervisor = db.get(User, team.supervisor_id)
-    if supervisor is not None and supervisor.role == "supervisor":
-        found.append((supervisor.id, "supervisor"))
-    hr = db.get(User, team.hr_id) if team.hr_id else None
-    if hr is not None and hr.role == "hr" and hr.id != team.supervisor_id:
-        found.append((hr.id, "hr"))
+    for role in ("supervisor", "hr"):
+        holder = current_holder(db, team, role)
+        if holder is not None and holder not in {user_id for user_id, _ in found}:
+            found.append((holder, role))
     return found
 
 
@@ -341,14 +351,10 @@ def _deliver(
 
 
 def holds_role(db: Session, mark: CheckinMark, team: Team) -> bool:
-    """Whether the mark's person still holds the role it was sent to them for. Someone who left
-    it loses every access at once; their mark stays as the record of what was delivered."""
-    if mark.role == "supervisor":
-        return team.supervisor_id == mark.user_id
-    if mark.role == "hr":
-        user = db.get(User, mark.user_id)
-        return team.hr_id == mark.user_id and user is not None and user.role == "hr"
-    return False
+    """Whether the mark's person still holds the role it was sent to them for, by the same rule
+    as delivery (`current_holder`). Someone who left it, or whose account was demoted, loses
+    every access at once; their mark stays as the record of what was delivered."""
+    return current_holder(db, team, mark.role) == mark.user_id
 
 
 def remind_due(db: Session, now: datetime) -> int:
