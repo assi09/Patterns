@@ -29,6 +29,7 @@ import type {
   CalendarDay,
   CalendarStatus,
   AccessTokenInfo,
+  ConnectRequest,
   HarnessSubmission,
   MadeAccessToken,
   Membership,
@@ -227,6 +228,12 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         baseUrl,
         `/me/harness/${encodeURIComponent(id)}/${approve ? 'approve' : 'decline'}`,
       ),
+    getConnectRequest: (id) =>
+      request<ConnectRequest>(baseUrl, `/oauth/requests/${encodeURIComponent(id)}`),
+    decideConnectRequest: (id, allow) =>
+      post<{ redirectTo: string }>(baseUrl, `/oauth/requests/${encodeURIComponent(id)}`, {
+        allow,
+      }),
     disconnectCalendar: () => post<CalendarStatus>(baseUrl, '/calendar/disconnect'),
     getMyCalendar: () => request<CalendarDay[]>(baseUrl, '/me/calendar'),
     getTeamCalendar: (teamId, week) =>

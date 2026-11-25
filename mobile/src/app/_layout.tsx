@@ -74,6 +74,9 @@ function Navigation() {
           contentStyle: { backgroundColor: colors.background },
         }}
       >
+        {/* An assistant's sign-in (docs/mcp.md) is open in every phase: it asks for sign-in
+            and approval itself, so the request survives signing in. */}
+        <Stack.Screen name="connect" options={{ headerShown: false }} />
         {/* Each route exists only in its phase, so a deep link can never skip sign-in or
             approval: signed out, pending or rejected, and approved. */}
         <Stack.Protected guard={state.phase === 'signedOut'} redirectTo={home}>

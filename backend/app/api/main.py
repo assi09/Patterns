@@ -139,6 +139,10 @@ def create_app() -> FastAPI:
 
     app.state.mcp = mcp_server.build(sessions, settings.public_url, settings.timezone)
     app.mount("/mcp", mcp_server.asgi_app(app.state.mcp, settings.public_url))
+    # OAuth sign-in for assistants that cannot take a pasted token (claude.ai, Codex's login).
+    app.router.routes.extend(
+        mcp_server.oauth_routes(sessions, settings.public_url, settings.app_url)
+    )
     return app
 
 

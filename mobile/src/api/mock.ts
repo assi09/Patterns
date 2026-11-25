@@ -46,6 +46,7 @@ import type {
   TeamPreview,
   CalendarStatus,
   AccessTokenInfo,
+  ConnectRequest,
   HarnessSubmission,
   Membership,
   TeamObserved,
@@ -1013,6 +1014,18 @@ let myTeams: Membership[] = [];
 let myCheckins: OwnCheckin[] = [];
 // MCP (docs/mcp.md), made up: tokens made here, and one send waiting for approval.
 let accessTokens: (AccessTokenInfo & { token: string })[] = [];
+// An assistant's sign-in waiting on /connect?request=mock-codex (docs/mcp.md).
+const connectRequests: Record<string, { request: ConnectRequest; decided: boolean }> = {
+  'mock-codex': {
+    request: {
+      clientName: 'Codex',
+      redirectHost: '127.0.0.1',
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+    },
+    decided: false,
+  },
+};
+
 const harnessSubmissions: HarnessSubmission[] = [
   {
     id: 'sent-1',
@@ -1834,6 +1847,7 @@ export const mockClient: ApiClient = {
         createdAt: new Date().toISOString(),
         lastUsedAt: null,
         revokedAt: null,
+        activity: [],
         token: `pat_mock-${Math.random().toString(36).slice(2)}`,
       };
       accessTokens = [made, ...accessTokens];
@@ -1855,6 +1869,29 @@ export const mockClient: ApiClient = {
       }
       found.status = approve ? 'approved' : 'declined';
       return found;
+    }),
+  getConnectRequest: (id) =>
+    later(() => {
+      const found = connectRequests[id];
+      if (!found) throw new ApiError('This sign-in link is not valid.', 'not_found', 404);
+      if (found.decided) {
+        throw new ApiError('This sign-in was already answered.', 'already_decided', 409);
+      }
+      return found.request;
+    }),
+  decideConnectRequest: (id, allow) =>
+    later(() => {
+      const found = connectRequests[id];
+      if (!found) throw new ApiError('This sign-in link is not valid.', 'not_found', 404);
+      if (found.decided) {
+        throw new ApiError('This sign-in was already answered.', 'already_decided', 409);
+      }
+      found.decided = true;
+      return {
+        redirectTo: allow
+          ? 'http://127.0.0.1:5555/callback?code=mock&state=s'
+          : 'http://127.0.0.1:5555/callback?error=access_denied&state=s',
+      };
     }),
   disconnectCalendar: () =>
     later(() => {

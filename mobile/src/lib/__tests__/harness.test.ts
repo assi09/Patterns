@@ -3,7 +3,7 @@ import { DEMO_OWNER, mockClient } from '@/api/mock';
 import { saveToken } from '@/api/token';
 import type { HarnessSubmission } from '@/api/types';
 
-import { submissionText } from '../harness';
+import { activityText, connectAbilities, setupCommands, submissionText } from '../harness';
 
 const sent = (kind: HarnessSubmission['kind'], payload: Record<string, unknown>) =>
   ({ id: 's', kind, status: 'pending', payload, teamId: null, createdAt: '' }) as HarnessSubmission;
@@ -69,5 +69,43 @@ describe('MCP tokens and approvals', () => {
     await expect(mockClient.decideHarnessSubmission(waiting.id, true)).rejects.toMatchObject({
       status: 409,
     });
+  });
+});
+
+describe('setting up a new device', () => {
+  const url = 'https://api.example/mcp/';
+  const token = 'pat_abc';
+
+  it('gives Claude Code one command with the token as a header', () => {
+    expect(setupCommands(url, token).claudeCode).toBe(
+      'claude mcp add --transport http patterns https://api.example/mcp/ --header "Authorization: Bearer pat_abc"',
+    );
+  });
+
+  it('gives Codex its add command and keeps the token out of its config', () => {
+    const codex = setupCommands(url, token);
+    expect(codex.codexAdd).toBe(
+      'codex mcp add patterns --url https://api.example/mcp/ --bearer-token-env-var PATTERNS_TOKEN',
+    );
+    expect(codex.codexAdd).not.toContain(token);
+    expect(codex.codexToken).toBe('export PATTERNS_TOKEN=pat_abc');
+  });
+
+  it('describes activity by tool, refusals included', () => {
+    expect(activityText([])).toBeNull();
+    expect(
+      activityText([
+        { tool: 'who_am_i', calls: 2, failed: 0 },
+        { tool: 'team_overview', calls: 1, failed: 1 },
+      ]),
+    ).toBe('who_am_i 2 · team_overview 1 (1 refused)');
+  });
+});
+
+describe('what an assistant may do once allowed', () => {
+  it('matches each role, and HR gets nothing to allow', () => {
+    expect(connectAbilities('supervisor')?.join(' ')).toContain('at least 5 people');
+    expect(connectAbilities('member')?.join(' ')).toContain('your own');
+    expect(connectAbilities('hr')).toBeNull();
   });
 });

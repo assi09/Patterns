@@ -1127,6 +1127,39 @@ class HrInvite(Base):
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
+class OAuthClient(Base):
+    """An assistant that registered itself for OAuth sign-in (RFC 7591), such as claude.ai or
+    Codex. Anyone may register; registering grants nothing until a person presses Allow."""
+
+    __tablename__ = "oauth_clients"
+
+    client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    info: Mapped[dict] = mapped_column(JSON)  # the registered metadata, as the SDK models it
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class OAuthRequest(Base):
+    """One OAuth sign-in in progress: what the assistant asked for, then, once the person allows
+    it in the app, a one-time code (only its hash) that the assistant trades for tokens."""
+
+    __tablename__ = "oauth_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[str] = mapped_column(
+        ForeignKey("oauth_clients.client_id", ondelete="CASCADE"), index=True
+    )
+    params: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), default=None
+    )
+    code_hash: Mapped[str | None] = mapped_column(String(64), unique=True, default=None)
+    code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
 class AccessToken(Base):
     """A personal access token for the MCP server (docs/mcp.md). Only a hash is stored; the
     token is shown once when made. Revoking it, or deleting the account, stops it at once."""
@@ -1142,6 +1175,16 @@ class AccessToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # Set when the assistant signed in through OAuth instead of a pasted token (docs/mcp.md): the
+    # access token then expires and is renewed with the refresh token, both rotated each time.
+    client_id: Mapped[str | None] = mapped_column(
+        ForeignKey("oauth_clients.client_id", ondelete="CASCADE"), default=None, index=True
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    refresh_hash: Mapped[str | None] = mapped_column(String(64), unique=True, default=None)
+    refresh_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
 
 HARNESS_KINDS = ("calendar_days", "team_event")
@@ -1179,3 +1222,22 @@ class HarnessSubmission(Base):
     status: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class HarnessCall(Base):
+    """One MCP tool call, for the person's own activity view and operations: which tool, whether
+    it worked, when. Never its inputs or results (docs/mcp.md)."""
+
+    __tablename__ = "harness_calls"
+    __table_args__ = (Index("ix_harness_calls_token_at", "token_id", "at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    token_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("access_tokens.id", ondelete="CASCADE"), default=None
+    )
+    tool: Mapped[str] = mapped_column(String(40))
+    ok: Mapped[bool] = mapped_column(Boolean)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

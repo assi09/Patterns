@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-105 operations, grouped by area.
+107 operations, grouped by area.
 
 ### meta
 
@@ -288,6 +288,8 @@ Besides the codes listed under [Error codes](#error-codes):
 | `GET` | `/me/harness` | approved |  |  | list[[SubmissionOut](#submissionout)] | What a harness sent that waits for this person's approval. |
 | `POST` | `/me/harness/{submission_id}/approve` | approved | `submission_id` |  | [SubmissionOut](#submissionout) |  |
 | `POST` | `/me/harness/{submission_id}/decline` | approved | `submission_id` |  | [SubmissionOut](#submissionout) |  |
+| `GET` | `/oauth/requests/{request_id}` | approved | `request_id` |  | [ConnectRequestOut](#connectrequestout) |  |
+| `POST` | `/oauth/requests/{request_id}` | approved | `request_id` | [ConnectDecisionIn](#connectdecisionin) | [ConnectDecisionOut](#connectdecisionout) |  |
 
 ## Error codes
 
@@ -299,6 +301,7 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 400 | `invite_other_email` |
 | 401 | `invalid_credentials` |
 | 401 | `signed_out` |
+| 403 | `cannot_connect` |
 | 403 | `forbidden` |
 | 403 | `not_approved` |
 | 403 | `not_supervisor` |
@@ -329,6 +332,7 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 409 | `too_many_tokens` |
 | 409 | `version_conflict` |
 | 409 | `week_not_over` |
+| 410 | `expired` |
 | 422 | `bad_change` |
 | 422 | `bad_start` |
 | 422 | `in_the_past` |
@@ -527,11 +531,31 @@ One signal behind a person's own check-in alert; shown to that person only.
 | `outcome` | `checked_in` \| `not_needed` or null | yes |  |
 | `markedAt` | string (date-time) or null | yes |  |
 
+### ConnectDecisionIn
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `allow` | boolean | yes |  |
+
+### ConnectDecisionOut
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `redirectTo` | string | yes |  |
+
 ### ConnectOptions
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `capability` | `food_logging` \| `workout_logging` \| `calendar` | yes |  |
+
+### ConnectRequestOut
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `clientName` | string | yes |  |
+| `redirectHost` | string | yes |  |
+| `expiresAt` | string (date-time) | yes |  |
 
 ### ConnectStart
 
@@ -776,6 +800,8 @@ The admin's view: who wrote it, so the team can follow up.
 | `createdAt` | string (date-time) | yes |  |
 | `lastUsedAt` | string (date-time) or null | yes |  |
 | `revokedAt` | string (date-time) or null | yes |  |
+| `activity` | list[[ToolCount](#toolcount)] |  | default `[]` |
+| `signedIn` | boolean |  | default `False` |
 | `token` | string | yes |  |
 
 ### MarkCheckin
@@ -1430,6 +1456,16 @@ What joining means, shown before the person agrees.
 | `createdAt` | string (date-time) | yes |  |
 | `lastUsedAt` | string (date-time) or null | yes |  |
 | `revokedAt` | string (date-time) or null | yes |  |
+| `activity` | list[[ToolCount](#toolcount)] |  | default `[]` |
+| `signedIn` | boolean |  | default `False` |
+
+### ToolCount
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `tool` | string | yes |  |
+| `calls` | integer | yes |  |
+| `failed` | integer | yes |  |
 
 ### Usual
 
