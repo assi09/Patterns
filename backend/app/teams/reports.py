@@ -128,6 +128,14 @@ def lined_up(db: Session, team: Team, window: Window) -> str:
     return f" It lined up with your note: {said}."
 
 
+def dates_text(window: Window) -> str:
+    """An inclusive date range as a reader says it: "Oct 5 to Nov 1", or "Oct 5 to 31"."""
+    start = f"{window.start:%b} {window.start.day}"
+    if (window.start.year, window.start.month) == (window.end.year, window.end.month):
+        return f"{start} to {window.end.day}"
+    return f"{start} to {window.end:%b} {window.end.day}"
+
+
 def priorities(db: Session, team: Team, scan) -> list[dict]:
     """What the week's report leads with: every lasting or new team change that is worth a
     supervisor's attention (the alerts' rule), concerns first, lasting before new, each with the
@@ -144,9 +152,11 @@ def priorities(db: Session, team: Team, scan) -> list[dict]:
         running = evidence.stats["weeks_running"]
         label = team_info(metric).label
         moved = latest["members_up"] if way == "up" else latest["members_down"]
+        # The scan compares every week with one fixed baseline (its record's second window), not
+        # with the four weeks before this one, so the sentence names that baseline's dates.
         figures = (
-            f"median change {change_text(metric, latest['median_change'])} against the four "
-            f"weeks before ({moved} of {latest['members']} people)"
+            f"median change {change_text(metric, latest['median_change'])} against "
+            f"{dates_text(evidence.windows[1])} ({moved} of {latest['members']} people)"
         )
         if status == "lasting":
             word = "later" if metric == "bedtime_hour" else "higher" if way == "up" else "lower"
