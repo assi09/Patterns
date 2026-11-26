@@ -504,3 +504,38 @@ eligibility can only be lower. A change on all 7 days at once is a stylised even
 
 **Decision.** The production rule stays as it is: it sends a name to HR, and a rule that finds more
 would need its own evaluation under a new name.
+
+### Candidate rules (2026-11-26)
+
+`eval/checkin_variants.py` at `9aee224` (#249); results in
+`eval/results/checkin_variants_2026-11-26.json`. **Evaluation only: production still runs
+checkin-v1.**
+
+**Design.** 21 candidates were compared with today's rule (checkin-v1):
+- today's rule with a smaller margin, fewer days, and recovery counted or not;
+- a week-level test against each person's own spread.
+
+They were tuned on PMData and 30 of LifeSnaps' people under a budget fixed beforehand: at most
+1 firing per 200 eligible ordinary weeks, and 2 h less sleep alone firing in at most 1 in 100
+observable weeks. The chosen candidate was then confirmed once on the other 21 LifeSnaps people.
+Eight candidates met the budget, and none of them counts recovery as a separate signal.
+
+**Chosen on tuning:** half the margin, 4 of 7 days, and recovery not a separate signal (it is
+partly computed from sleep).
+
+| Held out (LifeSnaps 21) | checkin-v1 | Candidate |
+|---|---|---|
+| Ordinary weeks fired | 0/150 | 0/150 |
+| 30 min less sleep, 3 more beats | 0/111 | 1/111 |
+| 60 min, 5 beats | 0/111 | 5/111 |
+| 90 min, 8 beats | 14/111 | 45/111 |
+| 120 min, 10 beats | 41/111 | **79/111** |
+| 120 min less sleep alone | 0/111 | 1/111 |
+
+**Limits:**
+- The held-out group is 21 people.
+- The ordinary weeks are unlabelled, so these are firing rates, not false-alarm rates.
+- The same wear assumptions apply as above.
+
+**Not yet decided:** whether to switch. A switch would ship under a new rule name with its own
+tests.
