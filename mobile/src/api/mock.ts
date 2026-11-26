@@ -1475,7 +1475,7 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
         label: 'Time asleep',
         kind: 'concern',
         status: 'lasting',
-        text: 'Time asleep has been lower for 3 weeks running: median change -38 min against the four weeks before (7 of 8 people). It lined up with your note: Release deadline (Oct 20).',
+        text: 'Time asleep has been lower for 3 weeks running: median change -38 min against Sep 22 to Oct 19 (7 of 8 people). It lined up with your note: Release deadline (Oct 20).',
         evidenceId: 'e_sleep_minutes',
       },
       {
@@ -1483,7 +1483,7 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
         label: 'Recovery',
         kind: 'concern',
         status: 'new',
-        text: 'Recovery fell this week: median change -9 against the four weeks before (6 of 8 people).',
+        text: 'Recovery fell this week: median change -9 against Sep 22 to Oct 19 (6 of 8 people).',
         evidenceId: 'e_recovery_score',
       },
       {
@@ -1491,7 +1491,7 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
         label: 'Steps',
         kind: 'improvement',
         status: 'new',
-        text: 'Steps rose this week: median change +1,400 against the four weeks before (7 of 8 people).',
+        text: 'Steps rose this week: median change +1,400 against Sep 22 to Oct 19 (7 of 8 people).',
         evidenceId: 'e_steps',
       },
     ],

@@ -398,3 +398,59 @@ def test_an_ended_challenge_says_whether_it_moved_its_metric(engine):
         )
     (row,) = report_for(engine, team_id).body["challenges"]
     assert row["text"].startswith("Lights out by 23:00: time asleep rose during it")
+
+
+def test_a_priority_names_the_fixed_baseline_its_figure_was_measured_against(engine):
+    """Regression (audit gap 1): priority lines said "against the four weeks before", but the scan
+    measures every week against one fixed baseline, the 28 days before its first week. With sleep
+    raised for three weeks and then dropped, the two baselines give clearly different figures,
+    and each sentence must name the one its own figure used."""
+    raised, dropped = WEEK.start - timedelta(days=21), WEEK.start
+    team_id, _ = team_with(
+        engine, 8, (Step("sleep_minutes", raised, 40), Step("sleep_minutes", dropped, -90))
+    )
+    report = report_for(engine, team_id)
+    sleep = next(p for p in report.body["priorities"] if p["metric"] == "sleep_minutes")
+    section = next(s for s in report.body["sections"] if s["metric"] == "sleep_minutes")
+    scan, rolling = report.evidence[sleep["evidence_id"]], report.evidence[section["evidence_id"]]
+
+    # The fixed baseline: the 28 days before the scan's first week (28 Sep to 4 Oct).
+    assert scan["windows"][1] == {"start": "2026-08-31", "end": "2026-09-27"}
+    assert "against Aug 31 to Sep 27 (" in sleep["text"]
+    assert "four weeks before" not in sleep["text"]
+    figure = scan["stats"]["weeks"][-1]["median_change"]
+    assert change_text("sleep_minutes", figure) in sleep["text"]
+
+    # The section's own figure, against the four weeks before this week, is a different number,
+    # so naming the wrong baseline would misstate the change by about the raised level.
+    assert abs(rolling["stats"]["median_change"] - figure) > 15
+    assert change_text("sleep_minutes", rolling["stats"]["median_change"]) in section["text"]
+
+
+def test_dates_are_written_as_a_reader_says_them():
+    from app.analysis.evidence import Window
+
+    assert reports.dates_text(Window(start=date(2026, 10, 5), end=date(2026, 11, 1))) == (
+        "Oct 5 to Nov 1"
+    )
+    assert reports.dates_text(Window(start=date(2026, 10, 5), end=date(2026, 10, 31))) == (
+        "Oct 5 to 31"
+    )
+    assert reports.dates_text(Window(start=date(2025, 12, 8), end=date(2026, 1, 4))) == (
+        "Dec 8 to Jan 4"
+    )
+
+
+@pytest.mark.parametrize("hours, word, sign", [(-1.0, "earlier", "-"), (1.0, "later", "+")])
+def test_a_lasting_bedtime_shift_is_named_the_way_it_went(engine, hours, word, sign):
+    """Regression: a lasting bedtime change was always called "later", so three weeks of going
+    to bed an hour earlier read "Bedtime has been later" beside a negative figure."""
+    began = WEEK.start - timedelta(days=14)  # three weeks running by the report's week
+    team_id, _ = team_with(engine, 8, (Step("bedtime_hour", began, hours),))
+    report = report_for(engine, team_id)
+    (bedtime,) = [p for p in report.body["priorities"] if p["metric"] == "bedtime_hour"]
+    record = report.evidence[bedtime["evidence_id"]]["stats"]
+    assert record["status"] == "lasting"
+    assert record["direction"] == ("up" if hours > 0 else "down")
+    assert bedtime["text"].startswith(f"Bedtime has been {word} for 3 weeks running")
+    assert f"median change {sign}" in bedtime["text"]
