@@ -299,7 +299,7 @@ CAUSAL = re.compile(
     r"\b(because|caused|due to|led to|leads to|results? in|drove|driven by)\b",
     re.IGNORECASE,
 )
-MEDIAN = re.compile(r"median change ([+-]?\d+(?:\.\d+)?)")
+MEDIAN = re.compile(r"median(?: change)? ([+-]?[\d,]+(?:\.\d+)?)")
 COUNTS = re.compile(r"\((\d+) of (\d+)")
 
 
@@ -321,14 +321,20 @@ def check_items(
                 in_week = False
         cited = [evidence[k] for k in item.get("evidence_ids", []) if k in evidence]
         values = {str(v) for r in cited for v in r.get("stats", {}).values()}
+        minutes = (
+            60
+            if item.get("metric") == "bedtime_hour" or "Bedtime" in item["text"]
+            else 1
+        )
         medians = [
-            abs(float(r["stats"][k]))
+            minutes * abs(float(r["stats"][k]))
             for r in cited
             for k in r.get("stats", {})
             if "median" in k and isinstance(r["stats"][k], (int, float))
         ]
         for found in MEDIAN.findall(item["text"]):
-            if not any(abs(abs(float(found)) - m) <= 0.5 for m in medians):
+            value = abs(float(found.replace(",", "")))
+            if not any(abs(value - m) <= 0.5 for m in medians):
                 numbers = False
         for a, b in COUNTS.findall(item["text"]):
             if b not in values and a not in values:
@@ -458,6 +464,7 @@ def run() -> None:
                     {
                         "text": s["text"],
                         "kind": "section",
+                        "metric": s["metric"],
                         "evidence_ids": [s["evidence_id"]]
                         if s.get("evidence_id")
                         else [],
@@ -602,17 +609,35 @@ def summarise(cases: list[dict], spec: dict) -> dict:
         "participant_reuse": 0,
         "outcomes": by_team,
         "task_completion": {
-            "briefing_for_every_ready_report": f"{sum(bool(c['briefing_kinds']) for c in ready)}/{len(ready)}",
+            "briefing_for_every_ready_report": f"{sum(c['briefing_kinds'] is not None for c in ready)}/{len(ready)}",
             "no_briefing_for_withheld": f"{sum(c['briefing_kinds'] is None for c in withheld)}/{len(withheld)}",
         },
         "checks_coach": {k: rate(k, "checks_coach") for k in keys},
         "checks_fixed_order": {k: rate(k, "checks_fixed") for k in keys},
         "recompute_agrees": f"{sum(recomputed)}/{len(recomputed)}",
+        # Added after the first full run (descriptive, not a pre-registered outcome): why sections
+        # were withheld, by metric, so "partial" is not read as a team-size effect alone.
+        "withheld_sections_by_contributors": _withheld_breakdown(ready),
         "paths": {
             p: sum(c["path"] == p for c in cases if c["status"] == "ready")
             for p in {c["path"] for c in cases}
         },
     }
+
+
+def _withheld_breakdown(ready: list[dict]) -> dict:
+    out: dict[str, dict[str, int]] = {}
+    for c in ready:
+        for metric, state in c["section_status"].items():
+            if state != "not_enough_data":
+                continue
+            n = c["contributors"].get(metric) or 0
+            bucket = (
+                "0 (no readings)" if n == 0 else ("4 (one short)" if n == 4 else "1-3")
+            )
+            row = out.setdefault(metric, {})
+            row[bucket] = row.get(bucket, 0) + 1
+    return out
 
 
 if __name__ == "__main__":
