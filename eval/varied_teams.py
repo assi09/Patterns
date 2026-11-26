@@ -227,6 +227,13 @@ def _ls_source() -> dict[str, dict[date, dict[str, float]]]:
     return out
 
 
+def _day(text: str) -> date:
+    """PMData writes dates two ways: 2019-11-01 00:00:00 and 11/01/19 00:00:00."""
+    if "/" in text:
+        return datetime.strptime(text[:8], "%m/%d/%y").date()
+    return date.fromisoformat(text[:10])
+
+
 def _pm_source() -> dict[str, dict[date, dict[str, float]]]:
     out: dict[str, dict[date, dict[str, float]]] = {}
     for folder in sorted(p for p in real_data.PMDATA.glob("p[0-9]*") if p.is_dir()):
@@ -234,7 +241,7 @@ def _pm_source() -> dict[str, dict[date, dict[str, float]]]:
         fitbit = folder / "fitbit"
         steps: dict[date, float] = {}
         for row in json.loads((fitbit / "steps.json").read_text()):
-            day = datetime.strptime(row["dateTime"], "%m/%d/%y %H:%M:%S").date()
+            day = _day(row["dateTime"])
             steps[day] = steps.get(day, 0.0) + float(row["value"])
         for day, value in steps.items():
             if value:
@@ -242,7 +249,7 @@ def _pm_source() -> dict[str, dict[date, dict[str, float]]]:
         for row in json.loads((fitbit / "resting_heart_rate.json").read_text()):
             value = float(row["value"].get("value") or 0)
             if value:
-                day = datetime.strptime(row["dateTime"], "%m/%d/%y %H:%M:%S").date()
+                day = _day(row["dateTime"])
                 days.setdefault(day, {})["resting_hr"] = value
         asleep: dict[date, float] = {}
         for row in json.loads((fitbit / "sleep.json").read_text()):
