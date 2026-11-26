@@ -1,0 +1,235 @@
+{
+  "ran": "2026-11-26",
+  "passed": 44,
+  "of": 44,
+  "by_group": {
+    "auth": "8/8",
+    "reach": "15/15",
+    "send": "4/4",
+    "input": "12/12",
+    "inject": "4/4",
+    "limit": "1/1"
+  },
+  "checks": [
+    {
+      "group": "auth",
+      "check": "no token: 401",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "a made-up pat_ token: 401",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "a made-up OAuth token: 401",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "a revoked token: 401",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "an unapproved account's token: 401",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "the token in the query string instead of the header: 401",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "a forged Host header (DNS rebinding): refused",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "a valid token works (control)",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "supervisor A reads team A's figures (control)",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "no figure names a person or carries an email",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "supervisor B asks for team A: refused",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "...with the same answer as a team that does not exist",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a member asks for their own team's figures: refused",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "...and the assistant is told why",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a member asks for the team's meeting load: refused",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "HR: who_am_i says nothing is allowed",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "HR: every read refused",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a supervisor demoted after making the token: their old team refused",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a member reads their own days (control)",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a member asks for 100,000 days: capped at 28",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a member passes another member's id: refused or ignored, never their data",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "no tool reaches check-in alerts",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "calling a made-up check-in tool: refused",
+      "passed": true
+    },
+    {
+      "group": "send",
+      "check": "a supervisor sends calendar days (members only): refused",
+      "passed": true
+    },
+    {
+      "group": "send",
+      "check": "a member sends a team event: refused",
+      "passed": true
+    },
+    {
+      "group": "send",
+      "check": "supervisor B sends an event to team A: refused",
+      "passed": true
+    },
+    {
+      "group": "send",
+      "check": "HR sends anything: refused",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with a date years ahead: refused",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with a negative count: refused",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with more minutes than a day has: refused",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with an extra field: refused",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with not a date: refused",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with a thousand days: refused",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "an event with a 100,000-character title: refused",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "an event with a title with control characters: refused",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a title with line breaks: kept as one line of data, held",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "SQL in the team id: refused cleanly",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a path in the team id: refused cleanly",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a 5 MB request: refused or answered without harm",
+      "passed": true
+    },
+    {
+      "group": "inject",
+      "check": "an injected title is refused at the door, with the reason",
+      "passed": true
+    },
+    {
+      "group": "inject",
+      "check": "an event about one person singled out: refused, as a note typed in the app would be",
+      "passed": true
+    },
+    {
+      "group": "inject",
+      "check": "an event about someone's health: refused, as a note typed in the app would be",
+      "passed": true
+    },
+    {
+      "group": "inject",
+      "check": "before approval it changes nothing the supervisor reads",
+      "passed": true
+    },
+    {
+      "group": "limit",
+      "check": "65 calls in a minute: the last 5 refused",
+      "passed": true
+    }
+  ]
+}
