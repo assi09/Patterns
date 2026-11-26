@@ -1,119 +1,122 @@
 {
   "ran": "2026-11-26",
-  "passed": 44,
-  "of": 44,
+  "commit": "e95c832",
+  "grading": "strict: the expected denial text or exact HTTP answer only",
+  "passed": 48,
+  "of": 48,
   "by_group": {
     "auth": "8/8",
     "reach": "15/15",
     "send": "4/4",
-    "input": "12/12",
+    "input": "15/15",
     "inject": "4/4",
-    "limit": "1/1"
+    "limit": "1/1",
+    "server": "1/1"
   },
   "checks": [
     {
       "group": "auth",
-      "check": "no token: 401",
+      "check": "no token: 401 invalid_token",
       "passed": true
     },
     {
       "group": "auth",
-      "check": "a made-up pat_ token: 401",
+      "check": "a made-up pat_ token: 401 invalid_token",
       "passed": true
     },
     {
       "group": "auth",
-      "check": "a made-up OAuth token: 401",
+      "check": "a made-up OAuth token: 401 invalid_token",
       "passed": true
     },
     {
       "group": "auth",
-      "check": "a revoked token: 401",
+      "check": "a revoked token: 401 invalid_token",
       "passed": true
     },
     {
       "group": "auth",
-      "check": "an unapproved account's token: 401",
+      "check": "an unapproved account's token: 401 invalid_token",
       "passed": true
     },
     {
       "group": "auth",
-      "check": "the token in the query string instead of the header: 401",
+      "check": "the token in the query string: 401",
       "passed": true
     },
     {
       "group": "auth",
-      "check": "a forged Host header (DNS rebinding): refused",
+      "check": "a forged Host header: 421 Invalid Host header",
       "passed": true
     },
     {
       "group": "auth",
-      "check": "a valid token works (control)",
+      "check": "control: a valid token lists the tools (200)",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "supervisor A reads team A's figures (control)",
+      "check": "control: supervisor A reads team A's report figures",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "no figure names a person or carries an email",
+      "check": "control: no name or email in team A's figures",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "supervisor B asks for team A: refused",
+      "check": "supervisor B asks for team A: 'No such team.'",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "...with the same answer as a team that does not exist",
+      "check": "a team that does not exist: the same 'No such team.'",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "a member asks for their own team's figures: refused",
+      "check": "a member asks for their team's figures",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "...and the assistant is told why",
+      "check": "a member asks for the team's meeting load",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "a member asks for the team's meeting load: refused",
+      "check": "HR: who_am_i says nothing through MCP",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "HR: who_am_i says nothing is allowed",
+      "check": "HR asks for team figures",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "HR: every read refused",
+      "check": "HR calls my_recent_days",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "a supervisor demoted after making the token: their old team refused",
+      "check": "HR calls my_calendar_days",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "a member reads their own days (control)",
+      "check": "a supervisor demoted after making the token: their old team",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "a member asks for 100,000 days: capped at 28",
+      "check": "a member asks for 100,000 days: answered, capped at 28",
       "passed": true
     },
     {
       "group": "reach",
-      "check": "a member passes another member's id: refused or ignored, never their data",
+      "check": "a member passes another member's id: ignored, own days only",
       "passed": true
     },
     {
@@ -123,112 +126,132 @@
     },
     {
       "group": "reach",
-      "check": "calling a made-up check-in tool: refused",
+      "check": "a made-up check-in tool: 'Unknown tool'",
       "passed": true
     },
     {
       "group": "send",
-      "check": "a supervisor sends calendar days (members only): refused",
+      "check": "a supervisor sends calendar days",
       "passed": true
     },
     {
       "group": "send",
-      "check": "a member sends a team event: refused",
+      "check": "a member sends a team event",
       "passed": true
     },
     {
       "group": "send",
-      "check": "supervisor B sends an event to team A: refused",
+      "check": "supervisor B sends an event to team A",
       "passed": true
     },
     {
       "group": "send",
-      "check": "HR sends anything: refused",
+      "check": "HR sends a team event",
       "passed": true
     },
     {
       "group": "input",
-      "check": "calendar days with a date years ahead: refused",
+      "check": "calendar days with a date years ahead",
       "passed": true
     },
     {
       "group": "input",
-      "check": "calendar days with a negative count: refused",
+      "check": "calendar days with a negative count",
       "passed": true
     },
     {
       "group": "input",
-      "check": "calendar days with more minutes than a day has: refused",
+      "check": "calendar days with more minutes than a day has",
       "passed": true
     },
     {
       "group": "input",
-      "check": "calendar days with an extra field: refused",
+      "check": "calendar days with an extra field",
       "passed": true
     },
     {
       "group": "input",
-      "check": "calendar days with not a date: refused",
+      "check": "calendar days with not a date",
       "passed": true
     },
     {
       "group": "input",
-      "check": "calendar days with a thousand days: refused",
+      "check": "calendar days with a thousand days",
       "passed": true
     },
     {
       "group": "input",
-      "check": "an event with a 100,000-character title: refused",
+      "check": "calendar days with the same day twice",
       "passed": true
     },
     {
       "group": "input",
-      "check": "an event with a title with control characters: refused",
+      "check": "a 100,000-character title",
       "passed": true
     },
     {
       "group": "input",
-      "check": "a title with line breaks: kept as one line of data, held",
+      "check": "a title with NUL",
       "passed": true
     },
     {
       "group": "input",
-      "check": "SQL in the team id: refused cleanly",
+      "check": "a title with a terminal escape",
       "passed": true
     },
     {
       "group": "input",
-      "check": "a path in the team id: refused cleanly",
+      "check": "a title with a right-to-left override",
       "passed": true
     },
     {
       "group": "input",
-      "check": "a 5 MB request: refused or answered without harm",
+      "check": "a title on two lines: held as one line of data",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "SQL in the team id",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a path in the team id",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a 5 MB request: 413 Request body too large",
       "passed": true
     },
     {
       "group": "inject",
-      "check": "an injected title is refused at the door, with the reason",
+      "check": "an instruction as a title",
       "passed": true
     },
     {
       "group": "inject",
-      "check": "an event about one person singled out: refused, as a note typed in the app would be",
+      "check": "one person singled out",
       "passed": true
     },
     {
       "group": "inject",
-      "check": "an event about someone's health: refused, as a note typed in the app would be",
+      "check": "someone's health",
       "passed": true
     },
     {
       "group": "inject",
-      "check": "before approval it changes nothing the supervisor reads",
+      "check": "nothing sent changes what the supervisor reads",
       "passed": true
     },
     {
       "group": "limit",
-      "check": "65 calls in a minute: the last 5 refused",
+      "check": "65 calls in a minute: 60 answered, then 5 'Too many calls'",
+      "passed": true
+    },
+    {
+      "group": "server",
+      "check": "no crash logged by the API during the run",
       "passed": true
     }
   ]
