@@ -549,6 +549,9 @@ way.
   people), meetings after hours up 49 min (6 of 6), back-to-back meetings up 10 (6 of 6), focus
   time down 4 h 22 min (6 of 6)."* (the real Monday job on the made-up demo team, 2026-11-26).
   Always "in the same week", never "because": moving together is not proof of a cause.
+- A wellbeing finding the briefing shows counts as a change, including a concern lasting weeks
+  that is steady against the week before (fixed 2026-11-26, after the production demo team showed
+  "no clear change" under a three-week sleep drop).
 - With no wellbeing change found: *"Calendars were busier last week. For the typical person,
   against their own usual week: ... We detected no clear change in the available team
   readings."*, naming any area with too few readings to tell (*"Too few readings to tell for

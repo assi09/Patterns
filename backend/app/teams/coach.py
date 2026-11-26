@@ -102,10 +102,13 @@ def _part(evidence: Evidence, first: bool) -> str:
     )
 
 
-def line(load: list[Evidence], sections: list[dict]) -> dict | None:
+def line(load: list[Evidence], sections: list[dict], findings: bool = False) -> dict | None:
     """The briefing's calendar sentence, or None when nothing clearly moved or too few calendars.
     `sections` are the week's report sections, which say per wellbeing metric whether it changed,
-    stayed steady or had too few readings to tell."""
+    stayed steady or had too few readings to tell. `findings` is whether the briefing shows a
+    wellbeing finding of its own, such as a concern lasting weeks: steady against the week before,
+    so no section says "changed", yet a change all the same, and "no clear change" beside it would
+    contradict it."""
     found = moved(load)
     if not found:
         return None
@@ -113,7 +116,7 @@ def line(load: list[Evidence], sections: list[dict]) -> dict | None:
     parts = [_part(e, i == 0) for i, e in enumerate(shown)]
     figures = f"For the typical person, against their own usual week: {', '.join(parts)}."
     ids = [e.id for e in shown]
-    if any(s.get("status") == "changed" for s in sections):
+    if findings or any(s.get("status") == "changed" for s in sections):
         text = f"In the same week, the team's calendars were busier than usual. {figures}"
         return {"text": text, "kind": "calendar", "metric": None, "evidence_ids": ids}
     # No team-wide change found. That is all it says: an absence of evidence, not a measure of

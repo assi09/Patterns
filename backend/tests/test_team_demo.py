@@ -93,6 +93,13 @@ def test_the_rehearsed_demo_gives_a_finding_its_calendar_and_one_change_to_appro
     assert "change" in kinds and "calendar" in kinds and "proposal" in kinds
     [proposal] = [i for i in items if i["kind"] == "proposal"]
     assert "evening boundary" in proposal["text"] and "after hours rose" in proposal["text"]
+    # Beside a sleep drop lasting three weeks, the calendar line must not say nothing changed
+    # (seen on production, 2026-11-26: the week itself was steady against the week before).
+    [change] = [i for i in items if i["kind"] == "change"]
+    [calendar_line] = [i for i in items if i["kind"] == "calendar"]
+    assert "3 weeks" in change["text"]
+    assert calendar_line["text"].startswith("In the same week, the team's calendars were busier")
+    assert "no clear change" not in calendar_line["text"]
 
 
 def test_a_team_too_small_shows_no_figures(engine):  # noqa: F811

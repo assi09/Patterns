@@ -259,6 +259,16 @@ def test_with_no_readings_to_tell_it_says_so():
     assert "no clear change" not in text
 
 
+def test_beside_a_finding_of_the_briefing_it_never_says_nothing_changed():
+    # A concern lasting weeks is steady against the week before, so every section can be
+    # "steady" while the briefing leads with it.
+    sections = [{"metric": "sleep_minutes", "label": "Time asleep", "status": "steady"}]
+    text = coach.line(_busy_load(), sections, findings=True)["text"]
+    assert text.startswith("In the same week, the team's calendars were busier than usual.")
+    assert "no clear change" not in text
+    assert coach.line(_busy_load(), sections)["text"].startswith("Calendars were busier last week.")
+
+
 def test_with_some_readings_too_thin_it_names_them():
     sections = [
         {"metric": "sleep_minutes", "label": "Time asleep", "status": "steady"},
