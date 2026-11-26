@@ -144,3 +144,25 @@ def test_the_command_needs_a_flag_on_a_deployed_database(monkeypatch, capsys):
     monkeypatch.setattr(cli.settings, "database_url", "postgresql://u:p@db.example.net/x")
     code = cli.main(["demo-team", "--supervisor", "a@b.c", "--name", "Demo (synthetic)"])
     assert code == 1 and "--on-production" in capsys.readouterr().err
+
+
+def test_two_demo_teams_never_share_made_up_members(engine):  # noqa: F811
+    boss_id = presenter(engine)
+    with session_scope(engine) as db:
+        boss = db.get(User, boss_id)
+        first, _ = demo.create_demo_team(
+            db, boss, "Demo (synthetic)", 8, "demo-member", True, BRIEF_NOW.date(), BRIEF_NOW
+        )
+        # The same prefix would reuse demo-member-1..3 and overwrite their data.
+        with pytest.raises(demo.DemoTeamError, match="already exist"):
+            demo.create_demo_team(
+                db, boss, "Few (synthetic)", 3, "demo-member", False, BRIEF_NOW.date(), BRIEF_NOW
+            )
+        assert db.scalar(select(func.count()).select_from(Team)) == 1
+        # Made some other way, a member shared with another team stops the removal.
+        second = memberships.create_team(db, boss, "Few (synthetic)", None, BRIEF_NOW)
+        shared = db.scalar(select(User).where(User.email == "demo-member-1@example.com"))
+        memberships.join(db, second, shared, BRIEF_NOW)
+        with pytest.raises(demo.DemoTeamError, match="another team"):
+            demo.remove_demo_team(db, second)
+        assert memberships.active_members(db, first) == 8

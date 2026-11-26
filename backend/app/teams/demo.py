@@ -144,17 +144,30 @@ def create_demo_team(
         raise DemoTeamError("Made-up members' emails must start with 'demo'.")
     if db.scalar(select(Team).where(Team.supervisor_id == supervisor.id, Team.name == name)):
         raise DemoTeamError(f"{supervisor.email} already has a team named {name!r}.")
+    # Fresh accounts only: reusing another demo team's members would mix the two teams' data,
+    # and removing one team would then delete the other's members.
+    emails = [f"{prefix}-{i + 1}@{DOMAIN}" for i in range(count)]
+    if db.scalar(select(User).where(User.email.in_(emails))):
+        raise DemoTeamError(f"Accounts starting {prefix!r} already exist: choose another --prefix.")
     team = memberships.create_team(db, supervisor, name, None, now)
     added = add_demo_members(db, team, count, count // 2, today, now, prefix, lasting)
     return team, added
 
 
 def demo_members_of(db: Session, team: Team) -> list[User]:
-    """The team's made-up members; raises if it has anyone else, so a real team is never removed."""
+    """The team's made-up members; raises if it has anyone else, so a real team is never removed,
+    or if one of them is in another team too, so removing it never empties a second team."""
     people = [db.get(User, uid) for uid in memberships.member_ids(db, team)]
     real = [p for p in people if not (p.email.startswith("demo") and p.email.endswith(DOMAIN))]
     if real or LABEL not in team.name.lower():
         raise DemoTeamError("This is not a demo team: it has real members or no label.")
+    elsewhere = db.scalar(
+        select(TeamMembership).where(
+            TeamMembership.user_id.in_([p.id for p in people]), TeamMembership.team_id != team.id
+        )
+    )
+    if elsewhere is not None:
+        raise DemoTeamError("A made-up member is also in another team: remove nothing.")
     return people
 
 
