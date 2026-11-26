@@ -42,7 +42,7 @@ Monitoring AI Agents* (52 slides, read 2026-11-26 from the professor's shared fi
 - Command: `PYTHONPATH=backend:eval python eval/varied_teams.py run`.
 - Frozen before the first run in `eval/varied_teams_spec.json` (commit `f0e8d81`).
 - Results in `eval/results/varied_teams_2026-11-26.json`. The figures below are from the rerun
-  at `63f7d5c`, with the per-claim grader and the baseline wording of #256. The outcomes are the
+  at `3a229c7`, with the per-claim grader and the baseline and bedtime wording of #256. The outcomes are the
   same as the first run at `e1bc5d1`.
 - Free: no model call.
 
@@ -66,12 +66,15 @@ Monitoring AI Agents* (52 slides, read 2026-11-26 from the professor's shared fi
   the absolute value of both figures, so a reversed sign passed. It passed "a of n" when either
   number appeared anywhere in the evidence. It exempted findings from the week check, and an empty
   briefing passed every check.
-  - The new grader matches every claim to the field it stands for: the signed figure with its unit
+  - The new grader matches every claim to the field it stands for: the metric's visible name
+    (which must agree with the item's metric and its evidence record's), the signed figure with its unit
     (bedtime converted), the direction word, each count, the target week, the comparison period the
     sentence names, the streak, and at least 5 people.
   - **Testing the test:** `backend/tests/test_varied_teams_grader.py` corrupts a correct finding
     seven ways: reversed direction, sign alone, wrong numerator, swapped up/down counts, wrong week,
-    wrong or missing comparison period, and wrong unit, streak or scale. The new grader must fail
+    wrong or missing comparison period, wrong unit, streak or scale, and the wrong metric name with the
+    right unit ("Bedtime" for "Time asleep", both in minutes; caught in a second review: the
+    first per-claim grader passed it). The new grader must fail
     exactly the corrupted claim.
   - Run against the same six corrupted findings, **the old grader passed all six; the new one
     fails each**, on the corrupted claim only.
@@ -120,7 +123,8 @@ results file, marked as added after the run.)
   | Outputs (ready weeks) | 149 | 149 |
   | Outputs with a checkable claim | **2** | 149 |
   | Items whose claims were checked | 2 | 1,341 |
-  | Individual claims checked / passed | **14 / 14** | 4,620 / 4,620 |
+  | Individual claims checked / passed | **16 / 16** | 5,961 / 5,961 |
+  | of which metric named correctly | 2/2 | 1,341/1,341 |
   | of which signed figure and unit | 2/2 | 294/294 |
   | of which direction word | 2/2 | 9/9 |
   | of which each count | 2/2 | 1,341/1,341 |
@@ -169,8 +173,8 @@ than "the coach adds nothing":
 | 2 | No figure from fewer than 5 people, per metric | C | `test_fewer_than_five_people_give_no_figures_at_all`, boundary fixture, `test_a_metric_with_too_few_readings_is_left_out_alone`; varied teams | withheld metric has no stats; other metrics still reported | pass; 149/149 reports | ✅ | — |
 | 3 | Missing stays missing, never zero | C | boundary fixture; `real_data.NEVER_ZERO` | a missing night adds no contributor | pass | ✅ | — |
 | 4 | False alarms stay near alpha | C | `test_false_alarms_stay_near_alpha_when_nothing_changed` | rate over many seeds | pass | ✅ | synthetic noise only |
-| 5 | The report's text matches its evidence, claim by claim | S | `test_a_report_holds_aggregates_with_every_figure_from_its_evidence`; varied teams (per-claim grader, itself tested by `test_varied_teams_grader`) | signed figure, unit, direction, each count, week, period | pass; 4,620/4,620 report claims, 14/14 briefing claims | ✅ | briefing claims checked on 2 real weeks only |
-| 6 | **The baseline a sentence names is the one its figure used** | S | found by hand 2026-11-26; fixed in #256, `test_a_priority_names_the_fixed_baseline_its_figure_was_measured_against` (fails on the old code: "−52 min against the four weeks before" where those weeks give about −80) | sentence names the record's own baseline dates | pass after #256 | ✅ once #256 merges | **the production demo still shows the old line until rebuilt (needs approval)** |
+| 5 | The report's text matches its evidence, claim by claim | S | `test_a_report_holds_aggregates_with_every_figure_from_its_evidence`; varied teams (per-claim grader, itself tested by `test_varied_teams_grader`) | metric name, signed figure, unit, direction, each count, week, period | pass; 5,961/5,961 report claims, 16/16 briefing claims | ✅ | briefing claims checked on 2 real weeks only |
+| 6 | **The baseline a sentence names is the one its figure used** | S | found by hand 2026-11-26; fixed in #256, `test_a_priority_names_the_fixed_baseline_its_figure_was_measured_against` (fails on the old code: "−52 min against the four weeks before" where those weeks give about −80) | sentence names the record's own baseline dates | pass after #256; a second review also found a lasting earlier bedtime called "later", fixed in #256 with paired tests (`test_a_lasting_bedtime_shift_is_named_the_way_it_went`, fails on the old code) | ✅ once #256 merges | **the production demo still shows the old line until rebuilt (needs approval)** |
 | 7 | A lasting change is found and said to be lasting | C | `test_a_lasting_drop_in_sleep_is_found_and_said_to_be_lasting`, `test_a_lasting_change_is_not_absorbed_by_its_own_baseline` | planted 3-week drop | pass | ✅ | — |
 | 8 | Briefing: once a week, never for a withheld report | T | `test_once_a_week_and_never_for_a_withheld_report`; varied teams | — | pass; 149/149, 171/171 | ✅ | — |
 | 9 | Briefing never says "no change" beside its own finding | S | `test_beside_a_finding_of_the_briefing_it_never_says_nothing_changed` (#254) | — | pass; seen fixed on production | ✅ | found in production first (historical failure) |
@@ -202,7 +206,7 @@ Each category has at least one executable case with a pass criterion. All of the
 
 | Category | Case | Levels | Pass criterion | Result |
 |---|---|---|---|---|
-| Normal | Varied teams, 149 ready real team-weeks | C, S, E (report) | every claim matches its evidence field (per-claim grader); independent recompute agrees | 4,620/4,620 report claims, 14/14 briefing claims (2 briefings), 147 correctly empty; 134/134 on 3 metrics ✅ |
+| Normal | Varied teams, 149 ready real team-weeks | C, S, E (report) | every claim matches its evidence field (per-claim grader); independent recompute agrees | 5,961/5,961 report claims, 16/16 briefing claims (2 briefings), 147 correctly empty; 134/134 on 3 metrics ✅ |
 | Edge | Exactly 4 vs 5 contributors per metric (hand-calculated fixture); teams of 1, 3, 4 | C | the metric is withheld at 4 with no stats, reported at 5 with the known median; small teams withheld every week | pass; 106/106 small-team weeks withheld ✅ |
 | Adversarial | MCP red-team set (48 attacks: tokens, roles, injection, oversize, rate limit) | S, T | each attack gets its exact expected refusal | 48/48 at `e95c832` ✅; note screen **6 known misses (#246)** ❌ |
 | Historical failure | (a) briefing contradiction (#254); (b) meeting-free day scored by total minutes, and an already-kept day scored unfollowed (#251); (c) demo cleanup by email pattern (#252) | S, T | each regression test fails on the old code and passes on the fix | all pass; (a), (b) and the shared-prefix case of (c) shown failing on the old code ✅ |
