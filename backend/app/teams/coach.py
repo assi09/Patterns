@@ -160,9 +160,13 @@ def _meeting_free_days(frame: pd.DataFrame, window: Window) -> tuple[float, int]
 
 
 def _followed_meeting_free(db: Session, team: Team, during: Window, before: Window) -> dict | None:
-    """Whether the team kept a meeting-free day: the typical person had at least one meeting-free
-    workday a week during it, more than in their 28 days before. Read from the days themselves,
-    so moving Monday's meetings to Tuesday counts and only shortening meetings does not."""
+    """Whether the team kept a meeting-free day: the typical person, and at least half the people,
+    had at least one meeting-free workday a week during it. Read from the days themselves, so
+    moving Monday's meetings to Tuesday counts and only shortening meetings does not.
+
+    Meeting the goal is scored apart from whether free days rose: a team that already kept its
+    Wednesdays free and went on doing so followed the change, and saying it did not would drop
+    the change's result from ranking as if it were never tried (review, 2026-11-26)."""
     rows = []
     for uid in memberships.member_ids(db, team):
         frame = calendar.frame_for(db, uid, before.start, during.end + timedelta(days=1))
@@ -176,19 +180,23 @@ def _followed_meeting_free(db: Session, team: Team, during: Window, before: Wind
         return None
     during_week = float(np.median([r[0] for r in rows]))
     usual_week = float(np.median([r[1] for r in rows]))
-    kept = sum(r[0] >= 1 and r[0] > r[1] for r in rows)
-    done = during_week >= 1 and during_week > usual_week and kept >= BROAD * len(rows)
-    if done:
-        text = (
-            f"Meeting-free workdays during it: {during_week:.1f} a week for the typical person, "
-            f"against {usual_week:.1f} before ({kept} of {len(rows)} had at least one a week)."
-        )
+    kept = sum(r[0] >= 1 for r in rows)
+    done = during_week >= 1 and kept >= BROAD * len(rows)
+    increased = during_week > usual_week
+    figures = (
+        f"Meeting-free workdays during it: {during_week:.1f} a week for the typical person, "
+        f"against {usual_week:.1f} before"
+    )
+    if not done:
+        text = f"{figures}, so it may not have been followed."
+    elif increased:
+        text = f"{figures} ({kept} of {len(rows)} had at least one a week)."
     else:
         text = (
-            f"Meeting-free workdays during it: {during_week:.1f} a week for the typical person, "
-            f"against {usual_week:.1f} before, so it may not have been followed."
+            f"{figures} ({kept} of {len(rows)} had at least one a week): kept, but the team "
+            "already had one, so the calendar did not change."
         )
-    return {"followed": done, "text": text, "members": len(rows)}
+    return {"followed": done, "increased": increased, "text": text, "members": len(rows)}
 
 
 def followed(db: Session, team: Team, action: TeamAction, metric: str, way: str) -> dict | None:

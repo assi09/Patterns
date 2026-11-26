@@ -284,11 +284,13 @@ def _shifted(seed: int, span, how: str) -> pd.DataFrame:
             frame.loc[day, ["meeting_minutes", "meetings"]] = 0.0
     elif how == "shorter":  # every meeting shorter, no day free
         frame.loc[inside & (frame.index.weekday < 5), "meeting_minutes"] *= 0.4
+    elif how == "already":  # Wednesdays free before the change and during it alike
+        frame.loc[frame.index.weekday == 2, ["meeting_minutes", "meetings"]] = 0.0
     return frame
 
 
-@pytest.mark.parametrize("how, kept", [("moved", True), ("shorter", False)])
-def test_a_meeting_free_day_counts_free_days_not_total_time(engine, how, kept):
+def _meeting_free_trial(engine, how: str) -> tuple[dict, str | None]:
+    """A made-up team's ended meeting-free-day change: its result and its verdict for ranking."""
     team_id = make_team(engine, effects=())
     span = (TODAY - timedelta(days=21), TODAY - timedelta(days=8))
     with session_scope(engine) as db:
@@ -300,9 +302,27 @@ def test_a_meeting_free_day_counts_free_days_not_total_time(engine, how, kept):
     action_id = ended_change(engine, team_id, "meeting_free_day", span)
     with session_scope(engine) as db:
         team = db.get(Team, uuid.UUID(team_id))
-        found = playbook.results_of(db, team, TODAY)[action_id]["followed"]
-        assert found["followed"] is kept, found["text"]
-        assert found["text"].startswith("Meeting-free workdays during it:")
+        results = playbook.results_of(db, team, TODAY)
+        return results[action_id], playbook.verdicts(results)[action_id]
+
+
+@pytest.mark.parametrize("how, kept", [("moved", True), ("shorter", False)])
+def test_a_meeting_free_day_counts_free_days_not_total_time(engine, how, kept):
+    result, _ = _meeting_free_trial(engine, how)
+    found = result["followed"]
+    assert found["followed"] is kept, found["text"]
+    assert found["text"].startswith("Meeting-free workdays during it:")
+
+
+def test_a_meeting_free_day_the_team_already_kept_counts_as_followed(engine):
+    # Review, 2026-11-26: one free Wednesday a week before and during is the goal met, not a
+    # change ignored; scoring it unfollowed would drop its result from ranking as never tried.
+    result, verdict = _meeting_free_trial(engine, "already")
+    found = result["followed"]
+    assert found["followed"] is True and found["increased"] is False, found["text"]
+    assert found["text"].endswith("already had one, so the calendar did not change.")
+    assert "may not have been followed" not in found["text"]
+    assert verdict == result["verdict"]  # its wellbeing result counts when ranking plays
 
 
 def test_a_day_out_of_office_is_not_a_meeting_free_day():
