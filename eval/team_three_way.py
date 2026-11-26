@@ -21,6 +21,7 @@ import json
 import sys
 import threading
 import time
+import uuid
 from datetime import date
 from pathlib import Path
 
@@ -68,7 +69,8 @@ print("members per metric:", {e.metrics[0]: e.stats["members"] for e in stats.ch
 with session_scope() as db:
     report = db.scalar(
         select(TeamReport).where(
-            TeamReport.team_id == T["team_a"], TeamReport.week_start == WEEK.start
+            TeamReport.team_id == uuid.UUID(T["team_a"]),
+            TeamReport.week_start == WEEK.start,
         )
     )
     stored = (
