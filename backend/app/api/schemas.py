@@ -414,6 +414,87 @@ class TeamBriefing(ApiModel):
     made_at: datetime
 
 
+class ChangeFigure(ApiModel):
+    value: float
+    unit: str | None = None
+    text: str
+
+
+class TeamFindingView(ApiModel):
+    """A priority finding as the supervisor reads it, built by app.teams.view from computed fields:
+    "Sustained change" or "New change", with the dates of its own fixed baseline."""
+
+    label: str
+    kind: str | None = None
+    metric: str
+    metric_label: str
+    direction: str | None = None
+    change: ChangeFigure
+    target: Window | None = None
+    weeks_running: int
+    baseline: Window | None = None
+    contributors: int | None = None
+    moved_that_way: int | None = None
+    roster: int
+    why: str
+    evidence_id: str
+
+
+class TeamWeeklyView(ApiModel):
+    """The weekly comparison's own label, dates and scoped summary."""
+
+    label: str
+    week: Window
+    baseline: Window
+    summary: str
+
+
+class EvidenceCoverage(ApiModel):
+    roster: int
+    minimum: int
+    contributors: int | None = None
+
+
+class ScanWeekView(ApiModel):
+    week: Window
+    contributors: int
+    change: ChangeFigure | None = None
+    higher: int | None = None
+    lower: int | None = None
+    changed: bool
+
+
+class EvidenceResult(ApiModel):
+    change: ChangeFigure
+    higher: int
+    lower: int
+    p_value: float | None = None
+
+
+class TeamFindingEvidence(ApiModel):
+    """One record of one team report, bounded: what was measured, its dates, method, the team
+    figure and its coverage. Never a person's value or a quartile (app.teams.view)."""
+
+    evidence_id: str
+    report_week: Window
+    metric: str
+    metric_label: str
+    unit: str | None = None
+    label: str
+    measured: str
+    method: str
+    target: Window | None = None
+    scanned: Window | None = None  # a scan's four weeks; `target` is the weeks the change held
+    baseline: Window | None = None
+    coverage: EvidenceCoverage
+    limitations: list[str]
+    status: str | None = None
+    weeks_running: int | None = None
+    weeks: list[ScanWeekView] = Field(default_factory=list)
+    result: EvidenceResult | None = None
+    withheld: str | None = None
+
+
 class TeamReport(TeamReportSummary):
     members_total: int
     minimum_members: int
@@ -427,6 +508,8 @@ class TeamReport(TeamReportSummary):
     generated_by: Literal["template", "model"]
     levels: list[SharedLevels]
     briefing: TeamBriefing | None = None
+    findings: list[TeamFindingView] = Field(default_factory=list)  # the priorities, labelled
+    weekly: TeamWeeklyView | None = None  # what "metrics changed" is measured against
 
 
 class GenerateReport(ApiModel):

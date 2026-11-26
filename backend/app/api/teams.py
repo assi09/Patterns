@@ -28,7 +28,7 @@ from app.reminders import store
 from app.reminders.schedule import zone
 from app.teams import actions as team_actions
 from app.teams import agent as team_agent
-from app.teams import checkin, hr, playbook, pulse, reports
+from app.teams import checkin, hr, playbook, pulse, reports, view
 from app.teams import memberships as teams
 from app.teams import observed as observed_text
 
@@ -172,7 +172,25 @@ def _report(db, team: Team, report: TeamReport, user: User, clock) -> schemas.Te
             )
             for email, found in shared
         ],
+        **_labelled(db, team, report, clock),
     )
+
+
+def _labelled(db, team: Team, report: TeamReport, clock) -> dict:
+    """The report's findings and weekly comparison as MCP gives them (app.teams.view)."""
+    if report.status != "ready":
+        return {}
+    found = view.overview(db, team, report.week_start, clock.date(), report=report, follow=False)
+    weekly = found["this_week_vs_previous_four"]
+    return {
+        "findings": [schemas.TeamFindingView(**f) for f in found["priorities"]],
+        "weekly": schemas.TeamWeeklyView(
+            label=weekly["label"],
+            week=weekly["week"],
+            baseline=weekly["baseline"],
+            summary=weekly["summary"],
+        ),
+    }
 
 
 # The nightly team pulse
@@ -236,6 +254,29 @@ def get_report(
     if report is None:
         raise ApiError(404, "not_found", "There is no report for that week.")
     return _report(db, team, report, user, clock)
+
+
+@router.get(
+    "/teams/{team_id}/reports/{week}/evidence/{evidence_id}",
+    response_model=schemas.TeamFindingEvidence,
+)
+def get_report_evidence(
+    team_id: str, week: date, evidence_id: str, db: Db, user: Supervisor
+) -> schemas.TeamFindingEvidence:
+    """The record behind one finding of one of the team's reports, bounded as MCP gives it. Any
+    other id, or another team's, is simply not found."""
+    team = teams.supervised_team(db, user, team_id)
+    report = db.scalar(
+        select(TeamReport).where(
+            TeamReport.team_id == team.id, TeamReport.week_start == week_of(week).start
+        )
+    )
+    try:
+        if report is None:
+            raise view.NotFound
+        return schemas.TeamFindingEvidence(**view.evidence_of(report, evidence_id))
+    except view.NotFound:
+        raise ApiError(404, "not_found", "There is no such evidence in that report.") from None
 
 
 @router.post("/teams/{team_id}/reports", response_model=schemas.TeamReport)

@@ -159,23 +159,49 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
         return use("who_am_i", lambda db, user, _: tools.who_am_i(db, user))
 
     @server.tool(
-        description="A supervisor's team as on its Team tab: observed readings, the latest weekly "
-        "report's team figures and open team alerts. Aggregates from at least 5 people."
+        description="A supervisor's team week in one call: the report's state (findings, no "
+        "priority finding, withheld, or no report for that week), each priority finding "
+        "('Sustained change' or 'New change') and each weekly line ('This week vs. the previous "
+        "four weeks') with its own comparison dates, contributors, roster and evidence id, and "
+        "team changes as known then. `week`: any date in the week (e.g. 2021-07-19); left out, "
+        "the latest report plus today's readings and open alerts. Aggregates from at least 5 "
+        "people; never a person's value."
     )
-    def team_overview(team_id: str) -> dict:
+    def team_overview(team_id: str, week: str | None = None) -> dict:
         return use(
             "team_overview",
-            lambda db, user, _: tools.team_overview(db, user, team_id, _today(user, timezone)),
+            lambda db, user, _: tools.team_overview(
+                db, user, team_id, _today(user, timezone), week
+            ),
         )
 
     @server.tool(
-        description="A supervisor's team meeting load for the last full week, per person against "
-        "each member's usual week, from at least 5 people."
+        description="The evidence behind one finding of one team report: what was measured, the "
+        "target and comparison dates, the method, the team figure and its coverage, and limits. "
+        "Use the report_id and evidence_id from team_overview."
     )
-    def team_meeting_load(team_id: str) -> dict:
+    def team_finding_evidence(team_id: str, report_id: str, evidence_id: str) -> dict:
+        return use(
+            "team_finding_evidence",
+            lambda db, user, _: tools.team_finding_evidence(
+                db, user, team_id, report_id, evidence_id
+            ),
+        )
+
+    @server.tool(
+        description="A supervisor's team scheduled meeting time for one full week against each "
+        "member's previous four weeks, from at least 5 people, with the week and comparison "
+        "dates and a state: observed, below_minimum, unavailable (no calendar data; never read "
+        "as zero) or week_not_over. `week`: any date in the week, e.g. the week of a "
+        "team_overview finding; left out, the last full week. Shows what else happened that "
+        "week, not a cause. It does not read the supervisor's own calendar."
+    )
+    def team_meeting_load(team_id: str, week: str | None = None) -> dict:
         return use(
             "team_meeting_load",
-            lambda db, user, _: tools.team_meeting_load(db, user, team_id, _today(user, timezone)),
+            lambda db, user, _: tools.team_meeting_load(
+                db, user, team_id, _today(user, timezone), week
+            ),
         )
 
     @server.tool(description="Your own last days (1-28): sleep, steps, resting heart rate, HRV.")
