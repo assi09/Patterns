@@ -7,6 +7,7 @@ What a harness sends is untrusted: checked against the schemas below and held as
 the person approves it in the app.
 """
 
+import unicodedata
 from datetime import date, datetime, timedelta
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -18,6 +19,7 @@ from app.analysis.team_calendar import team_load
 from app.db.daily import load_daily
 from app.db.models import HarnessSubmission, Team, TeamAlert, TeamReport, User
 from app.sync import calendar
+from app.teams import agent as team_agent
 from app.teams import memberships as teams
 from app.teams import observed as observed_text
 from app.teams import reports
@@ -62,7 +64,17 @@ class TeamEventIn(BaseModel):
         cleaned = " ".join(value.split())  # one line, kept as data
         if not cleaned:
             raise ValueError("A title is needed.")
+        # Control characters (NUL, terminal escapes) are not text: PostgreSQL refuses NUL in JSON,
+        # and escapes could rewrite a screen that shows the title.
+        if any(unicodedata.category(ch).startswith("C") for ch in cleaned):
+            raise ValueError("A title is plain text, without control characters.")
         return cleaned
+
+
+def _own_data_allowed(user: User) -> None:
+    # HR and admins have nothing to read through MCP, their own days included (docs/mcp.md).
+    if user.role not in ("member", "supervisor"):
+        raise HarnessError("Nothing can be read through MCP with this account.")
 
 
 def _in_range(day: date, today: date) -> None:
@@ -169,6 +181,7 @@ def team_meeting_load(db: Session, user: User, team_id: str, today: date) -> dic
 
 def my_recent_days(db: Session, user: User, today: date, days: int = 7) -> list[dict]:
     """The caller's own last days: sleep, steps, resting heart rate and HRV."""
+    _own_data_allowed(user)
     days = max(1, min(days, 28))
     frame = load_daily(
         db, user.id, "google_health", today - timedelta(days=days - 1), today + timedelta(days=1)
@@ -186,6 +199,7 @@ def my_recent_days(db: Session, user: User, today: date, days: int = 7) -> list[
 
 
 def my_calendar_days(db: Session, user: User, today: date, days: int = 14) -> list[dict]:
+    _own_data_allowed(user)
     days = max(1, min(days, 60))
     frame = calendar.frame_for(
         db, user.id, today - timedelta(days=days - 1), today + timedelta(days=1)
@@ -243,6 +257,10 @@ def send_team_event(
 ) -> dict:
     """A team event for the supervisor's notes; held for them to approve."""
     team = _supervised(db, user, team_id)
+    # Screened like a note written in the app (the team agent's model reads notes), so an
+    # instruction, a person singled out or someone's health is refused before it is even held.
+    if problem := team_agent._unsafe(event.title, note=True):
+        raise HarnessError(f"Not sent: {problem}")
     _in_range(event.starts_on, now.date())
     if event.ends_on is not None:
         _in_range(event.ends_on, now.date())

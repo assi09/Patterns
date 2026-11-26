@@ -5,7 +5,7 @@
 > and [escalation.md](escalation.md). The agent results below stand for the code they were measured
 > on; they describe the individual side and the analysis tools the team figures share.
 
-**The one page for what is true now.** As of `main` after #235 (2026-11-25). Every result below
+**The one page for what is true now.** As of `main` after #235 (2026-11-25), with the MCP server, OAuth sign-in and the weekend tests added on 2026-11-26. Every result below
 names the revision it was measured on and whether it still describes today's code. The history
 (audits, plans, negative results, superseded numbers) is kept as it was written, in the documents
 listed at the end; where one of them contradicts this page, this page is current.
@@ -66,7 +66,19 @@ the result. "Changed since" means it has, and the result has not been re-measure
 | Planted extreme week (sleep −3 h and HRV −30 ms for 7 days) | found in **100 of 100**; the test requires at least 95 | same | Valid |
 | What must not raise one | **0** in every case: one signal only, one bad night, three bad days (0 of 30 each; the test allows 1 of 30); a barely worn week, wear time missing all week, no wear column, four confirmed days, old data, 20 days of history (0 of 20 each; the test allows none) | same | Valid |
 | Privacy and roles | consent to roles; a replaced or demoted HR contact or supervisor loses access at once and gets no reminder; nameless notifications; leaving withdraws at once; one waiting alert per person and team | same, 42 tests, each review finding with a regression test | Valid |
-| On real people | **not measured yet**: weekend testing on PMData and LifeSnaps, defined in [plan.md](plan.md): eligibility, how often it fires on ordinary weeks, detection of planted changes | — | — |
+| On real people: ordinary weeks (PMData 16, LifeSnaps 51) | **0 triggers in 552** eligible ordinary person-weeks (PMData 0/189, LifeSnaps 0/213 and 0/150), under the stated wear assumptions: neither dataset records wear time, so PMData counts a day with activity minutes as worn and LifeSnaps every day. The weeks are unlabelled, so this is a firing rate, not a real-world false-alarm rate | `6c2b235`, 2026-11-26; `PYTHONPATH=backend:eval python eval/checkin_real.py` | Valid |
+| On real people: a planted change on all 7 days (2 h less sleep, 10 more resting beats) | Over all eligible weeks: **92/189** (48.7%) PMData, **49/213** (23.0%) and **41/150** (27.3%) LifeSnaps. Over **observable** weeks (sleep and resting heart rate each read on at least 5 worn days; 174/189, 160/213, 111/150 of them): **92/174** (52.9%), **49/160** (30.6%), **41/111** (36.9%). Smaller changes and every count: [evaluation.md](evaluation.md#the-check-in-rule-on-real-people-2026-11-26) | same | Valid. The rule is unchanged |
+| End to end through the API, team A = PMData's 16 people | **18/18 scenarios passed**: no consent no alert; send now, stop, the hour running out; no second alert; a nameless inbox and no metric for recipients; another team's supervisor and members see none; HR removed loses access; the report for the supervisor only | `46d6c4d`, 2026-11-26; `PYTHONPATH=backend python eval/team_e2e.py <db> <tokens>` | Valid |
+
+### MCP server and the path to the supervisor
+
+| Test | Result | Measured on | Valid now? |
+|---|---|---|---|
+| A team finding survives the full path to the supervisor (team A, week of 2020-01-06, as of 2020-01-13) | **The three agree**: the figures computed from the dataset files, the stored supervisor report and an authenticated MCP read match figure by figure (9 report lines, 4 latest readings; 6/6 checks) | `46d6c4d`, 2026-11-26; `PYTHONPATH=backend:eval python eval/team_three_way.py <tokens>` | Valid |
+| Red-team set, strictly graded: a refusal passes only with its expected denial, anything else (timeout, crash, another error) fails, and the runner exits 1 | **48/48**, runner exit 0, no traceback or 500 in the API log | `e95c832`, a dedicated worktree, a fresh database, 2026-11-26; `python eval/mcp_red_team.py <tokens> <api.log>` | Valid |
+| Fixes the first red-team run called for (each with a regression test) | refusals now reach the assistant with their reason (were a bare "Error executing tool" and logged as crashes); an event an assistant sends is screened like a note typed in the app, when sent and on approval; titles refuse control characters; HR reads nothing | `80f566d` | Valid |
+| The note screen: known gaps | **open privacy issue #246** (owner Jad): "Half the team has the flu", "John's sleep is bad" and "Sara is off this week" pass the screen, for app notes and MCP events alike; 6 regression cases marked `xfail(strict=True)` in `tests/test_note_screen.py` | `66dd5fc` | Open |
+| OAuth sign-in | the whole flow through the real routes, 17 tests (`pytest tests/test_mcp_oauth.py`); once with the MCP SDK's own OAuth client through the real Allow page in a browser, 9/9 (a one-off run, its script not kept) | #244 (`04afdc0`) | Valid |
 
 ### Conversations (follow-ups)
 
@@ -80,10 +92,11 @@ the result. "Changed since" means it has, and the result has not been re-measure
 
 ### Known limitations now
 
-- **Check-in alerts are tuned on synthetic people only**, until the weekend's run on real people.
+- **Check-in alerts find few planted changes on real people:** 31–53% of a 2-hour sleep loss with 10 more resting beats, where both signals are readable (above). Time asleep is one limiting signal: with readings present it clears its bar in 28–37% of those weeks, resting heart rate in 80–94%. These counts do not say how much of that is sleep's variability and how much other gaps, such as nights missing inside the week. The rule is unchanged.
+- **Team notes can carry a named health or absence remark** (#246, open): the note screen misses some (above), and the team agent's model reads notes. **The demo uses synthetic notes only** (a release, an offsite; no names, no health) until it is fixed.
 - **Fitbit's wear time counts awake hours**, so someone who wears the watch only at night never
   reaches the 10-hour "worn" bar, and the check-in rule cannot fire for them.
-- **No emails to HR yet**: check-in notices are in the app only until the HR invitation PR.
+- **Check-in emails are a generic notice** ("you have a check-in request"), never a name; the name is shown only in the app, to whoever holds the role (#240).
 
 - **"That earlier week"** after "and the week before?" is usually read as the opening week: right
   week in 2 of 66 on the small reader, about 60% on the large one; calendar weeks make the days

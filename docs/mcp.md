@@ -99,7 +99,8 @@ week in the last full week), then `python -m app.teams weekly --no-email` makes 
    assistant calls `who_am_i`, `team_overview` and `team_meeting_load`, and answers from team
    figures, each from at least 5 people.
 4. **Refusal:** "What is <a member>'s sleep?" There is no tool for it and the assistant says so.
-5. **Send in:** "Add the release on Friday as a team event." It calls `send_team_event`; Settings
+5. **Send in:** "Add the release on Friday as a team event." Use synthetic events only (a release,
+   an offsite): no names, no health or absence, until #246 is fixed. It calls `send_team_event`; Settings
    shows *From your harness: Team event* waiting. Approve it; only then is it a team note.
 6. **Settings** again: the connection lists what it did (`team_overview 1 · send_team_event 1`).
    Revoke it; the assistant's next call is refused.
@@ -124,3 +125,17 @@ week in the last full week), then `python -m app.teams weekly --no-email` makes 
   model login, which was not available on the test machine; that run is still to do.
 - **SDK quirk:** its `/revoke` form needs a `client_secret` field even from a public client
   (empty is fine).
+- **Red-team set, strictly graded (2026-11-26):** 48 attacks in `eval/mcp_red_team.py`, each
+  with the one outcome that passes (the expected denial text, or the exact HTTP status and body);
+  a timeout, crash or other error fails the case and the runner exits 1. Run at `e95c832` from a
+  dedicated worktree against a fresh database whose team A is PMData's 16 real people: **48/48**,
+  no traceback or 500 in the API log. Covers tokens (none, made-up, revoked, unapproved, in the
+  query string), a forged Host header (421), every role's reach, who may send what, malformed and
+  hostile input with payloads valid apart from the attacked field, prompt injection and the note
+  screen, a 5 MB request (413) and the call limit (60 answered, then refused). The first,
+  leniently graded run found four problems, fixed in `80f566d`; it also accepted calendar attacks
+  refused for missing fields rather than the reason under test, which the strict grader caught.
+- **The full path (2026-11-26, `46d6c4d`):** `eval/team_three_way.py` finds the dataset files, the
+  supervisor's report and an authenticated MCP read in agreement, figure by figure;
+  `eval/team_e2e.py` passes all 18 check-in and report scenarios through the API.
+- **Open:** the note screen's gaps, #246.

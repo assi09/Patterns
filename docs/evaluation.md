@@ -460,3 +460,47 @@ minutes and impossible zeros as values; regraded on the corrected key, its LifeS
 matches a question and is left out until rerun. On PMData alone the result holds: 82.4% of 261
 answers (by person 76.7-87.4), and 84.7% against the chatbot's 62.2% on 111 shared questions.
 
+
+## The check-in rule on real people (2026-11-26)
+
+The test defined in [plan.md](plan.md) ("What the real-data run can and cannot measure"), on
+`checkin-v1`, unchanged. Run at `6c2b235` with `PYTHONPATH=backend:eval python
+eval/checkin_real.py` from the repository root; counts in
+`eval/results/checkin_real_2026-11-26.json`. The counting rules are in the script: a check every 7
+days from 35 days after a person's first day, the data cut as a sync would leave it; **eligible**
+when at least 5 of the 7 days are worn and at least 2 signals have 14 values in the 28 days
+before; **observable** (for the planted change) when time asleep and resting heart rate each have
+a reading on at least 5 of the week's worn days, the most the rule asks of one signal.
+
+**Ordinary weeks.** **0 triggers in 552** eligible person-weeks: PMData 0/189 (14 of 16 people
+eligible at least once), LifeSnaps 0/213 (30/30) and 0/150 (20/21), under the wear assumptions
+below. These weeks are unlabelled, so this cannot establish a real-world false-alarm rate.
+
+**Planted changes** (all 7 days of a week that did not fire; the app's scores recomputed from the
+changed inputs). Each cell is found / weeks:
+
+| Change | PMData, all eligible | PMData, observable | LifeSnaps 30, all | LifeSnaps 30, observable | LifeSnaps 21, all | LifeSnaps 21, observable |
+|---|---|---|---|---|---|---|
+| 30 min less sleep, 3 more beats | 1/189 | 1/174 | 2/213 | 2/160 | 0/150 | 0/111 |
+| 60 min, 5 beats | 6/189 | 6/174 | 4/213 | 4/160 | 0/150 | 0/111 |
+| 90 min, 8 beats | 52/189 | 52/174 | 27/213 | 27/160 | 14/150 | 14/111 |
+| 120 min, 10 beats | **92/189** | **92/174** | **49/213** | **49/160** | **41/150** | **41/111** |
+| 120 min less sleep alone | 5/189 | 5/174 | 4/213 | 4/160 | 0/150 | 0/111 |
+
+Every detection fell in an observable week, so the weeks without enough readings (15 of 189, 53
+of 213, 39 of 150) account for the difference between the two columns.
+
+**Which signal holds it back.** With the largest change, in observable weeks, each signal clears
+its bar on its own in: resting heart rate 163/174, 128/160, 102/111; time asleep 60/174, 45/160,
+41/111; recovery 55/174, 22/160, 6/111. With two signals needed, **time asleep is one limiting
+signal**. These counts do not establish how much of that comes from the spread of a person's
+usual sleep (the bar sits a full usual-range width below its low edge) and how much from other
+gaps, such as a night missing among the 5 the rule needs. Time asleep alone sometimes raises an
+alert because recovery, partly computed from sleep, moves with it.
+
+**Wear.** Neither dataset records wear time. PMData counts a day with Fitbit's activity minutes as
+worn, LifeSnaps every day; production counts only Google's recorded wear time, so real
+eligibility can only be lower. A change on all 7 days at once is a stylised event.
+
+**Decision.** The production rule stays as it is: it sends a name to HR, and a rule that finds more
+would need its own evaluation under a new name.

@@ -19,6 +19,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy.orm import Session
 
 from app.db.models import HarnessCall, User
@@ -145,6 +146,10 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
                 result = work(db, user, token_id)
             ok = True
             return result
+        except HarnessError as refused:
+            # The SDK's own "expected failure": the assistant reads why, and the server does not
+            # log a refusal as a crash. Any other exception still shows only "Error executing tool".
+            raise ToolError(str(refused)) from None
         finally:
             if user_id is not None:
                 _record(sessions, user_id, token_id, tool, ok)

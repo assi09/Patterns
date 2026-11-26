@@ -11,6 +11,7 @@ from app.api.errors import ApiError
 from app.db.daily import save_daily
 from app.db.models import HarnessSubmission, Team, TeamNote, User
 from app.sync.calendar import HARNESS_SOURCE, METRICS
+from app.teams import agent as team_agent
 
 
 def pending(db: Session, user: User) -> list[HarnessSubmission]:
@@ -58,6 +59,9 @@ def approve(db: Session, user: User, submission_id: str, now: datetime) -> Harne
         if team is None or team.supervisor_id != user.id or user.role != "supervisor":
             raise ApiError(409, "not_supervisor", "You no longer supervise this team.")
         event = row.payload
+        # The same screen as a note written in the app: the team agent's model reads notes.
+        if problem := team_agent._unsafe(event["title"], note=True):
+            raise ApiError(422, "unsafe_note", f"Not saved: {problem}")
         db.add(
             TeamNote(
                 team_id=team.id,
