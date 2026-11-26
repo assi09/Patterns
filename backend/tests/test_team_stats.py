@@ -122,3 +122,38 @@ def test_levels_compare_a_week_with_the_persons_own_weeks_before():
     assert levels["sleep_minutes"].mean > 0
     new = generate(WEEK.start - timedelta(days=10), 17, seed=9).frame
     assert member_levels(new, WEEK)["sleep_minutes"].level is None  # no earlier weeks yet
+
+
+# A hand-calculated fixture for the exact 4-to-5 boundary, metric by metric (C9 evaluation audit,
+# 2026-11-26). Each person's 28 days before alternate between two values, so the mean and spread
+# are known; each week is a constant, so each person's change is known; the team figure is the
+# median of those changes.
+
+
+def _fixed(before: tuple[float, float], week: float, metric: str) -> pd.Series:
+    days = [before[i % 2] for i in range(BASELINE_DAYS)] + [week] * 7
+    return pd.Series(days, index=pd.date_range(START, periods=DAYS, freq="D"), name=metric)
+
+
+def test_a_metric_is_reported_at_five_people_and_withheld_at_four_on_its_own():
+    # Five people with steps; only four of them with sleep (the fifth's nights are missing).
+    step_changes = [1000.0, 1500.0, 2000.0, 2500.0, 3000.0]  # median 2000
+    frames = []
+    for i, change in enumerate(step_changes):
+        steps = _fixed((7000.0, 9000.0), 8000.0 + change, "steps")  # usual mean 8000
+        sleep = _fixed((400.0, 440.0), 420.0 - 30.0, "sleep_minutes")  # every one 30 min less
+        if i == 4:
+            sleep[:] = np.nan  # missing, not zero: this person adds nothing to sleep
+        frames.append(pd.concat([steps, sleep], axis=1))
+    found = {e.metrics[0]: e for e in team_statistics(frames, WEEK).changes}
+    assert found["steps"].sufficient and found["steps"].n == 5
+    assert found["steps"].stats["median_change"] == 2000.0
+    assert found["steps"].stats["members_up"] == 5
+    assert not found["sleep_minutes"].sufficient and found["sleep_minutes"].n == 4
+    assert set(found["sleep_minutes"].stats) == {"members", "minimum_members"}
+    # A fifth sleeper makes sleep reportable, with the hand-calculated figure.
+    frames[4]["sleep_minutes"] = _fixed((400.0, 440.0), 390.0, "sleep_minutes")
+    found = {e.metrics[0]: e for e in team_statistics(frames, WEEK).changes}
+    assert found["sleep_minutes"].sufficient and found["sleep_minutes"].n == 5
+    assert found["sleep_minutes"].stats["median_change"] == -30.0
+    assert found["sleep_minutes"].stats["members_down"] == 5

@@ -255,3 +255,107 @@ def test_a_change_still_running_has_no_result_yet(engine, client):  # noqa: F811
     client.post(f"/teams/{team_id}/actions", headers=boss, json={"play": "step_goal"})
     (action,) = client.get(f"/teams/{team_id}/actions", headers=boss).json()
     assert action["result"] is None
+
+
+class _NoModel:
+    """Stands in for the model and refuses every call: the briefing must use the code's order."""
+
+    def complete(self, messages, **_):
+        from app.agent.llm import LLMError
+
+        raise LLMError("no model in this test")
+
+
+def _weekly(engine, team_id: str, now) -> dict:  # noqa: F811
+    """What the Monday job does for one team: build last week's report and brief it."""
+    from app.teams import reports
+    from app.teams.briefing import brief
+
+    with session_scope(engine) as db:
+        team = db.get(Team, uuid.UUID(team_id))
+        week = reports.last_full_week(now.date())
+        report = reports.build_report(db, team, week, now)
+        brief(_NoModel(), db, team, report, now.date(), now, 0.10)
+        return report.body["briefing"]
+
+
+def test_one_change_from_proposal_to_its_result_keeps_its_state(engine, client):  # noqa: F811
+    """One stateful run, nothing deleted between steps: the briefing proposes, the supervisor
+    approves, a retried or contrary decision changes nothing, the next week proposes nothing
+    new on the same metric, and once the change has ended its result is there to review."""
+    client, app = client
+    from app.api import auth
+    from app.db.daily import save_daily
+    from app.db.models import User
+    from app.synthetic import generate
+    from app.teams import memberships
+
+    effects = (
+        Step("sleep_minutes", TODAY - timedelta(days=22), -75.0),  # three weeks lower by Monday
+        Step("sleep_minutes", TODAY + timedelta(days=1), 75.0),  # back up while the change runs
+    )
+    with session_scope(engine) as db:
+        boss = User(email="boss@example.com", status="approved", role="supervisor")
+        db.add(boss)
+        db.flush()
+        team = memberships.create_team(db, boss, "Design", None, NOW)
+        for i in range(7):
+            person = User(email=f"member{i:02d}@example.com", status="approved")
+            db.add(person)
+            db.flush()
+            frame = generate(TODAY - timedelta(days=90), 125, effects, seed=i).frame
+            save_daily(db, person.id, "google_health", frame)
+            memberships.join(db, team, person, NOW - timedelta(days=95))
+        team_id = str(team.id)
+
+    def actions() -> list[TeamAction]:
+        with session_scope(engine) as db:
+            rows = db.scalars(select(TeamAction)).all()
+            for row in rows:
+                db.expunge(row)
+            return rows
+
+    def told() -> int:
+        with session_scope(engine) as db:
+            kind = Notification.kind == "team_challenge"
+            return len(db.scalars(select(Notification).where(kind)).all())
+
+    # 1. The Monday briefing proposes one change, for the finding it cites, and waits.
+    briefing = _weekly(engine, team_id, NOW)
+    (proposal,) = [i for i in briefing["items"] if i["kind"] == "proposal"]
+    (change,) = [i for i in briefing["items"] if i["kind"] == "change"]
+    assert change["evidence_ids"][0] in proposal["evidence_ids"]
+    (action,) = actions()
+    assert (action.status, action.source, action.metric) == ("proposed", "agent", "sleep_minutes")
+    assert told() == 0
+
+    # 2. The supervisor sees it waiting, with no result yet, and approves it.
+    boss = signed_in(client, engine, "boss@example.com")
+    (listed,) = client.get(f"/teams/{team_id}/actions", headers=boss).json()
+    assert (listed["status"], listed["result"]) == ("proposed", None)
+    url = f"/teams/{team_id}/actions/{action.id}"
+    approved = client.post(f"{url}/approve", headers=boss)
+    assert approved.status_code == 200 and approved.json()["membersTold"] == 7
+    assert told() == 7
+
+    # 3. A retried approval, or a decline after it, changes nothing and tells nobody again.
+    for decision in ("approve", "decline"):
+        again = client.post(f"{url}/{decision}", headers=boss)
+        assert again.status_code == 409 and again.json()["error"]["code"] == "already_decided"
+    assert [(a.status, a.id) for a in actions()] == [("approved", action.id)]
+    assert told() == 7
+
+    # 4. The next Monday, with the change running, nothing new is proposed on the same metric.
+    later_briefing = _weekly(engine, team_id, NOW + timedelta(days=7))
+    assert not [i for i in later_briefing["items"] if i["kind"] == "proposal"]
+    assert len(actions()) == 1
+
+    # 5. After it ends, the supervisor reviews how the team went during it.
+    (ended,) = actions()
+    after = ended.ends_on + timedelta(days=3)
+    app.dependency_overrides[auth.now] = lambda: NOW + (after - TODAY)
+    (reviewed,) = client.get(f"/teams/{team_id}/actions", headers=boss).json()
+    assert reviewed["status"] == "approved"
+    assert reviewed["result"]["verdict"] == "better"
+    assert reviewed["result"]["evidence"]["tool"] == "team_change"
+    assert "Time asleep rose during it" in reviewed["result"]["text"]
