@@ -1,0 +1,237 @@
+{
+  "rule": "checkin-v1",
+  "commit": "6c2b235",
+  "command": "PYTHONPATH=backend:eval python eval/checkin_real.py (from the repository root)",
+  "ran": "2026-11-26",
+  "wear": "PMData: a day with activity minutes; LifeSnaps: every day (no wear time recorded)",
+  "results": [
+    {
+      "dataset": "pmdata",
+      "people": 16,
+      "people_with_an_eligible_week": 14,
+      "person_weeks": 269,
+      "eligible_person_weeks": 189,
+      "alerts_on_ordinary_weeks": 0,
+      "alert_rate_per_eligible_week": 0.0,
+      "people_with_an_alert": 0,
+      "alert_signals": {},
+      "largest_change_signals_alone": {
+        "sleep_minutes": 60,
+        "recovery_score": 55,
+        "resting_hr": 169
+      },
+      "planted_detection": {
+        "30min_3bpm": {
+          "found": 1,
+          "of": 189,
+          "rate": 0.005
+        },
+        "60min_5bpm": {
+          "found": 6,
+          "of": 189,
+          "rate": 0.032
+        },
+        "90min_8bpm": {
+          "found": 52,
+          "of": 189,
+          "rate": 0.275
+        },
+        "120min_10bpm": {
+          "found": 92,
+          "of": 189,
+          "rate": 0.487
+        },
+        "sleep_only_120min": {
+          "found": 5,
+          "of": 189,
+          "rate": 0.026
+        }
+      },
+      "observable_weeks": 174,
+      "observable_signals_alone_at_largest": {
+        "sleep_minutes": 60,
+        "recovery_score": 55,
+        "resting_hr": 163
+      },
+      "planted_detection_observable": {
+        "30min_3bpm": {
+          "found": 1,
+          "of": 174,
+          "rate": 0.006
+        },
+        "60min_5bpm": {
+          "found": 6,
+          "of": 174,
+          "rate": 0.034
+        },
+        "90min_8bpm": {
+          "found": 52,
+          "of": 174,
+          "rate": 0.299
+        },
+        "120min_10bpm": {
+          "found": 92,
+          "of": 174,
+          "rate": 0.529
+        },
+        "sleep_only_120min": {
+          "found": 5,
+          "of": 174,
+          "rate": 0.029
+        }
+      }
+    },
+    {
+      "dataset": "lifesnaps_evaluation_30",
+      "people": 30,
+      "people_with_an_eligible_week": 30,
+      "person_weeks": 308,
+      "eligible_person_weeks": 213,
+      "alerts_on_ordinary_weeks": 0,
+      "alert_rate_per_eligible_week": 0.0,
+      "people_with_an_alert": 0,
+      "alert_signals": {},
+      "largest_change_signals_alone": {
+        "resting_hr": 143,
+        "recovery_score": 22,
+        "sleep_minutes": 45
+      },
+      "planted_detection": {
+        "30min_3bpm": {
+          "found": 2,
+          "of": 213,
+          "rate": 0.009
+        },
+        "60min_5bpm": {
+          "found": 4,
+          "of": 213,
+          "rate": 0.019
+        },
+        "90min_8bpm": {
+          "found": 27,
+          "of": 213,
+          "rate": 0.127
+        },
+        "120min_10bpm": {
+          "found": 49,
+          "of": 213,
+          "rate": 0.23
+        },
+        "sleep_only_120min": {
+          "found": 4,
+          "of": 213,
+          "rate": 0.019
+        }
+      },
+      "observable_weeks": 160,
+      "observable_signals_alone_at_largest": {
+        "resting_hr": 128,
+        "recovery_score": 22,
+        "sleep_minutes": 45
+      },
+      "planted_detection_observable": {
+        "30min_3bpm": {
+          "found": 2,
+          "of": 160,
+          "rate": 0.013
+        },
+        "60min_5bpm": {
+          "found": 4,
+          "of": 160,
+          "rate": 0.025
+        },
+        "90min_8bpm": {
+          "found": 27,
+          "of": 160,
+          "rate": 0.169
+        },
+        "120min_10bpm": {
+          "found": 49,
+          "of": 160,
+          "rate": 0.306
+        },
+        "sleep_only_120min": {
+          "found": 4,
+          "of": 160,
+          "rate": 0.025
+        }
+      }
+    },
+    {
+      "dataset": "lifesnaps_others",
+      "people": 21,
+      "people_with_an_eligible_week": 20,
+      "person_weeks": 264,
+      "eligible_person_weeks": 150,
+      "alerts_on_ordinary_weeks": 0,
+      "alert_rate_per_eligible_week": 0.0,
+      "people_with_an_alert": 0,
+      "alert_signals": {},
+      "largest_change_signals_alone": {
+        "resting_hr": 111,
+        "sleep_minutes": 41,
+        "recovery_score": 6
+      },
+      "planted_detection": {
+        "30min_3bpm": {
+          "found": 0,
+          "of": 150,
+          "rate": 0.0
+        },
+        "60min_5bpm": {
+          "found": 0,
+          "of": 150,
+          "rate": 0.0
+        },
+        "90min_8bpm": {
+          "found": 14,
+          "of": 150,
+          "rate": 0.093
+        },
+        "120min_10bpm": {
+          "found": 41,
+          "of": 150,
+          "rate": 0.273
+        },
+        "sleep_only_120min": {
+          "found": 0,
+          "of": 150,
+          "rate": 0.0
+        }
+      },
+      "observable_weeks": 111,
+      "observable_signals_alone_at_largest": {
+        "resting_hr": 102,
+        "sleep_minutes": 41,
+        "recovery_score": 6
+      },
+      "planted_detection_observable": {
+        "30min_3bpm": {
+          "found": 0,
+          "of": 111,
+          "rate": 0.0
+        },
+        "60min_5bpm": {
+          "found": 0,
+          "of": 111,
+          "rate": 0.0
+        },
+        "90min_8bpm": {
+          "found": 14,
+          "of": 111,
+          "rate": 0.126
+        },
+        "120min_10bpm": {
+          "found": 41,
+          "of": 111,
+          "rate": 0.369
+        },
+        "sleep_only_120min": {
+          "found": 0,
+          "of": 111,
+          "rate": 0.0
+        }
+      }
+    }
+  ]
+}
