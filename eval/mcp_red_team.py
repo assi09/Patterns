@@ -141,8 +141,8 @@ async def main() -> None:
     r = await raw(T["boss_a"], headers={"Host": "evil.example"})
     check(
         "auth",
-        "a forged Host header: 400 Invalid Host header",
-        r.status_code == 400 and "Invalid Host header" in r.text,
+        "a forged Host header: 421 Invalid Host header",
+        r.status_code == 421 and "Invalid Host header" in r.text,
         f"{r.status_code} {r.text}",
     )
     r = await raw(T["boss_a"])
