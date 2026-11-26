@@ -159,7 +159,12 @@ def priorities(db: Session, team: Team, scan) -> list[dict]:
             f"{dates_text(evidence.windows[1])} ({moved} of {latest['members']} people)"
         )
         if status == "lasting":
-            word = "later" if metric == "bedtime_hour" else "higher" if way == "up" else "lower"
+            up = way == "up"
+            word = (
+                ("later" if up else "earlier")
+                if metric == "bedtime_hour"
+                else ("higher" if up else "lower")
+            )
             text = f"{label} has been {word} for {running} weeks running: {figures}."
         else:
             text = f"{label} {_direction(metric, latest['median_change'])} this week: {figures}."
