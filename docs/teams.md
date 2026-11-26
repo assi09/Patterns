@@ -541,10 +541,14 @@ way.
   people), meetings after hours up 49 min (6 of 6), back-to-back meetings up 10 (6 of 6), focus
   time down 4 h 22 min (6 of 6)."* (the real Monday job on the made-up demo team, 2026-11-26).
   Always "in the same week", never "because": moving together is not proof of a cause.
-- With no wellbeing change: *"Meetings changed last week. For the typical person, against their
-  own usual week: ... Nothing in sleep, recovery or activity moved beyond the team's usual range:
-  a heavier week, handled within its capacity."*
-  Nothing is suggested in such a week: there is nothing to fix.
+- With no wellbeing change found: *"Calendars were busier last week. For the typical person,
+  against their own usual week: ... We detected no clear change in the available team
+  readings."*, naming any area with too few readings to tell (*"Too few readings to tell for
+  physical stress signs."*), or, when none could be read, *"There were too few team readings to
+  tell whether anything else changed."* It never says the team coped: no clear change is an
+  absence of evidence, not a measure of capacity (changed after review, 2026-11-26; the first
+  version said "a heavier week, handled within its capacity"). Nothing is suggested in such a
+  week.
 - Fewer than 5 calendars, or fewer than half the members moving: nothing.
 
 Measured on 200 made-up teams of 7 (`tests/test_coach.py`): quiet weeks mentioned 0/200, clearly
@@ -559,7 +563,7 @@ the calendar afterwards, so "it did not help" is told apart from "it was not don
 | Change | Its trigger | Meant for | Followed when | Evidence (strength) |
 |---|---|---|---|---|
 | Evening boundary: no team meetings after 5 pm; messages wait until morning | after-hours meetings rose | sleep, bedtime | after-hours meetings fell | after-hours work messages and poorer sleep and recovery (Barber & Santuzzi 2015, 354 people; correlational); France's right to disconnect (2017) |
-| A meeting-free day each week | meeting time rose, or focus time fell | stress signs, recovery, load, HRV, resting heart rate | meeting time fell | one meeting-free day and 26% less stress across 76 companies (Laker et al. 2022, MIT Sloan Management Review; surveys, before and after) |
+| A meeting-free day each week | meeting time rose, or focus time fell | stress signs, recovery, load, HRV, resting heart rate | the typical person, and at least half the people, had at least one workday a week with no meeting (out-of-office days not counted); read from the days, so moved meetings count and only shorter ones do not. Whether free days rose is said apart: a team that already kept one and went on doing so followed it (changed after review: the first version used total meeting time, the second also required a rise) | one meeting-free day and 26% less stress across 76 companies (Laker et al. 2022, MIT Sloan Management Review; surveys, before and after) |
 | Breaks between meetings: 10 to 15 minutes | back-to-back meetings rose | stress signs, recovery | back-to-back meetings fell | stress-linked brain activity built up over back-to-back calls and fell with 10-minute breaks (Microsoft Human Factors Lab 2021; 14 people, the breaks included meditation) |
 | A team step goal, nobody ranked | steps or active minutes fell | steps, activity | (steps themselves) | team step games raised activity in a randomised trial of 602 adults (Patel et al. 2019, JAMA Internal Medicine; the collaborative arm's gain faded after the game) |
 
