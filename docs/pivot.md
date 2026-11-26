@@ -70,7 +70,7 @@ left, with Jad's part, is in [plan.md](plan.md).
 | Outlook | **set aside** (Karim, 2026-11-25); a harness can still read it through its own connectors |
 | The HR invitation by email, HR-only screens | half built |
 | The MCP server | not started (Friday) |
-| The coach using calendar load | not started (Friday) |
+| The coach using calendar load | built 2026-11-26: code-written calendar lines in the Monday briefing, a four-change playbook with triggers, adherence and evidence ([teams.md](teams.md#the-coach-and-the-playbook-2026-11-26)) |
 | Testing on real people, MCP attacks, end to end in production | the weekend |
 
 The first plan (kept for the record): Wed 25 the docs, the flag and the check-in backend; Thu 26

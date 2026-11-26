@@ -467,12 +467,17 @@ describe('the team agent in the mock', () => {
   it('starts a change from the playbook, approved as made, and lists it first', async () => {
     const id = await teamId();
     const plays = await mockClient.getTeamPlaybook(id);
-    expect(plays.map((p) => p.id)).toContain('no_late_meetings');
-    const { action, membersTold } = await mockClient.planTeamChange(id, { play: 'lighter_week' });
+    expect(plays.map((p) => p.id)).toEqual([
+      'evening_boundary',
+      'meeting_free_day',
+      'meeting_breaks',
+      'step_goal',
+    ]);
+    const { action, membersTold } = await mockClient.planTeamChange(id, { play: 'meeting_free_day' });
     expect(action).toMatchObject({
       status: 'approved',
       source: 'supervisor',
-      metric: 'recovery_score',
+      metric: 'stress_score',
     });
     expect(membersTold).toBeGreaterThan(0);
     expect((await mockClient.getTeamActions(id))[0].id).toBe(action.id);

@@ -43,16 +43,16 @@ def _action(play: str, status: str, decided_days_ago: int = 40) -> TeamAction:
 
 
 def test_what_went_better_comes_first_and_a_recent_decline_is_left_out():
-    candidates = playbook.plays_for("sleep_minutes")
-    better = _action("quiet_evenings", "approved")
-    worse = _action("no_late_meetings", "approved")
-    declined = _action("lighter_week", "declined", decided_days_ago=5)
+    candidates = playbook.plays_for("stress_score")  # a meeting-free day, breaks between meetings
+    better = _action("meeting_breaks", "approved")
+    worse = _action("meeting_free_day", "approved")
     results = {str(better.id): "better", str(worse.id): "worse"}
-    ordered = [p.id for p in playbook.rank(candidates, [better, worse, declined], results, TODAY)]
-    assert ordered[0] == "quiet_evenings" and ordered[-1] == "no_late_meetings"
-    assert "lighter_week" not in ordered
-    old_decline = _action("lighter_week", "declined", decided_days_ago=40)
-    assert "lighter_week" in [p.id for p in playbook.rank(candidates, [old_decline], {}, TODAY)]
+    ordered = [p.id for p in playbook.rank(candidates, [better, worse], results, TODAY)]
+    assert ordered == ["meeting_breaks", "meeting_free_day"]
+    declined = _action("meeting_breaks", "declined", decided_days_ago=5)
+    assert [p.id for p in playbook.rank(candidates, [declined], {}, TODAY)] == ["meeting_free_day"]
+    old_decline = _action("meeting_breaks", "declined", decided_days_ago=40)
+    assert "meeting_breaks" in [p.id for p in playbook.rank(candidates, [old_decline], {}, TODAY)]
 
 
 def test_every_play_is_about_the_team_and_measurable():
@@ -72,7 +72,7 @@ def test_a_lasting_concern_gets_one_suggestion_and_a_waiting_one_blocks_the_next
         assert (action.status, action.source, action.play) == (
             "proposed",
             "agent",
-            "no_late_meetings",
+            "evening_boundary",
         )
         assert action.metric == "sleep_minutes" and action.starts_on == TODAY + timedelta(days=1)
         assert reason["evidence_ids"] == ["e_sleep"]
@@ -115,7 +115,7 @@ def test_the_supervisor_starts_a_change_and_every_member_is_told(engine, client)
     boss = signed_in(client, engine, "boss@example.com")
     plays = client.get(f"/teams/{team_id}/playbook", headers=boss).json()
     assert [p["id"] for p in plays] == [p.id for p in playbook.PLAYS]
-    made = client.post(f"/teams/{team_id}/actions", headers=boss, json={"play": "no_late_meetings"})
+    made = client.post(f"/teams/{team_id}/actions", headers=boss, json={"play": "evening_boundary"})
     assert made.status_code == 201
     body = made.json()
     assert body["membersTold"] == 7
@@ -123,14 +123,14 @@ def test_the_supervisor_starts_a_change_and_every_member_is_told(engine, client)
     assert (action["status"], action["source"], action["play"]) == (
         "approved",
         "supervisor",
-        "no_late_meetings",
+        "evening_boundary",
     )
     assert (
         action["startsOn"] == str(TODAY + timedelta(days=1)) and action["metric"] == "sleep_minutes"
     )
     with session_scope(engine) as db:
         told = db.scalars(select(Notification).where(Notification.kind == "team_challenge")).all()
-        assert len(told) == 7 and all("No meetings after 5 pm" in n.title for n in told)
+        assert len(told) == 7 and all("Evening boundary" in n.title for n in told)
 
 
 def test_a_change_of_their_own_is_checked_like_a_note(engine, client):  # noqa: F811
@@ -177,9 +177,9 @@ def test_a_change_of_their_own_is_checked_like_a_note(engine, client):  # noqa: 
             "unsafe_change",
         ),
         ({"play": "nap_pods"}, "bad_change"),
-        ({"play": "lighter_week", "metric": "weight"}, "bad_change"),
-        ({"play": "lighter_week", "startsOn": str(TODAY - timedelta(days=1))}, "bad_start"),
-        ({"play": "lighter_week", "startsOn": str(TODAY + timedelta(days=90))}, "bad_start"),
+        ({"play": "meeting_free_day", "metric": "weight"}, "bad_change"),
+        ({"play": "meeting_free_day", "startsOn": str(TODAY - timedelta(days=1))}, "bad_start"),
+        ({"play": "meeting_free_day", "startsOn": str(TODAY + timedelta(days=90))}, "bad_start"),
     ],
 )
 def test_a_change_that_cannot_be_planned_says_why(engine, client, sent, code):  # noqa: F811
@@ -211,7 +211,7 @@ def test_only_the_teams_supervisor_plans_its_changes(engine, client):  # noqa: F
         db.add(User(email="other@example.com", status="approved", role="supervisor"))
     stranger = signed_in(client, engine, "other@example.com")
     member = signed_in(client, engine, "member00@example.com")
-    plan = {"play": "lighter_week"}
+    plan = {"play": "meeting_free_day"}
     assert client.post(f"/teams/{team_id}/actions", headers=stranger, json=plan).status_code == 404
     assert client.post(f"/teams/{team_id}/actions", headers=member, json=plan).status_code == 403
     assert client.get(f"/teams/{team_id}/playbook", headers=member).status_code == 403
@@ -252,6 +252,6 @@ def test_a_change_still_running_has_no_result_yet(engine, client):  # noqa: F811
     client, _ = client
     team_id = make_team(engine)
     boss = signed_in(client, engine, "boss@example.com")
-    client.post(f"/teams/{team_id}/actions", headers=boss, json={"play": "walking_meetings"})
+    client.post(f"/teams/{team_id}/actions", headers=boss, json={"play": "step_goal"})
     (action,) = client.get(f"/teams/{team_id}/actions", headers=boss).json()
     assert action["result"] is None
