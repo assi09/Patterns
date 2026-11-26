@@ -162,7 +162,7 @@ def brief(
     # The coach (docs/pivot.md): what the team's calendars did in the report's week, written by
     # code beside the wellbeing findings, or as a heavier week handled when nothing else moved.
     load = coach.week_load(db, team, coach.report_week(report))
-    calendar_line = coach.line(load, wellbeing_changed=not coach.heads_up_week(report.body))
+    calendar_line = coach.line(load, report.body.get("sections", []))
     if calendar_line:
         items.append(calendar_line)
         for evidence in load:

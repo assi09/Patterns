@@ -66,7 +66,9 @@ PLAYS = (
         "One working day a week with no team meetings.",
         ("stress_score", "recovery_score", "strain", "hrv_ms", "resting_hr"),
         triggers=(("meeting_minutes", "up"), ("focus_minutes", "down")),
-        adherence=("meeting_minutes", "down"),
+        # Read from the days themselves (coach.MEETING_FREE_DAYS): less meeting time overall could
+        # come from shorter meetings with no free day, and a moved meeting keeps the total.
+        adherence=("meeting_free_days", "up"),
         source="meeting-free days in 76 companies (Laker et al. 2022, MIT Sloan Management Review)",
     ),
     Play(

@@ -6,8 +6,9 @@ usual week (`app.analysis.team_calendar.team_load`), from at least MIN_MEMBERS p
 
 - **Beside a wellbeing change** it says what the calendar did *in the same week*, never that one
   caused the other: two things moving together is not proof of a cause.
-- **With no wellbeing change** it says by how much meetings moved and that nothing else did: a
-  heavier week the team handled within its usual range.
+- **With no wellbeing change found** it says by how much meetings moved and that no clear
+  change was detected in the readings there were enough of, naming those too thin to tell. It
+  never says the team coped: an absence of evidence is not a measure of capacity.
 - It names the calendar signals that point to a playbook change (`playbook.Play.triggers`), and
   after an approved change, whether the calendar shows it was followed (`Play.adherence`), so
   "it did not help" can be told apart from "it was not done".
@@ -101,28 +102,88 @@ def _part(evidence: Evidence, first: bool) -> str:
     )
 
 
-def line(load: list[Evidence], wellbeing_changed: bool) -> dict | None:
-    """The briefing's calendar sentence, or None when nothing clearly moved or too few calendars."""
+def line(load: list[Evidence], sections: list[dict]) -> dict | None:
+    """The briefing's calendar sentence, or None when nothing clearly moved or too few calendars.
+    `sections` are the week's report sections, which say per wellbeing metric whether it changed,
+    stayed steady or had too few readings to tell."""
     found = moved(load)
     if not found:
         return None
     shown = [found[m] for m in WATCHED if m in found]
     parts = [_part(e, i == 0) for i, e in enumerate(shown)]
-    listed = ", ".join(parts)
-    figures = f"For the typical person, against their own usual week: {listed}."
-    if wellbeing_changed:
+    figures = f"For the typical person, against their own usual week: {', '.join(parts)}."
+    ids = [e.id for e in shown]
+    if any(s.get("status") == "changed" for s in sections):
         text = f"In the same week, the team's calendars were busier than usual. {figures}"
+        return {"text": text, "kind": "calendar", "metric": None, "evidence_ids": ids}
+    # No team-wide change found. That is all it says: an absence of evidence, not a measure of
+    # the team's capacity, and only for the readings there were enough of.
+    read = [s for s in sections if s.get("status") in ("steady", "changed")]
+    short = [s["label"].lower() for s in sections if s.get("status") == "not_enough_data"]
+    if not read:
+        after = "There were too few team readings to tell whether anything else changed."
     else:
-        text = (
-            f"Meetings changed last week. {figures} Nothing in sleep, recovery or activity moved "
-            "beyond the team's usual range: a heavier week, handled within its capacity."
-        )
-    return {"text": text, "kind": "calendar", "metric": None, "evidence_ids": [e.id for e in shown]}
+        after = "We detected no clear change in the available team readings."
+        if short:
+            after += f" Too few readings to tell for {_listed(short)}."
+    text = f"Calendars were busier last week. {figures} {after}"
+    return {"text": text, "kind": "calendar", "metric": None, "evidence_ids": ids}
+
+
+def _listed(words: list[str]) -> str:
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
 
 
 def signals(load: list[Evidence]) -> set[tuple[str, str]]:
     """The calendar signals that moved, as (metric, way), for playbook.Play.triggers."""
     return {(metric, WATCHED[metric]) for metric in moved(load)}
+
+
+MEETING_FREE_DAYS = "meeting_free_days"  # an adherence measure of its own, not a calendar column
+
+
+def _meeting_free_days(frame: pd.DataFrame, window: Window) -> tuple[float, int] | None:
+    """Workdays with no meeting at all, per week, and the workdays read; out-of-office days are
+    not counted, so a day away is not a meeting-free day."""
+    days = frame.loc[pd.Timestamp(window.start) : pd.Timestamp(window.end)]
+    days = days[(days.index.weekday < 5) & days["meeting_minutes"].notna()]
+    if "out_of_office" in days.columns:
+        days = days[days["out_of_office"].fillna(0) == 0]
+    if days.empty:
+        return None
+    return 5 * float((days["meeting_minutes"] == 0).mean()), len(days)
+
+
+def _followed_meeting_free(db: Session, team: Team, during: Window, before: Window) -> dict | None:
+    """Whether the team kept a meeting-free day: the typical person had at least one meeting-free
+    workday a week during it, more than in their 28 days before. Read from the days themselves,
+    so moving Monday's meetings to Tuesday counts and only shortening meetings does not."""
+    rows = []
+    for uid in memberships.member_ids(db, team):
+        frame = calendar.frame_for(db, uid, before.start, during.end + timedelta(days=1))
+        if frame.empty or "meeting_minutes" not in frame.columns:
+            continue
+        now_, usual = _meeting_free_days(frame, during), _meeting_free_days(frame, before)
+        if now_ is None or usual is None or now_[1] < 3 or usual[1] < 10:
+            continue
+        rows.append((now_[0], usual[0]))
+    if len(rows) < MIN_MEMBERS:
+        return None
+    during_week = float(np.median([r[0] for r in rows]))
+    usual_week = float(np.median([r[1] for r in rows]))
+    kept = sum(r[0] >= 1 and r[0] > r[1] for r in rows)
+    done = during_week >= 1 and during_week > usual_week and kept >= BROAD * len(rows)
+    if done:
+        text = (
+            f"Meeting-free workdays during it: {during_week:.1f} a week for the typical person, "
+            f"against {usual_week:.1f} before ({kept} of {len(rows)} had at least one a week)."
+        )
+    else:
+        text = (
+            f"Meeting-free workdays during it: {during_week:.1f} a week for the typical person, "
+            f"against {usual_week:.1f} before, so it may not have been followed."
+        )
+    return {"followed": done, "text": text, "members": len(rows)}
 
 
 def followed(db: Session, team: Team, action: TeamAction, metric: str, way: str) -> dict | None:
@@ -133,6 +194,8 @@ def followed(db: Session, team: Team, action: TeamAction, metric: str, way: str)
     before = Window(
         start=during.start - timedelta(days=BASELINE_DAYS), end=during.start - timedelta(days=1)
     )
+    if metric == MEETING_FREE_DAYS:
+        return _followed_meeting_free(db, team, during, before)
     changes = []
     for uid in memberships.member_ids(db, team):
         frame = calendar.frame_for(db, uid, before.start, during.end + timedelta(days=1))
@@ -165,11 +228,6 @@ def followed(db: Session, team: Team, action: TeamAction, metric: str, way: str)
             "so it may not have been followed."
         )
     return {"followed": done, "text": text, "members": len(changes)}
-
-
-def heads_up_week(report_body: dict) -> bool:
-    """True when the week's report found no team-wide change in any wellbeing metric."""
-    return not any(s.get("status") == "changed" for s in report_body.get("sections", []))
 
 
 def report_week(report) -> Window:

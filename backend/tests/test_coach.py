@@ -86,15 +86,19 @@ def test_a_busy_week_beside_a_wellbeing_change_is_said_as_the_same_week(engine):
         assert f"({moved} of {stats['members']}" in line["text"]
 
 
-def test_a_busy_week_with_nothing_else_moving_says_by_how_much_and_that_it_was_handled(engine):
+def test_a_busy_week_with_no_change_found_says_by_how_much_and_claims_nothing_more(engine):
     team_id = make_team(engine, effects=())
     give_calendars(engine, 7, BUSY)
     run(engine, team_id, [])
     items, evidence = items_of(engine, team_id)
     [line] = [i for i in items if i["kind"] == "calendar"]
-    assert line["text"].startswith("Meetings changed last week. For the typical person")
+    assert line["text"].startswith("Calendars were busier last week. For the typical person")
     assert "time in meetings up " in line["text"]
-    assert "handled within its capacity" in line["text"]
+    assert "We detected no clear change in the available team readings." in line["text"]
+    # The made-up members have no stress readings, and the sentence says so.
+    assert line["text"].endswith("Too few readings to tell for physical stress signs.")
+    # An absence of evidence, never a claim about the team's capacity (review, 2026-11-26).
+    assert not re.search(r"capacity|handled|coped|managed|fine", line["text"], re.I)
     assert not CAUSAL.search(line["text"])
     assert not [i for i in items if i["kind"] == "proposal"]  # nothing to fix, nothing suggested
 
@@ -171,7 +175,7 @@ def test_every_change_has_a_trigger_of_its_own_and_its_evidence():
             assert trigger not in seen, trigger  # no two changes compete for one signal
             seen.add(trigger)
         if play.adherence:
-            assert play.adherence[0] in coach.WATCHED
+            assert play.adherence[0] in {*coach.WATCHED, coach.MEETING_FREE_DAYS}
 
 
 # Whether a change was followed
@@ -230,7 +234,83 @@ def test_over_many_made_up_teams_quiet_weeks_stay_quiet_and_busy_ones_are_said()
     for team in range(200):
         calm = [calendar_days(1000 * team + i) for i in range(7)]
         heavy = [calendar_days(1000 * team + i, BUSY) for i in range(7)]
-        quiet += coach.line(team_load(calm, WEEK), wellbeing_changed=False) is not None
-        busy += coach.line(team_load(heavy, WEEK), wellbeing_changed=False) is not None
+        quiet += coach.line(team_load(calm, WEEK), []) is not None
+        busy += coach.line(team_load(heavy, WEEK), []) is not None
     assert quiet <= 4, quiet  # at most 2% of quiet weeks mentioned
     assert busy >= 196, busy  # at least 98% of clearly busy weeks mentioned
+
+
+# What it says when readings are thin
+
+
+def _busy_load():
+    from app.analysis.team_calendar import team_load
+
+    return team_load([calendar_days(i, BUSY) for i in range(7)], WEEK)
+
+
+def test_with_no_readings_to_tell_it_says_so():
+    sections = [
+        {"metric": m, "label": label, "status": "not_enough_data"}
+        for m, label in [("sleep_minutes", "Time asleep"), ("steps", "Steps")]
+    ]
+    text = coach.line(_busy_load(), sections)["text"]
+    assert text.endswith("There were too few team readings to tell whether anything else changed.")
+    assert "no clear change" not in text
+
+
+def test_with_some_readings_too_thin_it_names_them():
+    sections = [
+        {"metric": "sleep_minutes", "label": "Time asleep", "status": "steady"},
+        {"metric": "hrv_ms", "label": "HRV", "status": "not_enough_data"},
+        {"metric": "stress_score", "label": "Physical stress signs", "status": "not_enough_data"},
+    ]
+    text = coach.line(_busy_load(), sections)["text"]
+    assert "We detected no clear change in the available team readings." in text
+    assert text.endswith("Too few readings to tell for hrv and physical stress signs.")
+
+
+# Was a meeting-free day kept? Read from the days, not from total meeting time
+
+
+def _shifted(seed: int, span, how: str) -> pd.DataFrame:
+    frame = calendar_days(seed)
+    inside = (frame.index.date >= span[0]) & (frame.index.date <= span[1])
+    if how == "moved":  # Monday's meetings moved to Tuesday: same total, Mondays free
+        for day in frame.index[inside & (frame.index.weekday == 0)]:
+            tuesday = day + pd.Timedelta(days=1)
+            if tuesday in frame.index:
+                frame.loc[tuesday, "meeting_minutes"] += frame.loc[day, "meeting_minutes"]
+            frame.loc[day, ["meeting_minutes", "meetings"]] = 0.0
+    elif how == "shorter":  # every meeting shorter, no day free
+        frame.loc[inside & (frame.index.weekday < 5), "meeting_minutes"] *= 0.4
+    return frame
+
+
+@pytest.mark.parametrize("how, kept", [("moved", True), ("shorter", False)])
+def test_a_meeting_free_day_counts_free_days_not_total_time(engine, how, kept):
+    team_id = make_team(engine, effects=())
+    span = (TODAY - timedelta(days=21), TODAY - timedelta(days=8))
+    with session_scope(engine) as db:
+        people = db.scalars(
+            select(User).where(User.email.like("member%")).order_by(User.email)
+        ).all()
+        for i, person in enumerate(people):
+            save_daily(db, person.id, calendar.SOURCE, _shifted(i, span, how))
+    action_id = ended_change(engine, team_id, "meeting_free_day", span)
+    with session_scope(engine) as db:
+        team = db.get(Team, uuid.UUID(team_id))
+        found = playbook.results_of(db, team, TODAY)[action_id]["followed"]
+        assert found["followed"] is kept, found["text"]
+        assert found["text"].startswith("Meeting-free workdays during it:")
+
+
+def test_a_day_out_of_office_is_not_a_meeting_free_day():
+    frame = calendar_days(0)
+    week = WEEK
+    days = frame.loc[pd.Timestamp(week.start) : pd.Timestamp(week.end)].index
+    monday = [d for d in days if d.weekday() == 0][0]
+    frame.loc[monday, ["meeting_minutes", "meetings"]] = 0.0
+    frame.loc[monday, "out_of_office"] = 1.0
+    free, read = coach._meeting_free_days(frame, week)
+    assert free == 0.0 and read == 4
