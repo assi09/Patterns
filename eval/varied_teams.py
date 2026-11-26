@@ -320,17 +320,24 @@ def check_items(
             if spans and str(week) not in spans and item["kind"] != "change":
                 in_week = False
         cited = [evidence[k] for k in item.get("evidence_ids", []) if k in evidence]
-        values = {str(v) for r in cited for v in r.get("stats", {}).values()}
+        # A lasting-change record keeps each week's figures in `weeks`; read those too.
+        flat = [r.get("stats", {}) for r in cited] + [
+            w
+            for r in cited
+            for w in r.get("stats", {}).get("weeks", [])
+            if isinstance(w, dict)
+        ]
+        values = {str(v) for stats_ in flat for v in stats_.values()}
         minutes = (
             60
             if item.get("metric") == "bedtime_hour" or "Bedtime" in item["text"]
             else 1
         )
         medians = [
-            minutes * abs(float(r["stats"][k]))
-            for r in cited
-            for k in r.get("stats", {})
-            if "median" in k and isinstance(r["stats"][k], (int, float))
+            minutes * abs(float(stats_[k]))
+            for stats_ in flat
+            for k in stats_
+            if "median" in k and isinstance(stats_[k], (int, float))
         ]
         for found in MEDIAN.findall(item["text"]):
             value = abs(float(found.replace(",", "")))
