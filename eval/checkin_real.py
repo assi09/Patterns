@@ -14,6 +14,10 @@ Fixed before the first run (docs/plan.md, "What the real-data run can and cannot
   `MIN_BASELINE` values in the 28 days before; on any other week the rule cannot fire.
 - **Firing on ordinary weeks**: alerts per eligible person-week, as the data is. These weeks are
   unlabelled, so an alert is reported as an alert, not called false.
+- **Observable** (added 2026-11-26, after the first run): an eligible week where time asleep and
+  resting heart rate each have a reading on at least `DAYS_FAR` worn days. Detection is reported
+  over all eligible weeks (end to end) and over observable weeks, so a change missed for lack of
+  readings is told apart from one missed with the readings there.
 - **Detection**: on eligible weeks that did not fire, a sustained change is planted on all 7 days
   (time asleep down and resting heart rate up, by four sizes), the app's scores recomputed from
   the changed inputs, and the rule run again. Also time asleep alone, to show what one signal does.
@@ -23,6 +27,7 @@ Fixed before the first run (docs/plan.md, "What the real-data run can and cannot
 """
 
 import json
+import subprocess
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -83,6 +88,19 @@ def single_signals(frame: pd.DataFrame, today: date) -> list[str]:
         checkin.MIN_SIGNALS = kept
 
 
+def observable(frame: pd.DataFrame, today: date) -> bool:
+    """Whether the planted change can be seen at all: time asleep and resting heart rate each have
+    a reading on at least `DAYS_FAR` of the week's worn days, the most the rule asks of a signal.
+    A week that fails this can only be missed for lack of readings, whatever the margins."""
+    days = pd.date_range(today - timedelta(days=checkin.WINDOW_DAYS - 1), today)
+    worn = checkin._worn(frame, days)
+    return all(
+        metric in frame
+        and int(frame[metric].reindex(days)[worn].notna().sum()) >= checkin.DAYS_FAR
+        for metric in ("sleep_minutes", "resting_hr")
+    )
+
+
 def run(name: str, people: dict[str, pd.DataFrame]) -> dict:
     weeks = eligible_weeks = fired = 0
     people_eligible, people_fired = set(), set()
@@ -91,6 +109,8 @@ def run(name: str, people: dict[str, pd.DataFrame]) -> dict:
         f"sleep_only_{SLEEP_ONLY}min": [0, 0]
     }
     largest_by_signal: dict[str, int] = {}  # which signals clear the bar on their own
+    seen = {k: [0, 0] for k in found}  # the same, among observable weeks only
+    seen_by_signal: dict[str, int] = {}
     for pid, raw in people.items():
         scored = with_scores(raw)
         first = raw.index.min().date()
@@ -110,18 +130,24 @@ def run(name: str, people: dict[str, pd.DataFrame]) -> dict:
                     signals[key] = signals.get(key, 0) + 1
                 else:
                     raw_cut = raw.loc[: pd.Timestamp(today)]
+                    visible = observable(cut, today)
+                    tallies = [found, seen] if visible else [found]
                     for s, r in SIZES:
                         hit = bool(checkin.detect(planted(raw_cut, today, s, r), today))
-                        found[f"{s}min_{r}bpm"][0] += hit
-                        found[f"{s}min_{r}bpm"][1] += 1
+                        for tally in tallies:
+                            tally[f"{s}min_{r}bpm"][0] += hit
+                            tally[f"{s}min_{r}bpm"][1] += 1
                     s, r = SIZES[-1]
                     for metric in single_signals(planted(raw_cut, today, s, r), today):
                         largest_by_signal[metric] = largest_by_signal.get(metric, 0) + 1
+                        if visible:
+                            seen_by_signal[metric] = seen_by_signal.get(metric, 0) + 1
                     hit = bool(
                         checkin.detect(planted(raw_cut, today, SLEEP_ONLY, 0), today)
                     )
-                    found[f"sleep_only_{SLEEP_ONLY}min"][0] += hit
-                    found[f"sleep_only_{SLEEP_ONLY}min"][1] += 1
+                    for tally in tallies:
+                        tally[f"sleep_only_{SLEEP_ONLY}min"][0] += hit
+                        tally[f"sleep_only_{SLEEP_ONLY}min"][1] += 1
             today += timedelta(days=7)
     return {
         "dataset": name,
@@ -140,6 +166,13 @@ def run(name: str, people: dict[str, pd.DataFrame]) -> dict:
             k: {"found": hit, "of": n, "rate": round(hit / n, 3) if n else None}
             for k, (hit, n) in found.items()
         },
+        # Weeks where sleep and resting heart rate each had a reading on at least 5 worn days.
+        "observable_weeks": seen[f"{SIZES[-1][0]}min_{SIZES[-1][1]}bpm"][1],
+        "observable_signals_alone_at_largest": seen_by_signal,
+        "planted_detection_observable": {
+            k: {"found": hit, "of": n, "rate": round(hit / n, 3) if n else None}
+            for k, (hit, n) in seen.items()
+        },
     }
 
 
@@ -154,6 +187,14 @@ def main() -> None:
     ]
     out = {
         "rule": checkin.RULE,
+        "commit": subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=HERE,
+        ).stdout.strip(),
+        "command": "PYTHONPATH=backend:eval python eval/checkin_real.py (from the repository root)",
         "ran": date.today().isoformat(),
         "wear": "PMData: a day with activity minutes; LifeSnaps: every day (no wear time recorded)",
         "results": results,
