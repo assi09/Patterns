@@ -618,6 +618,31 @@ class TeamMembership(Base):
     )
 
 
+class DemoTeam(Base):
+    """A team made by `python -m app.teams demo-team`, recorded when it was made, so its removal
+    deletes exactly what the command created and nothing that only looks like it."""
+
+    __tablename__ = "demo_teams"
+
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class DemoAccount(Base):
+    """A made-up account the demo-team command created, and the demo team it was made for."""
+
+    __tablename__ = "demo_accounts"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("demo_teams.team_id", ondelete="CASCADE"), index=True
+    )
+
+
 class TeamEvent(Base):
     """Append-only record of who joined, left, shared or changed a team's code, and when."""
 

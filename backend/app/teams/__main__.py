@@ -4,8 +4,9 @@ Run from the repository root with the virtual environment active; the deployed p
 scheduler runs `weekly` on Mondays. A team's week is made once, so running it again is safe.
 Prints counts only, never anyone's data. `demo-members` fills a team with made-up members on a
 local database, to try reports before real people join (`demo.py`). `demo-team` makes a new,
-labelled team of made-up members for a presentation, and with `--remove` deletes it again; on a
-deployed database it needs `--on-production`, and it never touches a team with real members.
+labelled team of made-up members for a presentation and records the ids it made; `--remove`
+deletes exactly those again, one named team per run. On a deployed database it needs
+`--on-production`, and it never removes a team anyone else ever joined.
 """
 
 import argparse

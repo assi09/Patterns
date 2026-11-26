@@ -9,6 +9,7 @@ has something to show too. Running it again replaces their data.
 """
 
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.analysis.team import week_of
 from app.auth.passwords import hash_password
 from app.db.daily import save_daily
-from app.db.models import Team, TeamMembership, User
+from app.db.models import DemoAccount, DemoTeam, Team, TeamMembership, User
 from app.sync import calendar
 from app.synthetic import Step, generate
 from app.teams import memberships
@@ -151,36 +152,44 @@ def create_demo_team(
         raise DemoTeamError(f"Accounts starting {prefix!r} already exist: choose another --prefix.")
     team = memberships.create_team(db, supervisor, name, None, now)
     added = add_demo_members(db, team, count, count // 2, today, now, prefix, lasting)
+    # Recorded when made, so removal deletes these ids and nothing that only looks like them.
+    db.add(DemoTeam(team_id=team.id, created_at=now))
+    db.flush()
+    for person in db.scalars(select(User).where(User.email.in_(emails))):
+        db.add(DemoAccount(user_id=person.id, team_id=team.id))
+    db.flush()
     return team, added
 
 
-def demo_members_of(db: Session, team: Team) -> list[User]:
-    """The team's made-up members; raises if it has anyone else, so a real team is never removed,
-    or if one of them is in another team too, so removing it never empties a second team."""
-    people = [db.get(User, uid) for uid in memberships.member_ids(db, team)]
-    real = [p for p in people if not (p.email.startswith("demo") and p.email.endswith(DOMAIN))]
-    if real or LABEL not in team.name.lower():
-        raise DemoTeamError("This is not a demo team: it has real members or no label.")
+def demo_accounts_of(db: Session, team: Team) -> list[uuid.UUID]:
+    """The ids of the accounts the demo-team command made for this team, whether or not they are
+    still members. Raises unless removing them and the team is safe: the command made the team,
+    nobody it did not make was ever a member, and none of its accounts is in another team."""
+    if db.get(DemoTeam, team.id) is None:
+        raise DemoTeamError("The demo-team command did not make this team: remove nothing.")
+    made = set(db.scalars(select(DemoAccount.user_id).where(DemoAccount.team_id == team.id)))
+    ever = set(db.scalars(select(TeamMembership.user_id).where(TeamMembership.team_id == team.id)))
+    if ever - made:
+        raise DemoTeamError("Someone the command did not make joined this team: remove nothing.")
     elsewhere = db.scalar(
         select(TeamMembership).where(
-            TeamMembership.user_id.in_([p.id for p in people]), TeamMembership.team_id != team.id
+            TeamMembership.user_id.in_(made), TeamMembership.team_id != team.id
         )
     )
     if elsewhere is not None:
         raise DemoTeamError("A made-up member is also in another team: remove nothing.")
-    return people
+    return sorted(made)
 
 
 def remove_demo_team(db: Session, team: Team) -> int:
-    """Deletes a demo team and its made-up accounts with all their data; returns how many."""
+    """Deletes a demo team and the accounts made for it, with all their data; returns how many."""
     from app.auth.deletion import delete_account
 
-    people = demo_members_of(db, team)
-    emails = [p.email for p in people]
-    db.execute(delete(Team).where(Team.id == team.id))
+    ids = demo_accounts_of(db, team)
+    db.execute(delete(Team).where(Team.id == team.id))  # its records go with it
     db.flush()
-    for email in emails:
-        person = db.scalar(select(User).where(User.email == email))
+    for user_id in ids:
+        person = db.get(User, user_id)
         if person is not None:
             delete_account(db, person)
-    return len(emails)
+    return len(ids)

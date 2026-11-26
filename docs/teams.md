@@ -144,10 +144,12 @@ For each person who opted in, the Team tab shows one row for the past week:
   accounts cannot sign in; running it again replaces their data.
 - `python -m app.teams demo-team --supervisor <email> --name "<name> (synthetic)" [--count 8]
   [--prefix demo-x] [--lasting] [--on-production]` makes a **new** team of made-up members for a
-  presentation; `--remove` with the same supervisor and name deletes it and its made-up accounts.
-  The name must say "synthetic", and each demo team needs its own `--prefix`: accounts that
-  already exist are refused, and removal stops if a made-up member is also in another team, so
-  removing one demo team never empties another. A team with any real member is never removed.
+  presentation, recording the team's id and each account's id it created (`demo_teams`,
+  `demo_accounts`). `--remove` with the same supervisor and name deletes exactly those, members
+  who left included; it removes one named team per run, so two demo teams take two runs. The name
+  must say "synthetic" and each demo team needs its own `--prefix`: accounts that already exist
+  are refused. Removal stops, deleting nothing, when the command did not make the team, when
+  anyone it did not make was ever a member, or when one of its accounts is in another team.
 - A report stores a headline and one section per metric ("Time asleep fell across the team:
   median change -32 min (1 of 7 higher, 6 lower)."), a weekday line for sleep, steps and stress,
   and the aggregate evidence each sentence cites. The text is templated: every number in it is
