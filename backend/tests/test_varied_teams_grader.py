@@ -98,7 +98,7 @@ def test_correct_findings_pass_every_claim(built):
     report = built["this"]
     change = grade(change_item(report), report)
     assert failed_checks(change) == set(), change["failed"]
-    assert change["claims"] == 7 and change["claims_passed"] == 7
+    assert change["claims"] == 8 and change["claims_passed"] == 8
     for section in report.body["sections"]:
         item = section_item(report, section["metric"])
         assert failed_checks(grade(item, report)) == set(), item["text"]
@@ -192,3 +192,18 @@ def test_a_figure_from_a_withheld_metric_fails(built):
 def test_an_empty_briefing_checks_no_claims(built):
     result = varied_teams.check_items([], built["this"], EMAILS, WEEK.start)
     assert result["claims"] == 0 and result["items_claim_checked"] == 0
+
+
+def test_the_wrong_metric_name_fails_even_with_the_right_unit(built):
+    """Time asleep and bedtime are both shown in minutes: swapping only the visible label keeps
+    every number right, and must still fail, because the supervisor reads the label."""
+    report = built["this"]
+    item = change_item(report)
+    renamed = corrupt(item, "Time asleep", "Bedtime")
+    assert failed_checks(grade(renamed, report)) == {"metric_named"}
+    section = section_item(report)
+    assert failed_checks(grade(corrupt(section, "Time asleep", "Bedtime"), report)) == {
+        "metric_named"
+    }
+    # The label right but the metadata pointing at another metric fails too.
+    assert "metric_named" in failed_checks(grade({**item, "metric": "bedtime_hour"}, report))

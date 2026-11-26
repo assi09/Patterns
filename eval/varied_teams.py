@@ -313,6 +313,18 @@ UNITS = {
     "stress_score": None,
 }
 FIGURE = re.compile(r"median(?: change)? ([+-][\d,]+(?:\.\d+)?)(?: (min|steps|bpm|ms)\b)?")
+# What the supervisor reads as the metric's name; written out here, not taken from the app.
+LABELS = {
+    "sleep_minutes": "Time asleep",
+    "bedtime_hour": "Bedtime",
+    "steps": "Steps",
+    "active_zone_minutes": "Active Zone Minutes",
+    "resting_hr": "Resting heart rate",
+    "hrv_ms": "Heart rate variability",
+    "recovery_score": "Recovery",
+    "strain": "Strain",
+    "stress_score": "Physical stress signs",
+}
 UP, DOWN = {"rose", "higher", "later"}, {"fell", "lower", "earlier"}
 WORD = re.compile(r"\b(rose|fell|higher|lower|later|earlier)\b")
 SPLIT = re.compile(r"[(;] ?(\d+) of (\d+) higher, (\d+) lower\)")  # "(median x; u of n ...)" too
@@ -322,6 +334,7 @@ NAMED = re.compile(r"against ([A-Z][a-z]{2}) (\d{1,2}) to (?:([A-Z][a-z]{2}) )?(
 RUNNING = re.compile(r"for (\d+) weeks running")
 MONTHS = {m: i for i, m in enumerate("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(), 1)}
 CHECKS = (
+    "metric_named",
     "figure_value_sign_unit",
     "direction_word",
     "counts_match_fields",
@@ -379,6 +392,15 @@ def _named_period_ok(text: str, baseline: tuple[date, date] | None, week: date) 
         MONTHS.get(m2 or m1),
         int(d2),
     ) == (end.month, end.day)
+
+
+def _metric_named(item: dict, record: dict) -> bool:
+    """The sentence names the metric its figure is about: the visible label, the item's metric
+    and the evidence record's metric all agree. The supervisor reads the label, not the metadata."""
+    metric = item["metric"]
+    label = LABELS.get(metric)
+    opens = bool(label) and re.match(rf"{re.escape(label)}\b(?: has| rose| fell| moved|:)", item["text"])
+    return bool(opens) and list(record.get("metrics") or []) == [metric]
 
 
 def _section_claims(item: dict, record: dict, week: date) -> dict[str, bool]:
@@ -465,6 +487,8 @@ def check_items(items: list[dict], report, emails: set[str], week: date) -> dict
             continue
         if not cited:
             claims = {"target_week": False}
+        else:
+            claims["metric_named"] = _metric_named(item, cited[0])
         for name, ok in claims.items():
             results[name].append(ok)
             if not ok:
