@@ -21,6 +21,7 @@ data/eval/supervisor/instance.json (git-ignored), for the scripted runs and real
 """
 
 import json
+import os
 import secrets
 import shutil
 import subprocess
@@ -29,7 +30,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 RUN_DB = Path("data/eval/varied_teams/run.db")
-OUT = Path("data/eval/supervisor")
+# Another folder keeps a second instance apart, e.g. one built at the baseline revision.
+OUT = Path(os.environ.get("FA_SUPERVISOR_INSTANCE", "data/eval/supervisor"))
 
 
 def main() -> None:
@@ -39,7 +41,7 @@ def main() -> None:
     db_path = OUT / "local.db"
     shutil.copy(RUN_DB, db_path)
     url = f"sqlite:///{db_path}"
-    env = {**__import__("os").environ, "FA_DATABASE_URL": url}
+    env = {**os.environ, "FA_DATABASE_URL": url}
     subprocess.run(
         ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"],
         check=True,
@@ -88,9 +90,9 @@ def main() -> None:
         small = made(boss, "Small demo team (synthetic data)", 3, "demo-small", False)
         acted = made(boss, "Demo team with a past change (synthetic data)", 8, "demo-acted", True)
         theirs = made(other, "Another supervisor's team (synthetic data)", 6, "demo-other", True)
-        # A change the supervisor approved: it ran for the two weeks before the last full week,
-        # so the report of the week before last was written while it ran, and its result is known
-        # only after it ended.
+        # A change the supervisor approved: it ran for three weeks up to the end of the last full
+        # week, so the report of the week before last was written while it ran, and its result
+        # is known only from the last week's report.
         began = last.start - timedelta(days=14)
         db.add(
             TeamAction(
@@ -100,7 +102,7 @@ def main() -> None:
                 body="No team meetings or calls after 5 pm on working days.",
                 metric="sleep_minutes",
                 starts_on=began,
-                ends_on=last.start - timedelta(days=1),
+                ends_on=last.end,
                 status="approved",
                 source="supervisor",
                 play="no_late_meetings",

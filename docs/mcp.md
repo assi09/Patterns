@@ -61,7 +61,7 @@ connection. Never its inputs or results.
 
 | Role | Reads | Sends in |
 |---|---|---|
-| **Supervisor** | their own teams: the observed readings, the latest weekly report's team figures, open team alerts, the team's meeting load; all built from at least 5 people, as on the Team tab | a team event (a launch, a deadline): title and dates, held for the supervisor to approve |
+| **Supervisor** | their own teams: any week's report as one labelled answer (`team_overview`, with `week`), the bounded evidence behind each finding (`team_finding_evidence`), the team's scheduled meeting time for a given week (`team_meeting_load`), and, for the latest week, observed readings and open team alerts; all from at least 5 people, as on the Team tab ([supervisor-workflow.md](supervisor-workflow.md)) | a team event (a launch, a deadline): title and dates, held for the supervisor to approve |
 | **Member** | their own recent days (sleep, steps, resting heart rate, HRV), their own calendar counts | their own calendar days (meeting minutes, meetings, after-hours minutes, back-to-back, focus minutes), held for them to approve |
 | **HR** | nothing through MCP | nothing |
 | **Anyone** | **never** another person's data, another team, a figure from fewer than 5 people, or any check-in alert | |
@@ -98,9 +98,13 @@ existing team instead.
 2. **Sign in from Codex** (`codex mcp login patterns`) or claude.ai: the Allow page names the
    assistant, what it may do and where the answer goes. Press Allow; the connection appears in
    Settings, marked *Signed in*.
-3. **Ask:** "How is my team doing this week, and what does their meeting load look like?" The
-   assistant calls `who_am_i`, `team_overview` and `team_meeting_load`, and answers from team
-   figures, each from at least 5 people.
+3. **Ask:** "What changed for my team last week?" The assistant calls `who_am_i` and
+   `team_overview`, and answers with the labelled finding ("Sustained change", its own baseline
+   dates, contributors out of the roster). **Challenge it:** "Was that everyone?" It answers from
+   `roster` and `contributors`. **Inspect it:** "Show me the evidence." It calls
+   `team_finding_evidence`. **Follow up:** "What happened to the change we agreed to try?" It
+   reads `follow_up`. For context, "And the meeting load that week?" calls `team_meeting_load`
+   with the same week; it never claims meetings caused the change.
 4. **Refusal:** "What is <a member>'s sleep?" There is no tool for it and the assistant says so.
 5. **Send in:** "Add the release on Friday as a team event." Use synthetic events only (a release,
    an offsite): no names, no health or absence, until #246 is fixed. It calls `send_team_event`; Settings

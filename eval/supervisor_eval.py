@@ -17,6 +17,7 @@ outcomes, calls, bytes and latency; never a token or a tool's full output.
 
 import asyncio
 import json
+import os
 import re
 import subprocess
 import sys
@@ -28,8 +29,9 @@ import httpx2
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-URL = "http://127.0.0.1:8013/mcp/"
-INSTANCE = json.loads(Path("data/eval/supervisor/instance.json").read_text())
+URL = os.environ.get("FA_EVAL_MCP_URL", "http://127.0.0.1:8013/mcp/")
+FOLDER = Path(os.environ.get("FA_SUPERVISOR_INSTANCE", "data/eval/supervisor"))
+INSTANCE = json.loads((FOLDER / "instance.json").read_text())
 TEAMS = INSTANCE["teams"]
 
 
@@ -166,7 +168,9 @@ async def tasks(run: Run) -> dict[str, dict]:
     mt = m["text"]
     out["synthetic_both_sources"] = {
         "sustained change": "Sustained change" in t or '"sustained"' in t,
-        "finding dates": bool(re.search(r'"baseline": \{"start": "\d{4}', t)),
+        # Corrected after the first dev run: the server indents its JSON, so the frozen pattern
+        # (no whitespace after the brace) could never match. Same check, whitespace allowed.
+        "finding dates": bool(re.search(r'"baseline": \{\s*"start": "\d{4}', t)),
         "calendar same week": bool(rep_week) and rep_week[1] in mt,
         "calendar comparison dates": has(mt, '"baseline"'),
         "no automatic scheduling proposal": "evening boundary" not in t.lower()
@@ -240,6 +244,8 @@ async def main(label: str) -> None:
         "commit": subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
         ).stdout.strip(),
+        # The server's code can differ from this script's checkout (the baseline runs apart).
+        "server_revision": os.environ.get("FA_EVAL_SERVER_REVISION", "this checkout"),
         "date": date.today().isoformat(),
         "tools": tools,
         "tasks_passed": f"{sum(passed.values())}/{len(passed)}",
@@ -257,7 +263,7 @@ async def main(label: str) -> None:
     out.write_text(json.dumps(summary, indent=1) + "\n")
     print(
         json.dumps(
-            {k: summary[k] for k in ("label", "commit", "tasks_passed", "passed", "calls")},
+            {k: summary[k] for k in ("label", "server_revision", "tasks_passed", "calls")},
             indent=1,
         )
     )

@@ -118,10 +118,11 @@ experiment database. Nothing goes to production and nothing is uploaded.
 
 - **#246 (privacy, open):** the note screen lets a named health or absence remark through (6
   known misses). The demo uses synthetic notes only. This stays the top privacy issue.
-- **Supervisor evidence view:** the Team screen cannot open the record behind a finding. The
-  rehearsal step "inspect its evidence" is not possible in the app today.
+- **Supervisor evidence view:** closed on the branch of 2026-11-27 (not yet deployed). Each finding
+  and weekly line opens its record on an Evidence screen ([supervisor-workflow.md](supervisor-workflow.md)).
 - **MCP:**
-  - It does not expose the briefing's dated finding or evidence.
+  - The dated finding and its evidence: closed on the same branch (`team_overview` with `week`,
+    `team_finding_evidence`).
   - No real assistant sign-in has been tested.
 - **The weekly job is unmonitored:** no metric for reports made, withheld or briefed, or for
   approvals and declines.
