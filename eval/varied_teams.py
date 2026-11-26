@@ -293,72 +293,196 @@ def recompute(
     return (statistics.median(changes), len(changes)) if len(changes) >= 5 else None
 
 
-# Objective checks on one output's items.
+# Objective checks, one claim at a time. Every number in a sentence is matched to the evidence
+# field it stands for, with its sign and unit, and every finding to its target week and the
+# comparison period its record used. Nothing here reuses the app's own sentence formatting.
 
 CAUSAL = re.compile(
     r"\b(because|caused|due to|led to|leads to|results? in|drove|driven by)\b",
     re.IGNORECASE,
 )
-MEDIAN = re.compile(r"median(?: change)? ([+-]?[\d,]+(?:\.\d+)?)")
-COUNTS = re.compile(r"\((\d+) of (\d+)")
+UNITS = {
+    "sleep_minutes": "min",
+    "bedtime_hour": "min",  # shown in minutes, stored in hours
+    "active_zone_minutes": "min",
+    "steps": "steps",
+    "resting_hr": "bpm",
+    "hrv_ms": "ms",
+    "recovery_score": None,
+    "strain": None,
+    "stress_score": None,
+}
+FIGURE = re.compile(r"median(?: change)? ([+-][\d,]+(?:\.\d+)?)(?: (min|steps|bpm|ms)\b)?")
+UP, DOWN = {"rose", "higher", "later"}, {"fell", "lower", "earlier"}
+WORD = re.compile(r"\b(rose|fell|higher|lower|later|earlier)\b")
+SPLIT = re.compile(r"[(;] ?(\d+) of (\d+) higher, (\d+) lower\)")  # "(median x; u of n ...)" too
+SHORT = re.compile(r"\((\d+) of the (\d+) people needed\)")
+MOVED = re.compile(r"\((\d+) of (\d+) people\)")
+NAMED = re.compile(r"against ([A-Z][a-z]{2}) (\d{1,2}) to (?:([A-Z][a-z]{2}) )?(\d{1,2})\b")
+RUNNING = re.compile(r"for (\d+) weeks running")
+MONTHS = {m: i for i, m in enumerate("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(), 1)}
+CHECKS = (
+    "figure_value_sign_unit",
+    "direction_word",
+    "counts_match_fields",
+    "target_week",
+    "comparison_period",
+    "streak",
+    "five_or_more",
+)
 
 
-def check_items(
-    items: list[dict], report, emails: set[str], week: date
-) -> dict[str, bool]:
+def _window(record: dict, at: int) -> tuple[date, date] | None:
+    spans = record.get("windows") or []
+    if len(spans) <= at:
+        return None
+    return date.fromisoformat(spans[at]["start"]), date.fromisoformat(spans[at]["end"])
+
+
+def _rolling(week: date) -> tuple[date, date]:
+    """The four weeks before the target week: what "the four weeks before" means."""
+    return week - timedelta(days=BASELINE_DAYS), week - timedelta(days=1)
+
+
+def _figure_ok(text: str, metric: str, truth: float) -> bool:
+    found = FIGURE.findall(text)
+    if len(found) != 1:
+        return False
+    shown, unit = found[0]
+    value = float(shown.replace(",", ""))
+    expected = truth * (60 if metric == "bedtime_hour" else 1)
+    tolerance = 0.5 if metric == "bedtime_hour" or abs(value) >= 10 else 0.05
+    sign_ok = abs(expected) < tolerance or (value > 0) == (expected > 0)
+    return sign_ok and abs(value - expected) <= tolerance + 1e-9 and (unit or None) == UNITS[metric]
+
+
+def _claimed_way(text: str) -> str | None:
+    before = text.split("median", 1)[0]
+    words = WORD.findall(before)
+    if not words:
+        return None
+    return "up" if words[0] in UP else "down"
+
+
+def _named_period_ok(text: str, baseline: tuple[date, date] | None, week: date) -> bool:
+    """The sentence's comparison period must be the one its figure was measured against."""
+    if baseline is None:
+        return False
+    if "the four weeks before" in text:
+        return baseline == _rolling(week)
+    named = NAMED.search(text)
+    if not named:
+        return False  # a figure with no comparison period stated
+    m1, d1, m2, d2 = named.groups()
+    start, end = baseline
+    return (MONTHS.get(m1), int(d1)) == (start.month, start.day) and (
+        MONTHS.get(m2 or m1),
+        int(d2),
+    ) == (end.month, end.day)
+
+
+def _section_claims(item: dict, record: dict, week: date) -> dict[str, bool]:
+    metric, text, stats = item["metric"], item["text"], record.get("stats", {})
+    target = _window(record, 0) == (week, week + timedelta(days=6))
+    period = _window(record, 1) == _rolling(week)  # sections compare with the four weeks before
+    short = SHORT.search(text)
+    if short:
+        return {
+            "counts_match_fields": not record.get("sufficient")
+            and int(short[1]) == stats.get("members")
+            and int(short[2]) == stats.get("minimum_members"),
+            "target_week": target,
+            "comparison_period": period,
+        }
+    split = SPLIT.search(text)
+    claims = {
+        "figure_value_sign_unit": _figure_ok(text, metric, stats.get("median_change", math.nan)),
+        "counts_match_fields": bool(split)
+        and (int(split[1]), int(split[2]), int(split[3]))
+        == (stats.get("members_up"), stats.get("members"), stats.get("members_down")),
+        "target_week": target,
+        "comparison_period": period,
+        "five_or_more": bool(record.get("sufficient")) and stats.get("members", 0) >= 5,
+    }
+    way = _claimed_way(text)
+    if way is not None or "no clear change" not in text:
+        truth = "up" if stats.get("median_change", 0) > 0 else "down"
+        claims["direction_word"] = way == truth
+    return claims
+
+
+def _change_claims(item: dict, record: dict, week: date) -> dict[str, bool]:
+    metric, text, stats = item["metric"], item["text"], record.get("stats", {})
+    rows = stats.get("weeks") or []
+    row = rows[-1] if rows else {}
+    way = stats.get("direction")
+    moved = MOVED.search(text)
+    field = "members_up" if way == "up" else "members_down"
+    running = RUNNING.search(text)
+    if running:
+        n = int(running[1])
+        streak = (
+            n == stats.get("weeks_running")
+            and n <= len(rows)
+            and all(r.get("changed") and r.get("direction") == way for r in rows[-n:])
+        )
+    else:  # "this week": a change in the target week only
+        streak = "this week" in text and stats.get("weeks_running") == 1 and bool(row.get("changed"))
+    return {
+        "figure_value_sign_unit": _figure_ok(text, metric, row.get("median_change", math.nan)),
+        "direction_word": way is not None and _claimed_way(text) == way,
+        "counts_match_fields": bool(moved)
+        and (int(moved[1]), int(moved[2])) == (row.get(field), row.get("members")),
+        "target_week": (row.get("start"), row.get("end"))
+        == (week.isoformat(), (week + timedelta(days=6)).isoformat())
+        and (_window(record, 0) or (None, None))[1] == week + timedelta(days=6),
+        "comparison_period": _named_period_ok(text, _window(record, 1), week),
+        "streak": streak,
+        "five_or_more": row.get("members", 0) >= 5,
+    }
+
+
+def check_items(items: list[dict], report, emails: set[str], week: date) -> dict:
+    """Every claim in one output, checked against the evidence field it stands for.
+
+    Returns pass/fail per check (over the claims of that kind), the number of claims checked,
+    and the items that carry no checkable figure (a calendar line, a proposal), counted apart.
+    """
     evidence = report.evidence or {}
     text = " ".join(i["text"] for i in items)
     refs = [key for i in items for key in i.get("evidence_ids", [])]
-    in_week = True
-    numbers = True
-    for item in items:
-        for key in item.get("evidence_ids", []):
-            record = evidence.get(key)
-            if record is None:
-                continue
-            spans = [w["start"] for w in record.get("windows", [])]
-            if spans and str(week) not in spans and item["kind"] != "change":
-                in_week = False
+    results: dict[str, list[bool]] = {k: [] for k in CHECKS}
+    failed: list[str] = []
+    other = 0
+    for at, item in enumerate(items):
         cited = [evidence[k] for k in item.get("evidence_ids", []) if k in evidence]
-        # A lasting-change record keeps each week's figures in `weeks`; read those too.
-        flat = [r.get("stats", {}) for r in cited] + [
-            w
-            for r in cited
-            for w in r.get("stats", {}).get("weeks", [])
-            if isinstance(w, dict)
-        ]
-        values = {str(v) for stats_ in flat for v in stats_.values()}
-        minutes = (
-            60
-            if item.get("metric") == "bedtime_hour" or "Bedtime" in item["text"]
-            else 1
-        )
-        medians = [
-            minutes * abs(float(stats_[k]))
-            for stats_ in flat
-            for k in stats_
-            if "median" in k and isinstance(stats_[k], (int, float))
-        ]
-        for found in MEDIAN.findall(item["text"]):
-            value = abs(float(found.replace(",", "")))
-            if not any(abs(value - m) <= 0.5 for m in medians):
-                numbers = False
-        for a, b in COUNTS.findall(item["text"]):
-            if b not in values and a not in values:
-                numbers = False
-    small = any(
-        r.get("sufficient") and r.get("n", 99) < 5
-        for r in evidence.values()
-        if isinstance(r, dict)
-    )
-    return {
-        "numbers_match_evidence": numbers,
-        "every_reference_exists": all(k in evidence for k in refs)
-        and (bool(refs) or not items),
-        "evidence_for_this_week": in_week,
+        if item["kind"] == "section":
+            claims = _section_claims(item, cited[0], week) if cited else {}
+        elif item["kind"] == "change":
+            claims = _change_claims(item, cited[0], week) if cited else {}
+        else:
+            other += 1
+            continue
+        if not cited:
+            claims = {"target_week": False}
+        for name, ok in claims.items():
+            results[name].append(ok)
+            if not ok:
+                failed.append(f"{at}:{name}")
+    checks = {k: all(v) for k, v in results.items()}
+    checks |= {
+        "every_reference_exists": all(k in evidence for k in refs) and (bool(refs) or not items),
         "no_causal_wording": not CAUSAL.search(text),
         "no_member_named": not any(e.split("@")[0] in text for e in emails),
-        "every_figure_from_five_or_more": not small,
+    }
+    return {
+        "checks": checks,
+        "claims": sum(len(v) for v in results.values()),
+        "claims_passed": sum(sum(v) for v in results.values()),
+        "by_check": {k: [sum(v), len(v)] for k, v in results.items()},
+        "items_claim_checked": len(items) - other,
+        "items_other": other,
+        "failed": failed,
     }
 
 
@@ -593,21 +717,34 @@ def summarise(cases: list[dict], spec: dict) -> dict:
         t["metric_at_5"] += 5 in ns
         t["model_would_decide"] += c["model_would_decide"]
 
-    def rate(key: str, which: str) -> str:
-        done = [c[which][key] for c in cases if c.get(which)]
-        return f"{sum(done)}/{len(done)}"
-
-    keys = [
-        "numbers_match_evidence",
-        "every_reference_exists",
-        "evidence_for_this_week",
-        "no_causal_wording",
-        "no_member_named",
-        "every_figure_from_five_or_more",
-    ]
     ready = [c for c in cases if c["status"] == "ready"]
     withheld = [c for c in cases if c["status"] != "ready"]
     recomputed = [a for c in cases for a in c["recompute_agrees"]]
+
+    def tally(which: str) -> dict:
+        """Claims checked, apart from outputs that made none (a correctly silent briefing)."""
+        outs = [c[which] for c in ready if c.get(which) is not None]
+        by = {k: [0, 0] for k in CHECKS}
+        for o in outs:
+            for k, (passed, checked) in o["by_check"].items():
+                by[k][0] += passed
+                by[k][1] += checked
+        with_claims = [o for o in outs if o["claims"]]
+        whole = [k for k in ("every_reference_exists", "no_causal_wording", "no_member_named")]
+        return {
+            "outputs": len(outs),
+            "outputs_with_checked_claims": len(with_claims),
+            "outputs_every_claim_passes": sum(all(o["checks"].values()) for o in with_claims),
+            "items_claim_checked": sum(o["items_claim_checked"] for o in outs),
+            "items_without_checkable_figures": sum(o["items_other"] for o in outs),
+            "claims_checked": sum(o["claims"] for o in outs),
+            "claims_passed": sum(o["claims_passed"] for o in outs),
+            "claims_by_check": {k: f"{p}/{n}" for k, (p, n) in by.items()},
+            "whole_output_checks": {
+                k: f"{sum(o['checks'][k] for o in outs)}/{len(outs)}" for k in whole
+            },
+        }
+
     return {
         "spec_sha256": hashlib.sha256(SPEC.read_bytes()).hexdigest(),
         "team_weeks": len(cases),
@@ -616,11 +753,25 @@ def summarise(cases: list[dict], spec: dict) -> dict:
         "participant_reuse": 0,
         "outcomes": by_team,
         "task_completion": {
+            "ready_reports": len(ready),
             "briefing_for_every_ready_report": f"{sum(c['briefing_kinds'] is not None for c in ready)}/{len(ready)}",
+            "briefings_with_items": sum(bool(c["briefing_kinds"]) for c in ready),
+            "briefings_empty_and_no_priority": sum(
+                c["briefing_kinds"] == [] and c["priorities"] == 0 for c in ready
+            ),
+            "briefings_empty_despite_a_priority": sum(
+                c["briefing_kinds"] == [] and c["priorities"] > 0 for c in ready
+            ),
             "no_briefing_for_withheld": f"{sum(c['briefing_kinds'] is None for c in withheld)}/{len(withheld)}",
         },
-        "checks_coach": {k: rate(k, "checks_coach") for k in keys},
-        "checks_fixed_order": {k: rate(k, "checks_fixed") for k in keys},
+        # The per-claim grader replaced the first run's looser one after that run (a reviewer
+        # showed it could pass a wrong sign, numerator, week or baseline); the cases, weeks and
+        # rules are the frozen ones. backend/tests/test_varied_teams_grader.py corrupts a
+        # correct finding each way and requires this grader to reject it.
+        "grader": "per-claim, field-matched (revised after the first run)",
+        "checks_coach": tally("checks_coach"),
+        "checks_fixed_order": tally("checks_fixed"),
+        # Covers three of the nine metrics: time asleep, steps and resting heart rate.
         "recompute_agrees": f"{sum(recomputed)}/{len(recomputed)}",
         # Added after the first full run (descriptive, not a pre-registered outcome): why sections
         # were withheld, by metric, so "partial" is not read as a team-size effect alone.

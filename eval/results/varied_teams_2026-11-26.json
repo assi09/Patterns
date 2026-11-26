@@ -161,24 +161,59 @@
   }
  },
  "task_completion": {
+  "ready_reports": 149,
   "briefing_for_every_ready_report": "149/149",
+  "briefings_with_items": 2,
+  "briefings_empty_and_no_priority": 147,
+  "briefings_empty_despite_a_priority": 0,
   "no_briefing_for_withheld": "171/171"
  },
+ "grader": "per-claim, field-matched (revised after the first run)",
  "checks_coach": {
-  "numbers_match_evidence": "149/149",
-  "every_reference_exists": "149/149",
-  "evidence_for_this_week": "149/149",
-  "no_causal_wording": "149/149",
-  "no_member_named": "149/149",
-  "every_figure_from_five_or_more": "149/149"
+  "outputs": 149,
+  "outputs_with_checked_claims": 2,
+  "outputs_every_claim_passes": 2,
+  "items_claim_checked": 2,
+  "items_without_checkable_figures": 0,
+  "claims_checked": 14,
+  "claims_passed": 14,
+  "claims_by_check": {
+   "figure_value_sign_unit": "2/2",
+   "direction_word": "2/2",
+   "counts_match_fields": "2/2",
+   "target_week": "2/2",
+   "comparison_period": "2/2",
+   "streak": "2/2",
+   "five_or_more": "2/2"
+  },
+  "whole_output_checks": {
+   "every_reference_exists": "149/149",
+   "no_causal_wording": "149/149",
+   "no_member_named": "149/149"
+  }
  },
  "checks_fixed_order": {
-  "numbers_match_evidence": "149/149",
-  "every_reference_exists": "149/149",
-  "evidence_for_this_week": "149/149",
-  "no_causal_wording": "149/149",
-  "no_member_named": "149/149",
-  "every_figure_from_five_or_more": "149/149"
+  "outputs": 149,
+  "outputs_with_checked_claims": 149,
+  "outputs_every_claim_passes": 149,
+  "items_claim_checked": 1341,
+  "items_without_checkable_figures": 0,
+  "claims_checked": 4620,
+  "claims_passed": 4620,
+  "claims_by_check": {
+   "figure_value_sign_unit": "294/294",
+   "direction_word": "9/9",
+   "counts_match_fields": "1341/1341",
+   "target_week": "1341/1341",
+   "comparison_period": "1341/1341",
+   "streak": "0/0",
+   "five_or_more": "294/294"
+  },
+  "whole_output_checks": {
+   "every_reference_exists": "149/149",
+   "no_causal_wording": "149/149",
+   "no_member_named": "149/149"
+  }
  },
  "recompute_agrees": "134/134",
  "withheld_sections_by_contributors": {
@@ -228,5 +263,5 @@
  "paths": {
   "deterministic": 149
  },
- "commit": "e1bc5d1"
+ "commit": "63f7d5c"
 }
