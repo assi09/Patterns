@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.analysis.team import week_of
@@ -40,15 +40,24 @@ class DemoMembers:
 
 
 def add_demo_members(
-    db: Session, team: Team, count: int, sharing: int, today: date, now: datetime
+    db: Session,
+    team: Team,
+    count: int,
+    sharing: int,
+    today: date,
+    now: datetime,
+    prefix: str = "demo-member",
+    lasting: bool = False,
 ) -> DemoMembers:
     """`count` made-up members in `team` with history up to yesterday; the first `sharing` of
-    them share their weekly levels."""
+    them share their weekly levels. With `lasting`, their time asleep drops two weeks before the
+    last full week instead of in it, so the drop is a lasting concern by the weekly report."""
     week = week_of(today - timedelta(days=7))
+    drop_from = week.start - timedelta(days=14) if lasting else week.start
     start = today - timedelta(days=HISTORY_DAYS)
     created = joined = 0
     for i in range(count):
-        email = f"demo-member-{i + 1}@{DOMAIN}"
+        email = f"{prefix}-{i + 1}@{DOMAIN}"
         person = db.scalar(select(User).where(User.email == email))
         if person is None:
             # A random password nobody is told: these accounts exist only to hold data.
@@ -57,7 +66,7 @@ def add_demo_members(
             db.add(person)
             db.flush()
             created += 1
-        drop = (Step("sleep_minutes", week.start, SLEEP_DROP),)
+        drop = (Step("sleep_minutes", drop_from, SLEEP_DROP),)
         frame = generate(start, HISTORY_DAYS, drop, seed=1000 + i).frame
         # The sync's heart rate zones and still heart rate, made up too, so strain and stress
         # have their inputs; zones split each day's Active Zone Minutes (moderate + 2 x higher).
@@ -106,3 +115,59 @@ def _calendar_days(start: date, today: date, busy_week: date, seed: int) -> pd.D
             }
         )
     return pd.DataFrame(rows, index=days)
+
+
+# --- a labelled demo team, for presentations (docs/deployment.md) -------------------------------
+
+LABEL = "synthetic"  # every demo team's name says so, so nobody mistakes it for a real team
+
+
+class DemoTeamError(ValueError):
+    pass
+
+
+def create_demo_team(
+    db: Session,
+    supervisor: User,
+    name: str,
+    count: int,
+    prefix: str,
+    lasting: bool,
+    today: date,
+    now: datetime,
+) -> tuple[Team, DemoMembers]:
+    """A new team of made-up members only, supervised by `supervisor` (a real account, who will
+    present it). Never fills an existing team, so made-up people never mix with real ones."""
+    if LABEL not in name.lower():
+        raise DemoTeamError(f"A demo team's name must say it is {LABEL}, e.g. 'Demo ({LABEL})'.")
+    if not prefix.startswith("demo"):
+        raise DemoTeamError("Made-up members' emails must start with 'demo'.")
+    if db.scalar(select(Team).where(Team.supervisor_id == supervisor.id, Team.name == name)):
+        raise DemoTeamError(f"{supervisor.email} already has a team named {name!r}.")
+    team = memberships.create_team(db, supervisor, name, None, now)
+    added = add_demo_members(db, team, count, count // 2, today, now, prefix, lasting)
+    return team, added
+
+
+def demo_members_of(db: Session, team: Team) -> list[User]:
+    """The team's made-up members; raises if it has anyone else, so a real team is never removed."""
+    people = [db.get(User, uid) for uid in memberships.member_ids(db, team)]
+    real = [p for p in people if not (p.email.startswith("demo") and p.email.endswith(DOMAIN))]
+    if real or LABEL not in team.name.lower():
+        raise DemoTeamError("This is not a demo team: it has real members or no label.")
+    return people
+
+
+def remove_demo_team(db: Session, team: Team) -> int:
+    """Deletes a demo team and its made-up accounts with all their data; returns how many."""
+    from app.auth.deletion import delete_account
+
+    people = demo_members_of(db, team)
+    emails = [p.email for p in people]
+    db.execute(delete(Team).where(Team.id == team.id))
+    db.flush()
+    for email in emails:
+        person = db.scalar(select(User).where(User.email == email))
+        if person is not None:
+            delete_account(db, person)
+    return len(emails)
