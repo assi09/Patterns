@@ -267,7 +267,7 @@ def test_with_some_readings_too_thin_it_names_them():
     ]
     text = coach.line(_busy_load(), sections)["text"]
     assert "We detected no clear change in the available team readings." in text
-    assert text.endswith("Too few readings to tell for hrv and physical stress signs.")
+    assert text.endswith("Too few readings to tell for HRV and physical stress signs.")
 
 
 # Was a meeting-free day kept? Read from the days, not from total meeting time

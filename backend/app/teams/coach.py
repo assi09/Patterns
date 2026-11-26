@@ -119,7 +119,7 @@ def line(load: list[Evidence], sections: list[dict]) -> dict | None:
     # No team-wide change found. That is all it says: an absence of evidence, not a measure of
     # the team's capacity, and only for the readings there were enough of.
     read = [s for s in sections if s.get("status") in ("steady", "changed")]
-    short = [s["label"].lower() for s in sections if s.get("status") == "not_enough_data"]
+    short = [_in_sentence(s["label"]) for s in sections if s.get("status") == "not_enough_data"]
     if not read:
         after = "There were too few team readings to tell whether anything else changed."
     else:
@@ -128,6 +128,11 @@ def line(load: list[Evidence], sections: list[dict]) -> dict | None:
             after += f" Too few readings to tell for {_listed(short)}."
     text = f"Calendars were busier last week. {figures} {after}"
     return {"text": text, "kind": "calendar", "metric": None, "evidence_ids": ids}
+
+
+def _in_sentence(label: str) -> str:
+    """A metric label inside a sentence: lower case, except an acronym ("HRV") stays as it is."""
+    return label if label[:2].isupper() else label[:1].lower() + label[1:]
 
 
 def _listed(words: list[str]) -> str:
