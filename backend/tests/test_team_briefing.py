@@ -202,7 +202,7 @@ def test_the_supervisor_reads_the_briefing_with_the_report(engine, monkeypatch):
     ).json()
     assert body["briefing"]["summary"].startswith("Time asleep has been lower")
     assert body["briefing"]["items"][0]["metric"] == "sleep_minutes"
-    assert body["briefing"]["proposals"] == 1  # the lasting drop in sleep: a change suggested
+    assert body["briefing"]["proposals"] == 0  # reported, never a change of its own (Nov 27)
     for item in body["briefing"]["items"]:
         assert item["evidenceIds"] and all(key in body["evidence"] for key in item["evidenceIds"])
 
