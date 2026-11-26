@@ -751,6 +751,14 @@ export function useTeamReport(teamId?: string, week?: ISODate) {
   });
 }
 
+export function useTeamEvidence(teamId?: string, week?: ISODate, evidenceId?: string) {
+  return useQuery({
+    queryKey: [...keys.teams, teamId, 'report', week, 'evidence', evidenceId],
+    queryFn: () => api.getTeamEvidence(teamId!, week!, evidenceId!),
+    enabled: !!teamId && !!week && !!evidenceId,
+  });
+}
+
 export function useMakeTeamReport() {
   const client = useQueryClient();
   return useMutation({
