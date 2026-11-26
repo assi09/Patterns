@@ -1,0 +1,124 @@
+{
+ "frozen": "2026-11-26",
+ "seed": 20261126,
+ "sizes": {
+  "lifesnaps": [
+   3,
+   4,
+   5,
+   6,
+   9,
+   11,
+   13
+  ],
+  "pmdata": [
+   1,
+   4,
+   5,
+   6
+  ]
+ },
+ "people": {
+  "lifesnaps": 51,
+  "pmdata": 16
+ },
+ "people_with_28_days": {
+  "lifesnaps": 51,
+  "pmdata": 15
+ },
+ "teams": {
+  "lifesnaps-3": 3,
+  "lifesnaps-4": 4,
+  "lifesnaps-5": 5,
+  "lifesnaps-6": 6,
+  "lifesnaps-9": 9,
+  "lifesnaps-11": 11,
+  "lifesnaps-13": 13,
+  "pmdata-1": 1,
+  "pmdata-4": 4,
+  "pmdata-5": 5,
+  "pmdata-6": 6
+ },
+ "assignment_sha256": "799aba59f0a5b1f6b5fa8432177b08fe36b48758770bfa9840e46f4d241ab4a0",
+ "weeks": {
+  "lifesnaps": [
+   "2021-05-10",
+   "2021-05-17",
+   "2021-05-24",
+   "2021-05-31",
+   "2021-06-07",
+   "2021-06-14",
+   "2021-06-21",
+   "2021-06-28",
+   "2021-07-05",
+   "2021-07-12",
+   "2021-07-19",
+   "2021-07-26",
+   "2021-08-02",
+   "2021-08-09",
+   "2021-08-16",
+   "2021-08-23",
+   "2021-08-30",
+   "2021-09-06",
+   "2021-09-13",
+   "2021-09-20",
+   "2021-09-27",
+   "2021-10-04",
+   "2021-10-11",
+   "2021-10-18",
+   "2021-10-25",
+   "2021-11-01",
+   "2021-11-08",
+   "2021-11-15",
+   "2021-11-22",
+   "2021-11-29",
+   "2021-12-06",
+   "2021-12-13",
+   "2021-12-20",
+   "2021-12-27",
+   "2022-01-03",
+   "2022-01-10"
+  ],
+  "pmdata": [
+   "2019-12-02",
+   "2019-12-09",
+   "2019-12-16",
+   "2019-12-23",
+   "2019-12-30",
+   "2020-01-06",
+   "2020-01-13",
+   "2020-01-20",
+   "2020-01-27",
+   "2020-02-03",
+   "2020-02-10",
+   "2020-02-17",
+   "2020-02-24",
+   "2020-03-02",
+   "2020-03-09",
+   "2020-03-16",
+   "2020-03-23"
+  ]
+ },
+ "cases": {
+  "rubric_development": [
+   "lifesnaps-11",
+   "lifesnaps-5",
+   "lifesnaps-9"
+  ],
+  "reserved": [
+   "lifesnaps-13",
+   "lifesnaps-6",
+   "pmdata-5",
+   "pmdata-6"
+  ]
+ },
+ "datasets": {
+  "lifesnaps": "Yfantidou et al. 2022, Scientific Data; CC BY 4.0; zenodo.org/records/7229547",
+  "pmdata": "Thambawita et al. 2020, MMSys; CC BY 4.0; datasets.simula.no/pmdata"
+ },
+ "dataset_sha256": {
+  "lifesnaps": "51a3cdf7b658ce4732ed47eed620fae246d14ced8fb75f155772b8ee423023e0",
+  "pmdata": "242a000c6b8af536b843e732feb4678fc876fb10ec2812c4b3c387bcccf91529"
+ },
+ "rules": "the module docstring of eval/varied_teams.py at the commit that froze this file"
+}
