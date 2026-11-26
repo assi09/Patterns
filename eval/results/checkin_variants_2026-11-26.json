@@ -1,0 +1,204 @@
+{
+  "ran": "2026-11-26",
+  "budget": "at most 1 firing per 200 eligible ordinary weeks of the tuning set",
+  "sleep_alone_max": "at most 1 in 100 observable tuning weeks fire on sleep alone",
+  "chosen_on_tuning": "A far=0.5 days=4 recovery=no",
+  "tuning": {
+    "checkin-v1 (today)": {
+      "fired": "0/402",
+      "30min_3bpm": "3/334",
+      "60min_5bpm": "10/334",
+      "90min_8bpm": "79/334",
+      "120min_10bpm": "141/334",
+      "sleep_only_120min": "9/334"
+    },
+    "A far=1.0 days=5 recovery=yes": {
+      "fired": "0/402",
+      "30min_3bpm": "3/334",
+      "60min_5bpm": "10/334",
+      "90min_8bpm": "79/334",
+      "120min_10bpm": "141/334",
+      "sleep_only_120min": "9/334"
+    },
+    "A far=1.0 days=5 recovery=no": {
+      "fired": "0/402",
+      "30min_3bpm": "0/334",
+      "60min_5bpm": "1/334",
+      "90min_8bpm": "38/334",
+      "120min_10bpm": "97/334",
+      "sleep_only_120min": "0/334"
+    },
+    "A far=1.0 days=4 recovery=yes": {
+      "fired": "0/402",
+      "30min_3bpm": "5/334",
+      "60min_5bpm": "36/334",
+      "90min_8bpm": "132/334",
+      "120min_10bpm": "198/334",
+      "sleep_only_120min": "14/334"
+    },
+    "A far=1.0 days=4 recovery=no": {
+      "fired": "0/402",
+      "30min_3bpm": "1/334",
+      "60min_5bpm": "11/334",
+      "90min_8bpm": "82/334",
+      "120min_10bpm": "159/334",
+      "sleep_only_120min": "0/334"
+    },
+    "A far=0.75 days=5 recovery=yes": {
+      "fired": "0/402",
+      "30min_3bpm": "5/334",
+      "60min_5bpm": "20/334",
+      "90min_8bpm": "109/334",
+      "120min_10bpm": "182/334",
+      "sleep_only_120min": "15/334"
+    },
+    "A far=0.75 days=5 recovery=no": {
+      "fired": "0/402",
+      "30min_3bpm": "0/334",
+      "60min_5bpm": "3/334",
+      "90min_8bpm": "52/334",
+      "120min_10bpm": "143/334",
+      "sleep_only_120min": "0/334"
+    },
+    "A far=0.75 days=4 recovery=yes": {
+      "fired": "1/402",
+      "30min_3bpm": "12/333",
+      "60min_5bpm": "68/333",
+      "90min_8bpm": "168/333",
+      "120min_10bpm": "233/333",
+      "sleep_only_120min": "30/333"
+    },
+    "A far=0.75 days=4 recovery=no": {
+      "fired": "1/402",
+      "30min_3bpm": "2/333",
+      "60min_5bpm": "21/333",
+      "90min_8bpm": "107/333",
+      "120min_10bpm": "194/333",
+      "sleep_only_120min": "0/333"
+    },
+    "A far=0.5 days=5 recovery=yes": {
+      "fired": "0/402",
+      "30min_3bpm": "7/334",
+      "60min_5bpm": "35/334",
+      "90min_8bpm": "147/334",
+      "120min_10bpm": "220/334",
+      "sleep_only_120min": "29/334"
+    },
+    "A far=0.5 days=5 recovery=no": {
+      "fired": "0/402",
+      "30min_3bpm": "1/334",
+      "60min_5bpm": "5/334",
+      "90min_8bpm": "77/334",
+      "120min_10bpm": "169/334",
+      "sleep_only_120min": "0/334"
+    },
+    "A far=0.5 days=4 recovery=yes": {
+      "fired": "2/402",
+      "30min_3bpm": "20/332",
+      "60min_5bpm": "85/332",
+      "90min_8bpm": "208/332",
+      "120min_10bpm": "266/332",
+      "sleep_only_120min": "48/332"
+    },
+    "A far=0.5 days=4 recovery=no": {
+      "fired": "1/402",
+      "30min_3bpm": "4/333",
+      "60min_5bpm": "24/333",
+      "90min_8bpm": "134/333",
+      "120min_10bpm": "228/333",
+      "sleep_only_120min": "1/333"
+    },
+    "B z=3.0 recovery=yes": {
+      "fired": "6/402",
+      "30min_3bpm": "36/328",
+      "60min_5bpm": "138/328",
+      "90min_8bpm": "244/328",
+      "120min_10bpm": "289/328",
+      "sleep_only_120min": "70/328"
+    },
+    "B z=3.0 recovery=no": {
+      "fired": "2/402",
+      "30min_3bpm": "3/332",
+      "60min_5bpm": "57/332",
+      "90min_8bpm": "170/332",
+      "120min_10bpm": "245/332",
+      "sleep_only_120min": "6/332"
+    },
+    "B z=4.0 recovery=yes": {
+      "fired": "3/402",
+      "30min_3bpm": "13/331",
+      "60min_5bpm": "77/331",
+      "90min_8bpm": "179/331",
+      "120min_10bpm": "238/331",
+      "sleep_only_120min": "40/331"
+    },
+    "B z=4.0 recovery=no": {
+      "fired": "1/402",
+      "30min_3bpm": "0/333",
+      "60min_5bpm": "22/333",
+      "90min_8bpm": "110/333",
+      "120min_10bpm": "189/333",
+      "sleep_only_120min": "4/333"
+    },
+    "B z=5.0 recovery=yes": {
+      "fired": "1/402",
+      "30min_3bpm": "4/333",
+      "60min_5bpm": "41/333",
+      "90min_8bpm": "95/333",
+      "120min_10bpm": "164/333",
+      "sleep_only_120min": "17/333"
+    },
+    "B z=5.0 recovery=no": {
+      "fired": "1/402",
+      "30min_3bpm": "0/333",
+      "60min_5bpm": "7/333",
+      "90min_8bpm": "48/333",
+      "120min_10bpm": "127/333",
+      "sleep_only_120min": "2/333"
+    },
+    "B z=6.0 recovery=yes": {
+      "fired": "0/402",
+      "30min_3bpm": "0/334",
+      "60min_5bpm": "11/334",
+      "90min_8bpm": "50/334",
+      "120min_10bpm": "90/334",
+      "sleep_only_120min": "4/334"
+    },
+    "B z=6.0 recovery=no": {
+      "fired": "0/402",
+      "30min_3bpm": "0/334",
+      "60min_5bpm": "3/334",
+      "90min_8bpm": "24/334",
+      "120min_10bpm": "62/334",
+      "sleep_only_120min": "1/334"
+    }
+  },
+  "admissible": [
+    "A far=1.0 days=5 recovery=no",
+    "A far=1.0 days=4 recovery=no",
+    "A far=0.75 days=5 recovery=no",
+    "A far=0.75 days=4 recovery=no",
+    "A far=0.5 days=5 recovery=no",
+    "A far=0.5 days=4 recovery=no",
+    "B z=5.0 recovery=no",
+    "B z=6.0 recovery=no"
+  ],
+  "held_out": {
+    "checkin-v1 (today)": {
+      "fired": "0/150",
+      "30min_3bpm": "0/111",
+      "60min_5bpm": "0/111",
+      "90min_8bpm": "14/111",
+      "120min_10bpm": "41/111",
+      "sleep_only_120min": "0/111"
+    },
+    "A far=0.5 days=4 recovery=no": {
+      "fired": "0/150",
+      "30min_3bpm": "1/111",
+      "60min_5bpm": "5/111",
+      "90min_8bpm": "45/111",
+      "120min_10bpm": "79/111",
+      "sleep_only_120min": "1/111"
+    }
+  }
+}
