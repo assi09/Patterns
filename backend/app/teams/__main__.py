@@ -3,7 +3,10 @@
 Run from the repository root with the virtual environment active; the deployed platform's
 scheduler runs `weekly` on Mondays. A team's week is made once, so running it again is safe.
 Prints counts only, never anyone's data. `demo-members` fills a team with made-up members on a
-local database, to try reports before real people join (`demo.py`).
+local database, to try reports before real people join (`demo.py`). `demo-team` makes a new,
+labelled team of made-up members for a presentation and records the ids it made; `--remove`
+deletes exactly those again, one named team per run. On a deployed database it needs
+`--on-production`, and it never removes a team anyone else ever joined.
 """
 
 import argparse
@@ -21,7 +24,12 @@ from app.db.models import Team
 from app.db.session import session_scope
 from app.teams import memberships, reports
 from app.teams.briefing import brief
-from app.teams.demo import add_demo_members
+from app.teams.demo import (
+    DemoTeamError,
+    add_demo_members,
+    create_demo_team,
+    remove_demo_team,
+)
 from app.teams.email import MailError, deliver, mailer_from_settings
 
 LOCAL_HOSTS = {None, "localhost", "127.0.0.1", "::1", "db"}
@@ -42,6 +50,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="select weekly highlights and match upcoming events to past changes (paid)",
     )
+    team_demo = commands.add_parser(
+        "demo-team", help="a new, labelled team of made-up members for a presentation"
+    )
+    team_demo.add_argument("--supervisor", required=True, help="the presenter's account email")
+    team_demo.add_argument("--name", required=True, help="must contain 'synthetic'")
+    team_demo.add_argument("--count", type=int, default=8)
+    team_demo.add_argument("--prefix", default="demo-member", help="made-up emails' start")
+    team_demo.add_argument(
+        "--lasting", action="store_true", help="time asleep lower for three weeks, not one"
+    )
+    team_demo.add_argument("--remove", action="store_true", help="delete the team and members")
+    team_demo.add_argument("--on-production", action="store_true", help="confirm a deployed db")
     demo = commands.add_parser(
         "demo-members", help="fill a team with made-up members (local database only)"
     )
@@ -51,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     now = datetime.now(UTC)
+    if args.command == "demo-team":
+        return _demo_team(args, now)
     if args.command == "demo-members":
         return _demo_members(args.code, args.count, args.sharing, now)
     week = week_of(args.week) if args.week else reports.last_full_week(now.date())
@@ -109,6 +131,42 @@ def main(argv: list[str] | None = None) -> int:
         where = "sent" if settings.email_backend == "resend" else "written to data/outbox/"
         print(f"{emailed} emails {where}" + (f", {failed} failed." if failed else "."))
     return 1 if failed else 0
+
+
+def _demo_team(args, now: datetime) -> int:
+    from app.db.models import User
+
+    local = make_url(settings.database_url).host in LOCAL_HOSTS
+    if not local and not args.on_production:
+        print("This database is deployed: add --on-production to confirm.", file=sys.stderr)
+        return 1
+    with session_scope() as session:
+        boss = session.scalar(select(User).where(User.email == args.supervisor))
+        if boss is None or boss.role != "supervisor" or boss.status != "approved":
+            print("The supervisor must be an approved supervisor account.", file=sys.stderr)
+            return 1
+        try:
+            if args.remove:
+                team = session.scalar(
+                    select(Team).where(Team.supervisor_id == boss.id, Team.name == args.name)
+                )
+                if team is None:
+                    print("No such team.", file=sys.stderr)
+                    return 1
+                removed = remove_demo_team(session, team)
+                print(f"{args.name}: removed, with {removed} made-up accounts and their data.")
+                return 0
+            team, added = create_demo_team(
+                session, boss, args.name, args.count, args.prefix, args.lasting, now.date(), now
+            )
+        except DemoTeamError as error:
+            print(error, file=sys.stderr)
+            return 1
+        print(
+            f"{team.name}: made with {added.created} made-up members ({added.sharing} sharing "
+            f"their levels), team id {team.id}."
+        )
+    return 0
 
 
 def _demo_members(code: str, count: int, sharing: int, now: datetime) -> int:

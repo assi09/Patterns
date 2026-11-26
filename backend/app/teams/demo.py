@@ -9,18 +9,19 @@ has something to show too. Running it again replaces their data.
 """
 
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.analysis.team import week_of
 from app.auth.passwords import hash_password
 from app.db.daily import save_daily
-from app.db.models import Team, TeamMembership, User
+from app.db.models import DemoAccount, DemoTeam, Team, TeamMembership, User
 from app.sync import calendar
 from app.synthetic import Step, generate
 from app.teams import memberships
@@ -40,15 +41,24 @@ class DemoMembers:
 
 
 def add_demo_members(
-    db: Session, team: Team, count: int, sharing: int, today: date, now: datetime
+    db: Session,
+    team: Team,
+    count: int,
+    sharing: int,
+    today: date,
+    now: datetime,
+    prefix: str = "demo-member",
+    lasting: bool = False,
 ) -> DemoMembers:
     """`count` made-up members in `team` with history up to yesterday; the first `sharing` of
-    them share their weekly levels."""
+    them share their weekly levels. With `lasting`, their time asleep drops two weeks before the
+    last full week instead of in it, so the drop is a lasting concern by the weekly report."""
     week = week_of(today - timedelta(days=7))
+    drop_from = week.start - timedelta(days=14) if lasting else week.start
     start = today - timedelta(days=HISTORY_DAYS)
     created = joined = 0
     for i in range(count):
-        email = f"demo-member-{i + 1}@{DOMAIN}"
+        email = f"{prefix}-{i + 1}@{DOMAIN}"
         person = db.scalar(select(User).where(User.email == email))
         if person is None:
             # A random password nobody is told: these accounts exist only to hold data.
@@ -57,7 +67,7 @@ def add_demo_members(
             db.add(person)
             db.flush()
             created += 1
-        drop = (Step("sleep_minutes", week.start, SLEEP_DROP),)
+        drop = (Step("sleep_minutes", drop_from, SLEEP_DROP),)
         frame = generate(start, HISTORY_DAYS, drop, seed=1000 + i).frame
         # The sync's heart rate zones and still heart rate, made up too, so strain and stress
         # have their inputs; zones split each day's Active Zone Minutes (moderate + 2 x higher).
@@ -106,3 +116,80 @@ def _calendar_days(start: date, today: date, busy_week: date, seed: int) -> pd.D
             }
         )
     return pd.DataFrame(rows, index=days)
+
+
+# --- a labelled demo team, for presentations (docs/deployment.md) -------------------------------
+
+LABEL = "synthetic"  # every demo team's name says so, so nobody mistakes it for a real team
+
+
+class DemoTeamError(ValueError):
+    pass
+
+
+def create_demo_team(
+    db: Session,
+    supervisor: User,
+    name: str,
+    count: int,
+    prefix: str,
+    lasting: bool,
+    today: date,
+    now: datetime,
+) -> tuple[Team, DemoMembers]:
+    """A new team of made-up members only, supervised by `supervisor` (a real account, who will
+    present it). Never fills an existing team, so made-up people never mix with real ones."""
+    if LABEL not in name.lower():
+        raise DemoTeamError(f"A demo team's name must say it is {LABEL}, e.g. 'Demo ({LABEL})'.")
+    if not prefix.startswith("demo"):
+        raise DemoTeamError("Made-up members' emails must start with 'demo'.")
+    if db.scalar(select(Team).where(Team.supervisor_id == supervisor.id, Team.name == name)):
+        raise DemoTeamError(f"{supervisor.email} already has a team named {name!r}.")
+    # Fresh accounts only: reusing another demo team's members would mix the two teams' data,
+    # and removing one team would then delete the other's members.
+    emails = [f"{prefix}-{i + 1}@{DOMAIN}" for i in range(count)]
+    if db.scalar(select(User).where(User.email.in_(emails))):
+        raise DemoTeamError(f"Accounts starting {prefix!r} already exist: choose another --prefix.")
+    team = memberships.create_team(db, supervisor, name, None, now)
+    added = add_demo_members(db, team, count, count // 2, today, now, prefix, lasting)
+    # Recorded when made, so removal deletes these ids and nothing that only looks like them.
+    db.add(DemoTeam(team_id=team.id, created_at=now))
+    db.flush()
+    for person in db.scalars(select(User).where(User.email.in_(emails))):
+        db.add(DemoAccount(user_id=person.id, team_id=team.id))
+    db.flush()
+    return team, added
+
+
+def demo_accounts_of(db: Session, team: Team) -> list[uuid.UUID]:
+    """The ids of the accounts the demo-team command made for this team, whether or not they are
+    still members. Raises unless removing them and the team is safe: the command made the team,
+    nobody it did not make was ever a member, and none of its accounts is in another team."""
+    if db.get(DemoTeam, team.id) is None:
+        raise DemoTeamError("The demo-team command did not make this team: remove nothing.")
+    made = set(db.scalars(select(DemoAccount.user_id).where(DemoAccount.team_id == team.id)))
+    ever = set(db.scalars(select(TeamMembership.user_id).where(TeamMembership.team_id == team.id)))
+    if ever - made:
+        raise DemoTeamError("Someone the command did not make joined this team: remove nothing.")
+    elsewhere = db.scalar(
+        select(TeamMembership).where(
+            TeamMembership.user_id.in_(made), TeamMembership.team_id != team.id
+        )
+    )
+    if elsewhere is not None:
+        raise DemoTeamError("A made-up member is also in another team: remove nothing.")
+    return sorted(made)
+
+
+def remove_demo_team(db: Session, team: Team) -> int:
+    """Deletes a demo team and the accounts made for it, with all their data; returns how many."""
+    from app.auth.deletion import delete_account
+
+    ids = demo_accounts_of(db, team)
+    db.execute(delete(Team).where(Team.id == team.id))  # its records go with it
+    db.flush()
+    for user_id in ids:
+        person = db.get(User, user_id)
+        if person is not None:
+            delete_account(db, person)
+    return len(ids)
