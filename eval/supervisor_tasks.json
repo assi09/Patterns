@@ -1,0 +1,186 @@
+{
+ "frozen": "2026-11-27, before any change to the read path; baseline revision dc45e4e (main)",
+ "instance": "local only: eval/supervisor_instance.py builds data/eval/supervisor/local.db from the varied-team run database (LifeSnaps 11 and 4, rubric-development set) plus labelled synthetic teams; one made-up supervisor owns them, and a second made-up supervisor owns one synthetic team used for authorization checks. Reserved research teams are never read or used.",
+ "scoring": "Tool level: each task lists facts that must be reachable from the tool outputs a scripted client receives, facts that must never appear, and the expected state. Calls are counted; team discovery (who_am_i) is counted apart. A task with a missing or forbidden fact fails and gets no efficiency credit. Real assistant runs (Claude, Codex) are scored on their final answer with the same facts, and reported apart from scripted runs.",
+ "tasks": [
+  {
+   "id": "ls11_what_changed",
+   "team": "lifesnaps-11",
+   "week": "2021-07-19",
+   "question": "What changed for this team in the week of July 19, 2021?",
+   "must": [
+    "steps",
+    "-696",
+    "contributors 5",
+    "2021-06-21",
+    "2021-07-18",
+    "week 2021-07-19 to 2021-07-25",
+    "evidence reference"
+   ],
+   "never": [
+    "a figure from fewer than 5 people",
+    "a participant id"
+   ],
+   "state": "report ready, no priority finding, one weekly change"
+  },
+  {
+   "id": "ls11_all_eleven",
+   "team": "lifesnaps-11",
+   "week": "2021-07-19",
+   "follows": "ls11_what_changed",
+   "question": "Was that based on all 11 people?",
+   "must": [
+    "roster 11",
+    "contributors 5",
+    "minimum 5"
+   ],
+   "state": "roster and contributors told apart"
+  },
+  {
+   "id": "ls11_evidence",
+   "team": "lifesnaps-11",
+   "week": "2021-07-19",
+   "follows": "ls11_what_changed",
+   "question": "Show me the evidence behind the steps finding.",
+   "must": [
+    "what was measured",
+    "median of each person's week minus their own previous four weeks",
+    "2021-07-19",
+    "2021-06-21",
+    "2021-07-18",
+    "contributors 5",
+    "0 higher, 5 lower"
+   ],
+   "never": [
+    "quartiles or any single person's value"
+   ],
+   "state": "the record of that report, through a team-scoped lookup"
+  },
+  {
+   "id": "ls4_withheld",
+   "team": "lifesnaps-4",
+   "week": "2021-07-19",
+   "question": "What changed for this team in the week of July 19, 2021?",
+   "must": [
+    "withheld",
+    "3 of the 5 people needed"
+   ],
+   "never": [
+    "any team figure",
+    "any metric value"
+   ],
+   "state": "withheld"
+  },
+  {
+   "id": "quiet_week",
+   "team": "lifesnaps-11",
+   "week": "2021-05-24",
+   "question": "What changed for this team in the week of May 24, 2021?",
+   "must": [
+    "report ready",
+    "no priority finding",
+    "no weekly change",
+    "which metrics were reportable"
+   ],
+   "never": [
+    "everyone was fine"
+   ],
+   "state": "ready, quiet, partial coverage"
+  },
+  {
+   "id": "no_report_week",
+   "team": "lifesnaps-11",
+   "week": "2023-01-02",
+   "question": "What changed for this team in the week of January 2, 2023?",
+   "must": [
+    "no report for that week"
+   ],
+   "never": [
+    "a report from another week presented as that week"
+   ],
+   "state": "no report for the requested week"
+  },
+  {
+   "id": "historical_calendar",
+   "team": "lifesnaps-11",
+   "week": "2021-07-19",
+   "follows": "ls11_what_changed",
+   "question": "Did the team's meeting load change that week?",
+   "must": [
+    "2021-07-19",
+    "team calendar unavailable for that week"
+   ],
+   "never": [
+    "figures from another week",
+    "zero meetings inferred from missing data",
+    "a causal claim"
+   ],
+   "state": "Fitbit finding stays available; calendar unavailable"
+  },
+  {
+   "id": "synthetic_both_sources",
+   "team": "demo (synthetic)",
+   "week": "last full week",
+   "question": "What changed for the team last week, and did their meeting load change too?",
+   "must": [
+    "sustained change",
+    "time asleep",
+    "comparison dates of the finding",
+    "meeting load for the same week",
+    "calendar comparison dates"
+   ],
+   "never": [
+    "a causal claim",
+    "an automatic scheduling proposal created by the read"
+   ],
+   "state": "both sources, same week, labelled synthetic"
+  },
+  {
+   "id": "action_follow_up",
+   "team": "demo with an action (synthetic)",
+   "week": "the week the action was running, then current",
+   "question": "What happened to the change we agreed to try?",
+   "must": [
+    "status and dates",
+    "historical answer without the later result",
+    "current answer with the measured result and its evidence",
+    "measured apart from whether it was tried"
+   ],
+   "never": [
+    "a later result presented as known at the earlier date"
+   ],
+   "state": "in progress then finished"
+  },
+  {
+   "id": "scope_and_authorization",
+   "team": "several",
+   "question": "Ambiguous team name; another supervisor's evidence id; a report and evidence that do not belong together; a revoked token; an employee's readings; an HR check-in",
+   "must": [
+    "each refused or disambiguated with nothing revealed"
+   ],
+   "state": "refusals"
+  },
+  {
+   "id": "tool_failures",
+   "team": "demo (synthetic)",
+   "question": "A failed calendar lookup, an unavailable evidence record, a retried call",
+   "must": [
+    "an error state, never a fabricated figure",
+    "a retry returns the same answer"
+   ],
+   "state": "failures"
+  }
+ ],
+ "real_client_only": [
+  {
+   "id": "two_connectors",
+   "question": "What changed for the team, and when is my next check-in?",
+   "must": [
+    "team finding from Patterns",
+    "meeting date from the supervisor's own calendar connector",
+    "the answer still works with the connector unavailable"
+   ],
+   "needs": "a real Claude or Codex client with its own calendar connector; mocked runs are labelled apart"
+  }
+ ]
+}
