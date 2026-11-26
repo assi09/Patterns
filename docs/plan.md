@@ -29,7 +29,18 @@ presentations on **5 December**.
 behind a flag (#234, live), check-in alerts with four review rounds (#235). Details and numbers in
 [status.md](status.md).
 
-**Left for Karim (with Claude Code), in order:**
+**Done on 2026-11-26** (a day ahead of the table below): the Google Calendar, the HR invitation,
+the MCP server, the coach with its review fixes, the check-in rule on real people and its candidate
+rules, the MCP red-team, and the demo-team command (#237–#252; [status.md](status.md)).
+
+**Still left before the report:**
+- the demo teams on production and a rehearsal of the deployed supervisor flow;
+- MCP sign-ins from claude.ai and Codex against production, and a Codex tool call;
+- the check-in rule decision;
+- #246;
+- Jad's DevSecOps items (below).
+
+**Left for Karim (with Claude Code), in order** (as planned on 2026-11-25):
 
 | When | What | Notes |
 |---|---|---|

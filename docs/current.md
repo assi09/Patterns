@@ -5,7 +5,7 @@
 > and [escalation.md](escalation.md). The agent results below stand for the code they were measured
 > on; they describe the individual side and the analysis tools the team figures share.
 
-**The one page for what is true now.** As of `main` after #235 (2026-11-25), with the MCP server, OAuth sign-in and the weekend tests added on 2026-11-26. Every result below
+**The one page for what is true now.** As of `main` at `21a110c` (2026-11-26, after #252), deployed to production the same day. Every result below
 names the revision it was measured on and whether it still describes today's code. The history
 (audits, plans, negative results, superseded numbers) is kept as it was written, in the documents
 listed at the end; where one of them contradicts this page, this page is current.
@@ -16,8 +16,11 @@ listed at the end; where one of them contradicts this page, this page is current
 |---|---|---|
 | **Product** | **Team first.** Members connect Google Health and join a team; supervisors see the team; HR sees check-in alerts. The individual side (Ask, findings, reminders, smart alarms, memory, logging) is off behind `FA_PERSONAL_FEATURES`; `v0.9-personal` tags the last version with it on | #233, #234, 2026-11-25 |
 | **Check-in alerts** | Code only. After each successful sync, for members who opted in; one hour for the person to send or stop; then a nameless notice to whoever holds the supervisor and HR-contact roles, the name on the Check-ins screen only ([escalation.md](escalation.md)) | #235, 2026-11-25 |
-| **Calendar** | *Not merged yet*: Google Calendar as daily meeting load, and a team "Meeting load" card (branch `feat/google-calendar`) | — |
-| **MCP server, coach** | *Not built yet* ([plan.md](plan.md)) | — |
+| **HR invitation** | The supervisor types HR's email; HR signs up through the link as that team's HR contact, and the current one keeps the role until they accept | #240, 2026-11-26 |
+| **Calendar** | Google Calendar read as daily counts per person (meeting minutes, after-hours minutes, back-to-back meetings, focus time, out of office), never event titles; its own sign-in, separate from Google Health; synced every 30 minutes; a team "Meeting load" card | #238, #239, #241, #243 |
+| **MCP server** | Claude (claude.ai, Desktop, Code), Codex and other harnesses sign in with OAuth or a pasted token. A supervisor reads `team_overview` (observed readings, the latest weekly report's figures, open team alerts) and `team_meeting_load`, from at least 5 people; a member reads their own days and sends calendar days or a team event, held until approved; HR reads nothing; check-in alerts never pass through it ([mcp.md](mcp.md)) | #242, #244, #248 |
+| **Coach** | Code only. The Monday briefing puts the team's calendar beside its wellbeing ("in the same week", never "because"); with no wellbeing change found it says only that, naming readings too thin to tell. A four-change playbook (evening boundary, meeting-free day, breaks between meetings, team step goal), each with its trigger, a check that it was followed, and cited evidence ([teams.md](teams.md)) | #250, review fixes #251 |
+| **Demo teams** | `python -m app.teams demo-team` makes a labelled team of made-up members (name must say "synthetic") and records the ids it made; `--remove` deletes exactly those, one team per run. **Not yet run on production** | #252 |
 | Routing | Jev router (`jev-latest`), keyword rule as fallback | — |
 | Reading a message | One typed reading per message by the small model (`gpt-5.4-mini`, API default sampling); code resolves dates, references and capabilities. The small-model read-back check exists but is **off** (`read_back_enabled` defaults to False) | #195, merged 2026-11-22 as `2ce08b5` |
 | Precise data answers | Deterministic tools build evidence; code writes the answer from it (`app/agent/requested.py`); every number cites an evidence id | #195 |
@@ -68,6 +71,7 @@ the result. "Changed since" means it has, and the result has not been re-measure
 | Privacy and roles | consent to roles; a replaced or demoted HR contact or supervisor loses access at once and gets no reminder; nameless notifications; leaving withdraws at once; one waiting alert per person and team | same, 42 tests, each review finding with a regression test | Valid |
 | On real people: ordinary weeks (PMData 16, LifeSnaps 51) | **0 triggers in 552** eligible ordinary person-weeks (PMData 0/189, LifeSnaps 0/213 and 0/150), under the stated wear assumptions: neither dataset records wear time, so PMData counts a day with activity minutes as worn and LifeSnaps every day. The weeks are unlabelled, so this is a firing rate, not a real-world false-alarm rate | `6c2b235`, 2026-11-26; `PYTHONPATH=backend:eval python eval/checkin_real.py` | Valid |
 | On real people: a planted change on all 7 days (2 h less sleep, 10 more resting beats) | Over all eligible weeks: **92/189** (48.7%) PMData, **49/213** (23.0%) and **41/150** (27.3%) LifeSnaps. Over **observable** weeks (sleep and resting heart rate each read on at least 5 worn days; 174/189, 160/213, 111/150 of them): **92/174** (52.9%), **49/160** (30.6%), **41/111** (36.9%). Smaller changes and every count: [evaluation.md](evaluation.md#the-check-in-rule-on-real-people-2026-11-26) | same | Valid. The rule is unchanged |
+| Candidate rules on real people (21 variants against checkin-v1; tuned on PMData and LifeSnaps' 30 under a budget fixed beforehand, confirmed once on the other 21) | Chosen on tuning: half the margin, 4 of 7 days, recovery not a separate signal (it is partly computed from sleep). **Held out:** ordinary weeks fired **0/150** (today's rule 0/150); 2 h less sleep and 10 more beats found **79/111** (today 41/111); 90 min and 8 beats 45/111 (14/111); 2 h less sleep alone 1/111 (0/111). [evaluation.md](evaluation.md#candidate-rules-2026-11-26) | `9aee224` (#249), 2026-11-26; `PYTHONPATH=backend:eval python eval/checkin_variants.py` | Valid. **Evaluation only: production still runs checkin-v1**; no new rule chosen |
 | End to end through the API, team A = PMData's 16 people | **18/18 scenarios passed**: no consent no alert; send now, stop, the hour running out; no second alert; a nameless inbox and no metric for recipients; another team's supervisor and members see none; HR removed loses access; the report for the supervisor only | `46d6c4d`, 2026-11-26; `PYTHONPATH=backend python eval/team_e2e.py <db> <tokens>` | Valid |
 
 ### MCP server and the path to the supervisor
@@ -80,6 +84,16 @@ the result. "Changed since" means it has, and the result has not been re-measure
 | The note screen: known gaps | **open privacy issue #246** (owner Jad): "Half the team has the flu", "John's sleep is bad" and "Sara is off this week" pass the screen, for app notes and MCP events alike; 6 regression cases marked `xfail(strict=True)` in `tests/test_note_screen.py` | `66dd5fc` | Open |
 | OAuth sign-in | the whole flow through the real routes, 17 tests (`pytest tests/test_mcp_oauth.py`); once with the MCP SDK's own OAuth client through the real Allow page in a browser, 9/9 (a one-off run, its script not kept) | #244 (`04afdc0`) | Valid |
 
+### The coach and the demo team
+
+| Test | Result | Measured on | Valid now? |
+|---|---|---|---|
+| The calendar line on 200 made-up teams of 7 | quiet weeks mentioned **0/200**, clearly busier weeks 200/200, half an hour more after hours alone 200/200 | #250, 2026-11-26 | Valid (#251 changed the wording, not when a line is written) |
+| Wording a busier week with no wellbeing change (review) | says "We detected no clear change in the available team readings", names readings too thin to tell, or says there were too few to tell; never "capacity", "handled", "coped" | `079c764` (#251) | Valid |
+| Whether a meeting-free day was kept (review) | counted from the days (out-of-office excluded): moved meetings count, only shorter ones do not; a team that already kept one counts as followed, with whether free days rose reported apart | `079c764` (#251) | Valid |
+| The demo-team command on a throwaway PostgreSQL database | two teams made (8 and 3 people), a reused prefix refused; `weekly --no-email`: 1 ready, 1 withheld; each removed in its own run, nothing left but the presenter. Removal refuses a look-alike account (`demo-user@myexample.com`) and keeps it | `e7dce15` (#252), 2026-11-26 | Valid |
+| Full backend suite | **3,086 passed**, 5 skipped, 6 xfailed (#246) | `6622e94`, 2026-11-26 | Valid |
+
 ### Conversations (follow-ups)
 
 | Test | Result | Measured on | Valid now? |
@@ -91,6 +105,15 @@ the result. "Changed since" means it has, and the result has not been re-measure
 | Replay third turns, 219 readings, regression check | heart-rate weekend kept in **59/62** with calendar weeks (dropped in 20/62 on the previous main) | 2026-11-23 | Valid |
 
 ### Known limitations now
+
+- **MCP, not yet done for real:** no sign-in from claude.ai or Codex against **production** (the
+  OAuth flow was run locally with the MCP SDK's client, and Claude Code with a pasted token, also
+  locally); no tool call inside Codex (it needs a Codex model login). The MCP reads figures,
+  meeting load and alerts, **not** the Monday briefing's calendar line or suggested change, and
+  approving a change is done in the app only.
+- **No demo team on production yet**, so the supervisor flow has not been rehearsed on the
+  deployed app.
+- **Meeting-free days** count a public holiday not marked out-of-office as a free day.
 
 - **Check-in alerts find few planted changes on real people:** 31–53% of a 2-hour sleep loss with 10 more resting beats, where both signals are readable (above). Time asleep is one limiting signal: with readings present it clears its bar in 28–37% of those weeks, resting heart rate in 80–94%. These counts do not say how much of that is sleep's variability and how much other gaps, such as nights missing inside the week. The rule is unchanged.
 - **Team notes can carry a named health or absence remark** (#246, open): the note screen misses some (above), and the team agent's model reads notes. **The demo uses synthetic notes only** (a release, an offsite; no names, no health) until it is fixed.

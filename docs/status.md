@@ -1,8 +1,33 @@
 # Project status
 
-The working log of the project, with [plan.md](plan.md) for what is left. Updated 2026-11-25.
+The working log of the project, with [plan.md](plan.md) for what is left. Updated 2026-11-26.
 **For what is true now, with the revision behind every result, read [current.md](current.md)
 first**; the sections below are dated and kept as they were written.
+
+## 2026-11-26: calendar, HR invitation, MCP server, coach, weekend tests
+
+All merged and deployed the same day; results with their revisions are in
+[current.md](current.md).
+
+| PR | Change |
+|---|---|
+| #237, #239 | The team's latest night and day from the first sync; first readings judged by the current report |
+| #238, #241, #243 | Google Calendar as daily meeting counts per person and for the team, with its own sign-in, synced every 30 minutes |
+| #240 | HR invitation by email; the current HR contact keeps the role until the new one accepts |
+| #242, #244 | MCP server for Claude, Codex and other harnesses: OAuth sign-in or a pasted token, per-token activity ([mcp.md](mcp.md)) |
+| #247 | The check-in rule on real people (PMData, LifeSnaps): 0 firings in 552 ordinary weeks, 31–53% of a large planted change found |
+| #248 | MCP red-team fixes; the strict red-team set (48/48); the three-way check of dataset, report and MCP; 18/18 end-to-end scenarios |
+| #249 | 21 candidate check-in rules on real people; the held-out candidate found 79/111 against 41/111, 0/150 ordinary weeks for both. Production rule unchanged |
+| #250 | The coach: the calendar in the Monday briefing and a four-change playbook |
+| #251 | Review fixes: no "handled within its capacity" claim; a meeting-free day counted from the days, and scored as followed when the goal is met even if the team already kept one |
+| #252 | `demo-team`: a labelled team of made-up members for the presentation, removed by the ids it recorded (migration 0040) |
+
+**Still open:**
+- Run the demo teams on production and rehearse the supervisor flow.
+- Sign in to the MCP from claude.ai and Codex on production; make a Codex tool call.
+- Choose (or not) a new check-in rule.
+- #246, the note screen.
+- Jad's threat model, failure matrix, red-team, chaos, load and contract tests.
 
 ## 2026-11-25: the move to a team product (milestone)
 

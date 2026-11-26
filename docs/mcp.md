@@ -87,9 +87,12 @@ the person stays in control: they choose what the harness may read, and approve 
 
 ## Demo script (about 3 minutes)
 
-Before: a team with at least 5 members with data. Locally, `python -m app.teams demo-members
-<invite code>` fills one with made-up members (Fitbit and calendar data, a sleep drop and a busy
-week in the last full week), then `python -m app.teams weekly --no-email` makes its report.
+Before: a team with at least 5 members with data. On production, `python -m app.teams demo-team
+--supervisor <presenter> --name "Demo team (synthetic data)" --count 8 --prefix demo-member
+--lasting --on-production` makes a labelled team of made-up members (Fitbit and calendar data,
+time asleep lower for three weeks, a busy last week), then `python -m app.teams weekly --team <id>
+--no-email` makes its report ([teams.md](teams.md)). Locally, `demo-members <invite code>` fills an
+existing team instead.
 
 1. **Settings → Claude, Codex and other harnesses.** Show the address and the two ways in.
 2. **Sign in from Codex** (`codex mcp login patterns`) or claude.ai: the Allow page names the
@@ -138,4 +141,10 @@ week in the last full week), then `python -m app.teams weekly --no-email` makes 
 - **The full path (2026-11-26, `46d6c4d`):** `eval/team_three_way.py` finds the dataset files, the
   supervisor's report and an authenticated MCP read in agreement, figure by figure;
   `eval/team_e2e.py` passes all 18 check-in and report scenarios through the API.
-- **Open:** the note screen's gaps, #246.
+- **Open:**
+  - the note screen's gaps, #246;
+  - a sign-in from claude.ai and from Codex against **production** (so far only local runs);
+  - a tool call inside Codex.
+
+  The MCP does not read the Monday briefing's calendar line or its suggested change, and changes
+  are approved in the app only.
