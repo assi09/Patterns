@@ -524,3 +524,54 @@ the Monday briefing reads it beside the watch's figures: "the team rated the wee
 Decided with Karim: asked every night, in the app. Defaults chosen and open to change: the question's
 wording, weekly figures only, five people minimum.
 
+
+## The coach and the playbook (2026-11-26)
+
+The Monday briefing reads the team's calendar beside its wellbeing ([pivot.md](pivot.md)). All of
+it is code (`app/teams/coach.py`); no model writes, chooses or words any of it.
+
+**What it says.** From the members' daily calendar counts, each against their own usual week, from
+at least 5 people with a calendar: a signal is mentioned when the typical person moved by a
+noticeable amount (an hour more in meetings, half an hour more after hours, three more
+back-to-back meetings, an hour less of focus time a week) and at least half the members moved that
+way.
+
+- Beside a wellbeing change: *"In the same week, the team's calendars were busier than usual.
+  For the typical person, against their own usual week: time in meetings up 6 h 17 min (6 of 6
+  people), meetings after hours up 49 min (6 of 6), back-to-back meetings up 10 (6 of 6), focus
+  time down 4 h 22 min (6 of 6)."* (the real Monday job on the made-up demo team, 2026-11-26).
+  Always "in the same week", never "because": moving together is not proof of a cause.
+- With no wellbeing change: *"Meetings changed last week. For the typical person, against their
+  own usual week: ... Nothing in sleep, recovery or activity moved beyond the team's usual range:
+  a heavier week, handled within its capacity."*
+  Nothing is suggested in such a week: there is nothing to fix.
+- Fewer than 5 calendars, or fewer than half the members moving: nothing.
+
+Measured on 200 made-up teams of 7 (`tests/test_coach.py`): quiet weeks mentioned 0/200, clearly
+busier weeks 200/200, half an hour more after hours alone 200/200. A first version used the Team
+tab's per-person bar (one more back-to-back meeting) and called a week busier when only 2 of 7
+people were; the noticeable amounts above replaced it.
+
+**The playbook.** Four changes, one per lever a supervisor controls and the calendar can see. Each
+has its own trigger, so no two compete for one signal, and each but the last is checked against
+the calendar afterwards, so "it did not help" is told apart from "it was not done":
+
+| Change | Its trigger | Meant for | Followed when | Evidence (strength) |
+|---|---|---|---|---|
+| Evening boundary: no team meetings after 5 pm; messages wait until morning | after-hours meetings rose | sleep, bedtime | after-hours meetings fell | after-hours work messages and poorer sleep and recovery (Barber & Santuzzi 2015, 354 people; correlational); France's right to disconnect (2017) |
+| A meeting-free day each week | meeting time rose, or focus time fell | stress signs, recovery, load, HRV, resting heart rate | meeting time fell | one meeting-free day and 26% less stress across 76 companies (Laker et al. 2022, MIT Sloan Management Review; surveys, before and after) |
+| Breaks between meetings: 10 to 15 minutes | back-to-back meetings rose | stress signs, recovery | back-to-back meetings fell | stress-linked brain activity built up over back-to-back calls and fell with 10-minute breaks (Microsoft Human Factors Lab 2021; 14 people, the breaks included meditation) |
+| A team step goal, nobody ranked | steps or active minutes fell | steps, activity | (steps themselves) | team step games raised activity in a randomised trial of 602 adults (Patel et al. 2019, JAMA Internal Medicine; the collaborative arm's gain faded after the game) |
+
+Retired on 2026-11-26 (kept only as the titles on past changes): *No meetings after 5 pm* and
+*Quiet evenings* (one lever, now the evening boundary; messages cannot be measured), *A lighter
+week* and *Protected focus mornings* (both fewer meetings, now the meeting-free day), *Walking
+meetings* (its evidence is about creativity, not activity, and a walk cannot be checked).
+
+**How one is chosen**, by code: only with a reason (a concern lasting two weeks or more, or an
+event coming like a past one followed by a dip); among the changes meant for that metric, one
+whose calendar trigger fired this week first, then what went better for this team before,
+untried, no difference, worse; one declined in the last 28 days waits. A change the calendar shows
+was not followed is not counted against it. With fewer than 5 calendars the choice falls back on
+the wellbeing metric alone. What a change is judged on is the team's metric during it against the
+28 days before: what happened during it, not proof it was the cause.

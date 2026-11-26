@@ -11,9 +11,10 @@ from app.agent.trace import team_trace
 from app.analysis.evidence import Evidence
 from app.analysis.report import change_text
 from app.analysis.team import kind_of, team_info
+from app.analysis.team_calendar import LOAD
 from app.db.chat import add_trace
 from app.db.models import Team, TeamChatMessage, TeamReport
-from app.teams import playbook
+from app.teams import coach, playbook
 from app.teams.agent import TeamClaim, TeamReply, TeamTools, _team_change_moved
 from app.teams.memberships import overlap_problem
 
@@ -158,13 +159,35 @@ def brief(
         {"text": w["text"], "kind": "ahead", "metric": None, "evidence_ids": w["evidence_ids"]}
         for w in ahead
     )
-    # One change suggested for approval when there is a reason: chosen by code from the playbook
-    # and this team's own results, never by the model.
-    results = {key: r["verdict"] for key, r in playbook.results_of(db, team, today).items()}
-    suggested = playbook.suggest(db, team, candidates, ahead, results, today, now)
+    # The coach (docs/pivot.md): what the team's calendars did in the report's week, written by
+    # code beside the wellbeing findings, or as a heavier week handled when nothing else moved.
+    load = coach.week_load(db, team, coach.report_week(report))
+    calendar_line = coach.line(load, wellbeing_changed=not coach.heads_up_week(report.body))
+    if calendar_line:
+        items.append(calendar_line)
+        for evidence in load:
+            box.evidence[evidence.id] = evidence
+    # One change suggested for approval when there is a reason: chosen by code from the playbook,
+    # the calendar signals that moved and this team's own results, never by the model.
+    results = playbook.verdicts(playbook.results_of(db, team, today))
+    suggested = playbook.suggest(
+        db, team, candidates, ahead, results, today, now, coach.signals(load)
+    )
     if suggested:
         action, reason = suggested
         label = team_info(action.metric).label.lower()
+        play = playbook.PLAY.get(action.play or "")
+        if play and (fired := [t for t in play.triggers if t in coach.signals(load)]):
+            metric, way = fired[0]
+            reason = {
+                **reason,
+                "why": f"{reason['why']}, and {LOAD[metric][0].lower()} "
+                f"{'rose' if way == 'up' else 'fell'} this week",
+                "evidence_ids": [
+                    *reason["evidence_ids"],
+                    *(e.id for e in load if e.metrics[0] == metric),
+                ],
+            }
         items.append(
             {
                 "text": (

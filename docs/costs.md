@@ -138,6 +138,7 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-18 | Constrained reader and variant selection, fresh 78-turn set: 75 strict passes, all 34 metric/date-shift pairs correct | $0.081097904 |
 | 2026-11-18 | Request-capability repair: 4 fresh probes plus 78 regression turns, 80/82 strict passes; two remaining contract failures fixed | $0.094112192 |
 | 2026-11-18 | Final threshold/food contract regressions: 4/4 passes; no new overall accuracy claim | $0.006452634 |
+| 2026-11-26 | The coach: the real Monday job (`weekly --agent`) on the made-up demo team, twice; one finding, so no highlight choice was needed and the calendar line is written by code: no model call | $0 |
 
 These implementation checks total **$0.254653954** (OpenAI $0.232608700, Jev $0.022045254).
 Including the earlier independently requested audits (about $0.4588 and $1.330020434), the shared

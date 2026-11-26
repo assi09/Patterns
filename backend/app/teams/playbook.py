@@ -32,47 +32,58 @@ class Play:
     id: str
     title: str
     body: str
-    fits: tuple[str, ...]  # the metrics it is meant for, the first measured by default
+    fits: tuple[str, ...]  # the wellbeing metrics it is meant for, the first measured by default
     days: int = 14
+    # The calendar signals that point to it: (metric, "up" or "down") as the team calendar
+    # measures them (app.analysis.team_calendar.LOAD). None for a change the calendar cannot see.
+    triggers: tuple[tuple[str, str], ...] = ()
+    # Whether the team did it, read from the calendar during the change: (metric, the way it
+    # should move). None when the calendar cannot tell.
+    adherence: tuple[str, str] | None = None
+    source: str = ""  # the evidence it rests on, as cited in docs/teams.md
 
 
+# Four levers, one per thing a supervisor controls and the calendar can see: when people meet,
+# how meetings are spaced, how much of the week they take, and movement. Each has its own trigger,
+# so no two compete for the same signal, and each but the last can be checked against the
+# calendar (docs/teams.md, "The playbook"). Retired on 2026-11-26, kept only as the titles stored
+# on past changes: no_late_meetings and quiet_evenings (now the evening boundary), lighter_week
+# and focus_mornings (now a meeting-free day), walking_meetings (its evidence is about creativity,
+# and the calendar cannot tell a walk).
 PLAYS = (
     Play(
-        "no_late_meetings",
-        "No meetings after 5 pm",
-        "No team meetings or calls after 5 pm on working days.",
-        ("sleep_minutes", "bedtime_hour", "recovery_score", "hrv_ms", "resting_hr", "stress_score"),
+        "evening_boundary",
+        "Evening boundary",
+        "No team meetings after 5 pm on working days; messages wait until the morning.",
+        ("sleep_minutes", "bedtime_hour"),
+        triggers=(("after_hours_minutes", "up"),),
+        adherence=("after_hours_minutes", "down"),
+        source="after-hours work messages and sleep (Barber & Santuzzi 2015); right to disconnect",
     ),
     Play(
-        "lighter_week",
-        "A lighter week",
-        "No new deadlines this week, and only the meetings that matter.",
-        ("recovery_score", "sleep_minutes", "stress_score", "strain", "hrv_ms", "resting_hr"),
-        days=7,
+        "meeting_free_day",
+        "A meeting-free day",
+        "One working day a week with no team meetings.",
+        ("stress_score", "recovery_score", "strain", "hrv_ms", "resting_hr"),
+        triggers=(("meeting_minutes", "up"), ("focus_minutes", "down")),
+        adherence=("meeting_minutes", "down"),
+        source="meeting-free days in 76 companies (Laker et al. 2022, MIT Sloan Management Review)",
     ),
     Play(
-        "quiet_evenings",
-        "Quiet evenings",
-        "No work messages after 7 pm; anything urgent waits for the morning.",
-        ("bedtime_hour", "sleep_minutes", "stress_score"),
-    ),
-    Play(
-        "focus_mornings",
-        "Protected focus mornings",
-        "No meetings before 11 am, so the day starts calmer.",
-        ("stress_score", "strain", "recovery_score"),
-    ),
-    Play(
-        "walking_meetings",
-        "Walking meetings",
-        "Hold one-to-ones and small meetings as walks when the weather allows.",
-        ("steps", "active_zone_minutes"),
+        "meeting_breaks",
+        "Breaks between meetings",
+        "Leave 10 to 15 minutes between meetings; end calls early to make room.",
+        ("stress_score", "recovery_score"),
+        triggers=(("back_to_back", "up"),),
+        adherence=("back_to_back", "down"),
+        source="breaks between video meetings, EEG (Microsoft Human Factors Lab 2021, 14 people)",
     ),
     Play(
         "step_goal",
         "A team step goal",
         "A shared goal for the team's steps together; nobody is ranked.",
         ("steps", "active_zone_minutes"),
+        source="team step games, randomised trial of 602 adults (Patel et al. 2019, JAMA Int Med)",
     ),
 )
 PLAY = {p.id: p for p in PLAYS}
@@ -187,10 +198,22 @@ def results_of(db: Session, team: Team, today: date) -> dict[str, dict]:
         return {}
     first = min(a.starts_on for a in done) - timedelta(days=35)
     frames = member_frames(db, team, first, max(a.ends_on for a in done))
+    from app.teams import coach
+
     found = {}
     for action in done:
         evidence = challenge_result(frames, action)
-        found[str(action.id)] = {**verdict(action, evidence), "evidence": evidence}
+        result = {**verdict(action, evidence), "evidence": evidence}
+        play = PLAY.get(action.play or "")
+        check = (
+            coach.followed(db, team, action, *play.adherence)
+            if play is not None and play.adherence is not None
+            else None
+        )
+        if check is not None:
+            result["followed"] = check
+            result["text"] = f"{result['text']} {check['text']}"
+        found[str(action.id)] = result
     return found
 
 
@@ -215,11 +238,16 @@ def _busy(history: list[TeamAction], metric: str, start: date, end: date) -> boo
 
 
 def rank(
-    candidates: list[Play], history: list[TeamAction], results: dict[str, str], today: date
+    candidates: list[Play],
+    history: list[TeamAction],
+    results: dict[str, str | None],
+    today: date,
+    signals: set[tuple[str, str]] = frozenset(),
 ) -> list[Play]:
-    # `results`: an ended change's id -> its verdict.
-    """Plays in the order to suggest them: what went better for this team first, then untried,
-    then what made no difference, then what went worse; one declined lately is left out."""
+    # `results`: an ended change's id -> its verdict (None when it was not followed).
+    """Plays in the order to suggest them: one whose calendar trigger fired this week first (it
+    targets what the calendar shows), then what went better for this team, untried, made no
+    difference, went worse; one declined lately is left out."""
     declined = {
         a.play
         for a in history
@@ -229,11 +257,27 @@ def rank(
     }
     best: dict[str, int] = {}
     for action in history:
-        if action.play and (seen := results.get(str(action.id))):
+        if action.play and (seen := results.get(str(action.id))) is not None:
             order = VERDICT_ORDER[seen]
             best[action.play] = min(best.get(action.play, order), order)
     kept = [p for p in candidates if p.id not in declined]
-    return sorted(kept, key=lambda p: (best.get(p.id, VERDICT_ORDER[None]), PLAYS.index(p)))
+    return sorted(
+        kept,
+        key=lambda p: (
+            not any(t in signals for t in p.triggers),
+            best.get(p.id, VERDICT_ORDER[None]),
+            PLAYS.index(p),
+        ),
+    )
+
+
+def verdicts(found: dict[str, dict]) -> dict[str, str | None]:
+    """Each ended change's verdict for ranking; None for one the calendar shows was not followed,
+    so a change that was not done is not held against it."""
+    return {
+        key: None if (r.get("followed") or {}).get("followed") is False else r["verdict"]
+        for key, r in found.items()
+    }
 
 
 def reasons(priorities: list[dict], warnings: list[dict], today: date) -> list[dict]:
@@ -269,17 +313,20 @@ def suggest(
     team: Team,
     priorities: list[dict],
     warnings: list[dict],
-    results: dict[str, str],
+    results: dict[str, str | None],
     today: date,
     now: datetime,
+    signals: set[tuple[str, str]] = frozenset(),
 ) -> tuple[TeamAction, dict] | None:
-    """At most one change a week, proposed for the supervisor's approval, with why."""
+    """At most one change a week, proposed for the supervisor's approval, with why. `signals`
+    are the calendar signals that moved this week (coach.signals); a change they point to comes
+    first."""
     history = _history(db, team)
     for reason in reasons(priorities, warnings, today):
         candidates = plays_for(reason["metric"])
         if not candidates:
             continue
-        ordered = rank(candidates, history, results, today)
+        ordered = rank(candidates, history, results, today, signals)
         if not ordered:
             continue
         play = ordered[0]
