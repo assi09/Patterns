@@ -188,11 +188,11 @@ than "the coach adds nothing":
 | 17 | Check-in: only who agreed, told first, exact hour, no double send, demoted/former HR get nothing, no model | T | `test_checkin` (6 tests) | — | pass | ✅ | real detection 31–53% (`current.md`) |
 | 18 | HR invitation: current contact stays until accept; expiry; no conversion | T | `test_hr_invite` (3), `test_hr_invite_postgres` | — | pass | ✅ | — |
 | 19 | Calendar: own sign-in, rows never mixed with health, failures contained | C/T | `test_calendar` (4) | — | pass | ✅ | — |
-| 20 | MCP: auth, roles, refusals, OAuth | S/T | `test_mcp`, `test_mcp_oauth`; red team 48/48 at `e95c832` | — | pass | ✅ | no production sign-in from claude.ai or Codex; no Codex tool call |
+| 20 | MCP: auth, roles, refusals, OAuth | S/T | `test_mcp`, `test_mcp_oauth`; red team 48/48 at `e95c832`; local SDK client session 2026-11-26 (`docs/rehearsal-2026-11-26.md`) | team figures match the app's; withheld team gives no figures | pass | ◐ | **the briefing's dated finding and evidence are not exposed**; no production sign-in from claude.ai or Codex; no Codex tool call |
 | 21 | Notes with a named health or absence remark are refused | C | `test_note_screen` | — | **6 xfail** | **❌** | **#246, open: could expose a person** |
 | 22 | Same figures in dataset, report and MCP | E | `eval/team_three_way.py` at `46d6c4d` | one team-week | 6/6 | ◐ | one week only |
 | 23 | Check-in and report scenarios through the API | E | `eval/team_e2e.py` at `46d6c4d` | 18 scenarios | 18/18 | ✅ | — |
-| 24 | Supervisor flow in the app: finding → evidence → approve → saved | E | rehearsal on production (pending); `mobile` evidence and team-briefing unit tests | — | not run end to end | ○ | **no scripted UI run; rehearsal and a Playwright pass needed** |
+| 24 | Supervisor flow in the app: finding → evidence → approve → saved | E | scripted browser run of the web app against a local API, 2026-11-26 (`docs/rehearsal-2026-11-26.md`) | the finding's dates match its cited record; approve saves and tells 8 members once; the withheld team shows its reason only | finding, approve, withheld: pass; **evidence: cannot be opened** | ◐ | **no way in the app to open a team finding's evidence**; production screen needs the supervisor's own sign-in |
 | 25 | Personal features off; team routes stay | C | `test_personal_features` | — | pass | ✅ | — |
 | 26 | Deleting an account deletes everything about the person | C | `test_account_deletion` | — | pass | ✅ | — |
 | 27 | Demo teams: labelled, removed by recorded ids only | T | `test_team_demo`; throwaway PostgreSQL run; production rebuild | — | pass; removed 8 → 0, recreated | ✅ | — |
@@ -227,7 +227,11 @@ Each category has at least one executable case with a pass criterion. All of the
 4. **The coach's relevance and action are unrated.** Nothing yet shows that the highlighted
    finding and the suggested action are the right ones. Needs the doctors' rubric, then scoring
    of the reserved cases by named raters.
-5. **MCP on production:** no sign-in from claude.ai or Codex, and no Codex tool call.
+5. **MCP:** it does not expose the briefing's dated finding or its evidence, so an assistant sees
+   "lower for 3 weeks running" beside "no clear change". No sign-in from claude.ai or Codex on
+   production, and no Codex tool call.
+5a. **No evidence view for supervisors:** the Team screen cannot open the record behind a
+   finding, and `/evidence/{id}` serves personal evidence only.
 6. **Monitoring of the weekly job:** no metric for reports made, withheld or briefed, or for
    briefing failures. The cron prints counts only.
 7. **Live-model consistency** (repeat runs, latency, cost per task) is not measured for the team
