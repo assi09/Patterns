@@ -10,7 +10,9 @@ Every answer below was produced by the app's code; no model was involved in any 
 | S1 | "Time asleep has been lower for 3 weeks running: median change −46 min against the four weeks before (8 of 8 people)." Then "In the same week, the team's calendars were busier than usual…" | Evening boundary, Nov 24 to Dec 7, measured on time asleep, waiting for approval. |
 | S2 | "Time asleep fell this week: median change −49 min against the four weeks before (8 of 8 people)." Then "In the same week, the team's calendars were busier than usual…" | none: a one-week change is "new", not lasting. |
 
-**Known issue for the discussion:** in S1 and S2 the briefing's "against the four weeks before"
-is not accurate. That figure uses a fixed baseline: the 28 days before the first of the last four
-weeks. So S2's report says −56 min and its briefing says −49 min for the same week
-(`docs/evaluation-audit.md`, gap 1).
+**Known issue for the discussion, fixed since in #256:** these briefing lines said "against the
+four weeks before", but that figure uses a fixed baseline: the 28 days before the first of the
+last four weeks. So S2's report says −56 min, and its briefing −49 min, for the same week. After
+#256 the briefing names its own dates instead ("against Sep 22 to Oct 19"). The two figures still
+differ, because they answer different questions. Is showing both, each with its own dates, clear
+to a supervisor?
