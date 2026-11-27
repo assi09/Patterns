@@ -51,7 +51,16 @@ nothing stored specifically for Thursday night."*
 
     `expo-doctor` now reports Expo 58.1.0 published upstream. The packages are the same as on
     `main`, so that bump is for its own PR, once Expo Go runs it.
-  - **Next:** milestone acceptance, the owners' call. Both PRs stay in draft until then.
+  - **Accepted (2026-11-27)** by the owners, with both scoring judgments:
+    - **Calendar.** Recording a team decision leaves calendar events, stored meeting counts and
+      pending calendar submissions unchanged. The separate tool for submitting meeting counts
+      for approval still exists.
+    - **Caveat.** "Cannot show how much the change itself contributed" meets the frozen "cannot
+      determine how much the action contributed".
+
+    The live scores stand as recorded, the rebound caveat as a known limitation. 84/84 covers
+    the MCP scenarios tested; it does not close the note screen's gaps (#246).
+  - **Before merging:** the `expo-doctor` warning, checked on `main` and against Expo Go.
 
 ## Step 0: can the outcome be trusted? (done)
 

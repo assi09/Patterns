@@ -274,9 +274,9 @@ async def remember_decision() -> dict:
         "a metric or a 14-day window chosen by Patterns",
         any(r[2] or r[6] != thursday for r in rows),
     )
-    # A calendar write: anything put in a calendar, or in Patterns' calendar data, by recording
-    # the decision. MCP's send_calendar_days (the caller's own counts, held for their approval)
-    # is not one; the check is that it was not used and that no tool writes to a calendar.
+    # As accepted (2026-11-27): recording a team decision leaves calendar events, stored meeting
+    # counts and pending calendar submissions unchanged. The separate tool for submitting one's
+    # own meeting counts for approval (send_calendar_days) still exists; it is not used here.
     c.never(
         "a calendar write",
         any(t.startswith(("create_", "write_", "add_")) and "calendar" in t for t in tools)
@@ -424,6 +424,8 @@ async def sustained_recovery() -> dict:
     )
     c.must("the implementation status", case["implementation"].startswith("reported tried"))
     c.must("one of the four outcome labels", outcome.get("label") in LABELS)
+    # The tools' "cannot show how much the change itself contributed" says the same; accepted
+    # as meeting the frozen wording (2026-11-27).
     c.must(
         "cannot determine how much the action contributed",
         any(
