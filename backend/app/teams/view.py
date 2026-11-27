@@ -15,7 +15,7 @@ Two comparisons appear in one report, and each is labelled with its own dates:
 """
 
 import uuid
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -532,28 +532,39 @@ def clear_change(evidence) -> str:
     return "none"
 
 
+def _utc(moment: datetime) -> datetime:
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)  # SQLite drops it
+
+
 def calendar_cohort(db: Session, team: Team, week) -> dict:
     """Whose calendars count for a past week: the group behind that week's Fitbit report.
 
-    A report is made just after its week from everyone who is a member then, with their history.
-    So a calendar counts the people who had joined by the day that week's report was made (the
-    day after the week when there is none) and are still in the team. Someone who joined later
-    was not in that report and is left out; someone who has left is left out too, since leaving
-    withdraws their data from team figures. When anyone counted in the report has left since, the
-    calendar group is smaller than the report's, and that is said."""
+    A report is made just after its week from everyone who is a member at that moment, with their
+    history. So a calendar counts the people who had joined by the exact time that week's report
+    was made and are still in the team. Someone who joined later, even the same day, was not in
+    that report and is left out; someone who has left is left out too, since leaving withdraws
+    their data from team figures. Only someone who was in the report and left after it makes the
+    calendar group smaller than the report's, and that is said. With no report for the week, the
+    group is the members at the start of the day after it, and the answer is labelled so."""
     from app.db.models import TeamMembership
 
     report = week_report(db, team, week.start)
-    cutoff = report.created_at.date() if report is not None else week.end + timedelta(days=1)
+    if report is not None:
+        cutoff = _utc(report.created_at)
+        basis = "the members when that week's report was made"
+    else:
+        cutoff = datetime.combine(week.end + timedelta(days=1), time.min, UTC)
+        basis = "no report for that week: the members at the start of the day after it"
     rows = db.scalars(select(TeamMembership).where(TeamMembership.team_id == team.id)).all()
-    by_then = [r for r in rows if r.joined_at.date() <= cutoff]
+    by_then = [r for r in rows if _utc(r.joined_at) <= cutoff]
     counted = [r for r in by_then if r.left_at is None]
-    joined_later = [r for r in rows if r.left_at is None and r.joined_at.date() > cutoff]
-    left_since = [r for r in by_then if r.left_at is not None and r.left_at.date() >= cutoff]
+    joined_later = [r for r in rows if r.left_at is None and _utc(r.joined_at) > cutoff]
+    left_since = [r for r in by_then if r.left_at is not None and _utc(r.left_at) > cutoff]
     return {
         "user_ids": [r.user_id for r in counted],
-        "rule": "The members behind that week's report (joined by the day it was made) who are "
+        "rule": "The members behind that week's report (joined by the moment it was made) who are "
         "still in the team. People who joined later and people who have left are not counted.",
+        "basis": basis,
         "group_as_of": cutoff.isoformat(),
         "counted": len(counted),
         "joined_later": len(joined_later),

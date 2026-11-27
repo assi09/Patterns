@@ -40,6 +40,14 @@ def boss(db) -> User:
     return db.scalar(select(User).where(User.email == "boss@example.com"))
 
 
+def reported(engine, size: int = 7) -> str:
+    """A team with the week's Fitbit report made at NOW, right after its members joined."""
+    team_id = make_team(engine, size=size)
+    with session_scope(engine) as db:
+        reports.build_report(db, team_of(db, team_id), WEEK, NOW)
+    return team_id
+
+
 def ready(engine, size: int = 7) -> str:
     """A team whose time asleep fell three weeks before the report and stayed low, reported."""
     team_id = make_team(engine, size=size)
@@ -229,7 +237,7 @@ def zero_calendar(engine, count: int) -> None:
     ],
 )
 def test_the_calendar_state_is_said_and_missing_is_never_zero(engine, setup, state):
-    team_id = make_team(engine)
+    team_id = reported(engine)  # the week's report, as the Monday job makes it
     setup(engine)
     with session_scope(engine) as db:
         out = view.meeting_load(db, team_of(db, team_id), WEEK.start, TODAY)
@@ -246,7 +254,7 @@ def test_the_calendar_state_is_said_and_missing_is_never_zero(engine, setup, sta
 
 
 def test_an_observed_zero_is_reported_as_zero(engine):
-    team_id = make_team(engine)
+    team_id = reported(engine)  # the week's report, as the Monday job makes it
     zero_calendar(engine, 7)
     with session_scope(engine) as db:
         out = view.meeting_load(db, team_of(db, team_id), WEEK.start, TODAY)
@@ -255,7 +263,7 @@ def test_an_observed_zero_is_reported_as_zero(engine):
 
 
 def test_a_busy_week_is_a_clear_change_and_another_week_is_not_borrowed(engine):
-    team_id = make_team(engine)
+    team_id = reported(engine)  # the week's report, as the Monday job makes it
     give_calendars(engine, 7, BUSY)
     with session_scope(engine) as db:
         team = team_of(db, team_id)
@@ -450,7 +458,8 @@ def test_a_past_weeks_calendar_counts_the_reports_group_still_in_the_team(engine
     assert before["coverage"]["roster"] == 7
     assert after["cohort"] | {"rule": ""} == {
         "rule": "",
-        "group_as_of": str(NOW.date()),
+        "basis": "the members when that week's report was made",
+        "group_as_of": NOW.isoformat(),
         "counted": 6,
         "joined_later": 1,
         "left_since": 1,
@@ -473,7 +482,7 @@ def test_a_past_weeks_calendar_counts_the_reports_group_still_in_the_team(engine
     ],
 )
 def test_a_clear_change_is_named_in_either_direction(engine, busy, expected, heavier):
-    team_id = make_team(engine)
+    team_id = reported(engine)  # the week's report, as the Monday job makes it
     give_calendars(engine, 7, busy)
     with session_scope(engine) as db:
         out = view.meeting_load(db, team_of(db, team_id), WEEK.start, TODAY)
@@ -485,9 +494,58 @@ def test_a_clear_change_is_named_in_either_direction(engine, busy, expected, hea
 
 
 def test_an_observed_zero_week_is_no_change_not_a_fall(engine):
-    team_id = make_team(engine)
+    team_id = reported(engine)  # the week's report, as the Monday job makes it
     zero_calendar(engine, 7)
     with session_scope(engine) as db:
         out = view.meeting_load(db, team_of(db, team_id), WEEK.start, TODAY)
     [time] = [f for f in out["figures"] if f["metric"] == "meeting_minutes"]
     assert time["median_week"] == 0 and time["clear_change"] == "none"
+
+
+def test_a_same_day_joiner_cannot_lift_a_withheld_calendar_figure_over_the_minimum(engine):
+    """Four calendars at the moment of the report; a fifth person with calendar history joins
+    later that day. The historical figure must stay withheld: a date comparison would have
+    counted them, made five and shown a figure the report's group cannot support."""
+    team_id = ready(engine)  # the report, made at NOW
+    give_calendars(engine, 4, BUSY)
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        newcomer = User(email="member99@example.com", status="approved")
+        db.add(newcomer)
+        db.flush()
+        from test_coach import calendar_days
+
+        save_daily(db, newcomer.id, calendar.SOURCE, calendar_days(99, BUSY))
+        memberships.join(db, team, newcomer, NOW + timedelta(hours=7))  # the same day, later
+        out = view.meeting_load(db, team, WEEK.start, TODAY)
+    assert out["state"] == "below_minimum"
+    assert out["cohort"]["joined_later"] == 1 and out["cohort"]["same_group_as_report"] is True
+    assert all(f["contributors"] == 4 and "median_week" not in f for f in out["figures"])
+
+
+def test_someone_who_left_before_the_report_that_day_is_not_said_to_have_left_after(engine):
+    from app.db.models import TeamMembership
+
+    team_id = make_team(engine)  # joined at NOW
+    give_calendars(engine, 7, BUSY)
+    made = NOW + timedelta(hours=8)
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        leaver = db.scalars(select(TeamMembership).where(TeamMembership.team_id == team.id)).first()
+        leaver.left_at = NOW + timedelta(hours=7)  # left that morning, before the report
+        db.flush()
+        reports.build_report(db, team, WEEK, made)
+        out = view.meeting_load(db, team, WEEK.start, TODAY)
+    assert out["cohort"]["left_since"] == 0 and out["cohort"]["counted"] == 6
+    assert out["cohort"]["same_group_as_report"] is True
+    assert not any("have left since" in line for line in out["limitations"])
+
+
+def test_a_week_without_a_report_says_whose_calendars_it_used(engine):
+    team_id = make_team(engine)
+    give_calendars(engine, 7, BUSY)
+    with session_scope(engine) as db:
+        out = view.meeting_load(db, team_of(db, team_id), WEEK.start, TODAY)
+    assert out["cohort"]["basis"].startswith("no report for that week")
+    assert out["cohort"]["same_group_as_report"] is False
+    assert "No Fitbit report for that week to match." in out["limitations"]
