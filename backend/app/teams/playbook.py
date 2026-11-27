@@ -200,12 +200,20 @@ def results_of(db: Session, team: Team, today: date) -> dict[str, dict]:
         return {}
     first = min(a.starts_on for a in done) - timedelta(days=35)
     frames = member_frames(db, team, first, max(a.ends_on for a in done))
-    from app.teams import coach
+    from app.teams import coach, outcome
 
     found = {}
     for action in done:
         evidence = challenge_result(frames, action)
-        result = {**verdict(action, evidence), "evidence": evidence}
+        described = outcome.describe(action, evidence)
+        # `verdict` only orders the old automatic suggestions (`rank`, off in the app); what is
+        # shown is the outcome, which makes no judgement.
+        result = {
+            **verdict(action, evidence),
+            "text": described["text"],
+            "outcome": described,
+            "evidence": evidence,
+        }
         play = PLAY.get(action.play or "")
         check = (
             coach.followed(db, team, action, *play.adherence)

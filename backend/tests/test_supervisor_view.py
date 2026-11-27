@@ -29,7 +29,7 @@ from app.db.session import session_scope
 from app.harness import tools
 from app.harness.tools import HarnessError
 from app.sync import calendar
-from app.teams import memberships, reports, view
+from app.teams import memberships, outcome, reports, view
 
 
 def team_of(db, team_id: str) -> Team:
@@ -313,11 +313,15 @@ def test_a_change_is_in_progress_in_its_week_and_measured_once_a_report_covers_i
         assert past["state"] == "in_progress" and "result" not in past
         assert past["as_of"] == str(during.end + timedelta(days=1))
         assert latest["state"] == "ended" and latest["result"]["report_id"]
-        assert "not proof" in latest["result"]["note"] and latest["tried"]
+        assert latest["tried"] and outcome.CONTRIBUTION in latest["result"]["caveats"]
+        assert latest["result"]["reference"]["kind"] == "before_the_change"  # not linked
+        assert outcome.REBOUND in latest["result"]["caveats"]
+        assert latest["result"]["outcome"] in outcome.OUTCOMES and "verdict" not in latest["result"]
         record = view.finding_evidence(
             db, team, latest["result"]["report_id"], latest["result"]["evidence_id"]
         )
     assert record["label"] == "Result of a team change"
+    assert record["outcome_label"] == outcome.OUTCOMES[record["outcome"]]
     assert record["target"] == {"start": str(WEEK.start - timedelta(days=14)), "end": str(WEEK.end)}
 
 

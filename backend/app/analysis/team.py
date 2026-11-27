@@ -142,7 +142,9 @@ def member_change(
     return MemberChange(change, change / spread)
 
 
-def team_change(changes: list[MemberChange], metric: str, week: Window) -> Evidence:
+def team_change(
+    changes: list[MemberChange], metric: str, week: Window, baseline: Window | None = None
+) -> Evidence:
     """Whether the team's changes are centred away from zero.
 
     A one-sample t-test on the standardized changes, so no one person's scale dominates; with 5
@@ -151,7 +153,7 @@ def team_change(changes: list[MemberChange], metric: str, week: Window) -> Evide
     statistics are left out entirely, not just flagged.
     """
     n = len(changes)
-    windows = (week, baseline_of(week))
+    windows = (week, baseline or baseline_of(week))  # the days the changes were measured against
     if n < MIN_MEMBERS:
         stats_ = {"members": n, "minimum_members": MIN_MEMBERS}
         return Evidence(

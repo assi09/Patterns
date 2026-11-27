@@ -1303,14 +1303,24 @@ function seededActions(): TeamAction[] {
       source: 'supervisor',
       play: 'walking_meetings',
       result: {
+        outcome: 'above',
+        label: 'above the reference level',
+        reference: { start: isoDate(64), end: isoDate(37) },
+        referenceLabel: 'the 28 days before the change started',
+        caveats: [
+          'An observation during the change: it cannot show how much the change itself contributed.',
+          'This is compared with the 28 days just before the change. If the team had just dipped, an ordinary rebound can look like an improvement.',
+        ],
         verdict: 'better',
-        text:
-          'Steps rose during it: median change +900 against the 28 days before (6 of 8 people).',
+        text: 'Steps: above the reference level during the change, median difference +900 steps against the 28 days before the change started; 8 people with data.',
         evidence: {
           id: 'e_change_walks',
           tool: 'team_change',
           metrics: ['steps'],
-          windows: [{ start: isoDate(36), end: isoDate(23) }],
+          windows: [
+            { start: isoDate(36), end: isoDate(23) },
+            { start: isoDate(64), end: isoDate(37) },
+          ],
           n: 8,
           sufficient: true,
           stats: { members: 8, median_change: 900, members_up: 6, members_down: 2 },

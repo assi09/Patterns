@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from app.agent.llm import LLM
 from app.analysis.evidence import Evidence, Window
 from app.analysis.report import change_text
-from app.analysis.screen import FDR
 from app.analysis.team import (
     LEVEL_METRICS,
     MIN_MEMBERS,
@@ -209,6 +208,7 @@ def week_alerts(db: Session, team: Team, week: Window) -> list[str]:
 def challenges(db: Session, team: Team, week: Window, frames: list) -> list[tuple[dict, Evidence]]:
     """Approved challenges that ended by the end of the week and not before the week before it:
     did the team's metric move during them? Read like a weekly change."""
+    from app.teams import outcome
     from app.teams.agent import challenge_result  # the agent imports this module
 
     done = []
@@ -223,16 +223,14 @@ def challenges(db: Session, team: Team, week: Window, frames: list) -> list[tupl
         ):
             continue
         evidence = challenge_result(frames, action)
-        label = team_info(action.metric).label
-        if not evidence.sufficient:
-            text = f"{action.title}: not enough people with data to tell."
-        elif evidence.stats["p_value"] < FDR:
-            median = change_text(action.metric, evidence.stats["median_change"])
-            way = _direction(action.metric, evidence.stats["median_change"])
-            text = f"{action.title}: {label.lower()} {way} during it (median change {median})."
-        else:
-            text = f"{action.title}: no clear change in {label.lower()} during it."
-        done.append(({"metric": action.metric, "text": text, "evidence_id": evidence.id}, evidence))
+        described = outcome.describe(action, evidence)
+        row = {
+            "metric": action.metric,
+            "text": f"{action.title}. {described['text']}",
+            "outcome": described["outcome"],
+            "evidence_id": evidence.id,
+        }
+        done.append((row, evidence))
     return done
 
 

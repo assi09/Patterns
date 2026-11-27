@@ -521,10 +521,12 @@ describe('the team agent in the mock', () => {
     );
   });
 
-  it('shows how an ended change went', async () => {
+  it('says what followed an ended change without a judgement', async () => {
     const id = await teamId();
-    const ended = (await mockClient.getTeamActions(id)).find((a) => a.result);
-    expect(ended?.result?.verdict).toBe('better');
+    const result = (await mockClient.getTeamActions(id)).find((a) => a.result)?.result;
+    expect(result?.outcome).toBe('above');
+    expect(result?.text).not.toMatch(/better|worse|rose|fell|worked/i);
+    expect(result?.caveats.join(' ')).toMatch(/rebound/);
   });
 });
 
