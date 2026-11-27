@@ -149,18 +149,12 @@ def team_overview(
     alerts = db.scalars(
         select(TeamAlert).where(TeamAlert.team_id == team.id, TeamAlert.resolved_at.is_(None))
     ).all()
-    # Kept for callers of the first version. Alert texts lose the supervisor's note (#246).
+    # Kept for callers of the first version, rebuilt from computed fields and fixed labels: a
+    # stored headline, section or alert sentence can carry a supervisor's note (#246).
     return out | {
         "readings": [observed_text.sentence(e, today) for e in team_observed(frames, today)],
-        "weekly_report": None
-        if report is None
-        else {
-            "week_start": report.week_start.isoformat(),
-            "status": report.status,
-            "headline": report.headline,
-            "figures": [s.get("text", "") for s in (report.body or {}).get("sections", [])],
-        },
-        "open_alerts": [a.text.split(" It lined up with your note:", 1)[0] for a in alerts],
+        "weekly_report": None if report is None else view.legacy_report(out),
+        "open_alerts": [view.alert_line(a) for a in alerts],
         "minimum_members": teams.MIN_MEMBERS,
     }
 

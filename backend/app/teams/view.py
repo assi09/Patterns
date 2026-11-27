@@ -186,6 +186,13 @@ def _bounded_change(record: dict) -> dict | None:
     }
 
 
+def _action_title(action: TeamAction) -> str:
+    """A controlled label: the playbook's own title, or "Custom team change". A supervisor's own
+    title is free text and can name someone (#246), so it never leaves through MCP."""
+    play = playbook.PLAY.get(action.play or "")
+    return play.title if play is not None and action.play != "custom" else "Custom team change"
+
+
 def _stored_result(db: Session, team: Team, action: TeamAction, as_of: date):
     """The record a report stored for this change once it ended, from a report made by `as_of`:
     (report, record), or None when no report has covered it yet."""
@@ -254,7 +261,7 @@ def follow_up(db: Session, team: Team, as_of: date) -> list[dict]:
         else:
             state = "ended"
         item = {
-            "title": action.title,
+            "title": _action_title(action),
             "metric": action.metric,
             "metric_label": team_info(action.metric).label if action.metric else None,
             "started_by": "supervisor"
@@ -339,6 +346,42 @@ def overview(
         out["follow_up"] = follow_up(db, team, as_of)
     out["as_of"] = as_of.isoformat()
     return out
+
+
+def legacy_report(found: dict) -> dict:
+    """The first version's `weekly_report`, from an overview: the same keys, controlled text."""
+    report = found["report"]
+    if report["state"] == "withheld":
+        headline = report["reason"]
+    elif found["priorities"]:
+        first = found["priorities"][0]
+        headline = f"{first['label']}: {first['metric_label']} {first['direction']}"
+    else:
+        headline = "No priority finding this week."
+    weekly = found.get("this_week_vs_previous_four") or {}
+    figures = [
+        f"{row['metric_label']}: median change {row['change']['text']} "
+        f"({row['higher']} higher, {row['lower']} lower, {row['contributors']} people)"
+        for row in (*weekly.get("changed", []), *weekly.get("steady", []))
+    ] + [
+        f"{row['metric_label']}: not enough data ({row['contributors']} of the {row['minimum']} "
+        "people needed)"
+        for row in weekly.get("withheld_metrics", [])
+    ]
+    return {
+        "week_start": report["week"]["start"],
+        "status": report["status"],
+        "headline": headline,
+        "figures": figures,
+    }
+
+
+def alert_line(alert) -> str:
+    """An open team alert from its fields only: never its stored sentence (#246)."""
+    way = _direction(alert.metric, alert.direction) or alert.direction
+    return (
+        f"{team_info(alert.metric).label} {way} across the team (raised {alert.raised_at:%b %-d})"
+    )
 
 
 def finding_evidence(db: Session, team: Team, report_id: str, evidence_id: str) -> dict:
@@ -462,13 +505,69 @@ CALENDAR_LIMITS = (
 )
 
 
+# The way each judged calendar metric adds load, as the coach reads it (coach.WATCHED).
+LOADING = {
+    "meeting_minutes": "higher",
+    "after_hours_minutes": "higher",
+    "back_to_back": "higher",
+    "focus_minutes": "lower",
+}
+
+
+def clear_change(evidence) -> str:
+    """ "higher", "lower" or "none" by the coach's bar, in both directions; "not judged" for a
+    metric the coach has no bar for. A clear fall is reported as a fall, not as no change."""
+    from app.teams import coach
+
+    metric = evidence.metrics[0]
+    bar = coach.NOTICEABLE.get(metric)
+    if bar is None:
+        return "not judged"
+    stats = evidence.stats
+    median, n = stats["median_change"], stats["members"]
+    if median >= bar and stats["members_up"] >= coach.BROAD * n:
+        return "higher"
+    if median <= -bar and stats["members_down"] >= coach.BROAD * n:
+        return "lower"
+    return "none"
+
+
+def calendar_cohort(db: Session, team: Team, week) -> dict:
+    """Whose calendars count for a past week: the group behind that week's Fitbit report.
+
+    A report is made just after its week from everyone who is a member then, with their history.
+    So a calendar counts the people who had joined by the day that week's report was made (the
+    day after the week when there is none) and are still in the team. Someone who joined later
+    was not in that report and is left out; someone who has left is left out too, since leaving
+    withdraws their data from team figures. When anyone counted in the report has left since, the
+    calendar group is smaller than the report's, and that is said."""
+    from app.db.models import TeamMembership
+
+    report = week_report(db, team, week.start)
+    cutoff = report.created_at.date() if report is not None else week.end + timedelta(days=1)
+    rows = db.scalars(select(TeamMembership).where(TeamMembership.team_id == team.id)).all()
+    by_then = [r for r in rows if r.joined_at.date() <= cutoff]
+    counted = [r for r in by_then if r.left_at is None]
+    joined_later = [r for r in rows if r.left_at is None and r.joined_at.date() > cutoff]
+    left_since = [r for r in by_then if r.left_at is not None and r.left_at.date() >= cutoff]
+    return {
+        "user_ids": [r.user_id for r in counted],
+        "rule": "The members behind that week's report (joined by the day it was made) who are "
+        "still in the team. People who joined later and people who have left are not counted.",
+        "group_as_of": cutoff.isoformat(),
+        "counted": len(counted),
+        "joined_later": len(joined_later),
+        "left_since": len(left_since),
+        "same_group_as_report": report is not None and not left_since,
+    }
+
+
 def meeting_load(db: Session, team: Team, week: date | None, today: date) -> dict:
     """The team's scheduled meeting time in one full week against each member's previous four
     weeks: observed, below the minimum, or unavailable. Never another week's figures, and never
     a zero for days nobody synced."""
     from app.analysis.team_calendar import team_load
     from app.sync import calendar
-    from app.teams import coach, memberships
 
     asked = week_of(week) if week is not None else week_of(today - timedelta(days=7))
     out: dict = {
@@ -484,9 +583,9 @@ def meeting_load(db: Session, team: Team, week: date | None, today: date) -> dic
             "state": "week_not_over",
             "note": "Figures are made for full weeks only; this week is not over.",
         }
-    ids = memberships.member_ids(db, team)
+    cohort = calendar_cohort(db, team, asked)
     frames, with_days = [], 0
-    for uid in ids:
+    for uid in cohort["user_ids"]:
         frame = calendar.frame_for(
             db, uid, asked.start - timedelta(days=28), asked.end + timedelta(days=1)
         )
@@ -496,12 +595,19 @@ def meeting_load(db: Session, team: Team, week: date | None, today: date) -> dic
         in_week = frame.loc[str(asked.start) : str(asked.end)]
         with_days += bool(in_week.notna().any(axis=None)) if not in_week.empty else 0
     load = team_load(frames, asked)
-    clear = coach.moved(load)
     out["coverage"] = {
-        "roster": len(ids),
+        "roster": len(cohort["user_ids"]),
         "with_calendar_days_that_week": with_days,
         "with_a_whole_week_and_usual_week": max((e.n for e in load), default=0),
     }
+    out["cohort"] = {k: v for k, v in cohort.items() if k != "user_ids"}
+    if not cohort["same_group_as_report"]:
+        out["limitations"].append(
+            "No Fitbit report for that week to match."
+            if cohort["left_since"] == 0
+            else f"{cohort['left_since']} of the people in that week's Fitbit report have left "
+            "since, so this calendar group is not the same group; compare the two with care."
+        )
     if with_days == 0:
         return out | {
             "state": "unavailable",
@@ -515,14 +621,15 @@ def meeting_load(db: Session, team: Team, week: date | None, today: date) -> dic
         row: dict = {"metric": metric, "label": CALENDAR_LABELS[metric]}
         row["contributors"] = evidence.n
         if evidence.sufficient:
-            way = coach.WATCHED.get(metric)
+            moved = clear_change(evidence)
             row |= {
                 "unit": stats["unit"],
                 "median_week": stats["median_week"],
                 "median_change": stats["median_change"],
                 "higher": stats["members_up"],
                 "lower": stats["members_down"],
-                "clear_change": (way if metric in clear else "none") if way else "not judged",
+                "clear_change": moved,
+                "heavier_load": moved == LOADING.get(metric) if metric in LOADING else None,
                 "evidence_id": evidence.id,
             }
         figures.append(row)
@@ -535,8 +642,19 @@ def meeting_load(db: Session, team: Team, week: date | None, today: date) -> dic
         }
     return out | {
         "state": "observed",
-        "clear_changes": sorted(clear),
-        "rule": "A clear change: the typical member moved by at least an hour (30 min outside "
-        "working hours, 3 back-to-back meetings) and at least half of contributors moved that way.",
+        "clear_changes": [
+            {
+                "metric": row["metric"],
+                "direction": row["clear_change"],
+                "heavier_load": row["heavier_load"],
+            }
+            for row in figures
+            if row.get("clear_change") in ("higher", "lower")
+        ],
+        "rule": "A clear change, either way: the typical member moved by at least an hour of "
+        "meetings or focus time (30 min outside working hours, 3 back-to-back meetings) and at "
+        "least half of contributors moved that way. heavier_load says whether that direction adds "
+        "load (more meeting time, more outside hours, more back-to-back, less focus time); the "
+        "number of meetings is not judged.",
         "figures": figures,
     }

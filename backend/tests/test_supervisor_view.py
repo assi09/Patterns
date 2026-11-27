@@ -262,9 +262,13 @@ def test_a_busy_week_is_a_clear_change_and_another_week_is_not_borrowed(engine):
         busy = view.meeting_load(db, team, WEEK.start, TODAY)
         before = view.meeting_load(db, team, WEEK.start - timedelta(days=7), TODAY)
         current = view.meeting_load(db, team, TODAY, TODAY)
-    assert "meeting_minutes" in busy["clear_changes"]
+    assert {"metric": "meeting_minutes", "direction": "higher", "heavier_load": True} in busy[
+        "clear_changes"
+    ]
     assert before["week"]["start"] == str(WEEK.start - timedelta(days=7))
-    assert before["clear_changes"] == []
+    # No report that week, and everyone joined after it: no group then, so no figures borrowed.
+    assert before["cohort"]["counted"] == 0 and before["cohort"]["joined_later"] == 7
+    assert before["state"] == "unavailable" and before["figures"] == []
     assert current["state"] == "week_not_over" and "figures" not in current
 
 
@@ -369,3 +373,121 @@ def test_a_withheld_report_has_no_findings_and_no_evidence_to_open(engine):
     client, headers = api_client(engine, "boss@example.com")
     report = client.get(f"/teams/{team_id}/reports/{WEEK.start}", headers=headers).json()
     assert report["findings"] == [] and report["weekly"] is None and report["evidence"] == {}
+
+
+# Review round, 2026-11-27: free text, the week's own group, and lighter weeks
+
+
+def test_no_free_text_title_or_stored_sentence_reaches_mcp(engine):
+    """A supervisor's own change title and an alert's stored sentence can name someone (#246):
+    neither the latest nor a dated answer carries them, only controlled labels."""
+    from app.db.models import TeamAlert
+
+    team_id = ready(engine)
+    secret = "Dana migraine"
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        db.add(
+            TeamAction(
+                team_id=team.id,
+                kind="challenge",
+                title=f"Quiet mornings for {secret}",
+                body=f"Because of {secret}.",
+                metric="sleep_minutes",
+                starts_on=WEEK.start - timedelta(days=14),
+                ends_on=WEEK.end,
+                status="approved",
+                source="supervisor",
+                play="custom",
+                proposed_at=NOW - timedelta(days=20),
+                decided_at=NOW - timedelta(days=20),
+            )
+        )
+        db.add(
+            TeamAlert(
+                team_id=team.id,
+                metric="sleep_minutes",
+                direction="down",
+                kind="concern",
+                text=f"Time asleep fell. It lined up with your note: {secret} (Oct 20).",
+                evidence={},
+                raised_at=NOW,
+            )
+        )
+        db.flush()
+        report = db.scalar(select(TeamReport).where(TeamReport.team_id == team.id))
+        report.headline = f"Needs attention: {secret}"  # as if a stored sentence carried it
+        latest = tools.team_overview(db, boss(db), team_id, TODAY)
+        dated = tools.team_overview(db, boss(db), team_id, TODAY, str(WEEK.start))
+    for answer in (latest, dated):
+        text = json.dumps(answer)
+        assert "Dana" not in text and "migraine" not in text
+        assert "Custom team change" in text
+    assert latest["open_alerts"] == [f"Time asleep lower across the team (raised {NOW:%b %-d})"]
+    assert latest["weekly_report"]["headline"] == "Sustained change: Time asleep lower"
+
+
+def test_a_past_weeks_calendar_counts_the_reports_group_still_in_the_team(engine):
+    from app.db.models import TeamMembership
+
+    team_id = ready(engine)  # the week's Fitbit report, made on NOW from the 7 members
+    give_calendars(engine, 7, BUSY)
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        before = view.meeting_load(db, team, WEEK.start, TODAY)
+        # After the report: one member left, and someone with a full calendar history joined.
+        leaver = db.scalars(select(TeamMembership).where(TeamMembership.team_id == team.id)).first()
+        leaver.left_at = NOW + timedelta(days=1)
+        newcomer = User(email="member99@example.com", status="approved")
+        db.add(newcomer)
+        db.flush()
+        from test_coach import calendar_days
+
+        save_daily(db, newcomer.id, calendar.SOURCE, calendar_days(99, BUSY))
+        memberships.join(db, team, newcomer, NOW + timedelta(days=1))
+        after = view.meeting_load(db, team, WEEK.start, TODAY)
+    assert before["cohort"]["same_group_as_report"] is True
+    assert before["coverage"]["roster"] == 7
+    assert after["cohort"] | {"rule": ""} == {
+        "rule": "",
+        "group_as_of": str(NOW.date()),
+        "counted": 6,
+        "joined_later": 1,
+        "left_since": 1,
+        "same_group_as_report": False,
+    }
+    [time] = [f for f in after["figures"] if f["metric"] == "meeting_minutes"]
+    assert time["contributors"] == 6  # neither the newcomer nor the leaver
+    assert any(
+        "1 of the people in that week's Fitbit report have left" in line
+        for line in after["limitations"]
+    )
+
+
+@pytest.mark.parametrize(
+    "busy, expected, heavier",
+    [
+        ({"meeting_minutes": 90.0}, "higher", True),
+        ({"meeting_minutes": -100.0}, "lower", False),  # a lighter week is not "none"
+        (None, "none", False),
+    ],
+)
+def test_a_clear_change_is_named_in_either_direction(engine, busy, expected, heavier):
+    team_id = make_team(engine)
+    give_calendars(engine, 7, busy)
+    with session_scope(engine) as db:
+        out = view.meeting_load(db, team_of(db, team_id), WEEK.start, TODAY)
+    [time] = [f for f in out["figures"] if f["metric"] == "meeting_minutes"]
+    assert time["clear_change"] == expected
+    assert time["heavier_load"] is heavier
+    [meetings] = [f for f in out["figures"] if f["metric"] == "meetings"]
+    assert meetings["clear_change"] == "not judged" and meetings["heavier_load"] is None
+
+
+def test_an_observed_zero_week_is_no_change_not_a_fall(engine):
+    team_id = make_team(engine)
+    zero_calendar(engine, 7)
+    with session_scope(engine) as db:
+        out = view.meeting_load(db, team_of(db, team_id), WEEK.start, TODAY)
+    [time] = [f for f in out["figures"] if f["metric"] == "meeting_minutes"]
+    assert time["median_week"] == 0 and time["clear_change"] == "none"
