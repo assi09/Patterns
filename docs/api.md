@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-109 operations, grouped by area.
+111 operations, grouped by area.
 
 ### meta
 
@@ -261,6 +261,8 @@ Besides the codes listed under [Error codes](#error-codes):
 | `GET` | `/teams/{team_id}/reports` | supervisor | `team_id` |  | list[[TeamReportSummary](#teamreportsummary)] |  |
 | `GET` | `/teams/{team_id}/reports/{week}` | supervisor | `team_id`, `week` |  | [TeamReport](#teamreport) |  |
 | `GET` | `/teams/{team_id}/reports/{week}/evidence/{evidence_id}` | supervisor | `team_id`, `week`, `evidence_id` |  | [TeamFindingEvidence](#teamfindingevidence) | The record behind one finding of one of the team's reports, bounded as MCP gives it. Any other id, or another team's, is simply not found. |
+| `GET` | `/teams/{team_id}/metrics` | supervisor | `team_id`, `week`? |  | [TeamMetrics](#teammetrics) | Every explorer metric for one finished week (the last one when none is asked), as MCP's team_metrics gives it (app.teams.explorer). |
+| `GET` | `/teams/{team_id}/metrics/{week}/{metric}` | supervisor | `team_id`, `week`, `metric` |  | [TeamMetricEvidence](#teammetricevidence) | One explorer metric's evidence for one week, with the evidence id MCP gives for it. |
 | `POST` | `/teams/{team_id}/reports` | supervisor | `team_id` | [GenerateReport](#generatereport) | [TeamReport](#teamreport) | The report for a full week, made now if it was not made yet; never for a week in progress. |
 | `GET` | `/teams/{team_id}/chat` | supervisor | `team_id` |  | list[[TeamChatMessage](#teamchatmessage)] |  |
 | `PUT` | `/teams/{team_id}/chat/{message_id}/rating` | supervisor | `team_id`, `message_id` | [RatingIn](#ratingin) | [TeamChatMessage](#teamchatmessage) | The supervisor's thumbs up or down on one of the team agent's answers. |
@@ -1442,6 +1444,94 @@ Did the team try it? None takes back an earlier answer: unknown again.
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `tried` | boolean or null | yes |  |
+
+### TeamMetricCategory
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `name` | string | yes |  |
+| `subgroups` | list[[TeamMetricSubgroup](#teammetricsubgroup)] | yes |  |
+
+### TeamMetricCoverage
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `contributors` | integer | yes |  |
+| `minimum` | integer | yes |  |
+| `roster` | integer | yes |  |
+| `withAnyData` | integer | yes |  |
+
+### TeamMetricEvidence
+
+One explorer metric's evidence, bounded as MCP gives it: what was measured, its dates, method, the team figure and coverage. Never a person's value or a quartile.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `state` | `ready` \| `week_not_over` \| `paused` \| `not_available_then` or `figure` \| `below_minimum` \| `no_data` | yes |  |
+| `metric` | string | yes |  |
+| `label` | string | yes |  |
+| `week` | [Window](#window) | yes |  |
+| `message` | string or null |  |  |
+| `evidenceId` | string or null |  |  |
+| `teamId` | string or null |  |  |
+| `category` | string or null |  |  |
+| `subgroup` | string or null |  |  |
+| `unit` | string or null |  |  |
+| `baseline` | [Window](#window) or null |  |  |
+| `madeOn` | string (date) or null |  |  |
+| `figureLabel` | string or null |  |  |
+| `change` | [ChangeFigure](#changefigure) or null |  |  |
+| `higher` | integer or null |  |  |
+| `lower` | integer or null |  |  |
+| `unchanged` | integer or null |  |  |
+| `coverage` | [TeamMetricCoverage](#teammetriccoverage) or null |  |  |
+| `withheld` | string or null |  |  |
+| `measured` | string or null |  |  |
+| `method` | string or null |  |  |
+| `zeroAndMissing` | string or null |  |  |
+| `derivation` | string or null |  |  |
+| `source` | string or null |  |  |
+| `limitations` | list[string] |  |  |
+
+### TeamMetricRow
+
+One metric in the explorer's list: its change, or why it has none (app.teams.explorer).
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `metric` | string | yes |  |
+| `label` | string | yes |  |
+| `unit` | string | yes |  |
+| `state` | `figure` \| `below_minimum` \| `no_data` | yes |  |
+| `evidenceId` | string | yes |  |
+| `contributors` | integer | yes |  |
+| `change` | [ChangeFigure](#changefigure) or null |  |  |
+| `withheld` | string or null |  |  |
+
+### TeamMetricSubgroup
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `name` | string | yes |  |
+| `metrics` | list[[TeamMetricRow](#teammetricrow)] | yes |  |
+
+### TeamMetrics
+
+Every explorer metric of one team week, or the week's state when there are none.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `teamId` | string | yes |  |
+| `week` | [Window](#window) | yes |  |
+| `baseline` | [Window](#window) | yes |  |
+| `weeks` | list[string (date)] | yes |  |
+| `minimumMembers` | integer | yes |  |
+| `state` | `ready` \| `week_not_over` \| `paused` \| `not_available_then` | yes |  |
+| `message` | string or null |  |  |
+| `madeOn` | string (date) or null |  |  |
+| `roster` | integer or null |  |  |
+| `membersWithData` | integer or null |  |  |
+| `categories` | list[[TeamMetricCategory](#teammetriccategory)] |  |  |
 
 ### TeamNote
 

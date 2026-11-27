@@ -192,6 +192,41 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
         )
 
     @server.tool(
+        description="Every team metric for one finished week, beyond the briefing's few: "
+        "sleep (time asleep, time in bed, bedtime, stages, Patterns-calculated efficiency), "
+        "movement (totals, activity intensity), heart (actual minutes in each heart-rate zone, "
+        "weighted Active Zone Minutes, resting heart rate, HRV) and Patterns' scores. Each is "
+        "the median of eligible members' changes from their own 28 days before, with its unit, "
+        "contributors and evidence id, or why it is withheld (fewer than 5 people) or "
+        "unavailable. Descriptive, not tested; not a briefing headline. Live Google Health data "
+        "only. `week`: any date in the week; left out, the last full week. `as_of`: only "
+        "figures stored by that day."
+    )
+    def team_metrics(team_id: str, week: str | None = None, as_of: str | None = None) -> dict:
+        return use(
+            "team_metrics",
+            lambda db, user, _: tools.team_metrics(
+                db, user, team_id, datetime.now(UTC), _today(user, timezone), week, as_of
+            ),
+        )
+
+    @server.tool(
+        description="The evidence behind one team metric of one week, by its name from "
+        "team_metrics (e.g. rem_sleep_minutes): what was measured, the week and comparison "
+        "dates, the method, the median change and its coverage, how zero and missing days are "
+        "treated, and limits. The same evidence id the app shows."
+    )
+    def team_metric(
+        team_id: str, metric: str, week: str | None = None, as_of: str | None = None
+    ) -> dict:
+        return use(
+            "team_metric",
+            lambda db, user, _: tools.team_metric(
+                db, user, team_id, metric, datetime.now(UTC), _today(user, timezone), week, as_of
+            ),
+        )
+
+    @server.tool(
         description="A supervisor's team scheduled meeting time for one full week against each "
         "member's previous four weeks, from at least 5 people, with the week and comparison "
         "dates and a state: observed, below_minimum, unavailable (no calendar data; never read "
