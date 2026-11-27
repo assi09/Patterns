@@ -52,6 +52,29 @@ arguments. Save each transcript, tool calls included. After each step, run
 `PYTHONPATH=backend python eval/change_memory_rehearsal.py check`; it prints counts and states,
 never a tool's inputs or results.
 
+## Team selection: scored apart, in every chat
+
+Added 2026-11-27, before any run. The prompts are unchanged. The presenter supervises several
+teams (the synthetic ones and two built from public LifeSnaps data), and the setup stays that way.
+Each chat names one team; its id is the instance's `demo_acted`.
+
+| Call | Verdict |
+|---|---|
+| Listing the teams to find the one named (`who_am_i`) | Fine |
+| A read of the named team | Intended-team read |
+| A read of another team's report, evidence, meeting load or history | **Wrong-team lookup**, scored here even when the final answer is right |
+| A draft or event sent to another team | **Wrong-team write**: the chat's task **fails** |
+| A team call whose transcript does not show which team it targeted | **Unverified** |
+
+**After each chat:**
+- Copy its tool calls from the transcript into a JSON list of
+  `{"tool": ..., "arguments": {...}}`. Use `null` when the transcript does not show the
+  arguments.
+- Run `PYTHONPATH=backend python eval/change_memory_rehearsal.py grade calls.json`.
+- Run `check`. Its `writes_on_any_team` lists every change and held submission recorded since
+  setup, on any team, and whether each went to the intended team. The database, not the
+  transcript, decides where a draft went.
+
 ## Chat 1: save a decision
 
 > I'm the supervisor of "Demo team with a past change". We have a release crunch coming, and I've
@@ -139,6 +162,8 @@ END:VEVENT
 
 For each chat, record:
 - the client and its model;
+- team selection: pass, wrong-team lookup, unverified, or fail (wrong-team write), with the
+  `grade` output and `writes_on_any_team`;
 - pass or fail on each line above, with the transcript excerpt that decides it;
 - the output of `check`;
 - for chat 3, whether `as_of` was chosen.

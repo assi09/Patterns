@@ -6,6 +6,7 @@ Codex); this script only prepares the database and reads it back.
     FA_DATABASE_URL=sqlite:///data/eval/change_memory/rehearsal.db FA_SENTRY_DSN= \\
       FA_OPENAI_API_KEY= uvicorn app.api.main:app --app-dir backend --port 8014
     PYTHONPATH=backend python eval/change_memory_rehearsal.py check
+    PYTHONPATH=backend python eval/change_memory_rehearsal.py grade calls.json
 
 `setup` copies the supervisor eval instance (data/eval/supervisor/local.db, left untouched) to
 data/eval/change_memory/rehearsal.db and migrates the copy. `check` prints, for the synthetic team
@@ -13,6 +14,13 @@ with a past change only: the changes recorded since setup (state, source, play, 
 whether it was reported tried), events, notifications sent, and the MCP tool calls made since
 setup by name. The server never stores a call's inputs or results, so whether an assistant passed
 `as_of` is read from the client's own transcript, not here.
+
+`check` also lists every change and held submission recorded since setup on **any** team, each
+marked with whether it went to the intended team, so a draft's destination is read from the
+database. `grade` scores team selection from a chat's tool calls, as copied from the transcript
+into a JSON list of {"tool": ..., "arguments": {...} or null}: listing teams is fine, a read of
+another team is a wrong-team lookup, a write to another team fails, and a team call whose
+arguments the transcript does not show is unverified.
 """
 
 import json
@@ -25,7 +33,8 @@ from pathlib import Path
 
 SOURCE = Path("data/eval/supervisor")
 FOLDER = Path("data/eval/change_memory")
-DB = FOLDER / "rehearsal.db"
+# Another file only to try the checks on a throwaway copy; the rehearsal uses the default.
+DB = Path(os.environ.get("FA_REHEARSAL_DB", FOLDER / "rehearsal.db"))
 STATE = FOLDER / "rehearsal.json"
 
 
@@ -49,10 +58,69 @@ def setup() -> None:
     print(f"Ready: {DB} (migrated copy). Start the API on it, port 8014.")
 
 
+LISTING = {"who_am_i"}
+TEAM_READS = {
+    "team_overview",
+    "team_finding_evidence",
+    "team_meeting_load",
+    "team_history",
+    "team_case",
+}
+TEAM_WRITES = {"record_team_change", "send_team_event"}
+
+
+def _labels() -> dict[str, str]:
+    """Team id (no dashes, lower case) to its key in the instance file: never a name."""
+    instance = json.loads((SOURCE / "instance.json").read_text())
+    return {str(v).replace("-", "").lower(): k for k, v in instance["teams"].items()}
+
+
+def _team(value, labels: dict[str, str]) -> str:
+    key = str(value).replace("-", "").lower()
+    return labels.get(key, "an id that is none of the instance's teams")
+
+
+def grade(path: str) -> None:
+    """Team selection for one chat, from its tool calls."""
+    state = json.loads(STATE.read_text())
+    intended = state["team"].replace("-", "").lower()
+    labels = _labels()
+    rows, verdicts = [], set()
+    for call in json.loads(Path(path).read_text()):
+        tool, arguments = call["tool"], call.get("arguments")
+        if tool in LISTING:
+            verdict = "listing teams (fine)"
+        elif tool in TEAM_READS | TEAM_WRITES:
+            write = tool in TEAM_WRITES
+            team_id = (arguments or {}).get("team_id")
+            if team_id is None:
+                verdict = "unverified write" if write else "unverified read"
+            elif str(team_id).replace("-", "").lower() == intended:
+                verdict = "intended-team write" if write else "intended-team read"
+            else:
+                verdict = "wrong-team write" if write else "wrong-team lookup"
+                rows.append({"tool": tool, "verdict": verdict, "team": _team(team_id, labels)})
+                verdicts.add(verdict)
+                continue
+        else:
+            verdict = "not a team tool"
+        rows.append({"tool": tool, "verdict": verdict})
+        verdicts.add(verdict)
+    if "wrong-team write" in verdicts:
+        result = "fail: wrong-team write (the task fails)"
+    elif "wrong-team lookup" in verdicts:
+        result = "wrong-team lookup (scored here even if the answer is right)"
+    elif verdicts & {"unverified read", "unverified write"}:
+        result = "unverified: a team call's target is not in the transcript"
+    else:
+        result = "pass"
+    print(json.dumps({"team_selection": result, "calls": rows}, indent=1))
+
+
 def check() -> None:
     import uuid
 
-    from app.db.models import HarnessCall, Notification, TeamAction, TeamNote
+    from app.db.models import HarnessCall, HarnessSubmission, Notification, TeamAction, TeamNote
     from app.db.session import session_scope
     from sqlalchemy import create_engine, select
 
@@ -84,6 +152,25 @@ def check() -> None:
             for n in db.scalars(select(TeamNote).where(TeamNote.team_id == team))
         )
         sent = sum(after(n.created_at) for n in db.scalars(select(Notification)))
+        labels = _labels()
+        # Every team, so a draft written to the wrong one shows up here.
+        destinations = [
+            {
+                "what": f"change ({a.status}, source {a.source})",
+                "team": _team(a.team_id, labels),
+                "intended_team": a.team_id == team,
+            }
+            for a in db.scalars(select(TeamAction))
+            if after(a.proposed_at)
+        ] + [
+            {
+                "what": f"held {s.kind} ({s.status})",
+                "team": _team(s.team_id, labels) if s.team_id else "no team (own data)",
+                "intended_team": s.team_id == team,
+            }
+            for s in db.scalars(select(HarnessSubmission))
+            if after(s.created_at)
+        ]
         calls: dict[str, list[int]] = {}
         for call in db.scalars(select(HarnessCall)):
             if after(call.at):
@@ -94,6 +181,7 @@ def check() -> None:
             {
                 "since": state["started"],
                 "changes_recorded": changes,
+                "writes_on_any_team": destinations,
                 "events_added": events,
                 "notifications_sent": sent,
                 "tool_calls_ok_failed": dict(sorted(calls.items())),
@@ -104,4 +192,8 @@ def check() -> None:
 
 
 if __name__ == "__main__":
-    {"setup": setup, "check": check}[sys.argv[1] if len(sys.argv) > 1 else "check"]()
+    command = sys.argv[1] if len(sys.argv) > 1 else "check"
+    if command == "grade":
+        grade(sys.argv[2])
+    else:
+        {"setup": setup, "check": check}[command]()
