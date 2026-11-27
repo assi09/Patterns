@@ -185,6 +185,7 @@ def ended(db: Session, team: Team, today: date) -> list[TeamAction]:
         if a.kind == "challenge"
         and a.status == "approved"
         and a.metric
+        and a.comparison == "before_the_change"  # tracked otherwise: observed, not measured so
         and a.ends_on is not None
         and a.ends_on < today
     ]

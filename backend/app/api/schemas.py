@@ -558,11 +558,28 @@ class TeamAction(ApiModel):
     starts_on: date | None = None
     ends_on: date | None = None
     status: Literal["proposed", "approved", "declined"]
-    source: Literal["agent", "supervisor"] = "agent"
+    # Who proposed it: the old team agent, the supervisor in the app, or an assistant through MCP
+    # from the supervisor's agreement in a chat ("Suggested in chat — awaiting your confirmation").
+    source: Literal["agent", "supervisor", "assistant"] = "agent"
     play: str | None = None  # the playbook change it came from, or "custom"
     result: ChangeResult | None = None  # once an approved change has ended
     proposed_at: datetime
     decided_at: datetime | None = None
+    # What the supervisor reported once it started; None is unknown.
+    implementation: Literal["tried", "not_tried"] | None = None
+    implementation_at: datetime | None = None
+    # Tracked: "before_the_change" (measured once it ends) or "observation_only" (the days below);
+    # None with no metric: not tracked, never measured.
+    comparison: Literal["before_the_change", "observation_only"] | None = None
+    observe_starts_on: date | None = None
+    observe_ends_on: date | None = None
+    event_id: str | None = None  # the event the supervisor linked it to
+
+
+class TeamImplementationIn(ApiModel):
+    """Did the team try it? None takes back an earlier answer: unknown again."""
+
+    tried: bool | None
 
 
 class TeamActionIn(ApiModel):
@@ -584,10 +601,16 @@ class TeamPlay(ApiModel):
     days: int
 
 
+EventCategory = Literal[
+    "deadline", "launch", "travel", "holiday", "reorganisation", "onboarding", "other"
+]
+
+
 class TeamNoteIn(ApiModel):
     text: str = Field(min_length=1, max_length=300)
     starts_on: date | None = None
     ends_on: date | None = None
+    category: EventCategory | None = None  # optional; "other" for a known event that fits none
 
 
 class TeamNote(ApiModel):
@@ -595,6 +618,7 @@ class TeamNote(ApiModel):
     text: str
     starts_on: date | None = None
     ends_on: date | None = None
+    category: EventCategory | None = None
     created_at: datetime
 
 

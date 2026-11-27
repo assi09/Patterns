@@ -186,7 +186,7 @@ def _bounded_change(record: dict) -> dict | None:
     }
 
 
-def _action_title(action: TeamAction) -> str:
+def action_title(action: TeamAction) -> str:
     """A controlled label: the playbook's own title, or "Custom team change". A supervisor's own
     title is free text and can name someone (#246), so it never leaves through MCP."""
     play = playbook.PLAY.get(action.play or "")
@@ -238,6 +238,26 @@ def _result(db: Session, team: Team, action: TeamAction, as_of: date, found: dic
     }
 
 
+STARTED_BY = {
+    "supervisor": "supervisor",
+    "assistant": "suggested in chat, recorded by an assistant",
+    "agent": "suggested by Patterns",
+}
+IMPLEMENTATION_TEXT = {
+    "tried": "reported tried by the supervisor",
+    "not_tried": "reported not tried by the supervisor",
+    None: "not reported: whether the team tried it is unknown",
+}
+
+
+def implementation(action: TeamAction, as_of: date) -> str:
+    """What the supervisor reported about trying it, as known on `as_of`: a mark made later is
+    left out, and an unmarked change is unknown, never assumed tried because it was approved."""
+    marked = action.implementation_at
+    known = action.implementation if marked is not None and marked.date() <= as_of else None
+    return IMPLEMENTATION_TEXT[known]
+
+
 def follow_up(db: Session, team: Team, as_of: date) -> list[dict]:
     """Team changes as they stood on `as_of`: a result only for a change that had ended by then."""
     actions = db.scalars(
@@ -262,26 +282,22 @@ def follow_up(db: Session, team: Team, as_of: date) -> list[dict]:
         else:
             state = "ended"
         item = {
-            "title": _action_title(action),
+            "title": action_title(action),
             "metric": action.metric,
             "metric_label": team_info(action.metric).label if action.metric else None,
-            "started_by": "supervisor"
-            if action.source == "supervisor"
-            else "suggested by Patterns",
+            "started_by": STARTED_BY.get(action.source, "suggested by Patterns"),
             "state": state,
             "dates": _span(action.starts_on, action.ends_on)
             if action.starts_on and action.ends_on
             else None,
             "as_of": as_of.isoformat(),
-            "tried": "approved by the supervisor; whether the team did it is not measured here"
-            if state in ("in_progress", "ended")
-            else None,
+            "tried": implementation(action, as_of) if state in ("in_progress", "ended") else None,
         }
         found = results.get(str(action.id)) if state == "ended" else None
         if found is not None:
             followed = found.get("followed")
-            if followed is not None:
-                item["tried"] = followed.get("text")
+            if followed is not None:  # the calendar's own observation, beside the report
+                item["calendar_check"] = followed.get("text")
                 item["followed_on_the_calendar"] = bool(followed.get("followed"))
             item["result"] = _result(db, team, action, as_of, found)
         out.append(item)

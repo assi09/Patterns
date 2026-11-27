@@ -7,16 +7,27 @@ What a harness sends is untrusted: checked against the schemas below and held as
 the person approves it in the app.
 """
 
+import re
 import unicodedata
 from datetime import date, datetime, timedelta
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import null, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.analysis.team import team_observed
+from app.analysis.team import TEAM_METRICS, team_observed
 from app.db.daily import load_daily
-from app.db.models import HarnessSubmission, Team, TeamAlert, User
+from app.db.models import (
+    EVENT_CATEGORIES,
+    HarnessSubmission,
+    Team,
+    TeamAction,
+    TeamAlert,
+    TeamNote,
+    User,
+)
 from app.sync import calendar
 from app.teams import agent as team_agent
 from app.teams import memberships as teams
@@ -56,6 +67,8 @@ class TeamEventIn(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     starts_on: date
     ends_on: date | None = None
+    # Optional: "other" for a known event that fits none; left out when there is no category.
+    category: Literal[EVENT_CATEGORIES] | None = None
 
     @field_validator("title")
     @classmethod
@@ -68,6 +81,46 @@ class TeamEventIn(BaseModel):
         if any(unicodedata.category(ch).startswith("C") for ch in cleaned):
             raise ValueError("A title is plain text, without control characters.")
         return cleaned
+
+
+class FindingRef(BaseModel):
+    """A finding of one of the team's reports, as team_overview gives it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    report_id: str = Field(min_length=1, max_length=64)
+    evidence_id: str = Field(min_length=1, max_length=32)
+
+
+class TrackingIn(BaseModel):
+    """What to observe, chosen now, before any outcome exists: a metric and the days to watch."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    metric: str
+    observe_from: date
+    observe_to: date
+
+
+class TeamChangeIn(BaseModel):
+    """A change the supervisor agreed to in the chat, to be confirmed in the Patterns app."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=8, max_length=64)
+    play: str = Field(min_length=1, max_length=32)
+    starts_on: date
+    ends_on: date | None = None
+    event_id: str | None = Field(default=None, max_length=64)
+    finding: FindingRef | None = None
+    tracking: TrackingIn | None = None
+
+    @field_validator("request_id")
+    @classmethod
+    def _token(cls, value: str) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]+", value):
+            raise ValueError("A request_id is letters, digits and - _ . : only.")
+        return value
 
 
 def _own_data_allowed(user: User) -> None:
@@ -272,3 +325,173 @@ def send_team_event(
         if event.ends_on < event.starts_on:
             raise HarnessError("The event ends before it starts.")
     return _hold(db, user, "team_event", event.model_dump(mode="json"), team, token_id, now)
+
+
+# --- a decision, recorded as a pending draft (docs/change-memory.md) ---------------------------
+
+SUGGESTED = "Suggested in chat — awaiting your confirmation"
+CHANGE_AHEAD_DAYS = 60  # as for a change planned in the app
+LONGEST_CHANGE_DAYS = 60
+
+
+def _draft(action: TeamAction) -> dict:
+    """A recorded change as MCP returns it: controlled labels and fields, no free text."""
+    tracked = action.metric is not None and action.comparison == "observation_only"
+    return {
+        "change_id": str(action.id),
+        "request_id": action.request_id,
+        "status": "pending" if action.status == "proposed" else action.status,
+        "shown_in_app": SUGGESTED if action.status == "proposed" else None,
+        "title": view.action_title(action),
+        "play": action.play,
+        "starts_on": action.starts_on.isoformat(),
+        "ends_on": action.ends_on.isoformat(),
+        "linked_event_id": str(action.event_id) if action.event_id else None,
+        "linked_finding": {
+            "report_id": str(action.finding_report_id),
+            "evidence_id": action.finding_evidence_id,
+        }
+        if action.finding_report_id
+        else None,
+        "tracking": {
+            "metric": action.metric,
+            "observe_from": action.observe_starts_on.isoformat(),
+            "observe_to": action.observe_ends_on.isoformat(),
+            "comparison": "observation only",
+        }
+        if tracked
+        else None,
+        "members_notified": 0 if action.status == "proposed" else None,
+        "note": "Nothing reaches the team until the supervisor confirms it in the Patterns app. "
+        "Whether the team tried it is unknown until the supervisor reports it there.",
+    }
+
+
+def _same_request(action: TeamAction, change: TeamChangeIn, ends_on: date) -> bool:
+    track = change.tracking
+    return (
+        action.play == change.play
+        and action.starts_on == change.starts_on
+        and action.ends_on == ends_on
+        and (str(action.event_id) if action.event_id else None) == change.event_id
+        and action.finding_evidence_id == (change.finding.evidence_id if change.finding else None)
+        and action.metric == (track.metric if track else None)
+        and action.observe_starts_on == (track.observe_from if track else None)
+        and action.observe_ends_on == (track.observe_to if track else None)
+    )
+
+
+def record_team_change(
+    db: Session,
+    user: User,
+    team_id: str,
+    change: TeamChangeIn,
+    token_id,
+    now: datetime,
+    today: date,
+) -> dict:
+    """Records a playbook change the supervisor agreed to in the chat, as a pending draft that
+    only the Patterns app can confirm or decline. Nobody is told; nothing is measured unless
+    tracking was chosen now. The same request_id returns the same record."""
+    from app.teams import playbook
+
+    team = _supervised(db, user, team_id)
+    play = playbook.PLAY.get(change.play)
+    if change.play == playbook.CUSTOM or play is None:
+        raise HarnessError(
+            "Only a playbook change can be recorded through MCP; a change in your own words is "
+            "planned in the Patterns app. Playbook changes: " + ", ".join(playbook.PLAY) + "."
+        )
+    ends_on = change.ends_on or change.starts_on + timedelta(days=play.days - 1)
+    if (repeat := _repeat(db, team, change, ends_on)) is not None:
+        return repeat
+    if not today <= change.starts_on <= today + timedelta(days=CHANGE_AHEAD_DAYS):
+        raise HarnessError(
+            f"starts_on: a change starts between today and {CHANGE_AHEAD_DAYS} days from now."
+        )
+    if (
+        not change.starts_on
+        <= ends_on
+        <= change.starts_on + timedelta(days=LONGEST_CHANGE_DAYS - 1)
+    ):
+        raise HarnessError(
+            f"ends_on: on or after starts_on, and at most {LONGEST_CHANGE_DAYS} days in all."
+        )
+    event = None
+    if change.event_id is not None:
+        event = next(
+            (
+                n
+                for n in db.scalars(select(TeamNote).where(TeamNote.team_id == team.id))
+                if str(n.id) == change.event_id
+            ),
+            None,
+        )
+        if event is None:
+            raise HarnessError("event_id: no such event for this team.")
+    if change.finding is not None:
+        try:
+            view.finding_evidence(db, team, change.finding.report_id, change.finding.evidence_id)
+        except view.NotFound:
+            raise HarnessError("finding: no such finding in this team's reports.") from None
+    track = change.tracking
+    if track is not None:
+        if track.metric not in TEAM_METRICS:
+            raise HarnessError(f"tracking.metric: one of {', '.join(TEAM_METRICS)}.")
+        if not today <= track.observe_from <= track.observe_to:
+            raise HarnessError(
+                "tracking: the days observed start today or later and end on or after they "
+                "start, so they are chosen before any outcome exists."
+            )
+        if track.observe_to > track.observe_from + timedelta(days=LONGEST_CHANGE_DAYS - 1):
+            raise HarnessError(f"tracking: at most {LONGEST_CHANGE_DAYS} days observed.")
+    action = TeamAction(
+        team_id=team.id,
+        kind="challenge",
+        title=play.title,
+        body=play.body,
+        metric=track.metric if track else None,
+        starts_on=change.starts_on,
+        ends_on=ends_on,
+        status="proposed",
+        source="assistant",
+        play=play.id,
+        proposed_at=now,
+        request_id=change.request_id,
+        token_id=token_id,
+        event_id=event.id if event else None,
+        finding_report_id=_uuid(change.finding.report_id) if change.finding else None,
+        finding_evidence_id=change.finding.evidence_id if change.finding else None,
+        observe_starts_on=track.observe_from if track else None,
+        observe_ends_on=track.observe_to if track else None,
+        # NULL itself: a plain None would let the column default make it "before_the_change".
+        comparison="observation_only" if track else null(),
+    )
+    try:
+        with db.begin_nested():  # a retry racing this one hits the unique request id
+            db.add(action)
+            db.flush()
+    except IntegrityError:
+        if (repeat := _repeat(db, team, change, ends_on)) is not None:
+            return repeat
+        raise
+    return _draft(action)
+
+
+def _repeat(db: Session, team: Team, change: TeamChangeIn, ends_on: date) -> dict | None:
+    existing = db.scalar(
+        select(TeamAction).where(
+            TeamAction.team_id == team.id, TeamAction.request_id == change.request_id
+        )
+    )
+    if existing is None:
+        return None
+    if not _same_request(existing, change, ends_on):
+        raise HarnessError("This request_id was already used for a different change.")
+    return _draft(existing) | {"repeat": True}
+
+
+def _uuid(value: str):
+    import uuid
+
+    return uuid.UUID(value)

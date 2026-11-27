@@ -218,6 +218,7 @@ def challenges(db: Session, team: Team, week: Window, frames: list) -> list[tupl
             action.kind != "challenge"
             or action.status != "approved"
             or not action.metric
+            or action.comparison != "before_the_change"
             or ends is None
             or not (week.start - timedelta(days=7) <= ends <= week.end)
         ):
