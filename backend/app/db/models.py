@@ -772,11 +772,35 @@ class TeamAction(Base):
     comparison: Mapped[str | None] = mapped_column(
         String(24), default="before_the_change", server_default="before_the_change"
     )
-    # What the supervisor reported once it started; unset is unknown, never inferred.
+    # What the supervisor reports now, once it started; unset is unknown, never inferred. Each
+    # answer is also kept in `team_action_marks`, so a later correction or undo does not rewrite
+    # what was on record on an earlier day.
     implementation: Mapped[str | None] = mapped_column(String(12), default=None)
     implementation_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+
+
+class TeamActionMark(Base):
+    """One answer to "Did the team try it?", kept as given: tried, not tried, or taken back (an
+    unset `implementation`). Never edited or deleted, so a question about a past day reads the
+    answer on record that day."""
+
+    __tablename__ = "team_action_marks"
+    __table_args__ = (
+        CheckConstraint(
+            "implementation IS NULL OR implementation IN "
+            f"({', '.join(repr(i) for i in IMPLEMENTATIONS)})",
+            name="ck_team_action_marks_implementation",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    action_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("team_actions.id", ondelete="CASCADE"), index=True
+    )
+    implementation: Mapped[str | None] = mapped_column(String(12), default=None)
+    marked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class TeamChatMessage(Base):

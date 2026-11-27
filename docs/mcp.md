@@ -91,7 +91,8 @@ What a harness sends is **untrusted input**:
   a different change is refused.
 - **Nothing happens until confirmed.** No member is told, nothing is approved and no calendar is
   written. Only the app confirms or declines a recorded change, and only the app marks whether
-  the team tried it. No MCP tool can do any of these.
+  the team tried it. No MCP tool can do any of these. Each answer to "Did the team try it?" is
+  kept as given, so a later correction or undo leaves an earlier day's answer as it was.
 - **Explicit links only.** A link to an event or a finding is kept only when the supervisor gave
   it, and only to that team's own records.
 - **Tracking only when asked.** It is chosen at recording, starting today or later, so before

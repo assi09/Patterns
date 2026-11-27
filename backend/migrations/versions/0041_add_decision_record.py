@@ -1,5 +1,6 @@
 """Keep what a team decided and what was reported: an event's category, and on a team change its
-request id, the connection that recorded it, explicit links, tracking and implementation
+request id, the connection that recorded it, explicit links, tracking and implementation, and
+every answer to "Did the team try it?" as given
 
 Revision ID: 0041
 Revises: 0040
@@ -62,10 +63,28 @@ def upgrade() -> None:
             "ck_team_actions_comparison",
             _in("comparison", ("before_the_change", "observation_only")),
         )
+    op.create_table(
+        "team_action_marks",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("action_id", sa.Uuid(), nullable=False),
+        sa.Column("implementation", sa.String(length=12), nullable=True),
+        sa.Column("marked_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            _in("implementation", ("tried", "not_tried")),
+            name="ck_team_action_marks_implementation",
+        ),
+        sa.ForeignKeyConstraint(["action_id"], ["team_actions.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        op.f("ix_team_action_marks_action_id"), "team_action_marks", ["action_id"], unique=False
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_index(op.f("ix_team_action_marks_action_id"), table_name="team_action_marks")
+    op.drop_table("team_action_marks")
     with op.batch_alter_table("team_actions") as batch:
         batch.drop_constraint("ck_team_actions_comparison", type_="check")
         batch.drop_constraint("ck_team_actions_implementation", type_="check")

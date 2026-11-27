@@ -14,7 +14,7 @@ from test_mcp import build as build_mcp
 from test_mcp import call as call_mcp
 from test_supervisor_view import api_client, boss, reported, team_of
 
-from app.db.models import Notification, TeamAction, TeamNote, User
+from app.db.models import Notification, TeamAction, TeamActionMark, TeamNote, User
 from app.db.session import session_scope
 from app.harness import tools
 from app.harness.tools import HarnessError, TeamChangeIn
@@ -192,18 +192,51 @@ def test_whether_it_was_tried_is_the_supervisors_report_and_known_only_from_then
     assert approved.status_code == 200
     marked = client.put(url, json={"tried": True}, headers=auth).json()
     assert marked["implementation"] == "tried" and marked["implementationAt"]
-    with session_scope(engine) as db:
-        team = team_of(db, team_id)
-        [action] = drafts(db, team_id)
-        action.implementation_at = NOW + timedelta(days=5)  # marked on day 5 of the change
-        db.flush()
-        [then] = view.follow_up(db, team, TODAY + timedelta(days=2))
-        [later] = view.follow_up(db, team, TODAY + timedelta(days=6))
-    assert then["state"] == "in_progress"
-    assert then["tried"] == "not reported: whether the team tried it is unknown"  # not yet marked
-    assert later["tried"] == "reported tried by the supervisor"
     cleared = client.put(url, json={"tried": None}, headers=auth).json()
-    assert cleared["implementation"] is None
+    assert cleared["implementation"] is None and cleared["implementationAt"] is None
+    with session_scope(engine) as db:
+        [action] = drafts(db, team_id)
+        assert [m.implementation for m in marks(db, action)] == ["tried", None]  # both kept
+
+
+def marks(db, action) -> list[TeamActionMark]:
+    return db.scalars(
+        select(TeamActionMark)
+        .where(TeamActionMark.action_id == action.id)
+        .order_by(TeamActionMark.marked_at)
+    ).all()
+
+
+def test_a_correction_or_undo_leaves_an_earlier_day_as_it_was_on_record(engine):
+    """Yes on Monday, No on Wednesday, then undone on Thursday: Tuesday still reads tried,
+    read again in a fresh session after each step."""
+    team_id = make_team(engine)
+    monday = NOW  # 2026-10-26 is a Monday
+    tuesday, wednesday, thursday = (TODAY + timedelta(days=d) for d in (1, 2, 3))
+    with session_scope(engine) as db:
+        record(db, team_id, starts_on=TODAY)
+        [action] = drafts(db, team_id)
+        team_actions.decide(db, team_of(db, team_id), action, True, monday)
+        team_actions.mark_implementation(db, action, True, monday)
+
+    def on(day):
+        with session_scope(engine) as db:
+            [followed] = view.follow_up(db, team_of(db, team_id), day)
+            return followed["tried"]
+
+    def mark(tried, at):
+        with session_scope(engine) as db:
+            [action] = drafts(db, team_id)
+            team_actions.mark_implementation(db, action, tried, at)
+
+    assert on(tuesday) == "reported tried by the supervisor"
+    mark(False, monday + timedelta(days=2))
+    assert on(tuesday) == "reported tried by the supervisor"
+    assert on(wednesday) == "reported not tried by the supervisor"
+    mark(None, monday + timedelta(days=3))
+    assert on(tuesday) == "reported tried by the supervisor"
+    assert on(wednesday) == "reported not tried by the supervisor"
+    assert on(thursday) == "not reported: whether the team tried it is unknown"
 
 
 def test_a_one_day_decision_keeps_its_one_day_and_needs_its_end_stated(engine):

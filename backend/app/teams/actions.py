@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError
-from app.db.models import Notification, Team, TeamAction, TeamMembership
+from app.db.models import Notification, Team, TeamAction, TeamActionMark, TeamMembership
 
 
 def action_of(db: Session, team: Team, action_id: str) -> TeamAction:
@@ -26,6 +26,16 @@ def action_of(db: Session, team: Team, action_id: str) -> TeamAction:
     if action is None:
         raise ApiError(404, "not_found", "There is no such proposal.")
     return action
+
+
+def mark_implementation(db: Session, action: TeamAction, tried: bool | None, now: datetime) -> None:
+    """Record an answer to "Did the team try it?" (None takes it back): the action keeps the
+    current answer, and the answer is added to its marks, never overwriting an earlier one."""
+    value = None if tried is None else ("tried" if tried else "not_tried")
+    action.implementation = value
+    action.implementation_at = None if value is None else now
+    db.add(TeamActionMark(action_id=action.id, implementation=value, marked_at=now))
+    db.flush()
 
 
 def decide(db: Session, team: Team, action: TeamAction, approve: bool, now: datetime) -> int:

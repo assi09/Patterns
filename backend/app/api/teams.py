@@ -557,9 +557,7 @@ def report_implementation(
         raise ApiError(409, "not_approved", "Only a confirmed change can be marked as tried.")
     if action.starts_on is None or action.starts_on > _local_today(user, clock):
         raise ApiError(409, "not_started", "This change has not started yet.")
-    action.implementation = None if body.tried is None else ("tried" if body.tried else "not_tried")
-    action.implementation_at = None if body.tried is None else clock
-    db.flush()
+    team_actions.mark_implementation(db, action, body.tried, clock)
     results = playbook.results_of(db, team, _local_today(user, clock))
     return _action(action, results.get(str(action.id)))
 
