@@ -352,19 +352,35 @@ def team_history(
     play: str | None = None,
     metric: str | None = None,
     as_of: str | None = None,
+    cursor: str | None = None,
 ) -> dict:
     """The team's past cases: events (with or without a change), changes in every state, and the
-    evidence available for their dates. Facts only: relevance is the assistant's to judge."""
+    evidence available for their dates. Facts only: relevance is the assistant's to judge.
+
+    A page holds at most 20; `next_cursor` continues the same lookup. The cursor carries the
+    team, the filters and the as-of date of the first page (resolved, so "today" does not move
+    between pages); it is passed alone."""
     from app.teams import history, playbook
 
     team = _supervised(db, user, team_id)
+    after = None
+    asked_as_of = as_of is not None
+    if cursor is not None:
+        if any(v is not None for v in (start, end, category, play, metric, as_of)):
+            raise HarnessError(
+                "cursor: pass it alone; it already carries the filters and as_of of the first page."
+            )
+        saved = _read_cursor(cursor, team)
+        start, end, category, play, metric = (saved["filters"][k] for k in FILTERS)
+        as_of, asked_as_of, after = saved["as_of"], saved["asked_as_of"], tuple(saved["after"])
     if category is not None and category not in EVENT_CATEGORIES:
         raise HarnessError(f"category: one of {', '.join(EVENT_CATEGORIES)}.")
     if play is not None and play not in (*playbook.PLAY, "custom"):
         raise HarnessError(f"play: one of {', '.join(playbook.PLAY)}, or custom.")
     if metric is not None and metric not in TEAM_METRICS:
         raise HarnessError(f"metric: one of {', '.join(TEAM_METRICS)}.")
-    return history.history(
+    known = min(_date(as_of, "as_of") or today, today)
+    out = history.history(
         db,
         team,
         today,
@@ -373,8 +389,69 @@ def team_history(
         category=category,
         play=play,
         metric=metric,
-        as_of=_date(as_of, "as_of"),
+        as_of=known,
+        after=after,
     )
+    if not asked_as_of:
+        out["as_of_meaning"] = "what was known on the day this lookup began"
+    last = out.pop("last")
+    out["next_cursor"] = (
+        _write_cursor(
+            team,
+            {k: out["filters"][k] for k in FILTERS},
+            out["as_of"],
+            asked_as_of,
+            last,
+        )
+        if last
+        else None
+    )
+    return out
+
+
+FILTERS = ("start", "end", "category", "play", "metric")
+
+
+def _write_cursor(team: Team, filters: dict, as_of: str, asked: bool, after) -> str:
+    import base64
+    import json
+
+    body = {"team": str(team.id), "filters": filters, "as_of": as_of, "asked_as_of": asked}
+    body["after"] = list(after)
+    raw = json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _read_cursor(cursor: str, team: Team) -> dict:
+    """A cursor is the caller's to hold, so it is checked like any input: its values pass the
+    same validation as the filters (team_history re-checks them), and it only works for the team
+    it came from."""
+    import base64
+    import binascii
+    import json
+
+    try:
+        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+        saved = json.loads(raw)
+        ok = (
+            isinstance(saved, dict)
+            and set(saved) == {"team", "filters", "as_of", "asked_as_of", "after"}
+            and isinstance(saved["filters"], dict)
+            and set(saved["filters"]) == set(FILTERS)
+            and all(v is None or isinstance(v, str) for v in saved["filters"].values())
+            and isinstance(saved["as_of"], str)
+            and isinstance(saved["asked_as_of"], bool)
+            and isinstance(saved["after"], list)
+            and len(saved["after"]) == 2
+            and all(isinstance(v, str) for v in saved["after"])
+        )
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        ok = False
+    if not ok or len(cursor) > 2000:
+        raise HarnessError("cursor: not a cursor from team_history.")
+    if saved["team"] != str(team.id):
+        raise HarnessError("cursor: it belongs to another lookup.")
+    return saved
 
 
 def team_case(

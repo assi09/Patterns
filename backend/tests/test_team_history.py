@@ -3,6 +3,8 @@
 without a change, every decision state, explicit links apart from date overlaps, the evidence that
 exists for the dates, and the day-specific gap said rather than filled."""
 
+import base64
+import json
 import uuid
 from datetime import timedelta
 
@@ -390,3 +392,58 @@ def test_a_past_answer_ignores_calendar_data_synced_after_its_cutoff(engine):
         assert "followed_on_the_calendar" not in followed
     assert then["follow_up"] == before_sync["follow_up"]  # the sync changed nothing about then
     assert now["followed_on_the_calendar"] is True and "fell during it" in now["calendar_check"]
+
+
+def test_a_long_history_pages_through_mcp_without_losing_or_repeating_a_case(engine):
+    """21 matching cases on one date, plus ones the filters leave out: page one has 20, page two
+    the one left, every case id once, and the last page has no cursor."""
+    team_id = make_team(engine)
+    server = build_mcp(engine)
+    day = TODAY - timedelta(days=3)
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        made = {f"event:{event(db, team, day).id}" for _ in range(21)}
+        for _ in range(3):
+            event(db, team, day, category="launch")  # left out by the filter
+        boss_id = boss(db).id
+    asked = {"team_id": team_id, "category": "deadline", "as_of": str(TODAY - timedelta(days=1))}
+    error, first = call_mcp(server, boss_id, "team_history", **asked)
+    assert not error and len(first["cases"]) == 20 and first["more"] == 1
+    assert first["next_cursor"]
+    error, second = call_mcp(
+        server, boss_id, "team_history", team_id=team_id, cursor=first["next_cursor"]
+    )
+    assert not error and len(second["cases"]) == 1 and second["more"] == 0
+    assert second["next_cursor"] is None
+    assert second["filters"] == first["filters"] and second["as_of"] == first["as_of"]
+    seen = [c["case_id"] for page in (first, second) for c in page["cases"]]
+    assert len(seen) == 21 and set(seen) == made
+    error, again = call_mcp(server, boss_id, "team_history", **asked)
+    assert [c["case_id"] for c in again["cases"]] == seen[:20]  # one order on one date
+
+
+def test_a_cursor_keeps_todays_date_and_is_refused_elsewhere(engine):
+    team_id = make_team(engine)
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        for _ in range(21):
+            event(db, team, TODAY - timedelta(days=2))
+        first = tools.team_history(db, boss(db), team_id, TODAY)
+        later = TODAY + timedelta(days=5)
+        event(db, team, TODAY + timedelta(days=1), made=NOW + timedelta(days=33))  # after day 1
+        second = tools.team_history(db, boss(db), team_id, later, cursor=first["next_cursor"])
+        assert second["as_of"] == str(TODAY) and len(second["cases"]) == 1
+        assert "began" in second["as_of_meaning"]
+        with pytest.raises(HarnessError, match="pass it alone"):
+            tools.team_history(
+                db, boss(db), team_id, later, category="travel", cursor=first["next_cursor"]
+            )
+        for bad in ("abc", first["next_cursor"][:-4], "x" * 3000):
+            with pytest.raises(HarnessError, match="not a cursor"):
+                tools.team_history(db, boss(db), team_id, later, cursor=bad)
+        saved = json.loads(base64.urlsafe_b64decode(first["next_cursor"] + "=="))
+        moved = base64.urlsafe_b64encode(
+            json.dumps(saved | {"team": str(uuid.uuid4())}).encode()
+        ).decode()
+        with pytest.raises(HarnessError, match="another lookup"):
+            tools.team_history(db, boss(db), team_id, later, cursor=moved)

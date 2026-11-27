@@ -252,8 +252,10 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
         "nearby only by date (not a link, not a cause), and how much evidence exists for its "
         "dates. Filters, all optional: start, end (dates), category (deadline, launch, travel, "
         "holiday, reorganisation, onboarding, other), play, metric, as_of (what was known that "
-        "day). Every filter given must hold. Facts only: it never ranks, recommends or says a "
-        "change worked."
+        "day). Every filter given must hold. At most 20 cases a page: when `more` is above 0, "
+        "call again with only team_id and the returned next_cursor to get the rest of the same "
+        "lookup (same filters, same as_of); the last page has next_cursor null. Facts only: it "
+        "never ranks, recommends or says a change worked."
     )
     def team_history(
         team_id: str,
@@ -263,6 +265,7 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
         play: str | None = None,
         metric: str | None = None,
         as_of: str | None = None,
+        cursor: str | None = None,
     ) -> dict:
         return use(
             "team_history",
@@ -277,6 +280,7 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
                 play,
                 metric,
                 as_of,
+                cursor,
             ),
         )
 

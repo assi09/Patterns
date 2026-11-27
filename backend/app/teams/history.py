@@ -271,13 +271,27 @@ def history(
     play: str | None = None,
     metric: str | None = None,
     as_of: date | None = None,
+    after: tuple[str, str] | None = None,
 ) -> dict:
-    """A short list of the team's cases, newest first, as known on `as_of` (today if not given):
-    events with no change included, and declined, untried, inconclusive and unmeasured changes."""
+    """A page of the team's cases, newest first, as known on `as_of` (today if not given):
+    events with no change included, and declined, untried, inconclusive and unmeasured changes.
+
+    Ordered by start date, newest first, then by case id, so cases on one date keep one order.
+    `after` is the (start, case_id) of the last case already returned: the page continues after
+    it, and `last` gives the key to continue from, or None when nothing is left."""
     known = min(as_of or today, today)
     cases, _ = _cases(db, team, known)
     kept = [c for c in cases.values() if _keep(c, start, end, category, play, metric, cases)]
-    kept.sort(key=lambda c: (c["dates"] or {"start": ""})["start"], reverse=True)
+    kept.sort(key=lambda c: c["case_id"])
+    kept.sort(key=_start, reverse=True)  # stable: one date keeps its case id order
+    if after is not None:
+        kept = [
+            c
+            for c in kept
+            if _start(c) < after[0] or (_start(c) == after[0] and c["case_id"] > after[1])
+        ]
+    page = kept[:LISTED]
+    more = max(0, len(kept) - LISTED)
     return {
         "as_of": known.isoformat(),
         "as_of_meaning": "what was recorded by that date; anything later is left out"
@@ -290,11 +304,17 @@ def history(
             "play": play,
             "metric": metric,
         },
-        "cases": [_summary(c) for c in kept[:LISTED]],
-        "more": max(0, len(kept) - LISTED),
+        "cases": [_summary(c) for c in page],
+        "more": more,
+        "last": (_start(page[-1]), page[-1]["case_id"]) if more else None,
         "note": "Linked records were linked by the supervisor; nearby ones only share dates. "
         "Open a case with team_case for its evidence.",
     }
+
+
+def _start(case: dict) -> str:
+    """The sort date; a case with no dates sorts after every dated one."""
+    return (case["dates"] or {"start": ""})["start"]
 
 
 def _summary(case: dict) -> dict:
