@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-107 operations, grouped by area.
+108 operations, grouped by area.
 
 ### meta
 
@@ -260,6 +260,7 @@ Besides the codes listed under [Error codes](#error-codes):
 | `GET` | `/teams/{team_id}/pulse` | supervisor | `team_id` |  | [TeamPulse](#teampulse) | Weekly team figures only, each from at least five people; never a person or a day. |
 | `GET` | `/teams/{team_id}/reports` | supervisor | `team_id` |  | list[[TeamReportSummary](#teamreportsummary)] |  |
 | `GET` | `/teams/{team_id}/reports/{week}` | supervisor | `team_id`, `week` |  | [TeamReport](#teamreport) |  |
+| `GET` | `/teams/{team_id}/reports/{week}/evidence/{evidence_id}` | supervisor | `team_id`, `week`, `evidence_id` |  | [TeamFindingEvidence](#teamfindingevidence) | The record behind one finding of one of the team's reports, bounded as MCP gives it. Any other id, or another team's, is simply not found. |
 | `POST` | `/teams/{team_id}/reports` | supervisor | `team_id` | [GenerateReport](#generatereport) | [TeamReport](#teamreport) | The report for a full week, made now if it was not made yet; never for a week in progress. |
 | `GET` | `/teams/{team_id}/chat` | supervisor | `team_id` |  | list[[TeamChatMessage](#teamchatmessage)] |  |
 | `PUT` | `/teams/{team_id}/chat/{message_id}/rating` | supervisor | `team_id`, `message_id` | [RatingIn](#ratingin) | [TeamChatMessage](#teamchatmessage) | The supervisor's thumbs up or down on one of the team agent's answers. |
@@ -467,6 +468,14 @@ A field not marked required may be left out.
 | `lastError` | string or null | yes |  |
 | `days` | integer | yes |  |
 
+### ChangeFigure
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `value` | number | yes |  |
+| `unit` | string or null |  |  |
+| `text` | string | yes |  |
+
 ### ChangeResult
 
 How the team's metric went during an ended change, against the 28 days before it.
@@ -664,6 +673,23 @@ One signal behind a person's own check-in alert; shown to that person only.
 | `n` | integer | yes |  |
 | `sufficient` | boolean | yes |  |
 | `stats` | object | yes |  |
+
+### EvidenceCoverage
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `roster` | integer | yes |  |
+| `minimum` | integer | yes |  |
+| `contributors` | integer or null |  |  |
+
+### EvidenceResult
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `change` | [ChangeFigure](#changefigure) | yes |  |
+| `higher` | integer | yes |  |
+| `lower` | integer | yes |  |
+| `pValue` | number or null |  |  |
 
 ### FactOut
 
@@ -1133,6 +1159,17 @@ What the week's report leads with: a worthwhile team change, in reading order.
 | `version` | integer | yes | ≥ 1.0 |
 | `log` | any | yes |  |
 
+### ScanWeekView
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `week` | [Window](#window) | yes |  |
+| `contributors` | integer | yes |  |
+| `change` | [ChangeFigure](#changefigure) or null |  |  |
+| `higher` | integer or null |  |  |
+| `lower` | integer or null |  |  |
+| `changed` | boolean | yes |  |
+
 ### ShareCheckin
 
 | Field | Type | Required | Limits |
@@ -1328,6 +1365,52 @@ Weekly highlights and upcoming event warnings, each linked to the report evidenc
 |---|---|---|---|
 | `code` | string | yes | min length 1, max length 32 |
 
+### TeamFindingEvidence
+
+One record of one team report, bounded: what was measured, its dates, method, the team figure and its coverage. Never a person's value or a quartile (app.teams.view).
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `evidenceId` | string | yes |  |
+| `reportWeek` | [Window](#window) | yes |  |
+| `metric` | string | yes |  |
+| `metricLabel` | string | yes |  |
+| `unit` | string or null |  |  |
+| `label` | string | yes |  |
+| `measured` | string | yes |  |
+| `method` | string | yes |  |
+| `target` | [Window](#window) or null |  |  |
+| `scanned` | [Window](#window) or null |  |  |
+| `baseline` | [Window](#window) or null |  |  |
+| `coverage` | [EvidenceCoverage](#evidencecoverage) | yes |  |
+| `limitations` | list[string] | yes |  |
+| `status` | string or null |  |  |
+| `weeksRunning` | integer or null |  |  |
+| `weeks` | list[[ScanWeekView](#scanweekview)] |  |  |
+| `result` | [EvidenceResult](#evidenceresult) or null |  |  |
+| `withheld` | string or null |  |  |
+
+### TeamFindingView
+
+A priority finding as the supervisor reads it, built by app.teams.view from computed fields: "Sustained change" or "New change", with the dates of its own fixed baseline.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `label` | string | yes |  |
+| `kind` | string or null |  |  |
+| `metric` | string | yes |  |
+| `metricLabel` | string | yes |  |
+| `direction` | string or null |  |  |
+| `change` | [ChangeFigure](#changefigure) | yes |  |
+| `target` | [Window](#window) or null |  |  |
+| `weeksRunning` | integer | yes |  |
+| `baseline` | [Window](#window) or null |  |  |
+| `contributors` | integer or null |  |  |
+| `movedThatWay` | integer or null |  |  |
+| `roster` | integer | yes |  |
+| `why` | string | yes |  |
+| `evidenceId` | string | yes |  |
+
 ### TeamHr
 
 | Field | Type | Required | Limits |
@@ -1423,6 +1506,8 @@ What joining means, shown before the person agrees.
 | `generatedBy` | `template` \| `model` | yes |  |
 | `levels` | list[[SharedLevels](#sharedlevels)] | yes |  |
 | `briefing` | [TeamBriefing](#teambriefing) or null |  |  |
+| `findings` | list[[TeamFindingView](#teamfindingview)] |  |  |
+| `weekly` | [TeamWeeklyView](#teamweeklyview) or null |  |  |
 
 ### TeamReportSummary
 
@@ -1440,6 +1525,17 @@ What joining means, shown before the person agrees.
 |---|---|---|---|
 | `mean` | number or null | yes |  |
 | `level` | `below` \| `usual` \| `above` or null | yes |  |
+
+### TeamWeeklyView
+
+The weekly comparison's own label, dates and scoped summary.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `label` | string | yes |  |
+| `week` | [Window](#window) | yes |  |
+| `baseline` | [Window](#window) | yes |  |
+| `summary` | string | yes |  |
 
 ### TimeZone
 

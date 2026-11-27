@@ -770,6 +770,71 @@ export interface ReportFinding {
   evidenceId: string;
 }
 
+export interface ChangeFigure {
+  value: number;
+  unit?: string | null;
+  text: string; // as the supervisor reads it, e.g. "-46 min"
+}
+
+/**
+ * A priority finding with its own comparison: "Sustained change" (the same way for weeks running)
+ * or "New change", always against the fixed baseline its scan used. Built by the backend from
+ * computed fields only (app.teams.view); the same as MCP's team_overview gives.
+ */
+export interface TeamFindingView {
+  label: string;
+  kind?: 'concern' | 'improvement' | 'change' | null;
+  metric: string;
+  metricLabel: string;
+  direction?: string | null; // lower, higher, earlier, later
+  change: ChangeFigure;
+  target?: Window | null; // the weeks it held, ending with the report's week
+  weeksRunning: number;
+  baseline?: Window | null; // the fixed baseline it was measured against
+  contributors?: number | null; // people with enough data in the latest week
+  movedThatWay?: number | null;
+  roster: number;
+  why: string; // the rule that fired
+  evidenceId: string;
+}
+
+/** What the weekly lines and "metrics changed" are measured against. */
+export interface TeamWeeklyView {
+  label: string; // "This week vs. the previous four weeks"
+  week: Window;
+  baseline: Window;
+  summary: string;
+}
+
+/** One record of one team report, bounded: never a person's value or a quartile. */
+export interface TeamFindingEvidence {
+  evidenceId: string;
+  reportWeek: Window;
+  metric: string;
+  metricLabel: string;
+  unit?: string | null;
+  label: string;
+  measured: string;
+  method: string;
+  target?: Window | null; // for a scan, the weeks the change held
+  scanned?: Window | null; // a scan's four weeks
+  baseline?: Window | null;
+  coverage: { roster: number; minimum: number; contributors?: number | null };
+  limitations: string[];
+  status?: string | null;
+  weeksRunning?: number | null;
+  weeks: {
+    week: Window;
+    contributors: number;
+    change?: ChangeFigure | null;
+    higher?: number | null;
+    lower?: number | null;
+    changed: boolean;
+  }[];
+  result?: { change: ChangeFigure; higher: number; lower: number; pValue?: number | null } | null;
+  withheld?: string | null; // fewer than the minimum: why there is no figure
+}
+
 /** What the team agent found on its own Monday run, every claim checked against team evidence. */
 export interface TeamBriefing {
   summary: string;
@@ -791,6 +856,8 @@ export interface TeamReport extends TeamReportSummary {
   generatedBy: 'template' | 'model';
   briefing?: TeamBriefing | null; // the team agent's Monday run, when it checked out
   levels: SharedLevels[];
+  findings?: TeamFindingView[]; // the priorities, labelled with their own baseline
+  weekly?: TeamWeeklyView | null; // what the weekly lines are measured against; none if withheld
 }
 
 export interface ApiClient {
@@ -896,6 +963,7 @@ export interface ApiClient {
   rotateTeamCode(teamId: string): Promise<SupervisedTeam>;
   getTeamReports(teamId: string): Promise<TeamReportSummary[]>; // newest first
   getTeamReport(teamId: string, week: ISODate): Promise<TeamReport>;
+  getTeamEvidence(teamId: string, week: ISODate, evidenceId: string): Promise<TeamFindingEvidence>;
   makeTeamReport(teamId: string, week?: ISODate): Promise<TeamReport>; // the last full week
   getTeamChat(teamId: string): Promise<TeamChatMessage[]>; // oldest first
   rateTeamAnswer(

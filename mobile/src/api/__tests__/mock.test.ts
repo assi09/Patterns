@@ -455,6 +455,26 @@ describe('the team agent in the mock', () => {
     return (teams[0] ?? (await mockClient.createTeam('Design'))).id;
   }
 
+  it('labels each finding with its own baseline and opens its evidence only in its report', async () => {
+    const id = await teamId();
+    const report = await mockClient.makeTeamReport(id);
+    const [finding] = report.findings ?? [];
+    expect(finding.label).toBe('Sustained change');
+    expect((finding.baseline?.end ?? '9') < report.week.start).toBe(true);
+    expect(report.weekly?.label).toBe('This week vs. the previous four weeks');
+    const record = await mockClient.getTeamEvidence(id, report.week.start, finding.evidenceId);
+    expect(record).toMatchObject({ label: 'Sustained change', baseline: finding.baseline });
+    expect(JSON.stringify(record)).not.toMatch(/q1|q3|@/);
+    const weekly = await mockClient.getTeamEvidence(id, report.week.start, 'e_bedtime_hour');
+    expect(weekly.label).toBe('This week vs. the previous four weeks');
+    await expect(
+      mockClient.getTeamEvidence(id, report.week.start, 'e_weekday_sleep'),
+    ).rejects.toThrow(/no such evidence/);
+    await expect(mockClient.getTeamEvidence(id, '2020-01-06', finding.evidenceId)).rejects.toThrow(
+      /no such evidence/,
+    );
+  });
+
   it('keeps notes about the team and refuses ones about a person', async () => {
     const id = await teamId();
     const note = await mockClient.addTeamNote(id, 'Release deadline', '2026-11-03');

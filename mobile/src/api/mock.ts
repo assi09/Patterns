@@ -59,6 +59,8 @@ import type {
   TeamPlay,
   TeamChatMessage,
   TeamNote,
+  TeamFindingEvidence,
+  TeamFindingView,
   TeamReport,
 } from './types';
 
@@ -1394,6 +1396,136 @@ function lastFullWeek(): ISODate {
   return monday.toISOString().slice(0, 10);
 }
 
+const dayShift = (iso: ISODate, days: number): ISODate =>
+  new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+/** The priorities labelled as the backend's app.teams.view gives them, for a report's week. */
+function mockFindings(start: ISODate): TeamFindingView[] {
+  const end = dayShift(start, 6);
+  // A four-week scan: the fixed baseline is the 28 days before its first week.
+  const baseline = { start: dayShift(start, -49), end: dayShift(start, -22) };
+  const finding = (
+    metric: string,
+    metricLabel: string,
+    kind: TeamFindingView['kind'],
+    sustained: boolean,
+    direction: string,
+    value: number,
+    unit: string | null,
+    text: string,
+    moved: number,
+  ): TeamFindingView => ({
+    label: sustained ? 'Sustained change' : 'New change',
+    kind,
+    metric,
+    metricLabel,
+    direction,
+    change: { value, unit, text },
+    target: { start: sustained ? dayShift(start, -14) : start, end },
+    weeksRunning: sustained ? 3 : 1,
+    baseline,
+    contributors: 8,
+    movedThatWay: moved,
+    roster: 8,
+    why: sustained
+      ? 'Changed the same way in 3 weeks running against the fixed baseline (at least 2 weeks counts as sustained); large enough, and at least 60% of contributors moved that way.'
+      : 'Changed this week against the fixed baseline (at least 2 weeks counts as sustained); large enough, and at least 60% of contributors moved that way.',
+    evidenceId: `e_${metric}`,
+  });
+  return [
+    finding('sleep_minutes', 'Time asleep', 'concern', true, 'lower', -38, 'min', '-38 min', 7),
+    finding('recovery_score', 'Recovery', 'concern', false, 'lower', -9, null, '-9', 6),
+    finding('steps', 'Steps', 'improvement', false, 'higher', 1400, 'steps', '+1,400 steps', 7),
+  ];
+}
+
+/** The bounded record behind a finding or weekly line of a mock report. */
+function mockTeamEvidence(report: TeamReport, evidenceId: string): TeamFindingEvidence {
+  const record = report.evidence[evidenceId];
+  const cited = [...report.priorities, ...report.sections].some((r) => r.evidenceId === evidenceId);
+  if (!record || !cited)
+    throw new ApiError('There is no such evidence in that report.', 'not_found', 404);
+  const finding = (report.findings ?? []).find((f) => f.evidenceId === evidenceId);
+  const section = report.sections.find((r) => r.evidenceId === evidenceId);
+  const stats = record.stats as Record<string, number>;
+  const common = {
+    evidenceId,
+    reportWeek: report.week,
+    metric: record.metrics[0],
+    coverage: {
+      roster: report.membersTotal,
+      minimum: report.minimumMembers,
+      contributors: stats.members,
+    },
+    limitations: [
+      "Team aggregates from at least 5 people; no person's value is shown.",
+      'Describes a change in readings; it does not establish a cause.',
+      'People without enough data that week are not counted.',
+    ],
+  };
+  if (finding) {
+    return {
+      ...common,
+      metricLabel: finding.metricLabel,
+      unit: finding.change.unit,
+      label: finding.label,
+      measured:
+        "For each person, each of the four scanned weeks minus the person's own average over the fixed baseline; the team figure is the median across people.",
+      method:
+        'Each week is tested across the team, with one correction across every metric and week scanned. Sustained means changed the same way in at least 2 weeks running, up to the latest.',
+      target: finding.target,
+      scanned: { start: dayShift(report.week.start, -21), end: report.week.end },
+      baseline: finding.baseline,
+      status: finding.weeksRunning > 1 ? 'lasting' : 'new',
+      weeksRunning: finding.weeksRunning,
+      weeks: [0, 1, 2, 3].map((i) => {
+        const start = dayShift(report.week.start, (i - 3) * 7);
+        const changed = 3 - i < finding.weeksRunning;
+        return {
+          week: { start, end: dayShift(start, 6) },
+          contributors: 8,
+          change: changed ? finding.change : { ...finding.change, value: 0, text: '0' },
+          higher: changed ? 8 - (finding.movedThatWay ?? 0) : 4,
+          lower: changed ? (finding.movedThatWay ?? 0) : 4,
+          changed,
+        };
+      }),
+      limitations: [
+        ...common.limitations,
+        "The baseline is fixed for the whole scan, so it differs from the weekly comparison's four weeks just before.",
+      ],
+    };
+  }
+  return {
+    ...common,
+    metricLabel: section?.label ?? record.metrics[0],
+    label: 'This week vs. the previous four weeks',
+    measured:
+      "For each person, the week's average minus the person's own average over the previous four weeks; the team figure is the median across people.",
+    method:
+      "A test of whether the team's changes are centred away from zero; the report counts a metric as changed only after a correction across all metrics.",
+    target: report.week,
+    baseline: { start: dayShift(report.week.start, -28), end: dayShift(report.week.start, -1) },
+    weeks: [],
+    ...(record.sufficient
+      ? {
+          result: {
+            change: {
+              value: stats.median_change,
+              text:
+                section?.text.match(/median (?:change )?([^;)]+)/)?.[1] ??
+                String(stats.median_change),
+            },
+            higher: stats.members_up,
+            lower: stats.members_down,
+          },
+        }
+      : {
+          withheld: `${stats.members} of the 5 people needed had data for this metric, so no team figure was computed.`,
+        }),
+  };
+}
+
 function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
   const end = new Date(Date.parse(`${start}T00:00:00Z`) + 6 * 86_400_000)
     .toISOString()
@@ -1499,6 +1631,14 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
       'Time asleep fell across the team over the past week: median change -38 min (6 of 8 people).',
     ],
     challenges: [],
+    findings: mockFindings(start),
+    weekly: {
+      label: 'This week vs. the previous four weeks',
+      week: { start, end },
+      baseline: { start: dayShift(start, -28), end: dayShift(start, -1) },
+      summary:
+        '3 of 9 reportable metrics changed this week vs. the previous four weeks; 0 had fewer than 5 people with data.',
+    },
     membersIncluded: 8,
     membersTotal: 8,
     minimumMembers: 5,
@@ -1645,6 +1785,15 @@ export const mockClient: ApiClient = {
       );
       if (!found) throw new ApiError('There is no report for that week.', 'not_found', 404);
       return found;
+    }),
+  getTeamEvidence: (teamId, week, evidenceId) =>
+    later(() => {
+      ownTeam(teamId);
+      const found = (teamReports.get(teamId) ?? []).find(
+        (r) => r.week.start <= week && week <= r.week.end,
+      );
+      if (!found) throw new ApiError('There is no such evidence in that report.', 'not_found', 404);
+      return mockTeamEvidence(found, evidenceId);
     }),
   getTeamChat: (teamId) =>
     later(() => {

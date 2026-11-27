@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import type { Evidence, ReportSection, SharedLevels } from '@/api/types';
 import { Text } from '@/components/Text';
+import { EvidenceLink } from '@/components/teamEvidence';
 import { metricLabel } from '@/lib/format';
 import {
   type ChangeRow,
@@ -35,7 +36,13 @@ export function KeyFigures({ items }: { items: { value: string; label: string }[
  * metric, on one scale (share of the people with data), so metrics in different units compare.
  * Changes are drawn in the metric's color; steady metrics recede in gray.
  */
-export function ChangeChart({ rows }: { rows: ChangeRow[] }) {
+export function ChangeChart({
+  rows,
+  evidenceOf,
+}: {
+  rows: ChangeRow[];
+  evidenceOf?: { teamId: string; week: string }; // each row links to its record when given
+}) {
   return (
     <View style={styles.chart}>
       <View style={styles.legend}>
@@ -47,13 +54,28 @@ export function ChangeChart({ rows }: { rows: ChangeRow[] }) {
         </Text>
       </View>
       {rows.map((row) => (
-        <ChangeBar key={row.metric} row={row} />
+        <ChangeBar key={row.metric} row={row} evidenceOf={evidenceOf} />
       ))}
     </View>
   );
 }
 
-function ChangeBar({ row }: { row: ChangeRow }) {
+function ChangeBar({
+  row,
+  evidenceOf,
+}: {
+  row: ChangeRow;
+  evidenceOf?: { teamId: string; week: string };
+}) {
+  const link =
+    evidenceOf && row.evidenceId ? (
+      <EvidenceLink
+        teamId={evidenceOf.teamId}
+        week={evidenceOf.week}
+        evidenceId={row.evidenceId}
+        label="Evidence"
+      />
+    ) : null;
   const colors = useColors();
   const metricColor = useMetricColor(row.metric);
   const changed = row.status === 'changed';
@@ -64,6 +86,7 @@ function ChangeBar({ row }: { row: ChangeRow }) {
         <Text variant="caption" color="faint">
           Not enough data: {row.members} of the {row.minimum} people needed
         </Text>
+        {link}
       </View>
     );
   }
@@ -107,6 +130,7 @@ function ChangeBar({ row }: { row: ChangeRow }) {
           {row.up} higher
         </Text>
       </View>
+      {link}
     </View>
   );
 }

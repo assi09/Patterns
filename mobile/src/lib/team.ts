@@ -38,6 +38,7 @@ export interface ChangeRow {
   down: number;
   median: number | null;
   minimum?: number; // with too little data: how many people were needed
+  evidenceId?: string; // the record behind it, opened from the report
 }
 
 const ORDER = { changed: 0, steady: 1, not_enough_data: 2 };
@@ -65,6 +66,7 @@ function changeRow(section: ReportSection, evidence: Evidence | undefined, minim
     down: number('members_down'),
     median: typeof stats.median_change === 'number' ? stats.median_change : null,
     ...(status === 'not_enough_data' && { minimum }),
+    evidenceId: section.evidenceId,
   } satisfies ChangeRow;
 }
 

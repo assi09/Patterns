@@ -97,9 +97,21 @@ def heads_up(llm: LLM, box: TeamTools, budget: Budget, trace: list[dict]) -> lis
 
 
 def brief(
-    llm: LLM, db: Session, team: Team, report: TeamReport, today: date, now: datetime, cap: float
+    llm: LLM,
+    db: Session,
+    team: Team,
+    report: TeamReport,
+    today: date,
+    now: datetime,
+    cap: float,
+    suggest_changes: bool = False,
 ) -> TeamReply | None:
-    """Use only this report and eligible event pairs. Old team conversations are never inputs."""
+    """Use only this report and eligible event pairs. Old team conversations are never inputs.
+
+    Since 2026-11-27 the briefing suggests no change of its own (docs/supervisor-workflow.md):
+    calendar figures are reported, and a change is started by the supervisor. `suggest_changes`
+    keeps the earlier behaviour for its tests and for re-running old evaluations; nothing in the
+    app passes it. Changes already proposed or approved are left exactly as they are."""
     if report.status != "ready" or overlap_problem(db, team) or report.body.get("briefing"):
         return None
     started = time.monotonic()
@@ -167,12 +179,14 @@ def brief(
         items.append(calendar_line)
         for evidence in load:
             box.evidence[evidence.id] = evidence
-    # One change suggested for approval when there is a reason: chosen by code from the playbook,
-    # the calendar signals that moved and this team's own results, never by the model.
-    results = playbook.verdicts(playbook.results_of(db, team, today))
-    suggested = playbook.suggest(
-        db, team, candidates, ahead, results, today, now, coach.signals(load)
-    )
+    # Before 2026-11-27: one change suggested for approval when there was a reason, chosen by
+    # code from the playbook and the calendar signals that moved. Off in the app (see above).
+    suggested = None
+    if suggest_changes:
+        results = playbook.verdicts(playbook.results_of(db, team, today))
+        suggested = playbook.suggest(
+            db, team, candidates, ahead, results, today, now, coach.signals(load)
+        )
     if suggested:
         action, reason = suggested
         label = team_info(action.metric).label.lower()

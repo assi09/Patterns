@@ -78,7 +78,7 @@ def test_a_demo_team_must_be_labelled_and_is_never_an_existing_team(engine):  # 
             )
 
 
-def test_the_rehearsed_demo_gives_a_finding_its_calendar_and_one_change_to_approve(engine):  # noqa: F811
+def test_the_rehearsed_demo_gives_a_finding_and_its_calendar_and_suggests_nothing(engine):  # noqa: F811
     boss_id = presenter(engine)
     with session_scope(engine) as db:
         boss = db.get(User, boss_id)
@@ -90,9 +90,7 @@ def test_the_rehearsed_demo_gives_a_finding_its_calendar_and_one_change_to_appro
         brief(ScriptedLLM([]), db, team, report, BRIEF_NOW.date(), BRIEF_NOW, 0.1)
         items = report.body["briefing"]["items"]
     kinds = [i["kind"] for i in items]
-    assert "change" in kinds and "calendar" in kinds and "proposal" in kinds
-    [proposal] = [i for i in items if i["kind"] == "proposal"]
-    assert "evening boundary" in proposal["text"] and "after hours rose" in proposal["text"]
+    assert "change" in kinds and "calendar" in kinds and "proposal" not in kinds
     # Beside a sleep drop lasting three weeks, the calendar line must not say nothing changed
     # (seen on production, 2026-11-26: the week itself was steady against the week before).
     [change] = [i for i in items if i["kind"] == "change"]

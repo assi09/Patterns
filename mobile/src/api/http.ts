@@ -49,6 +49,7 @@ import type {
   TeamChatMessage,
   TeamNote,
   TeamPreview,
+  TeamFindingEvidence,
   TeamReport,
   TeamReportSummary,
 } from './types';
@@ -268,6 +269,11 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       request<TeamReportSummary[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/reports`),
     getTeamReport: (teamId, week) =>
       request<TeamReport>(baseUrl, `/teams/${encodeURIComponent(teamId)}/reports/${week}`),
+    getTeamEvidence: (teamId, week, evidenceId) =>
+      request<TeamFindingEvidence>(
+        baseUrl,
+        `/teams/${encodeURIComponent(teamId)}/reports/${week}/evidence/${encodeURIComponent(evidenceId)}`,
+      ),
     getTeamChat: (teamId) =>
       request<TeamChatMessage[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/chat`),
     rateTeamAnswer: (teamId, messageId, rating) =>

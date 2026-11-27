@@ -157,11 +157,31 @@ def test_the_calendar_signal_picks_the_change_that_targets_it(engine, moved, exp
         assert action.play == expected
 
 
-def test_a_busy_evening_week_with_lasting_shorter_sleep_suggests_the_evening_boundary(engine):
+def test_a_busy_week_with_lasting_shorter_sleep_suggests_nothing_by_itself(engine):
+    """Since 2026-11-27 the briefing reports the calendar and proposes no change of its own."""
     team_id = make_team(engine)
     give_calendars(engine, 7, BUSY)
     run(engine, team_id, [])
     items, _ = items_of(engine, team_id)
+    assert not [i for i in items if i["kind"] == "proposal"]
+    assert [i for i in items if i["kind"] == "calendar"]
+    with session_scope(engine) as db:
+        assert not db.scalars(select(TeamAction)).all()
+
+
+def test_the_old_suggestion_still_picks_the_evening_boundary_when_asked_for(engine):
+    """The earlier behaviour, kept behind `suggest_changes` for old evaluations."""
+    from app.agent.llm import ScriptedLLM
+    from app.teams import reports
+    from app.teams.briefing import brief
+
+    team_id = make_team(engine)
+    give_calendars(engine, 7, BUSY)
+    with session_scope(engine) as db:
+        team = db.get(Team, uuid.UUID(team_id))
+        report = reports.build_report(db, team, WEEK, NOW)
+        brief(ScriptedLLM([]), db, team, report, TODAY, NOW, 0.1, suggest_changes=True)
+        items = report.body["briefing"]["items"]
     [proposal] = [i for i in items if i["kind"] == "proposal"]
     assert "evening boundary" in proposal["text"]
     assert "meetings after hours rose this week" in proposal["text"]

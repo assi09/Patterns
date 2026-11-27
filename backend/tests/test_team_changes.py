@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import select
 from test_team_agent import NOW, TODAY, client, engine, make_team, signed_in  # noqa: F401
 
-from app.db.models import Notification, Team, TeamAction
+from app.db.models import Notification, Team, TeamAction, TeamReport
 from app.db.session import session_scope
 from app.synthetic import Step
 from app.teams import playbook
@@ -280,9 +280,10 @@ def _weekly(engine, team_id: str, now) -> dict:  # noqa: F811
 
 
 def test_one_change_from_proposal_to_its_result_keeps_its_state(engine, client):  # noqa: F811
-    """One stateful run, nothing deleted between steps: the briefing proposes, the supervisor
-    approves, a retried or contrary decision changes nothing, the next week proposes nothing
-    new on the same metric, and once the change has ended its result is there to review."""
+    """One stateful run, nothing deleted between steps: a change waiting from before 2026-11-27
+    (when the briefing still proposed them), the supervisor approves, a retried or contrary
+    decision changes nothing, the next week proposes nothing, and once the change has ended its
+    result is there to review."""
     client, app = client
     from app.api import auth
     from app.db.daily import save_daily
@@ -320,11 +321,19 @@ def test_one_change_from_proposal_to_its_result_keeps_its_state(engine, client):
             kind = Notification.kind == "team_challenge"
             return len(db.scalars(select(Notification).where(kind)).all())
 
-    # 1. The Monday briefing proposes one change, for the finding it cites, and waits.
+    # 1. The Monday briefing reports the finding and proposes nothing itself. A change proposed
+    # the way the old briefing did, for the finding it cites, waits like the one on production.
     briefing = _weekly(engine, team_id, NOW)
-    (proposal,) = [i for i in briefing["items"] if i["kind"] == "proposal"]
+    assert not [i for i in briefing["items"] if i["kind"] == "proposal"]
+    assert not actions()
     (change,) = [i for i in briefing["items"] if i["kind"] == "change"]
-    assert change["evidence_ids"][0] in proposal["evidence_ids"]
+    with session_scope(engine) as db:
+        team = db.get(Team, uuid.UUID(team_id))
+        report = db.scalar(select(TeamReport).where(TeamReport.team_id == team.id))
+        _, reason = playbook.suggest(
+            db, team, report.body["priorities"], [], {}, TODAY, NOW, frozenset()
+        )
+    assert change["evidence_ids"][0] in reason["evidence_ids"]
     (action,) = actions()
     assert (action.status, action.source, action.metric) == ("proposed", "agent", "sleep_minutes")
     assert told() == 0

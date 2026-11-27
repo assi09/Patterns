@@ -14,15 +14,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.analysis.team import team_observed, week_of
-from app.analysis.team_calendar import team_load
+from app.analysis.team import team_observed
 from app.db.daily import load_daily
-from app.db.models import HarnessSubmission, Team, TeamAlert, TeamReport, User
+from app.db.models import HarnessSubmission, Team, TeamAlert, User
 from app.sync import calendar
 from app.teams import agent as team_agent
 from app.teams import memberships as teams
 from app.teams import observed as observed_text
-from app.teams import reports
+from app.teams import reports, view
 
 PAST_DAYS = 60  # how far back a harness may send calendar days
 AHEAD_DAYS = 14  # and how far ahead
@@ -123,58 +122,64 @@ def who_am_i(db: Session, user: User) -> dict:
 # --- reading --------------------------------------------------------------------------------
 
 
-def team_overview(db: Session, user: User, team_id: str, today: date) -> dict:
-    """The team as on its Team tab: observed readings, the latest weekly report's team figures,
-    open team alerts. Aggregates only, from at least 5 people."""
+def _week(value: str | None) -> date | None:
+    if value in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        raise HarnessError("A week is a date like 2021-07-19 (any day of that week).") from None
+
+
+def team_overview(
+    db: Session, user: User, team_id: str, today: date, week: str | None = None
+) -> dict:
+    """The team's week in one call: the report's state, its priority findings and weekly
+    comparison, each with its own dates, coverage and evidence id, and the follow-up on team
+    changes as known then (app.teams.view). With no week, the latest report, plus today's
+    observed readings and open alerts as before. With a week, that week only: nothing current is
+    mixed in, and a week without a report says so."""
     team = _supervised(db, user, team_id)
+    asked = _week(week)
+    out = view.overview(db, team, asked, today)
+    if asked is not None:
+        return out
     frames = reports.member_frames(db, team, today - timedelta(days=4), today)
-    observed = [observed_text.sentence(e, today) for e in team_observed(frames, today)]
-    report = db.scalar(
-        select(TeamReport)
-        .where(TeamReport.team_id == team.id)
-        .order_by(TeamReport.week_start.desc())
-        .limit(1)
-    )
+    report = view.week_report(db, team, None)
     alerts = db.scalars(
         select(TeamAlert).where(TeamAlert.team_id == team.id, TeamAlert.resolved_at.is_(None))
     ).all()
-    return {
-        "team": team.name,
-        "readings": observed,
-        "weekly_report": None
-        if report is None
-        else {
-            "week_start": report.week_start.isoformat(),
-            "status": report.status,
-            "headline": report.headline,
-            "figures": [s.get("text", "") for s in (report.body or {}).get("sections", [])],
-        },
-        "open_alerts": [a.text for a in alerts],
+    # Kept for callers of the first version, rebuilt from computed fields and fixed labels: a
+    # stored headline, section or alert sentence can carry a supervisor's note (#246).
+    return out | {
+        "readings": [observed_text.sentence(e, today) for e in team_observed(frames, today)],
+        "weekly_report": None if report is None else view.legacy_report(out),
+        "open_alerts": [view.alert_line(a) for a in alerts],
         "minimum_members": teams.MIN_MEMBERS,
     }
 
 
-def team_meeting_load(db: Session, user: User, team_id: str, today: date) -> dict:
-    """The team's meeting load for the last full week, from at least 5 people."""
+def team_finding_evidence(
+    db: Session, user: User, team_id: str, report_id: str, evidence_id: str
+) -> dict:
+    """One evidence record of one of the team's reports, bounded (app.teams.view)."""
     team = _supervised(db, user, team_id)
-    week = week_of(today - timedelta(days=7))
-    frames = [
-        frame
-        for uid in teams.member_ids(db, team)
-        if not (
-            frame := calendar.frame_for(
-                db, uid, week.start - timedelta(days=28), week.end + timedelta(days=8)
-            )
-        ).empty
-    ]
-    return {
-        "week": f"{week.start.isoformat()} to {week.end.isoformat()}",
-        "members_with_a_calendar": len(frames),
-        "figures": [
-            {"metric": e.metrics[0], "members": e.n, **e.stats}
-            for e in team_load(frames, week)
-            if e.sufficient
-        ],
+    try:
+        return view.finding_evidence(db, team, report_id, evidence_id)
+    except view.NotFound:
+        raise HarnessError("No such evidence for this team's report.") from None
+
+
+def team_meeting_load(
+    db: Session, user: User, team_id: str, today: date, week: str | None = None
+) -> dict:
+    """The team's scheduled meeting time for one full week (the last one when no week is asked),
+    with its comparison dates and an explicit state (app.teams.view.meeting_load)."""
+    team = _supervised(db, user, team_id)
+    out = view.meeting_load(db, team, _week(week), today)
+    # Kept for callers of the first version.
+    return out | {
+        "members_with_a_calendar": out.get("coverage", {}).get("with_calendar_days_that_week", 0),
         "minimum_members": teams.MIN_MEMBERS,
     }
 

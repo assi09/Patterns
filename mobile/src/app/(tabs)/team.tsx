@@ -37,6 +37,7 @@ import { MeetingLoad } from '@/components/teamCalendar';
 import { Cards, KeyTiles, Part, TeamBoard, WhoMoved } from '@/components/teamBoard';
 import { TeamPulseTile } from '@/components/pulse';
 import { AreaChips, BriefingCard } from '@/components/teamBrief';
+import { FindingsCard } from '@/components/teamEvidence';
 import { TILE_RADIUS } from '@/components/widgets';
 import { ChangeChart, KeyFigures, LevelsTable, WeekdayChart } from '@/components/teamReport';
 import { QueryState, Screen } from '@/components/Screen';
@@ -44,6 +45,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { windowLabel } from '@/lib/format';
+import { datesText } from '@/lib/teamEvidence';
 import {
   areaReadings,
   briefingItems,
@@ -254,6 +256,13 @@ function TeamView({ team }: { team: SupervisedTeam }) {
               {ready || pulse.data?.weeks.length ? (
                 <KeyTiles teamId={team.id} report={latest.data} />
               ) : null}
+              {ready && latest.data?.findings?.length ? (
+                <FindingsCard
+                  teamId={team.id}
+                  week={latest.data.week.start}
+                  findings={latest.data.findings}
+                />
+              ) : null}
               {ready ? <WhoMoved report={latest.data} /> : null}
               <MeetingLoad teamId={team.id} style={card} />
             </Cards>
@@ -360,7 +369,10 @@ function ReportSection({
         <KeyFigures
           items={[
             { value: `${report.membersIncluded}`, label: 'people with data' },
-            { value: `${changed} of ${rows.length}`, label: 'metrics changed' },
+            {
+              value: `${changed} of ${rows.length}`,
+              label: 'metrics changed this week vs. the previous four weeks',
+            },
             { value: `${report.levels.length}`, label: 'sharing levels' },
           ]}
         />
@@ -390,10 +402,14 @@ function ReportSection({
       </View>
       <Section
         style={card}
-        title="How the team changed"
-        footer="Each person's week against their own four weeks before; only the counts and the median reach you, never anyone's own data. A metric counts as changed only when the whole team moved clearly. Patterns, not advice."
+        title={report.weekly?.label ?? 'This week vs. the previous four weeks'}
+        footer={`${
+          report.weekly
+            ? `${datesText(report.weekly.week)} against ${datesText(report.weekly.baseline)}. `
+            : ''
+        }Each person's week against their own four weeks before; only the counts and the median reach you, never anyone's own data. A metric counts as changed only when the whole team moved clearly. A sustained change above is measured against a different, fixed baseline. Patterns, not advice.`}
       >
-        <ChangeChart rows={rows} />
+        <ChangeChart rows={rows} evidenceOf={{ teamId: team.id, week: report.week.start }} />
       </Section>
     </Cards>
   );
