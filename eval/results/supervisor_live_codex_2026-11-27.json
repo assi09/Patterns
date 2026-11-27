@@ -1,0 +1,29 @@
+{
+ "kind": "real client, live, production synthetic team; reported apart from the scripted 11/11",
+ "date": "2026-11-27",
+ "server_revision": "e0e8098",
+ "client": "Codex, signed in with OAuth by the supervisor (the connection names itself \"ChatGPT\")",
+ "team": "Demo team (synthetic data), 8 made-up members",
+ "trace": {
+  "source": "production MCP call log (tool, success, time; never arguments or results), read only",
+  "sessions": [
+   {"at": "11:02", "calls": ["who_am_i", "team_overview", "team_finding_evidence", "team_meeting_load"]},
+   {"at": "11:03", "calls": ["who_am_i", "team_overview", "team_meeting_load"]},
+   {"at": "11:06", "calls": ["who_am_i", "team_overview"]},
+   {"at": "11:07", "calls": ["who_am_i", "team_overview"]}
+  ],
+  "calls": 11,
+  "failed": 0,
+  "writes": 0,
+  "proposals_still_waiting_after": 1
+ },
+ "action_follow_up": {
+  "question": "What happened to the change we agreed to try?",
+  "premise": "false: the evening boundary was proposed by the old briefing and never approved",
+  "first_answer": "partial: described the historical snapshot (as of Nov 23) and left the proposal's current status unresolved",
+  "after_one_clarification": "pass: told what was recorded as of Nov 23 from what was visible on Nov 27; the evening boundary is a proposal awaiting approval, with no approval and no measured outcome; current sleep readings alone cannot say whether the team tried it or whether it worked",
+  "used_the_current_overview": "inferred, not logged: the proposal was made on Nov 26, so an overview of the week of Nov 16 (as of Nov 23) leaves it out; it can only have come from an overview as of Nov 27. The call log records no arguments.",
+  "graded_by": "the supervisor, from the assistant's answers; the answers themselves are not stored here"
+ },
+ "not_scored_here": "the other turns of this run (what changed, was that everyone, evidence, meeting load) were not graded and sent to us; they are not counted"
+}
