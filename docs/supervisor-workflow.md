@@ -132,6 +132,23 @@ on the tool outputs only. A failed task gets no efficiency credit. Free: no mode
 | Server time, all task calls (local, varies run to run) | 0.24 s | 0.60 to 0.73 s |
 | Cost | $0 | $0 |
 
+**Frozen suite at `fc467c4`: 10/11 (2026-11-27), kept on record.** From `fc467c4` a week's answer
+is dated no earlier than its report ([change-memory.md](change-memory.md)). The instance's report
+for the action week was made at build time, 11 days after that week. So `action_follow_up`, which
+asks for that week with no cutoff, now gets an answer dated by the report, with the change ended
+and its outcome. Its historical half fails (in progress: no; no result: no); its current half
+passes. The answer is right for "what does that week's report say?" but not for "was it still in
+progress at the end of that week?". Same instance, same checker
+(`eval/results/supervisor_frozen_fc467c4_2026-11-27.json`).
+
+**Revised suite: 11/11, scored apart.** `action_follow_up_v2` (in `eval/supervisor_tasks.json`,
+`versioned`) asks the second question with `as_of` the day after the week. It checks in progress,
+no result and no later report. Its current half is the frozen task's own checks. The frozen tasks
+are unchanged. The versioned call is counted on its own (1 call), so the frozen run's 14 task calls
+stay comparable (`eval/results/supervisor_revised_2026-11-27.json`, run at `11b8f58`: frozen
+10/11, revised 11/11). Whether a real assistant passes `as_of` by itself for the question in plain
+words is checked in the fresh-chat rehearsal.
+
 **Reading it.** This shows **better task coverage**: the tools now supply information the old
 interface lacked. It does not show that a real assistant answers better or that a supervisor saves
 time; both are still to be measured.
