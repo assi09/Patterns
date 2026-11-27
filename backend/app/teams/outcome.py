@@ -35,6 +35,19 @@ REBOUND = (
     "ordinary rebound can look like an improvement."
 )
 REFERENCE_DAYS = 28
+# How a change's result is computed, said once so the outcome card and its evidence record agree.
+MEASURED = (
+    "For each person, the average during the change minus the person's own average over the 28 "
+    "days before the change started (the baseline dates); the team figure is the median across "
+    "people."
+)
+METHOD = (
+    "A one-sample t-test of whether the team's changes, each in units of the person's own spread "
+    f"over the baseline days, are centred away from zero. The result is above or below the "
+    f"reference level when this one test gives p < {FDR} and the median difference is not zero, "
+    "with no correction across metrics; otherwise no clear difference detected. With fewer than "
+    f"{MIN_MEMBERS} people with data it is insufficient data, and no figure is computed."
+)
 
 
 def reference(action: TeamAction) -> Window:
@@ -84,6 +97,7 @@ def describe(action: TeamAction, evidence: Evidence | dict) -> dict:
     out = {
         "outcome": outcome,
         "label": OUTCOMES[outcome],
+        "method": METHOD,
         "metric": metric,
         "metric_label": label,
         "during": during,

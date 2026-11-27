@@ -1394,6 +1394,9 @@ One record of one team report, bounded: what was measured, its dates, method, th
 | `weeks` | list[[ScanWeekView](#scanweekview)] |  |  |
 | `result` | [EvidenceResult](#evidenceresult) or null |  |  |
 | `withheld` | string or null |  |  |
+| `baselineLabel` | string or null |  |  |
+| `outcome` | `above` \| `below` \| `no_clear_difference` \| `insufficient_data` or null |  |  |
+| `outcomeLabel` | string or null |  |  |
 
 ### TeamFindingView
 

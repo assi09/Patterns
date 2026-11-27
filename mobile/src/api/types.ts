@@ -840,6 +840,10 @@ export interface TeamFindingEvidence {
   }[];
   result?: { change: ChangeFigure; higher: number; lower: number; pValue?: number | null } | null;
   withheld?: string | null; // fewer than the minimum: why there is no figure
+  // A team change's result only: its baseline's meaning and the outcome its card shows.
+  baselineLabel?: string | null;
+  outcome?: ChangeResult['outcome'] | null;
+  outcomeLabel?: string | null;
 }
 
 /** What the team agent found on its own Monday run, every claim checked against team evidence. */

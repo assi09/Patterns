@@ -106,6 +106,11 @@ export function TeamEvidenceView({ record }: { record: TeamFindingEvidence }) {
           {record.metricLabel}
         </Text>
         <Text color="muted">{comparisonText(record)}</Text>
+        {record.outcomeLabel ? (
+          <Text>
+            {record.metricLabel}: {record.outcomeLabel}
+          </Text>
+        ) : null}
       </View>
 
       {record.withheld ? (

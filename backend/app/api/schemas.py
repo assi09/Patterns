@@ -493,6 +493,10 @@ class TeamFindingEvidence(ApiModel):
     weeks: list[ScanWeekView] = Field(default_factory=list)
     result: EvidenceResult | None = None
     withheld: str | None = None
+    # A team change's result only: what its baseline is, and the outcome the card shows.
+    baseline_label: str | None = None
+    outcome: Literal["above", "below", "no_clear_difference", "insufficient_data"] | None = None
+    outcome_label: str | None = None
 
 
 class TeamReport(TeamReportSummary):

@@ -73,5 +73,11 @@ describe('team findings and their evidence', () => {
       { label: 'People with enough data', value: '5 of 11 (at least 5 needed)' },
     ]);
     expect(comparisonText(record)).toMatch(/^Jul 19 to Jul 25, 2021, compared with Jun 21 to/);
+    // A change result says what its baseline is, so "above reference" can be checked.
+    const change = { ...record, baselineLabel: 'the 28 days before the change started' };
+    expect(evidenceFigures({ ...change, outcome: 'below' })[0].label).toBe('Median difference');
+    expect(comparisonText(change)).toMatch(
+      /Jul 18, 2021 \(the 28 days before the change started\)$/,
+    );
   });
 });

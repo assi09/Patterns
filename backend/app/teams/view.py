@@ -456,16 +456,9 @@ def evidence_of(report: TeamReport, evidence_id: str) -> dict:
             row.get("evidence_id") for row in (report.body or {}).get("challenges", [])
         }
         out |= {
-            "label": "Result of a team change" if result else WEEKLY_LABEL,
-            "measured": (
-                "For each person, the average during the change minus the person's own average "
-                "over the comparison days given as the baseline (the 28 days before the change, "
-                "or before the first flagged week of the finding that prompted it); the team "
-                "figure is the median across people."
-                if result
-                else "For each person, the week's average minus the person's own average over "
-                "the previous four weeks; the team figure is the median across people."
-            ),
+            "label": WEEKLY_LABEL,
+            "measured": "For each person, the week's average minus the person's own average over "
+            "the previous four weeks; the team figure is the median across people.",
             "method": "A test of whether the team's changes are centred away from zero; the "
             "report counts a metric as changed only after a correction across all metrics.",
             "target": _window(record, 0),
@@ -473,11 +466,19 @@ def evidence_of(report: TeamReport, evidence_id: str) -> dict:
         }
         out["coverage"]["contributors"] = stats.get("members", 0)
         if result:
+            # The same account as the outcome card (`outcome`): its test, its dates, its caveats.
             from app.teams import outcome
 
             found = outcome.outcome_of(record)
-            out |= {"outcome": found, "outcome_label": outcome.OUTCOMES[found]}
-            out["limitations"].append(outcome.CONTRIBUTION)
+            out |= {
+                "label": "Result of a team change",
+                "measured": outcome.MEASURED,
+                "method": outcome.METHOD,
+                "baseline_label": outcome.REFERENCES[outcome.BEFORE_CHANGE],
+                "outcome": found,
+                "outcome_label": outcome.OUTCOMES[found],
+            }
+            out["limitations"] += [outcome.CONTRIBUTION, outcome.REBOUND]
         figure = _bounded_change(record)
         if figure is None:
             out["withheld"] = (
