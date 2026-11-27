@@ -329,6 +329,75 @@ def send_team_event(
     return _hold(db, user, "team_event", event.model_dump(mode="json"), team, token_id, now)
 
 
+# --- the team's past cases (docs/change-memory.md) ----------------------------------------------
+
+
+def _date(value: str | None, field: str) -> date | None:
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise HarnessError(f"{field}: a date like 2026-11-20.") from None
+
+
+def team_history(
+    db: Session,
+    user: User,
+    team_id: str,
+    today: date,
+    start: str | None = None,
+    end: str | None = None,
+    category: str | None = None,
+    play: str | None = None,
+    metric: str | None = None,
+    as_of: str | None = None,
+) -> dict:
+    """The team's past cases: events (with or without a change), changes in every state, and the
+    evidence available for their dates. Facts only: relevance is the assistant's to judge."""
+    from app.teams import history, playbook
+
+    team = _supervised(db, user, team_id)
+    if category is not None and category not in EVENT_CATEGORIES:
+        raise HarnessError(f"category: one of {', '.join(EVENT_CATEGORIES)}.")
+    if play is not None and play not in (*playbook.PLAY, "custom"):
+        raise HarnessError(f"play: one of {', '.join(playbook.PLAY)}, or custom.")
+    if metric is not None and metric not in TEAM_METRICS:
+        raise HarnessError(f"metric: one of {', '.join(TEAM_METRICS)}.")
+    return history.history(
+        db,
+        team,
+        today,
+        start=_date(start, "start"),
+        end=_date(end, "end"),
+        category=category,
+        play=play,
+        metric=metric,
+        as_of=_date(as_of, "as_of"),
+    )
+
+
+def team_case(
+    db: Session,
+    user: User,
+    team_id: str,
+    today: date,
+    case_id: str,
+    day: str | None = None,
+    as_of: str | None = None,
+) -> dict:
+    """One case from team_history in full, with the evidence that exists for its dates."""
+    from app.teams import history
+
+    team = _supervised(db, user, team_id)
+    try:
+        return history.one_case(
+            db, team, case_id, today, day=_date(day, "day"), as_of=_date(as_of, "as_of")
+        )
+    except history.NotFound:
+        raise HarnessError("No such case for this team.") from None
+
+
 # --- a decision, recorded as a pending draft (docs/change-memory.md) ---------------------------
 
 SUGGESTED = "Suggested in chat — awaiting your confirmation"
