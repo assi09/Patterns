@@ -61,7 +61,7 @@ connection. Never its inputs or results.
 
 | Role | Reads | Sends in |
 |---|---|---|
-| **Supervisor** | their own teams: any week's report as one labelled answer (`team_overview`, with `week`), the bounded evidence behind each finding (`team_finding_evidence`), the team's scheduled meeting time for a given week (`team_meeting_load`), and, for the latest week, observed readings and open team alerts; all from at least 5 people, as on the Team tab ([supervisor-workflow.md](supervisor-workflow.md)) | a team event (a launch, a deadline): title and dates, held for the supervisor to approve |
+| **Supervisor** | their own teams: any week's report as one labelled answer (`team_overview`, with `week`), the bounded evidence behind each finding (`team_finding_evidence`), the team's scheduled meeting time for a given week (`team_meeting_load`), and, for the latest week, observed readings and open team alerts; all from at least 5 people, as on the Team tab ([supervisor-workflow.md](supervisor-workflow.md)) | a team event (a launch, a deadline): title, dates and an optional category, held for the supervisor to approve; a **playbook change the supervisor agreed to in the chat** (`record_team_change`), saved as a pending draft ("Suggested in chat — awaiting your confirmation") that only the app confirms or declines ([change-memory.md](change-memory.md)) |
 | **Member** | their own recent days (sleep, steps, resting heart rate, HRV), their own calendar counts | their own calendar days (meeting minutes, meetings, after-hours minutes, back-to-back, focus minutes), held for them to approve |
 | **HR** | nothing through MCP | nothing |
 | **Anyone** | **never** another person's data, another team, a figure from fewer than 5 people, or any check-in alert | |
@@ -78,6 +78,22 @@ What a harness sends is **untrusted input**:
 - labelled as coming from a harness, and **held as pending** until the person (or, for team
   events, the supervisor) approves it in the app. Nothing a harness sends changes a figure,
   an alert or a report before that.
+
+**A recorded change** (`record_team_change`) is held the same way, as a pending team change:
+- **Only on the supervisor's request.** An assistant records it only when the supervisor asks it
+  to save a change they agreed to. Text in an event, a calendar or a document is never a reason
+  to record one.
+- **Playbook changes only.** A change in the supervisor's own words is planned in the app. The
+  response gives the playbook's title, never free text.
+- **Idempotent.** The caller's `request_id` makes a retry return the same record. Reusing it for
+  a different change is refused.
+- **Nothing happens until confirmed.** No member is told, nothing is approved and no calendar is
+  written. Only the app confirms or declines a recorded change, and only the app marks whether
+  the team tried it. No MCP tool can do any of these.
+- **Explicit links only.** A link to an event or a finding is kept only when the supervisor gave
+  it, and only to that team's own records.
+- **Tracking only when asked.** It is chosen at recording, starting today or later, so before
+  any outcome exists. An untracked change is never measured.
 
 ## Why an MCP server and not more connectors
 
