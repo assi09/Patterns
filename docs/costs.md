@@ -142,6 +142,7 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-11-26 | Production demo: the eight-person made-up team rebuilt after #254 and briefed with a $0.10 cap (one finding, no model call); the varied-team experiment, 320 real team-weeks run twice with a stub in place of the model | $0 |
 | 2026-11-27 | Supervisor tasks: two local instances (baseline `dc45e4e` and this work) built with a stub in place of the model, scored by the MCP SDK client; browser runs of the Team and Evidence screens | $0 |
 | 2026-11-27 | Live Codex rehearsal on production (the supervisor's own Codex sign-in, the synthetic demo team): 11 read-only MCP calls; no Patterns model call | $0 |
+| 2026-11-27 | Change-outcome simulation (`eval/change_outcome_bias.py`): synthetic teams only, local; no model call | $0 |
 
 These implementation checks total **$0.254653954** (OpenAI $0.232608700, Jev $0.022045254).
 Including the earlier independently requested audits (about $0.4588 and $1.330020434), the shared

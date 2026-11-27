@@ -1,0 +1,464 @@
+{
+ "question": "How often does a change's outcome say 'better' when the change did nothing?",
+ "measures": {
+  "current": "the change's days against the 28 days just before it (in use)",
+  "before_drop": "the change's days against the 28 days before the drop was first flagged"
+ },
+ "trigger": "two flagged weeks running (p < FDR, median in the bad direction); the change starts the Monday after, for 14 days",
+ "dip": "every member 0.9 daily SD lower for the dip's weeks, then back",
+ "real_effect": "every member 0.5 daily SD higher during the change",
+ "noise": {
+  "independent": "independent days (app.synthetic)",
+  "personal_drift": "plus a slow personal wander (AR(1), phi 0.9, 0.5 SD)",
+  "shared_weeks": "plus a team-wide weekly shift (SD 0.3), like deadlines and holidays"
+ },
+ "team_sizes": [
+  5,
+  6,
+  8
+ ],
+ "cells": [
+  {
+   "metric": "sleep_minutes",
+   "noise": "independent",
+   "scenario": "random_start",
+   "teams_simulated": 300,
+   "changes_started": 300,
+   "current": {
+    "better": 0.03,
+    "no_change": 0.957,
+    "worse": 0.013
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "independent",
+   "scenario": "after_chance_drop",
+   "teams_simulated": 300,
+   "changes_started": 1,
+   "current": {
+    "no_change": 1.0
+   },
+   "before_drop": {
+    "no_change": 1.0
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "independent",
+   "scenario": "after_2_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 251,
+   "current": {
+    "better": 0.813,
+    "no_change": 0.187
+   },
+   "before_drop": {
+    "better": 0.028,
+    "no_change": 0.948,
+    "worse": 0.024
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "independent",
+   "scenario": "after_3_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 256,
+   "current": {
+    "better": 0.039,
+    "no_change": 0.945,
+    "worse": 0.016
+   },
+   "before_drop": {
+    "better": 0.004,
+    "no_change": 0.242,
+    "worse": 0.754
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "independent",
+   "scenario": "after_2_week_dip_real_effect",
+   "teams_simulated": 300,
+   "changes_started": 251,
+   "current": {
+    "better": 1.0
+   },
+   "before_drop": {
+    "better": 0.841,
+    "no_change": 0.159
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "personal_drift",
+   "scenario": "random_start",
+   "teams_simulated": 300,
+   "changes_started": 300,
+   "current": {
+    "better": 0.023,
+    "no_change": 0.967,
+    "worse": 0.01
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "personal_drift",
+   "scenario": "after_chance_drop",
+   "teams_simulated": 300,
+   "changes_started": 0
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "personal_drift",
+   "scenario": "after_2_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 156,
+   "current": {
+    "better": 0.385,
+    "no_change": 0.615
+   },
+   "before_drop": {
+    "better": 0.013,
+    "no_change": 0.936,
+    "worse": 0.051
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "personal_drift",
+   "scenario": "after_3_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 166,
+   "current": {
+    "better": 0.042,
+    "no_change": 0.922,
+    "worse": 0.036
+   },
+   "before_drop": {
+    "no_change": 0.62,
+    "worse": 0.38
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "personal_drift",
+   "scenario": "after_2_week_dip_real_effect",
+   "teams_simulated": 300,
+   "changes_started": 156,
+   "current": {
+    "better": 0.936,
+    "no_change": 0.064
+   },
+   "before_drop": {
+    "better": 0.385,
+    "no_change": 0.615
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "shared_weeks",
+   "scenario": "random_start",
+   "teams_simulated": 300,
+   "changes_started": 300,
+   "current": {
+    "better": 0.15,
+    "no_change": 0.693,
+    "worse": 0.157
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "shared_weeks",
+   "scenario": "after_chance_drop",
+   "teams_simulated": 300,
+   "changes_started": 64,
+   "current": {
+    "better": 0.203,
+    "no_change": 0.672,
+    "worse": 0.125
+   },
+   "before_drop": {
+    "better": 0.031,
+    "no_change": 0.578,
+    "worse": 0.391
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "shared_weeks",
+   "scenario": "after_2_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 191,
+   "current": {
+    "better": 0.639,
+    "no_change": 0.351,
+    "worse": 0.01
+   },
+   "before_drop": {
+    "better": 0.115,
+    "no_change": 0.723,
+    "worse": 0.162
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "shared_weeks",
+   "scenario": "after_3_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 210,
+   "current": {
+    "better": 0.186,
+    "no_change": 0.695,
+    "worse": 0.119
+   },
+   "before_drop": {
+    "better": 0.029,
+    "no_change": 0.319,
+    "worse": 0.652
+   }
+  },
+  {
+   "metric": "sleep_minutes",
+   "noise": "shared_weeks",
+   "scenario": "after_2_week_dip_real_effect",
+   "teams_simulated": 300,
+   "changes_started": 191,
+   "current": {
+    "better": 0.979,
+    "no_change": 0.021
+   },
+   "before_drop": {
+    "better": 0.686,
+    "no_change": 0.298,
+    "worse": 0.016
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "independent",
+   "scenario": "random_start",
+   "teams_simulated": 300,
+   "changes_started": 300,
+   "current": {
+    "better": 0.023,
+    "no_change": 0.947,
+    "worse": 0.03
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "independent",
+   "scenario": "after_chance_drop",
+   "teams_simulated": 300,
+   "changes_started": 3,
+   "current": {
+    "better": 0.667,
+    "no_change": 0.333
+   },
+   "before_drop": {
+    "no_change": 1.0
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "independent",
+   "scenario": "after_2_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 249,
+   "current": {
+    "better": 0.835,
+    "no_change": 0.165
+   },
+   "before_drop": {
+    "better": 0.02,
+    "no_change": 0.968,
+    "worse": 0.012
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "independent",
+   "scenario": "after_3_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 252,
+   "current": {
+    "better": 0.02,
+    "no_change": 0.972,
+    "worse": 0.008
+   },
+   "before_drop": {
+    "better": 0.004,
+    "no_change": 0.183,
+    "worse": 0.813
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "independent",
+   "scenario": "after_2_week_dip_real_effect",
+   "teams_simulated": 300,
+   "changes_started": 249,
+   "current": {
+    "better": 1.0
+   },
+   "before_drop": {
+    "better": 0.835,
+    "no_change": 0.165
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "personal_drift",
+   "scenario": "random_start",
+   "teams_simulated": 300,
+   "changes_started": 300,
+   "current": {
+    "better": 0.03,
+    "no_change": 0.947,
+    "worse": 0.023
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "personal_drift",
+   "scenario": "after_chance_drop",
+   "teams_simulated": 300,
+   "changes_started": 6,
+   "current": {
+    "no_change": 1.0
+   },
+   "before_drop": {
+    "no_change": 0.833,
+    "worse": 0.167
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "personal_drift",
+   "scenario": "after_2_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 151,
+   "current": {
+    "better": 0.404,
+    "no_change": 0.596
+   },
+   "before_drop": {
+    "better": 0.007,
+    "no_change": 0.954,
+    "worse": 0.04
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "personal_drift",
+   "scenario": "after_3_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 156,
+   "current": {
+    "better": 0.026,
+    "no_change": 0.962,
+    "worse": 0.013
+   },
+   "before_drop": {
+    "no_change": 0.526,
+    "worse": 0.474
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "personal_drift",
+   "scenario": "after_2_week_dip_real_effect",
+   "teams_simulated": 300,
+   "changes_started": 151,
+   "current": {
+    "better": 0.934,
+    "no_change": 0.066
+   },
+   "before_drop": {
+    "better": 0.404,
+    "no_change": 0.596
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "shared_weeks",
+   "scenario": "random_start",
+   "teams_simulated": 300,
+   "changes_started": 300,
+   "current": {
+    "better": 0.133,
+    "no_change": 0.67,
+    "worse": 0.197
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "shared_weeks",
+   "scenario": "after_chance_drop",
+   "teams_simulated": 300,
+   "changes_started": 65,
+   "current": {
+    "better": 0.292,
+    "no_change": 0.646,
+    "worse": 0.062
+   },
+   "before_drop": {
+    "better": 0.062,
+    "no_change": 0.662,
+    "worse": 0.277
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "shared_weeks",
+   "scenario": "after_2_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 205,
+   "current": {
+    "better": 0.62,
+    "no_change": 0.361,
+    "worse": 0.02
+   },
+   "before_drop": {
+    "better": 0.122,
+    "no_change": 0.698,
+    "worse": 0.18
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "shared_weeks",
+   "scenario": "after_3_week_dip",
+   "teams_simulated": 300,
+   "changes_started": 217,
+   "current": {
+    "better": 0.175,
+    "no_change": 0.677,
+    "worse": 0.147
+   },
+   "before_drop": {
+    "better": 0.028,
+    "no_change": 0.272,
+    "worse": 0.7
+   }
+  },
+  {
+   "metric": "steps",
+   "noise": "shared_weeks",
+   "scenario": "after_2_week_dip_real_effect",
+   "teams_simulated": 300,
+   "changes_started": 205,
+   "current": {
+    "better": 0.985,
+    "no_change": 0.015
+   },
+   "before_drop": {
+    "better": 0.659,
+    "no_change": 0.327,
+    "worse": 0.015
+   }
+  }
+ ]
+}
