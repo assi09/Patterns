@@ -119,11 +119,11 @@ def main() -> None:
             (acted, last),
             (theirs, last),
         ):
-            at = datetime.combine(week.end + timedelta(days=1), datetime.min.time(), UTC)
-            report = reports.build_report(db, team, week, at)
+            # Made now, as the demo command does: the made-up members joined just before.
+            report = reports.build_report(db, team, week, now)
             # The code's ranking, never a model (the stub refuses every call). Whatever the
             # briefing proposes is left as the code made it.
-            brief(varied_teams.Stub(), db, team, report, week.end + timedelta(days=1), at, 0.0)
+            brief(varied_teams.Stub(), db, team, report, week.end + timedelta(days=1), now, 0.0)
         made_ids = {
             "demo_both": str(both.id),
             "demo_small": str(small.id),

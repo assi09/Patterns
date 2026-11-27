@@ -1,6 +1,6 @@
 {
  "label": "baseline",
- "commit": "73e67e9",
+ "commit": "cd1c5aa",
  "server_revision": "dc45e4e",
  "date": "2026-11-27",
  "tools": [
@@ -98,7 +98,7 @@
   "discovery": 1,
   "task_calls": 13,
   "failed_calls": 2,
-  "bytes": 11396,
-  "seconds": 0.199
+  "bytes": 11372,
+  "seconds": 0.211
  }
 }

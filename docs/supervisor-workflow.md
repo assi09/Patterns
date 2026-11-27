@@ -20,8 +20,11 @@ needed.
 | **Team size and contributors are separate** | `roster` is the team's size; `contributors` is how many people had enough data for that figure; `minimum` is 5 |
 | **Evidence is opened only through its own report** | MCP: `team_finding_evidence(team_id, report_id, evidence_id)`. App: `GET /teams/{id}/reports/{week}/evidence/{evidence_id}` and the **Evidence** screen. The caller's current role and team are checked; the record must be cited by that report. A guessed id, another team's report or a record of another report gets "not found" and nothing else |
 | **Records are bounded** | What was measured, target and comparison dates, method, unit, the team median, how many people were higher or lower, coverage and limits. Never a person's value, a quartile (with 5 people a quartile is close to one person), a note, a member, or a check-in |
+| **No free text through MCP** | Every MCP response is built from computed fields and fixed labels. A change's title is the playbook's own title, or "Custom team change" for one the supervisor wrote. The latest week's compatibility keys (`weekly_report`, `open_alerts`) are rebuilt from fields, not from stored headline, section or alert sentences. **One free-text label remains:** the team's name, which the supervisor chose |
 | **No automatic scheduling proposals** | The Monday briefing reports the team calendar beside the Fitbit findings and **proposes nothing itself**. A change is started by the supervisor ("Plan a change"). The old behaviour is kept behind `brief(..., suggest_changes=True)` for its tests and old evaluations; nothing in the app passes it |
 | **Calendar is context, not a cause** | `team_meeting_load(team_id, week)` takes an explicit week and returns that week only, with its comparison dates and a state. It never falls back to the current week, and never says meetings caused a change |
+| **The calendar counts the report's group** | For any week, the calendars counted are those of the members behind that week's Fitbit report (joined by the day it was made) who are still in the team. Someone who joined later is not counted. Someone who has left is not counted either, because leaving withdraws their data. The response gives the counts (`cohort`), and says so when people in the report have left since, or when the week has no report to match |
+| **A clear change in either direction** | `clear_change` is `higher`, `lower`, `none` or `not judged` (the number of meetings), by the coach's bar in both directions; `heavier_load` says whether that direction adds load. A clearly lighter week is a fall, not "none" |
 | **Follow-up as it stood then** | A historical week's answer is as of the day after that week: a change still running shows *in progress* without a result; later results, today's readings and open alerts are left out |
 | **MCP stays read-only for decisions** | MCP cannot approve or decline a change and cannot write to anyone's calendar |
 
@@ -50,7 +53,7 @@ once this code is deployed; nothing on production was rebuilt or changed for it.
 | `who_am_i` | Role and teams | Team discovery; counted apart in the evaluation |
 | `team_overview(team_id, week?)` | The week in one call: `report.state` (`findings`, `no_priority_finding`, `withheld`, `no_report`), the report and week ids, `roster` and `with_enough_data`, each priority (label, metric, direction, signed change with unit, the weeks it held, its fixed baseline, contributors and how many moved that way, the rule that fired, `evidence_id`), `this_week_vs_previous_four` (label, dates, scoped summary, changed / steady / withheld metrics), and `follow_up` | `week` is any date in the week. Without it: the latest report, plus the first version's keys (`readings`, `weekly_report`, `open_alerts`), with an alert's note removed. With it: nothing current |
 | `team_finding_evidence(team_id, report_id, evidence_id)` | The bounded record | The same representation as the app's Evidence screen |
-| `team_meeting_load(team_id, week?)` | Scheduled meeting time that week against each member's previous four weeks: `state` is `observed`, `below_minimum`, `unavailable` or `week_not_over`, with week and baseline dates, coverage, figures, and `clear_changes` by the coach's rule | The definition is in the response: scheduled meeting time, working hours 8:00 to 18:00 on weekdays, a synced day without meetings is 0, a day never synced is missing |
+| `team_meeting_load(team_id, week?)` | Scheduled meeting time that week against each member's previous four weeks: `state` is `observed`, `below_minimum`, `unavailable` or `week_not_over`, with week and baseline dates, coverage, figures, `cohort`, and `clear_changes` in either direction with `heavier_load` | The definition is in the response: scheduled meeting time, working hours 8:00 to 18:00 on weekdays, a synced day without meetings is 0, a day never synced is missing |
 
 **Questions the tools do not answer.**
 - **"When is my next team check-in?"** Patterns does not read the supervisor's own calendar. The
@@ -63,7 +66,7 @@ once this code is deployed; nothing on production was rebuilt or changed for it.
 Each team change in `follow_up` shows:
 - its lifecycle: `proposed`, `declined`, `approved, not started`, `in_progress` or `ended`, with
   its dates and `as_of`;
-- who started it;
+- a controlled title (the playbook's, or "Custom team change") and who started it;
 - whether it was tried. That is the calendar check when the change has one; otherwise "approved
   by the supervisor; whether the team did it is not measured here";
 - for an ended change, `result`: what was measured, the verdict (`better`, `worse`, `changed`,
@@ -95,6 +98,10 @@ on the tool outputs only. A failed task gets no efficiency credit. Free: no mode
 - **One check was corrected after the first development run:** the pattern for a finding's
   baseline dates did not allow the indentation the server's JSON has. The baseline has no such
   field, so the correction cannot favour either version.
+- **The instance builder was corrected in the review round:** reports were dated the day after
+  their week, before the made-up members had joined. They are now made at build time, as the demo
+  command does. Both instances were rebuilt and both versions rescored; the results did not
+  change.
 
 | Scripted MCP SDK run | Baseline `dc45e4e` | This work |
 |---|---|---|
@@ -103,11 +110,13 @@ on the tool outputs only. A failed task gets no efficiency credit. Free: no mode
 | Tools | 7 | 8 |
 | Task calls (team discovery apart: 1 each) | 13 | 14 |
 | Failed calls, as planned (another supervisor's team; a guessed evidence id) | 2 | 2 |
-| Response size, all task calls | 11.4 kB | 35.8 kB |
+| Response size, all task calls | 11.4 kB | 36.7 kB |
 | Server time, all task calls (local, varies run to run) | 0.24 s | 0.60 to 0.73 s |
 | Cost | $0 | $0 |
 
-**Reading it.**
+**Reading it.** This shows **better task coverage**: the tools now supply information the old
+interface lacked. It does not show that a real assistant answers better or that a supervisor saves
+time; both are still to be measured.
 - **The baseline's 2 passes are partly hollow.** "Unavailable evidence is an error" passed because
   the evidence tool did not exist.
 - **The baseline answered no historical question.** Without `week`, every call returned the latest
