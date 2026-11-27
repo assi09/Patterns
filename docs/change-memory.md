@@ -26,7 +26,13 @@ nothing stored specifically for Thursday night."*
   - the outcome wording fix (four labels and the rebound caveat for every change made so far, in
     the app and MCP).
 - **Revised 2026-11-27 (this version):** events and decisions first; measurement optional.
-- **Next:** freeze the acceptance cases, then milestone 1. No change-memory code is written yet.
+- **Acceptance cases frozen** (#261, tightened after review).
+- **Milestone 1, in progress:**
+  - **Done:** the decision record. That covers the schema, `record_team_change`, the event
+    category, the app's "Suggested in chat — awaiting your confirmation" and "Did the team try
+    it?".
+  - **Next:** `team_history` and `team_case`, then the scripted cases and the local live
+    rehearsal.
 
 ## Step 0: can the outcome be trusted? (done)
 

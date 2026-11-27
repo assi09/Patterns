@@ -330,6 +330,12 @@ def _action(row: TeamActionRow, result: dict | None = None) -> schemas.TeamActio
         status=row.status,
         source=row.source,
         play=row.play,
+        implementation=row.implementation,
+        implementation_at=row.implementation_at,
+        comparison=row.comparison if row.metric else None,
+        observe_starts_on=row.observe_starts_on,
+        observe_ends_on=row.observe_ends_on,
+        event_id=str(row.event_id) if row.event_id else None,
         result=schemas.ChangeResult(
             outcome=result["outcome"]["outcome"],
             label=result["outcome"]["label"],
@@ -356,6 +362,7 @@ def _note(row: TeamNoteRow) -> schemas.TeamNote:
         text=row.text,
         starts_on=row.starts_on,
         ends_on=row.ends_on,
+        category=row.category,
         created_at=row.created_at,
     )
 
@@ -402,6 +409,7 @@ def add_note(
         text=body.text.strip(),
         starts_on=body.starts_on,
         ends_on=body.ends_on,
+        category=body.category,
         created_at=clock,
     )
     db.add(note)
@@ -528,6 +536,30 @@ def plan_change(
         raise ApiError(422, "bad_change", str(error)) from error
     told = team_actions.decide(db, team, action, True, clock)
     return schemas.TeamActionDecision(members_told=told, action=_action(action))
+
+
+@router.put(
+    "/teams/{team_id}/actions/{action_id}/implementation", response_model=schemas.TeamAction
+)
+def report_implementation(
+    team_id: str,
+    action_id: str,
+    body: schemas.TeamImplementationIn,
+    db: Db,
+    clock: Now,
+    user: Supervisor,
+) -> schemas.TeamAction:
+    """Did the team try it? Asked only of an approved change that has started; kept apart from
+    approval, and never inferred from it or from its dates passing."""
+    team = teams.supervised_team(db, user, team_id)
+    action = team_actions.action_of(db, team, action_id)
+    if action.status != "approved" or action.kind != "challenge":
+        raise ApiError(409, "not_approved", "Only a confirmed change can be marked as tried.")
+    if action.starts_on is None or action.starts_on > _local_today(user, clock):
+        raise ApiError(409, "not_started", "This change has not started yet.")
+    team_actions.mark_implementation(db, action, body.tried, clock)
+    results = playbook.results_of(db, team, _local_today(user, clock))
+    return _action(action, results.get(str(action.id)))
 
 
 @router.post(

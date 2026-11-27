@@ -68,6 +68,7 @@ def approve(db: Session, user: User, submission_id: str, now: datetime) -> Harne
                 text=event["title"][:300],
                 starts_on=date.fromisoformat(event["starts_on"]),
                 ends_on=date.fromisoformat(event["ends_on"]) if event.get("ends_on") else None,
+                category=event.get("category"),
                 created_at=now,
             )
         )

@@ -92,7 +92,7 @@ Besides the codes listed under [Error codes](#error-codes):
 
 ## Endpoints
 
-108 operations, grouped by area.
+109 operations, grouped by area.
 
 ### meta
 
@@ -272,6 +272,7 @@ Besides the codes listed under [Error codes](#error-codes):
 | `GET` | `/teams/{team_id}/actions` | supervisor | `team_id` |  | list[[TeamAction](#teamaction)] |  |
 | `GET` | `/teams/{team_id}/playbook` | supervisor | `team_id` |  | list[[TeamPlay](#teamplay)] | The changes a supervisor can start; their own is also possible (play "custom"). |
 | `POST` | `/teams/{team_id}/actions` | supervisor | `team_id` | [TeamActionIn](#teamactionin) | 201: [TeamActionDecision](#teamactiondecision) | A change the supervisor starts: approved as made, and every member is told. |
+| `PUT` | `/teams/{team_id}/actions/{action_id}/implementation` | supervisor | `team_id`, `action_id` | [TeamImplementationIn](#teamimplementationin) | [TeamAction](#teamaction) | Did the team try it? Asked only of an approved change that has started; kept apart from approval, and never inferred from it or from its dates passing. |
 | `POST` | `/teams/{team_id}/actions/{action_id}/{decision}` | supervisor | `team_id`, `action_id`, `decision` |  | [TeamActionDecision](#teamactiondecision) |  |
 | `POST` | `/teams/preview` | approved |  | [TeamCode](#teamcode) | [TeamPreview](#teampreview) | What joining the team means, for the person to read before agreeing. |
 | `POST` | `/teams/join` | approved |  | [JoinTeam](#jointeam) | 201: [Membership](#membership) |  |
@@ -319,11 +320,13 @@ Raised in the code with a fixed status and code (the message varies by case).
 | 409 | `consent_changed` |
 | 409 | `duplicate_log` |
 | 409 | `email_taken` |
+| 409 | `not_approved` |
 | 409 | `not_changeable` |
 | 409 | `not_connected` |
 | 409 | `not_hr` |
 | 409 | `not_in_team` |
 | 409 | `not_logged` |
+| 409 | `not_started` |
 | 409 | `not_supervisor` |
 | 409 | `own_team` |
 | 409 | `paused` |
@@ -1275,11 +1278,17 @@ One member who chose to share, with their week against their own usual.
 | `startsOn` | string (date) or null |  |  |
 | `endsOn` | string (date) or null |  |  |
 | `status` | `proposed` \| `approved` \| `declined` | yes |  |
-| `source` | `agent` \| `supervisor` |  | default `agent` |
+| `source` | `agent` \| `supervisor` \| `assistant` |  | default `agent` |
 | `play` | string or null |  |  |
 | `result` | [ChangeResult](#changeresult) or null |  |  |
 | `proposedAt` | string (date-time) | yes |  |
 | `decidedAt` | string (date-time) or null |  |  |
+| `implementation` | `tried` \| `not_tried` or null |  |  |
+| `implementationAt` | string (date-time) or null |  |  |
+| `comparison` | `before_the_change` \| `observation_only` or null |  |  |
+| `observeStartsOn` | string (date) or null |  |  |
+| `observeEndsOn` | string (date) or null |  |  |
+| `eventId` | string or null |  |  |
 
 ### TeamActionDecision
 
@@ -1426,6 +1435,14 @@ A priority finding as the supervisor reads it, built by app.teams.view from comp
 | `email` | string or null | yes |  |
 | `invited` | boolean |  | default `False` |
 
+### TeamImplementationIn
+
+Did the team try it? None takes back an earlier answer: unknown again.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `tried` | boolean or null | yes |  |
+
 ### TeamNote
 
 | Field | Type | Required | Limits |
@@ -1434,6 +1451,7 @@ A priority finding as the supervisor reads it, built by app.teams.view from comp
 | `text` | string | yes |  |
 | `startsOn` | string (date) or null |  |  |
 | `endsOn` | string (date) or null |  |  |
+| `category` | `deadline` \| `launch` \| `travel` \| `holiday` \| `reorganisation` \| `onboarding` \| `other` or null |  |  |
 | `createdAt` | string (date-time) | yes |  |
 
 ### TeamNoteIn
@@ -1443,6 +1461,7 @@ A priority finding as the supervisor reads it, built by app.teams.view from comp
 | `text` | string | yes | min length 1, max length 300 |
 | `startsOn` | string (date) or null |  |  |
 | `endsOn` | string (date) or null |  |  |
+| `category` | `deadline` \| `launch` \| `travel` \| `holiday` \| `reorganisation` \| `onboarding` \| `other` or null |  |  |
 
 ### TeamObserved
 

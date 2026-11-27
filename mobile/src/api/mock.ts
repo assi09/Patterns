@@ -1266,15 +1266,16 @@ function seededActions(): TeamAction[] {
       kind: 'challenge',
       title: 'A meeting-free day',
       body: 'One working day a week with no team meetings.',
-      metric: 'recovery_score',
+      metric: null, // recorded in a chat without tracking: nothing will be measured
       startsOn: isoDate(-10),
       endsOn: isoDate(-16),
       status: 'proposed',
-      source: 'agent',
+      source: 'assistant',
       play: 'meeting_free_day',
       result: null,
       proposedAt: at(1),
       decidedAt: null,
+      comparison: null,
     },
     {
       id: 'act-running',
@@ -1889,6 +1890,21 @@ export const mockClient: ApiClient = {
       action.status = approve ? 'approved' : 'declined';
       action.decidedAt = new Date().toISOString();
       return { membersTold: approve ? team.members : 0, action };
+    }),
+  setTeamImplementation: (teamId, actionId, tried) =>
+    later(() => {
+      ownTeam(teamId);
+      const action = actionsOf(teamId).find((a) => a.id === actionId);
+      if (!action) throw new ApiError('There is no such proposal.', 'not_found', 404);
+      if (action.status !== 'approved' || action.kind !== 'challenge') {
+        throw new ApiError('Only a confirmed change can be marked as tried.', 'not_approved', 409);
+      }
+      if (!action.startsOn || action.startsOn > isoDate(0)) {
+        throw new ApiError('This change has not started yet.', 'not_started', 409);
+      }
+      action.implementation = tried === null ? null : tried ? 'tried' : 'not_tried';
+      action.implementationAt = tried === null ? null : new Date().toISOString();
+      return action;
     }),
   makeTeamReport: (teamId) =>
     later(() => {

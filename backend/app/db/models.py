@@ -666,6 +666,23 @@ class TeamEvent(Base):
 
 TEAM_ACTION_KINDS = ("challenge", "message")
 TEAM_ACTION_STATUSES = ("proposed", "approved", "declined")
+# A team event's optional category (docs/change-memory.md): unset when none was given; "other"
+# for a known event that fits none. Assistants find past events by it; an event's text stays in
+# the app.
+EVENT_CATEGORIES = (
+    "deadline",
+    "launch",
+    "travel",
+    "holiday",
+    "reorganisation",
+    "onboarding",
+    "other",
+)
+# What the supervisor reported about a confirmed change; unset means unknown.
+IMPLEMENTATIONS = ("tried", "not_tried")
+# How a change's outcome is compared: the 28 days before it (every change made in the app so far,
+# measured once it ends), or only observed over the days chosen when it was recorded.
+COMPARISONS = ("before_the_change", "observation_only")
 
 
 class TeamNote(Base):
@@ -673,6 +690,12 @@ class TeamNote(Base):
     an offsite. It explains timing; it never holds anything about a member."""
 
     __tablename__ = "team_notes"
+    __table_args__ = (
+        CheckConstraint(
+            f"category IS NULL OR category IN ({', '.join(repr(c) for c in EVENT_CATEGORIES)})",
+            name="ck_team_notes_category",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     team_id: Mapped[uuid.UUID] = mapped_column(
@@ -681,16 +704,30 @@ class TeamNote(Base):
     text: Mapped[str] = mapped_column(String(300))
     starts_on: Mapped[date | None] = mapped_column(Date, default=None)
     ends_on: Mapped[date | None] = mapped_column(Date, default=None)
+    category: Mapped[str | None] = mapped_column(String(16), default=None)
     # The supervisor's message it was made from, if any: deleting the note forgets that too.
     source_message_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class TeamAction(Base):
-    """Something the team agent proposed for the whole team; nothing happens until approved."""
+    """A change for the whole team: proposed (by the old team agent, or recorded by an assistant
+    from the supervisor's agreement in a chat), or started by the supervisor; nothing reaches the
+    members until it is approved in the app. Approval, what the supervisor reported about trying
+    it, and any outcome are separate facts (docs/change-memory.md)."""
 
     __tablename__ = "team_actions"
     __table_args__ = (
+        UniqueConstraint("team_id", "request_id", name="uq_team_actions_request"),
+        CheckConstraint(
+            "implementation IS NULL OR implementation IN "
+            f"({', '.join(repr(i) for i in IMPLEMENTATIONS)})",
+            name="ck_team_actions_implementation",
+        ),
+        CheckConstraint(
+            f"comparison IS NULL OR comparison IN ({', '.join(repr(c) for c in COMPARISONS)})",
+            name="ck_team_actions_comparison",
+        ),
         CheckConstraint(
             f"kind IN ({', '.join(repr(k) for k in TEAM_ACTION_KINDS)})",
             name="ck_team_actions_kind",
@@ -718,6 +755,52 @@ class TeamAction(Base):
     play: Mapped[str | None] = mapped_column(String(32), default=None)
     proposed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # Recorded by an assistant: the caller's own id for the request, so a retry returns the same
+    # record, and the connection it came through (kept if the token is later revoked).
+    request_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    token_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
+    # Explicit links, given by the supervisor: the event it is for, the finding that prompted it.
+    event_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("team_notes.id", ondelete="SET NULL"), default=None
+    )
+    finding_report_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
+    finding_evidence_id: Mapped[str | None] = mapped_column(String(32), default=None)
+    # Tracking, chosen when recorded and before any outcome exists: `metric` above, the days
+    # observed and how they are compared. Unset metric: not tracked, never measured.
+    observe_starts_on: Mapped[date | None] = mapped_column(Date, default=None)
+    observe_ends_on: Mapped[date | None] = mapped_column(Date, default=None)
+    comparison: Mapped[str | None] = mapped_column(
+        String(24), default="before_the_change", server_default="before_the_change"
+    )
+    # What the supervisor reports now, once it started; unset is unknown, never inferred. Each
+    # answer is also kept in `team_action_marks`, so a later correction or undo does not rewrite
+    # what was on record on an earlier day.
+    implementation: Mapped[str | None] = mapped_column(String(12), default=None)
+    implementation_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+
+class TeamActionMark(Base):
+    """One answer to "Did the team try it?", kept as given: tried, not tried, or taken back (an
+    unset `implementation`). Never edited or deleted, so a question about a past day reads the
+    answer on record that day."""
+
+    __tablename__ = "team_action_marks"
+    __table_args__ = (
+        CheckConstraint(
+            "implementation IS NULL OR implementation IN "
+            f"({', '.join(repr(i) for i in IMPLEMENTATIONS)})",
+            name="ck_team_action_marks_implementation",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    action_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("team_actions.id", ondelete="CASCADE"), index=True
+    )
+    implementation: Mapped[str | None] = mapped_column(String(12), default=None)
+    marked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class TeamChatMessage(Base):

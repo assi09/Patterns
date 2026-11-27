@@ -521,6 +521,27 @@ describe('the team agent in the mock', () => {
     );
   });
 
+  it('shows a change recorded in a chat as waiting, untracked', async () => {
+    const id = await teamId();
+    const waiting = (await mockClient.getTeamActions(id)).find((a) => a.status === 'proposed');
+    expect(waiting?.source).toBe('assistant');
+    expect(waiting?.metric).toBeNull();
+  });
+
+  it('asks whether a started change was tried, apart from approval', async () => {
+    const id = await teamId();
+    const actions = await mockClient.getTeamActions(id);
+    const running = actions.find((a) => a.id === 'act-running')!;
+    const waiting = actions.find((a) => a.status === 'proposed')!;
+    await expect(mockClient.setTeamImplementation(id, waiting.id, true)).rejects.toMatchObject({
+      code: 'not_approved',
+    });
+    expect((await mockClient.setTeamImplementation(id, running.id, false)).implementation).toBe(
+      'not_tried',
+    );
+    expect((await mockClient.setTeamImplementation(id, running.id, null)).implementation).toBeNull();
+  });
+
   it('says what followed an ended change without a judgement', async () => {
     const id = await teamId();
     const result = (await mockClient.getTeamActions(id)).find((a) => a.result)?.result;

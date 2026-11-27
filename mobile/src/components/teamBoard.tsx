@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { ApiError } from '@/api/http';
 import {
   useDecideTeamAction,
+  useSetTeamImplementation,
   usePlanTeamChange,
   useTeamActions,
   useTeamAlerts,
@@ -270,6 +271,7 @@ export function TeamBoard({
   const alerts = useTeamAlerts(teamId);
   const actions = useTeamActions(teamId);
   const decide = useDecideTeamAction(teamId);
+  const mark = useSetTeamImplementation(teamId);
   const [told, setTold] = useState<string | null>(null);
   const now = today();
   const all = actions.data ?? [];
@@ -279,7 +281,13 @@ export function TeamBoard({
   const trying = all.filter(
     (a) => a.status === 'approved' && a.kind === 'challenge' && (a.endsOn ?? '') >= now,
   );
-  const ended = all.filter((a) => a.status === 'approved' && a.result).slice(0, 3);
+  // Ended, measured or not: an untracked change still belongs in what happened.
+  const ended = all
+    .filter(
+      (a) =>
+        a.status === 'approved' && a.kind === 'challenge' && (a.result || (a.endsOn ?? now) < now),
+    )
+    .slice(0, 3);
   const closed = (alerts.data ?? []).filter((a) => a.resolvedAt).slice(0, 2);
   return (
     <View style={styles.part}>
@@ -299,9 +307,9 @@ export function TeamBoard({
           {waiting.map((action) => (
             <Item
               key={action.id}
-              kicker={`Suggested by your team agent · ${day(action.startsOn)} to ${day(action.endsOn)}`}
+              kicker={`${suggestedBy(action)} · ${day(action.startsOn)} to ${day(action.endsOn)}`}
               title={action.title}
-              detail={`${action.body} Measured on ${metricLabel(action.metric ?? '').toLowerCase()}.`}
+              detail={`${action.body} ${tracking(action)}`}
             >
               <View style={styles.buttons}>
                 <Button
@@ -337,7 +345,9 @@ export function TeamBoard({
         </Lane>
         <Lane icon="arrow-forward" tint={colors.secondary} title="Trying" count={trying.length}>
           {trying.map((action) => (
-            <Running key={action.id} action={action} today={now} />
+            <Running key={action.id} action={action} today={now}>
+              {(action.startsOn ?? now) <= now ? <Tried action={action} mark={mark} /> : null}
+            </Running>
           ))}
         </Lane>
         <Lane
@@ -350,10 +360,17 @@ export function TeamBoard({
             <Item
               key={action.id}
               title={action.title}
-              detail={`${action.result!.text} ${action.result!.caveats.join(' ')}`}
-              badge={OUTCOME[action.result!.outcome]}
-            />
+              detail={
+                action.result
+                  ? `${action.result.text} ${action.result.caveats.join(' ')}`
+                  : tracking(action)
+              }
+              badge={action.result ? OUTCOME[action.result.outcome] : 'Not measured'}
+            >
+              <Tried action={action} mark={mark} />
+            </Item>
           ))}
+          {mark.error ? <ErrorLine error={mark.error} /> : null}
           {closed.map((alert) => (
             <Item
               key={alert.id}
@@ -368,7 +385,87 @@ export function TeamBoard({
   );
 }
 
-function Running({ action, today: now }: { action: TeamAction; today: string }) {
+function suggestedBy(action: TeamAction): string {
+  if (action.source === 'assistant') return 'Suggested in chat — awaiting your confirmation';
+  return 'Suggested by your team agent';
+}
+
+/** What will be measured, said before anything is: nothing, for a change saved untracked. */
+function tracking(action: TeamAction): string {
+  if (!action.metric) return 'Not tracked: nothing is measured.';
+  const label = metricLabel(action.metric).toLowerCase();
+  if (action.comparison === 'observation_only' && action.observeStartsOn) {
+    return `Observed on ${label}, ${day(action.observeStartsOn)} to ${day(action.observeEndsOn ?? action.observeStartsOn)}.`;
+  }
+  return `Measured on ${label}.`;
+}
+
+const STARTED: Record<NonNullable<TeamAction['source']>, string> = {
+  agent: 'Suggested and approved',
+  supervisor: 'Started by you',
+  assistant: 'Suggested in chat, confirmed by you',
+};
+
+const TRIED: Record<'tried' | 'not_tried', string> = {
+  tried: 'You reported the team tried it.',
+  not_tried: 'You reported the team did not try it.',
+};
+
+/** Did the team try it? Asked apart from approval; unanswered is unknown, never assumed. */
+function Tried({
+  action,
+  mark,
+}: {
+  action: TeamAction;
+  mark: ReturnType<typeof useSetTeamImplementation>;
+}) {
+  if (action.implementation) {
+    return (
+      <View style={styles.buttons}>
+        <Text variant="caption" color="muted" style={{ flex: 1 }}>
+          {TRIED[action.implementation]}
+        </Text>
+        <Button
+          label="Undo"
+          variant="secondary"
+          disabled={mark.isPending}
+          onPress={() => mark.mutate({ actionId: action.id, tried: null })}
+        />
+      </View>
+    );
+  }
+  return (
+    <View style={{ gap: spacing.xs }}>
+      <Text variant="caption" color="muted">
+        Did the team try it? Not answered yet: unknown.
+      </Text>
+      <View style={styles.buttons}>
+        <Button
+          label="Yes"
+          variant="secondary"
+          disabled={mark.isPending}
+          onPress={() => mark.mutate({ actionId: action.id, tried: true })}
+        />
+        <Button
+          label="No"
+          variant="secondary"
+          disabled={mark.isPending}
+          onPress={() => mark.mutate({ actionId: action.id, tried: false })}
+        />
+      </View>
+    </View>
+  );
+}
+
+function Running({
+  action,
+  today: now,
+  children,
+}: {
+  action: TeamAction;
+  today: string;
+  children?: ReactNode;
+}) {
   const colors = useColors();
   const start = Date.parse(`${action.startsOn}T00:00:00Z`);
   const end = Date.parse(`${action.endsOn}T00:00:00Z`);
@@ -378,7 +475,7 @@ function Running({ action, today: now }: { action: TeamAction; today: string }) 
   return (
     <Item
       title={action.title}
-      detail={`${action.source === 'agent' ? 'Suggested and approved' : 'Started by you'} · measured on ${metricLabel(action.metric ?? '').toLowerCase()}.`}
+      detail={`${STARTED[action.source ?? 'agent']} · ${tracking(action)}`}
     >
       <View style={[styles.progress, { backgroundColor: colors.track }]}>
         <View
@@ -392,6 +489,7 @@ function Running({ action, today: now }: { action: TeamAction; today: string }) 
       <Text variant="caption" color="muted">
         {started ? `Day ${Math.min(done, total)} of ${total}` : `Starts ${day(action.startsOn)}`}
       </Text>
+      {children}
     </Item>
   );
 }
