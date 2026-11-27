@@ -1,0 +1,37 @@
+{
+ "run": "post-fix run of chats 1 and 2 of eval/change_memory_rehearsal.md, 2026-11-27, on a fresh copy of the same synthetic instance; local only, no production write, no project API. Recorded apart from the first run (change_memory_rehearsal_2026-11-27.json), whose scores stand",
+ "server": "feat/team-history at 26a1e07 (after ad85b92 and bfd71a4)",
+ "client": "Codex CLI 0.171.0-alpha.13 (codex-tui), gpt-6.1-sol, low reasoning effort; each chat a new session in the rehearsal folder (session metadata and the reviewer's screenshots)",
+ "scored_against": "the same criteria as the first run, unchanged",
+ "chats": {
+  "1_save": {
+   "result": "pass",
+   "lines": {
+    "record_team_change succeeds once": "pass, first try: one call (meeting_free_day, 2026-11-27 to 2026-12-11, no tracking); the first run needed three. Server log: record_team_change 1 ok, 0 failed",
+    "one proposed change, assistant, meeting_free_day, dates, not tracked, on the intended team": "pass (writes_on_any_team: one change, demo_acted, intended)",
+    "notifications 0 before approval": "pass: from the database's timestamps, 0 notifications between recording (20:38:19 UTC) and approval (20:40:34 UTC); 8 at approval",
+    "answer says it waits for confirmation in the app": "pass: 'It's pending your confirmation in the Patterns app.'",
+    "never says the team was told or that it is approved": "pass"
+   }
+  },
+  "2_handoff": {
+   "result": "partial: the handoff passed, and the earlier change is now named as what it is; its outcome label and rebound caveat are still left out. No fail item",
+   "lines": {
+    "found through team_history": "pass: team_history(play meeting_free_day), team_case on the new change, team_history, team_case on the earlier change",
+    "approved, with dates, and whether the team tried it is unknown": "pass: 'A meeting-free day, Nov 27-Dec 11 | Approved Nov 27 | Unknown; implementation hasn't been reported'",
+    "no team evidence yet for its dates": "pass: 'No tracking, outcome, or evidence yet'",
+    "earlier change as what it is: a custom team change, Nov 2 to Nov 22, tracked on sleep, with its recorded outcome label, dates and caveats": "partial: now 'Earlier custom change, Nov 2-22', 'Its playbook entry has been retired', 'I can't establish whether it resembled a meeting-free day'; approved Nov 11, tried unknown, sleep tracking, 8 contributors, the figure and its reference dates (Oct 5-Nov 1) all match the tools. Still not used: the label 'below the reference level' (it gave '59 minutes lower'), and the rebound caveat. It gave the causal caveat in substance ('don't establish that ... it caused the sleep difference'). The tools returned both the label and the rebound caveat in the earlier change's team_case"
+   },
+   "fail_items": "none: no claim the team did or did not do either change, or that one worked; no cause; no figure for the new change; the earlier change not called a meeting-free day ('can't establish whether it resembled' one); decisions reported"
+  }
+ },
+ "team_selection": {
+  "result": "no wrong-team access in either chat",
+  "detail": "grade: chat 1 listing + one intended-team write; chat 2 listing + four intended-team reads. Other teams' ids appear only in who_am_i's team list. check: still one change since setup, on the intended team"
+ },
+ "compared_with_first_run": {
+  "chat_1": "pass in both; refused attempts 2 -> 0",
+  "chat_2": "partial in both; the retired-id naming is gone (old id absent from every tool output), the outcome label and rebound caveat are still omitted by the assistant although the tools return them"
+ },
+ "files": "data/eval/change_memory/post_fix_run/ (git-ignored): chat-1-calls.json, chat-2-calls.json, after-approval-check.json, after-chat-2-check.json"
+}

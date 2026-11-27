@@ -196,3 +196,17 @@ recorded apart.
   call refused by the schema appears only in the client's transcript (3 calls, 2 logged).
 - **Retired entries:** one now reads "Custom team change" with `playbook_entry: "retired"` and no
   old id; its `case_id` opens it. The assistant had used the old id as the change's name.
+
+## The post-fix run of chats 1 and 2 (2026-11-27)
+
+After the fixes above, on a fresh copy of the same instance, with the same client, model and
+effort, and the same criteria. Recorded apart: the first run's scores stand. The full record is in
+[results/change_memory_rehearsal_postfix_2026-11-27.json](results/change_memory_rehearsal_postfix_2026-11-27.json).
+
+| Chat | Result |
+|---|---|
+| 1. Save a decision | **Pass, first try.** One `record_team_change` call, where the first run needed three. Zero notifications before approval, from the database's timestamps; 8 at approval |
+| 2. The handoff | **Partial again, for a narrower reason.** The handoff passed as before. The earlier change is now "Earlier custom change", said to come from a retired entry, and the assistant says it can't tell whether it resembled a meeting-free day. Its dates, approval, unknown trial, sleep tracking and figure all match the tools. Still missing: the label "below the reference level" and the rebound caveat, although the earlier change's `team_case` returned both. No fail item |
+| Team selection | **No wrong-team access in either chat.** Other teams' ids appear only in `who_am_i`'s list |
+
+**What is left:** the gap in chat 2 is now the assistant's summary, not what the tools return.
