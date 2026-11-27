@@ -129,6 +129,33 @@ time; both are still to be measured.
   run, reported apart (still to do). The before/after usefulness review with the doctor and timed
   supervisor runs also remain to do; the reserved cases are untouched.
 
+## Real client runs (reported apart from the scripted tasks)
+
+**Codex, live on production, 2026-11-27** (`e0e8098`; the synthetic 8-person demo team; signed
+in with OAuth by the supervisor). Record: `eval/results/supervisor_live_codex_2026-11-27.json`.
+
+| Turn | Result |
+|---|---|
+| "What happened to the change we agreed to try?" (a false premise: nothing was agreed) | **Partial.** It described the historical snapshot (as of Nov 23) and left the proposal's current status unresolved |
+| The same, after one clarification | **Pass.** It told what was recorded as of Nov 23 from what was visible on Nov 27. The evening boundary is a proposal awaiting approval, with no approval and no measured outcome. It also said current sleep readings alone cannot show whether the team tried it or whether it worked. It did not accept the premise |
+
+**Grading.**
+- The supervisor graded this from the assistant's answers; the answers are not stored in the
+  repository.
+- The clarification is part of the result: one clarifying turn was needed.
+
+**Trace** (production call log: tool, success and time only, never arguments).
+- 11 calls in 4 sessions, all successful, no writes.
+- The proposal is still waiting afterwards.
+- The follow-up turns each made one `team_overview` call.
+- **That the passing answer used the current overview is inferred, not logged.** The proposal was
+  made on Nov 26, so an overview of the week of Nov 16 (as of Nov 23) leaves it out. It can only
+  have come from an overview as of Nov 27.
+
+**Not scored.** The run's other turns (what changed, "was that everyone", the evidence, meeting
+load) were not graded, so they are not counted. The proposal is left pending on purpose: it tests
+whether an assistant accepts the premise that the team agreed to it.
+
 ## What was observed, and how
 
 | Scenario (frozen task) | Through | Observed |
@@ -144,7 +171,8 @@ time; both are still to be measured.
 | Insufficient data and unknown records on screen | browser, light and dark | A withheld metric's record says "4 of the 5 people needed … no team figure"; a guessed id shows "There is no such evidence in that report" |
 
 **Not observed yet:**
-- A real Claude or Codex client on the new tools.
+- A real client on every task: only the action follow-up has been graded live (Codex, above), and
+  Claude has not been run.
 - The two-connector question ("when is my next check-in?"), which needs the assistant's own
   calendar connector.
 - Production: nothing was deployed, rebuilt or written there.
