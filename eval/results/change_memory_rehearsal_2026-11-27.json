@@ -1,7 +1,10 @@
 {
  "run": "first live run of eval/change_memory_rehearsal.md, 2026-11-27, local copy of the supervisor eval instance (synthetic team), no production write, no project API",
  "server": "feat/team-history at 8e5eac7",
- "client": "not recorded in the run files",
+ "client": {
+  "all_four_chats": "Codex CLI 0.171.0-alpha.13 (codex-tui), model gpt-6.1-sol, reasoning effort low",
+  "source": "chats 1 and 2: the reviewer's screenshots; all four: each Codex session's own metadata (session_meta and turn_context), read 2026-11-27. Four separate sessions, each started in the empty rehearsal folder"
+ },
  "scored_against": "the criteria in eval/change_memory_rehearsal.md as written before the run",
  "chats": {
   "1_save": {
@@ -9,7 +12,7 @@
    "lines": {
     "record_team_change succeeds once": "pass: one success; check shows one change on the intended team",
     "one change: proposed, assistant, meeting_free_day, 2026-11-27 to 2026-12-11, not tracked": "pass (now approved after the app step; tracked null, comparison null)",
-    "notifications 0 after chat 1": "not separately verified: no check was saved after chat 1; the final 8 are the members told by the approval",
+    "notifications 0 after chat 1": "pass: the reviewer ran change_memory_rehearsal.py check right after chat 1, before Approve was pressed: one proposed change on the intended team and notifications_sent 0. The output is in the reviewer's tool transcript (contemporaneous); the run folder keeps only the final check",
     "answer says it waits for confirmation in the app": "pass: 'It's pending your confirmation in the Patterns app.'",
     "never says the team was told or that it is approved": "pass"
    },
@@ -41,10 +44,17 @@
   }
  },
  "team_selection": {
-  "result": "pass in all four chats",
-  "detail": "every team call targeted the intended team (grade); the one write in the database went to the intended team (check, writes_on_any_team)"
+  "result": "no wrong-team access in four chats; chat 4 required zero Patterns calls",
+  "detail": "every team call targeted the intended team (grade); the one write in the database went to the intended team (check, writes_on_any_team)",
+  "as_first_recorded": "pass in all four chats"
  },
- "findings_not_yet_acted_on": [
+ "findings_acted_on_after_the_run": [
+  "the playbook ids are now the input schema's choices for play, taken from the playbook registry",
+  "docs/mcp.md now says the server log counts calls that reach the handler; schema refusals are only in the client's transcript",
+  "a retired entry now reads 'Custom team change' with playbook_entry 'retired' and no old id; its case_id opens it"
+ ],
+ "scores_unchanged": "3 passes and 1 partial (chat 2); a later run after the fixes is recorded apart",
+ "findings_at_scoring": [
   "record_team_change's description does not name the playbook ids, which cost two refused attempts",
   "a call refused by the input schema never reaches the call log, so 'each tool call is recorded' (docs/mcp.md) undercounts refusals: 3 record_team_change calls, 2 logged",
   "team_history and team_case give a retired entry's id (play: no_late_meetings) beside 'Custom team change'; the assistant used the id as the change's name in chats 2 and 3"
