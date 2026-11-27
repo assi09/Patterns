@@ -695,8 +695,15 @@ export interface TeamChatMessage {
   createdAt: ISODateTime;
 }
 
-/** How the team's metric went during an ended change, against the 28 days before it. */
+/** What followed an ended change: the team's metric during it against its reference days, named
+ * without a judgement. `caveats` say what it cannot show. */
 export interface ChangeResult {
+  outcome: 'above' | 'below' | 'no_clear_difference' | 'insufficient_data';
+  label: string;
+  reference: Window;
+  referenceLabel: string;
+  caveats: string[];
+  /** The earlier judgement, kept for older app versions; not shown. */
   verdict: 'better' | 'worse' | 'changed' | 'no_change' | 'unclear';
   text: string;
   evidence: Evidence;
@@ -833,6 +840,10 @@ export interface TeamFindingEvidence {
   }[];
   result?: { change: ChangeFigure; higher: number; lower: number; pValue?: number | null } | null;
   withheld?: string | null; // fewer than the minimum: why there is no figure
+  // A team change's result only: its baseline's meaning and the outcome its card shows.
+  baselineLabel?: string | null;
+  outcome?: ChangeResult['outcome'] | null;
+  outcomeLabel?: string | null;
 }
 
 /** What the team agent found on its own Monday run, every claim checked against team evidence. */

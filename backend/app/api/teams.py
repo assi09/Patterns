@@ -331,6 +331,14 @@ def _action(row: TeamActionRow, result: dict | None = None) -> schemas.TeamActio
         source=row.source,
         play=row.play,
         result=schemas.ChangeResult(
+            outcome=result["outcome"]["outcome"],
+            label=result["outcome"]["label"],
+            reference=schemas.Window(
+                start=result["outcome"]["reference"]["start"],
+                end=result["outcome"]["reference"]["end"],
+            ),
+            reference_label=result["outcome"]["reference"]["label"],
+            caveats=result["outcome"]["caveats"],
             verdict=result["verdict"],
             text=result["text"],
             evidence=_evidence(result["evidence"].model_dump(mode="json")),

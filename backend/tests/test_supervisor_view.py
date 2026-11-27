@@ -29,7 +29,7 @@ from app.db.session import session_scope
 from app.harness import tools
 from app.harness.tools import HarnessError
 from app.sync import calendar
-from app.teams import memberships, reports, view
+from app.teams import memberships, outcome, reports, view
 
 
 def team_of(db, team_id: str) -> Team:
@@ -313,11 +313,15 @@ def test_a_change_is_in_progress_in_its_week_and_measured_once_a_report_covers_i
         assert past["state"] == "in_progress" and "result" not in past
         assert past["as_of"] == str(during.end + timedelta(days=1))
         assert latest["state"] == "ended" and latest["result"]["report_id"]
-        assert "not proof" in latest["result"]["note"] and latest["tried"]
+        assert latest["tried"] and outcome.CONTRIBUTION in latest["result"]["caveats"]
+        assert latest["result"]["reference"]["kind"] == "before_the_change"  # not linked
+        assert outcome.REBOUND in latest["result"]["caveats"]
+        assert latest["result"]["outcome"] in outcome.OUTCOMES and "verdict" not in latest["result"]
         record = view.finding_evidence(
             db, team, latest["result"]["report_id"], latest["result"]["evidence_id"]
         )
     assert record["label"] == "Result of a team change"
+    assert record["outcome_label"] == outcome.OUTCOMES[record["outcome"]]
     assert record["target"] == {"start": str(WEEK.start - timedelta(days=14)), "end": str(WEEK.end)}
 
 
@@ -549,3 +553,48 @@ def test_a_week_without_a_report_says_whose_calendars_it_used(engine):
     assert out["cohort"]["basis"].startswith("no report for that week")
     assert out["cohort"]["same_group_as_report"] is False
     assert "No Fitbit report for that week to match." in out["limitations"]
+
+
+def test_a_change_results_evidence_gives_the_same_account_as_its_outcome(engine):
+    """ "Show me the evidence" for an "above reference" result: the record opened through MCP
+    states the same test, the same baseline dates and meaning, and both caveats. No correction
+    across metrics and no "first flagged week", which this result does not use."""
+    team_id = make_team(engine)
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        db.add(
+            TeamAction(
+                team_id=team.id,
+                kind="challenge",
+                title="Quiet mornings for Dana",  # free text: never in an MCP answer
+                body="Free text.",
+                metric="sleep_minutes",
+                play="custom",
+                starts_on=WEEK.start - timedelta(days=14),
+                ends_on=WEEK.end,
+                status="approved",
+                source="supervisor",
+                proposed_at=NOW - timedelta(days=20),
+                decided_at=NOW - timedelta(days=20),
+            )
+        )
+        db.flush()
+        reports.build_report(db, team, WEEK, NOW)
+        [followed] = tools.team_overview(db, boss(db), team_id, TODAY)["follow_up"]
+        result = followed["result"]
+        record = tools.team_finding_evidence(
+            db, boss(db), team_id, result["report_id"], result["evidence_id"]
+        )
+    assert record["label"] == "Result of a team change"
+    assert record["outcome"] == result["outcome"]
+    assert record["outcome_label"] == result["label"] == outcome.OUTCOMES[result["outcome"]]
+    assert record["baseline"] == {k: result["reference"][k] for k in ("start", "end")}
+    assert record["baseline"]["end"] == str(WEEK.start - timedelta(days=15))  # day before it began
+    assert record["baseline_label"] == result["reference"]["label"]
+    assert record["measured"] == outcome.MEASURED and record["method"] == outcome.METHOD
+    assert "no correction across metrics" in record["method"]
+    for wrong in ("first flagged", "correction across all metrics"):
+        assert wrong not in record["measured"] + record["method"]
+    assert {outcome.CONTRIBUTION, outcome.REBOUND} <= set(record["limitations"])
+    assert set(result["caveats"]) <= set(record["limitations"])
+    assert "Dana" not in str(record) + str(followed)

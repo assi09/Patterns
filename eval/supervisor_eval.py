@@ -184,8 +184,10 @@ async def tasks(run: Run) -> dict[str, dict]:
     now = await run.call("team_overview", {"team_id": acted})
     out["action_follow_up"] = {
         "historical: in progress": has(h["text"], "in_progress"),
-        "historical: no result": '"verdict"' not in h["text"],
-        "current: result": has(now["text"], '"verdict"'),
+        # A measured result is marked by "verdict" up to #262 and "outcome" from it; either
+        # counts, so the change of key favours neither version (disclosed in the workflow doc).
+        "historical: no result": not any(k in h["text"] for k in ('"verdict"', '"outcome"')),
+        "current: result": any(has(now["text"], k) for k in ('"verdict"', '"outcome"')),
         "current: result evidence": bool(re.search(r'"result".*"evidence_id"', now["text"], re.S)),
         "measured apart from tried": has(now["text"], "measured") and has(now["text"], "tried"),
     }

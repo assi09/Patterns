@@ -36,7 +36,9 @@ export function evidenceFigures(record: TeamFindingEvidence): { label: string; v
   const out: { label: string; value: string }[] = [];
   const latest = record.weeks.length ? record.weeks[record.weeks.length - 1] : undefined;
   const change = record.result?.change ?? latest?.change;
-  if (change) out.push({ label: 'Median change', value: change.text });
+  // A change's result is a difference from its reference days, as its outcome card says.
+  const named = record.outcome ? 'Median difference' : 'Median change';
+  if (change) out.push({ label: named, value: change.text });
   const higher = record.result?.higher ?? latest?.higher;
   const lower = record.result?.lower ?? latest?.lower;
   if (higher != null && lower != null) {
@@ -56,5 +58,6 @@ export function evidenceFigures(record: TeamFindingEvidence): { label: string; v
 /** What was compared with what, in words. */
 export function comparisonText(record: TeamFindingEvidence): string {
   const scanned = record.scanned ? ` (scanned ${datesText(record.scanned)})` : '';
-  return `${datesText(record.target)}, compared with ${datesText(record.baseline)}${scanned}`;
+  const meaning = record.baselineLabel ? ` (${record.baselineLabel})` : '';
+  return `${datesText(record.target)}, compared with ${datesText(record.baseline)}${meaning}${scanned}`;
 }

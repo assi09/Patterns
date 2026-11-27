@@ -232,12 +232,13 @@ function Legend({ color, label }: { color: string; label: string }) {
   );
 }
 
-const VERDICT: Record<ChangeResult['verdict'], string> = {
-  better: 'Better during it',
-  worse: 'Worse during it',
-  changed: 'Changed during it',
-  no_change: 'No clear change',
-  unclear: 'Too few to tell',
+// What followed, without a judgement: a rebound after a dip can look like improvement, and no
+// comparison shows how much the change itself contributed (backend `app.teams.outcome`).
+const OUTCOME: Record<ChangeResult['outcome'], string> = {
+  above: 'Above reference',
+  below: 'Below reference',
+  no_clear_difference: 'No clear difference',
+  insufficient_data: 'Insufficient data',
 };
 
 function day(iso: string | null): string {
@@ -349,8 +350,8 @@ export function TeamBoard({
             <Item
               key={action.id}
               title={action.title}
-              detail={action.result!.text}
-              badge={VERDICT[action.result!.verdict]}
+              detail={`${action.result!.text} ${action.result!.caveats.join(' ')}`}
+              badge={OUTCOME[action.result!.outcome]}
             />
           ))}
           {closed.map((alert) => (

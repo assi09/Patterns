@@ -493,6 +493,10 @@ class TeamFindingEvidence(ApiModel):
     weeks: list[ScanWeekView] = Field(default_factory=list)
     result: EvidenceResult | None = None
     withheld: str | None = None
+    # A team change's result only: what its baseline is, and the outcome the card shows.
+    baseline_label: str | None = None
+    outcome: Literal["above", "below", "no_clear_difference", "insufficient_data"] | None = None
+    outcome_label: str | None = None
 
 
 class TeamReport(TeamReportSummary):
@@ -529,8 +533,17 @@ class TeamChatMessage(ApiModel):
 
 
 class ChangeResult(ApiModel):
-    """How the team's metric went during an ended change, against the 28 days before it."""
+    """What followed an ended change: the team's metric during it against its reference days.
 
+    `outcome` names the difference without a judgement, and `caveats` say what it cannot show
+    (`app.teams.outcome`). `verdict` is the earlier judgement, kept for older app versions only;
+    nothing new reads it."""
+
+    outcome: Literal["above", "below", "no_clear_difference", "insufficient_data"]
+    label: str
+    reference: Window
+    reference_label: str
+    caveats: list[str]
     verdict: Literal["better", "worse", "changed", "no_change", "unclear"]
     text: str
     evidence: Evidence

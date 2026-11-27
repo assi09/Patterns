@@ -12,7 +12,7 @@ from test_team_agent import NOW, TODAY, client, engine, make_team, signed_in  # 
 from app.db.models import Notification, Team, TeamAction, TeamReport
 from app.db.session import session_scope
 from app.synthetic import Step
-from app.teams import playbook
+from app.teams import outcome, playbook
 
 SLEEP_DROP = {
     "metric": "sleep_minutes",
@@ -217,8 +217,8 @@ def test_only_the_teams_supervisor_plans_its_changes(engine, client):  # noqa: F
     assert client.get(f"/teams/{team_id}/playbook", headers=member).status_code == 403
 
 
-@pytest.mark.parametrize("effect, verdict", [(60.0, "better"), (0.0, "no_change")])
-def test_an_ended_change_says_how_the_team_went_during_it(engine, client, effect, verdict):  # noqa: F811
+@pytest.mark.parametrize("effect, found", [(60.0, "above"), (0.0, "no_clear_difference")])
+def test_an_ended_change_says_what_followed_without_a_judgement(engine, client, effect, found):  # noqa: F811
     client, _ = client
     began = TODAY - timedelta(days=30)
     effects = (Step("sleep_minutes", began, effect),) if effect else ()
@@ -242,10 +242,15 @@ def test_an_ended_change_says_how_the_team_went_during_it(engine, client, effect
         )
     boss = signed_in(client, engine, "boss@example.com")
     (action,) = client.get(f"/teams/{team_id}/actions", headers=boss).json()
-    assert action["result"]["verdict"] == verdict
-    assert action["result"]["evidence"]["tool"] == "team_change"
-    if verdict == "better":
-        assert "Time asleep rose during it" in action["result"]["text"]
+    result = action["result"]
+    assert result["outcome"] == found and result["evidence"]["tool"] == "team_change"
+    assert result["reference"] == result["evidence"]["windows"][1]  # its own dates, stated
+    assert result["referenceLabel"] == "the 28 days before the change started"
+    assert outcome.REBOUND in result["caveats"] and outcome.CONTRIBUTION in result["caveats"]
+    if found == "above":
+        assert "Time asleep: above the reference level during the change" in result["text"]
+    for judged in ("better", "worse", "worked", "returned", "rose", "fell"):
+        assert judged not in result["text"].lower()
 
 
 def test_a_change_still_running_has_no_result_yet(engine, client):  # noqa: F811
@@ -365,6 +370,6 @@ def test_one_change_from_proposal_to_its_result_keeps_its_state(engine, client):
     app.dependency_overrides[auth.now] = lambda: NOW + (after - TODAY)
     (reviewed,) = client.get(f"/teams/{team_id}/actions", headers=boss).json()
     assert reviewed["status"] == "approved"
-    assert reviewed["result"]["verdict"] == "better"
+    assert reviewed["result"]["outcome"] == "above"
     assert reviewed["result"]["evidence"]["tool"] == "team_change"
-    assert "Time asleep rose during it" in reviewed["result"]["text"]
+    assert "Time asleep: above the reference level" in reviewed["result"]["text"]

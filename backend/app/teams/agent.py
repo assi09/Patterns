@@ -577,11 +577,10 @@ class TeamTools:
 
 
 def challenge_result(frames: list, action: TeamAction) -> Evidence:
-    """The challenge's days against the 28 before them, for the team, as for a weekly change."""
-    window = Window(start=action.starts_on, end=action.ends_on)
-    prepared = [prepare(frame) for frame in frames]
-    changes = [member_change(frame, action.metric, window) for frame in prepared]
-    return team_change([c for c in changes if c is not None], action.metric, window)
+    """The challenge's days against its reference (`app.teams.outcome`), as for a weekly change."""
+    from app.teams import outcome
+
+    return outcome.measure(frames, action)
 
 
 def forget_note(db: Session, team: Team, note: TeamNote) -> None:

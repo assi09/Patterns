@@ -478,10 +478,15 @@ A field not marked required may be left out.
 
 ### ChangeResult
 
-How the team's metric went during an ended change, against the 28 days before it.
+What followed an ended change: the team's metric during it against its reference days. `outcome` names the difference without a judgement, and `caveats` say what it cannot show (`app.teams.outcome`). `verdict` is the earlier judgement, kept for older app versions only; nothing new reads it.
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
+| `outcome` | `above` \| `below` \| `no_clear_difference` \| `insufficient_data` | yes |  |
+| `label` | string | yes |  |
+| `reference` | [Window](#window) | yes |  |
+| `referenceLabel` | string | yes |  |
+| `caveats` | list[string] | yes |  |
 | `verdict` | `better` \| `worse` \| `changed` \| `no_change` \| `unclear` | yes |  |
 | `text` | string | yes |  |
 | `evidence` | [Evidence](#evidence) | yes |  |
@@ -1389,6 +1394,9 @@ One record of one team report, bounded: what was measured, its dates, method, th
 | `weeks` | list[[ScanWeekView](#scanweekview)] |  |  |
 | `result` | [EvidenceResult](#evidenceresult) or null |  |  |
 | `withheld` | string or null |  |  |
+| `baselineLabel` | string or null |  |  |
+| `outcome` | `above` \| `below` \| `no_clear_difference` \| `insufficient_data` or null |  |  |
+| `outcomeLabel` | string or null |  |  |
 
 ### TeamFindingView
 

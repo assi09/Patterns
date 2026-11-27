@@ -397,7 +397,10 @@ def test_an_ended_challenge_says_whether_it_moved_its_metric(engine):
             )
         )
     (row,) = report_for(engine, team_id).body["challenges"]
-    assert row["text"].startswith("Lights out by 23:00: time asleep rose during it")
+    assert row["text"].startswith(
+        "Lights out by 23:00. Time asleep: above the reference level during the change"
+    )
+    assert row["outcome"] == "above" and "rose" not in row["text"]
 
 
 def test_a_priority_names_the_fixed_baseline_its_figure_was_measured_against(engine):
