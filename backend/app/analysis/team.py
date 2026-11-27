@@ -188,6 +188,52 @@ def team_change(
     )
 
 
+def member_raw_change(frame: pd.DataFrame, metric: str, week: Window) -> float | None:
+    """One member's change on one metric, in its units: the week's mean minus the mean of their
+    own 28 days before. The same coverage rule as `member_change` (MIN_WEEK_DAYS of the week and
+    MIN_BASELINE_DAYS of the 28 days); no spread is needed, as nothing is standardized, so a
+    member whose zone minutes were a genuine 0 every day still counts, with a change of 0."""
+    recent, before = _values(frame, metric, week), _values(frame, metric, baseline_of(week))
+    if len(recent) < MIN_WEEK_DAYS or len(before) < MIN_BASELINE_DAYS:
+        return None
+    return float(recent.mean() - before.mean())
+
+
+def team_metric_change(changes: list[float], metric: str, week: Window) -> Evidence:
+    """Descriptive: the median of eligible members' changes from their own 28 days before, for
+    the metric explorer (app.teams.explorer). No test and no verdict: a supervisor browses many
+    metrics on request, so none is claimed to have changed. Below MIN_MEMBERS people there is no
+    figure at all, only the count. No quartiles either: with five people they sit close to single
+    people's values, so only the median and the counts up and down are kept."""
+    n = len(changes)
+    windows = (week, baseline_of(week))
+    base = {"members": n, "minimum_members": MIN_MEMBERS, "descriptive": True}
+    if n < MIN_MEMBERS:
+        return Evidence(
+            tool="team_metric_change",
+            metrics=(metric,),
+            windows=windows,
+            n=n,
+            sufficient=False,
+            stats=base,
+        )
+    raw = np.array(changes)
+    return Evidence(
+        tool="team_metric_change",
+        metrics=(metric,),
+        windows=windows,
+        n=n,
+        sufficient=True,
+        stats=base
+        | {
+            "median_change": round(float(np.median(raw)), 2),
+            "members_up": int((raw > 0).sum()),
+            "members_down": int((raw < 0).sum()),
+            "members_unchanged": int((raw == 0).sum()),
+        },
+    )
+
+
 def team_weekdays(frames: list[pd.DataFrame], metric: str, week: Window) -> Evidence:
     """Descriptive: how each weekday sits against each member's own mean over five weeks.
 
