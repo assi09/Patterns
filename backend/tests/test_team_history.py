@@ -310,9 +310,23 @@ def test_an_outcome_from_a_report_made_after_as_of_is_left_out(engine):
         then = history.one_case(db, team, case_id, late.date(), as_of=TODAY)
         now = history.one_case(db, team, case_id, late.date())
         listed_then = tools.team_history(db, boss(db), team_id, late.date(), as_of=str(TODAY))
+        # The same question through the week's overview: as of the day after that week.
+        week_then = tools.team_overview(db, boss(db), team_id, late.date(), week=str(WEEK.start))
+        week_now = tools.team_overview(db, boss(db), team_id, late.date())
+    not_yet = f"No outcome was recorded by {TODAY}"
     assert then["outcome"] is None and then["evidence"] == []
+    assert then["outcome_note"].startswith(not_yet)
     assert listed_then["cases"][0]["outcome"] is None
-    assert now["outcome"] is not None and now["outcome"]["report_id"]
+    assert listed_then["cases"][0]["outcome_note"].startswith(not_yet)
+    assert week_then["as_of"] == str(TODAY)
+    [followed] = week_then["follow_up"]
+    assert followed["state"] == "ended" and followed["result"]["outcome"] is None
+    assert followed["result"]["note"].startswith(not_yet)
+    assert "figure" not in followed["result"] and "measured_now" not in followed["result"]
+    assert now["outcome"] is not None and now["outcome"]["report_id"] and "outcome_note" not in now
+    [current] = week_now["follow_up"]
+    assert current["result"]["outcome"] == now["outcome"]["outcome"]
+    assert current["result"]["report_id"] == now["outcome"]["report_id"]
 
 
 def test_every_filter_given_must_hold(engine):

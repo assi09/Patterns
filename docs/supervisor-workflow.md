@@ -74,8 +74,9 @@ Each team change in `follow_up` shows:
   reference days and their label, contributors and the bounded figure, and the stored record of
   the report that covered it (`report_id`, `evidence_id`), so it opens like any finding.
 
-When no report has covered the change yet, the result is measured on request and marked
-`measured_now`.
+When no report has covered the change yet, today's answer measures it on request and marks it
+`measured_now`. An answer about a past week never does: if no report had covered the change by
+its cutoff, it says "No outcome was recorded by" that date and gives no figure.
 
 **Why no "better" (since 2026-11-27, [change-memory.md](change-memory.md) step 0).** A change is
 compared with the 28 days before it started, and changes usually start right after a drop. In a

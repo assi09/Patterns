@@ -173,6 +173,10 @@ def _change_case(db: Session, team: Team, action: TeamAction, as_of: date) -> di
         "tracking": _tracking(action),
         "outcome": _outcome(db, team, action, as_of) if decision["state"] == "approved" else None,
     }
+    measured = action.metric and action.comparison == "before_the_change"
+    ended = action.ends_on is not None and action.ends_on < as_of
+    if decision["state"] == "approved" and measured and ended and out["outcome"] is None:
+        out["outcome_note"] = view.NO_OUTCOME_BY.format(day=as_of)
     if action.play == "custom" or action.play is None:
         out["custom_note"] = (
             "A change the supervisor wrote in their own words; what it involved is in the app, "
@@ -311,6 +315,8 @@ def _summary(case: dict) -> dict:
             "tracked": case["tracking"] is not None,
             "outcome": (case["outcome"] or {}).get("label"),
         }
+        if "outcome_note" in case:
+            out["outcome_note"] = case["outcome_note"]
     out["evidence_available"] = len(case["evidence"])
     return out
 

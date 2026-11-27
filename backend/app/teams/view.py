@@ -211,6 +211,17 @@ def _stored_result(db: Session, team: Team, action: TeamAction, as_of: date):
     return None
 
 
+NO_OUTCOME_BY = (
+    "No outcome was recorded by {day}: no weekly report had covered this change by then."
+)
+
+
+def no_outcome(as_of: date) -> dict:
+    """A past date's answer when no stored record existed by then: said, with no figure, rather
+    than one measured today inside an answer about what was known then."""
+    return {"outcome": None, "recorded": False, "note": NO_OUTCOME_BY.format(day=as_of)}
+
+
 def _result(db: Session, team: Team, action: TeamAction, as_of: date, found: dict) -> dict:
     """What followed once the change ended (`app.teams.outcome`): the report's stored record when
     one covered it (so its evidence can be opened), otherwise measured now and marked so. A stored
@@ -269,8 +280,10 @@ def implementation(db: Session, action: TeamAction, as_of: date) -> str:
     return IMPLEMENTATION_TEXT[known]
 
 
-def follow_up(db: Session, team: Team, as_of: date) -> list[dict]:
-    """Team changes as they stood on `as_of`: a result only for a change that had ended by then."""
+def follow_up(db: Session, team: Team, as_of: date, today: date | None = None) -> list[dict]:
+    """Team changes as they stood on `as_of`: a result only for a change that had ended by then.
+    For a past date (`as_of` before `today`), only a result stored by then: nothing measured now."""
+    past = today is not None and as_of < today
     actions = db.scalars(
         select(TeamAction)
         .where(TeamAction.team_id == team.id, TeamAction.kind == "challenge")
@@ -312,7 +325,10 @@ def follow_up(db: Session, team: Team, as_of: date) -> list[dict]:
             if followed is not None:  # the calendar's own observation, beside the report
                 item["calendar_check"] = followed.get("text")
                 item["followed_on_the_calendar"] = bool(followed.get("followed"))
-            item["result"] = _result(db, team, action, as_of, found)
+            if past and _stored_result(db, team, action, as_of) is None:
+                item["result"] = no_outcome(as_of)
+            else:
+                item["result"] = _result(db, team, action, as_of, found)
         out.append(item)
     return out
 
@@ -373,7 +389,7 @@ def overview(
     out["priorities"] = priorities
     out["this_week_vs_previous_four"] = _weekly(report)
     if follow:  # the team's changes, measured; the app reads them from its own route
-        out["follow_up"] = follow_up(db, team, as_of)
+        out["follow_up"] = follow_up(db, team, as_of, today)
     out["as_of"] = as_of.isoformat()
     return out
 
