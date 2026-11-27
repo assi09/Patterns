@@ -1,7 +1,7 @@
 {
  "label": "after",
- "commit": "cd1c5aa",
- "server_revision": "review fixes (uncommitted)",
+ "commit": "7d1d074",
+ "server_revision": "exact-time cohort (uncommitted)",
  "date": "2026-11-27",
  "tools": [
   "my_calendar_days",
@@ -99,7 +99,7 @@
   "discovery": 1,
   "task_calls": 14,
   "failed_calls": 2,
-  "bytes": 36668,
-  "seconds": 0.545
+  "bytes": 36833,
+  "seconds": 0.882
  }
 }

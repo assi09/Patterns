@@ -23,7 +23,7 @@ needed.
 | **No free text through MCP** | Every MCP response is built from computed fields and fixed labels. A change's title is the playbook's own title, or "Custom team change" for one the supervisor wrote. The latest week's compatibility keys (`weekly_report`, `open_alerts`) are rebuilt from fields, not from stored headline, section or alert sentences. **One free-text label remains:** the team's name, which the supervisor chose |
 | **No automatic scheduling proposals** | The Monday briefing reports the team calendar beside the Fitbit findings and **proposes nothing itself**. A change is started by the supervisor ("Plan a change"). The old behaviour is kept behind `brief(..., suggest_changes=True)` for its tests and old evaluations; nothing in the app passes it |
 | **Calendar is context, not a cause** | `team_meeting_load(team_id, week)` takes an explicit week and returns that week only, with its comparison dates and a state. It never falls back to the current week, and never says meetings caused a change |
-| **The calendar counts the report's group** | For any week, the calendars counted are those of the members behind that week's Fitbit report (joined by the day it was made) who are still in the team. Someone who joined later is not counted. Someone who has left is not counted either, because leaving withdraws their data. The response gives the counts (`cohort`), and says so when people in the report have left since, or when the week has no report to match |
+| **The calendar counts the report's group** | For any week, the calendars counted are those of the members behind that week's Fitbit report (joined by the exact moment it was made) who are still in the team. Someone who joined later, even the same day, is not counted, so a same-day joiner cannot lift a withheld figure over the minimum. Someone who has left is not counted either, because leaving withdraws their data. The response gives the counts (`cohort`), and says so when people in the report have left since, or when the week has no report to match. With no report, the group is the members at the start of the day after the week, and `cohort.basis` says so |
 | **A clear change in either direction** | `clear_change` is `higher`, `lower`, `none` or `not judged` (the number of meetings), by the coach's bar in both directions; `heavier_load` says whether that direction adds load. A clearly lighter week is a fall, not "none" |
 | **Follow-up as it stood then** | A historical week's answer is as of the day after that week: a change still running shows *in progress* without a result; later results, today's readings and open alerts are left out |
 | **MCP stays read-only for decisions** | MCP cannot approve or decline a change and cannot write to anyone's calendar |
@@ -110,7 +110,7 @@ on the tool outputs only. A failed task gets no efficiency credit. Free: no mode
 | Tools | 7 | 8 |
 | Task calls (team discovery apart: 1 each) | 13 | 14 |
 | Failed calls, as planned (another supervisor's team; a guessed evidence id) | 2 | 2 |
-| Response size, all task calls | 11.4 kB | 36.7 kB |
+| Response size, all task calls | 11.4 kB | 36.8 kB |
 | Server time, all task calls (local, varies run to run) | 0.24 s | 0.60 to 0.73 s |
 | Cost | $0 | $0 |
 
