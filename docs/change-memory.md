@@ -35,7 +35,8 @@ nothing stored specifically for Thursday night."*
     supervisor's; a date overlap is `nearby`. Evidence is the weekly reports overlapping a case,
     each with its own dates. A single day gets "No day-specific team evidence available." An
     `as_of` answer leaves out anything recorded later. Retired and custom changes read "Custom
-    team change".
+    team change", with `playbook_entry` saying which ("retired" or "the supervisor's own
+    words"). A retired entry's old id is not given; its `case_id` opens it.
   - **Next:** the scripted cases on a local eval instance, an MCP red-team pass, and the local
     live rehearsal.
 

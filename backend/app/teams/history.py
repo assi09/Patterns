@@ -159,10 +159,11 @@ def _change_case(db: Session, team: Team, action: TeamAction, as_of: date) -> di
         "case_id": _change_id(action),
         "kind": CHANGE,
         "title": view.action_title(action),
-        "play": action.play,
-        # Not a current playbook change: the supervisor's own words, or a retired entry whose
-        # stored title may be edited text; both read "Custom team change" (view.action_title).
-        "custom": action.play not in playbook.PLAY,
+        # A current playbook change gives its id. Anything else reads "Custom team change"
+        # (view.action_title): the supervisor's own words, or an entry since retired, whose old id
+        # is left out so it is not taken for the change's name; case_id is how to open it.
+        "play": action.play if action.play in playbook.PLAY else None,
+        "playbook_entry": _entry(action),
         "dates": span,
         "recorded": {
             "by": view.STARTED_BY.get(action.source, "suggested by Patterns"),
@@ -177,17 +178,27 @@ def _change_case(db: Session, team: Team, action: TeamAction, as_of: date) -> di
     ended = action.ends_on is not None and action.ends_on < as_of
     if decision["state"] == "approved" and measured and ended and out["outcome"] is None:
         out["outcome_note"] = view.NO_OUTCOME_BY.format(day=as_of)
-    if action.play == "custom" or action.play is None:
+    if out["playbook_entry"] == OWN_WORDS:
         out["custom_note"] = (
             "A change the supervisor wrote in their own words; what it involved is in the app, "
             "not shared through MCP."
         )
-    elif out["custom"]:
+    elif out["playbook_entry"] == RETIRED:
         out["custom_note"] = (
-            "A change from a playbook entry since retired; its wording is in the app, not shared "
-            "through MCP."
+            "A change from a playbook entry since retired; its name and wording are in the app, "
+            "not shared through MCP."
         )
     return out
+
+
+CURRENT, RETIRED, OWN_WORDS = "current", "retired", "none: the supervisor's own words"
+
+
+def _entry(action: TeamAction) -> str:
+    """Where a change came from: a current playbook entry, one since retired, or neither."""
+    if action.play in playbook.PLAY:
+        return CURRENT
+    return OWN_WORDS if action.play in (None, playbook.CUSTOM) else RETIRED
 
 
 def _links(notes: list[TeamNote], actions: list[TeamAction], cases: dict[str, dict]) -> None:
@@ -251,7 +262,10 @@ def _keep(case: dict, start, end, category, play, metric, cases: dict[str, dict]
     if play is not None:
         if case["kind"] != CHANGE:
             return False
-        if not (case["custom"] if play == "custom" else case["play"] == play):
+        if play == "custom":
+            if case["playbook_entry"] == CURRENT:
+                return False
+        elif case["play"] != play:
             return False
     if metric is not None:
         tracked = (case.get("tracking") or {}).get("metric")
@@ -330,6 +344,7 @@ def _summary(case: dict) -> dict:
         out |= {
             "title": case["title"],
             "play": case["play"],
+            "playbook_entry": case["playbook_entry"],
             "decision": case["decision"],
             "implementation": case["implementation"],
             "tracked": case["tracking"] is not None,

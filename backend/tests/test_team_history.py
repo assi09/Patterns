@@ -210,7 +210,8 @@ def test_no_free_text_leaves_through_history(engine):
         listing = tools.team_history(db, boss(db), team_id, TODAY)
         one = tools.team_case(db, boss(db), team_id, TODAY, f"change:{own.id}", str(FRIDAY))
     assert SECRET not in str(listing) and SECRET not in str(one)
-    assert one["title"] == "Custom team change" and one["custom"] is True
+    assert one["title"] == "Custom team change" and one["play"] is None
+    assert one["playbook_entry"] == "none: the supervisor's own words"
     assert "not shared through MCP" in one["custom_note"]
 
 
@@ -496,3 +497,25 @@ def test_a_cursor_keeps_todays_date_and_is_refused_elsewhere(engine):
         ).decode()
         with pytest.raises(HarnessError, match="another lookup"):
             tools.team_history(db, boss(db), team_id, later, cursor=moved)
+
+
+def test_a_retired_entry_reads_custom_with_a_retired_status_and_no_old_id(engine):
+    """In the live run the assistant named a retired change from its old id. The id is left out;
+    the title and an explicit status say what it is, and its case_id opens it."""
+    team_id = make_team(engine)
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        old = change(db, team, WEEK.start, play="no_late_meetings", metric="sleep_minutes")
+        current = change(db, team, WEEK.start, play="meeting_breaks")
+        listing = tools.team_history(db, boss(db), team_id, TODAY)
+        case = tools.team_case(db, boss(db), team_id, TODAY, f"change:{old.id}")
+        own = tools.team_history(db, boss(db), team_id, TODAY, play="custom")
+    listed = by_id(listing)
+    for shown in (listed[f"change:{old.id}"], case):
+        assert shown["title"] == "Custom team change"
+        assert shown["playbook_entry"] == "retired" and shown["play"] is None
+    assert "no_late_meetings" not in json.dumps(listing) + json.dumps(case)
+    assert "retired" in case["custom_note"]
+    assert listed[f"change:{current.id}"]["play"] == "meeting_breaks"
+    assert listed[f"change:{current.id}"]["playbook_entry"] == "current"
+    assert [c["case_id"] for c in own["cases"]] == [f"change:{old.id}"]
