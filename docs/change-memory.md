@@ -1,22 +1,32 @@
-# Team change memory: plan (2026-11-27, not built)
+# Team memory for assistants: events, decisions and evidence (plan, 2026-11-27)
 
-**Goal.** Patterns remembers what a supervisor decided to try, whether the team tried it, and what
-the team's data showed afterwards. A later assistant (another Claude or Codex chat, through MCP) or
-the app can then answer: **"Have we tried anything like this before, and what happened?"**
+**Goal.** A supervisor opens a fresh assistant (Claude or Codex, through MCP) and asks: **"Have we
+seen something like this before? What did we try? What evidence do we have?"**
+- **The assistant** investigates and decides what is relevant to the question.
+- **Patterns** stores the facts, enforces permissions, and returns dated, computed evidence.
 
-**Who decides what.**
-- **Assistant:** recommends a change from Patterns' findings and the team's events, in the chat.
-- **Supervisor:** agrees in the chat. The assistant records that agreement in Patterns.
-- **Patterns:**
-  - holds it **waiting for confirmation**, and confirmation happens only in the Patterns app
-    (option B, chosen 2026-11-27);
-  - measures what followed;
-  - returns the history.
+Patterns does not decide that two events are related, rank causes, recommend, or say a change
+worked. It answers three questions well:
+1. What happened?
+2. What did we decide?
+3. What evidence exists for those dates?
 
-Patterns never says a change "worked", and never ranks changes.
+**Example.** "We have another Friday deadline. What happened last time?" The assistant finds:
+- a past deadline;
+- a confirmed decision to keep the Thursday evening free;
+- a weekly sleep report.
 
-**Status: approved 2026-11-27, building.** Step 0 (below) has been run, and the three decisions
-are made (end of this page). Build order: the outcome fix first, then the record and the history.
+A good answer: *"You tried keeping the evening free. We have a sleep figure for that week, but
+nothing stored specifically for Thursday night."*
+
+**Status.**
+- **Done 2026-11-27:**
+  - step 0 (below);
+  - the owners' decisions;
+  - the outcome wording fix (four labels and the rebound caveat for every change made so far, in
+    the app and MCP).
+- **Revised 2026-11-27 (this version):** events and decisions first; measurement optional.
+- **Next:** freeze the acceptance cases, then milestone 1. No change-memory code is written yet.
 
 ## Step 0: can the outcome be trusted? (done)
 
@@ -90,9 +100,14 @@ Drops that were only noise rarely triggered a change; with so few, that row is n
    - "No clear change" must read as "not shown", never as "did not help".
    - Several similar trials, retrieved together, are more informative than one.
 
+**Scope of this result.** It was evaluated for one case: a **sustained action** (two weeks)
+started after a **sustained finding** (two flagged weeks), on time asleep and steps. It does not
+validate the before-the-drop comparison for one-day events, other metrics or arbitrary windows.
+Those get the available observation with its limits, not a comparison.
+
 **Decision (2026-11-27).**
-- **A linked change:** the metric and the comparison dates are taken from its verified triggering
-  finding **when the change is recorded**, and frozen. The comparison is the 28 days before the
+- **A linked change** (milestone 2): the metric and the comparison dates are taken from its
+  verified triggering finding **when the change is recorded**, and frozen. The comparison is the 28 days before the
   finding's first flagged week, shown as "before the first flagged week" with its dates.
 - **A change with no linked finding** (every change made so far): the existing dated 28-day
   comparison, with a stated caveat that a preceding dip can make an ordinary rebound look like
@@ -106,103 +121,159 @@ Drops that were only noise rarely triggered a change; with so few, that row is n
 
   Each shows the observed difference and the contributor count when permitted. Nothing says
   "better", "worse", "worked" or "returned to baseline".
-- The change's implementation status ("tried", step 4) is shown beside the observation. A fresh
+- The change's implementation status ("tried") is shown beside the observation. A fresh
   assistant should be able to say: **"You confirmed trying it; here's what followed; we can't
   determine how much the action contributed."**
 
-## What is built on
+## Three records, kept apart
 
-| Exists today | Used for |
+| Record | What it is | Example | Stored in (today) |
+|---|---|---|---|
+| **Event** | Something that happened or is scheduled. It can exist on its own | A deadline on Friday | `TeamNote`: free text (up to 300 characters) and optional dates. Made in the app, or through MCP by `send_team_event` (held, screened, approved in the app) |
+| **Team action** | A deliberate choice: proposed, approved or declined, then reported tried or untried | Keep Thursday evening free before the deadline | `TeamAction`: playbook change or custom, metric, dates, `proposed` → `approved` / `declined`, approval notifies members |
+| **Evidence** | An observation about a stated metric and period, with coverage, comparison dates where they apply, and where it came from | A weekly sleep finding covering that week; Thursday night's sleep | Report records (weekly change, four-week scan, change results), opened by `team_finding_evidence`. **No day-level team figure exists** |
+
+**Links.**
+- An event can have no action, an action can have no event and no measurement, and several
+  events can overlap one action.
+- Records are **linked** only when the supervisor (or the record's source) says so explicitly:
+  "we're doing this because of the deadline".
+- **A date overlap is nearby context, never a link and never an explanation.** Responses keep
+  `linked` and `nearby` apart.
+
+**What changes in the schema (milestone 1).**
+
+| Record | Added | Why |
+|---|---|---|
+| Event (`team_notes`) | `category`: optional, one of deadline, launch, travel, holiday, reorganisation, onboarding, other; unset when no category was given | Through MCP an event is returned as its category and dates only. Its text is free and stays in the app (#246). An event saved without a category can still be found by date |
+| Team action (`team_actions`) | `request_id`, unique per team, so a retry returns the same record; `recorded_via`, the assistant connection that recorded it, if any; `implementation`: `tried`, `not_tried` or unset (= unknown), with when and by whom; `event_id` and `finding` (report id and evidence id) for explicit links; `tracking`: optional, see below | The decision sequence: proposed, approved or declined, then implementation as reported. Approval and dates passing never imply "tried" |
+
+Recurring events are saved as separate dated occurrences in this milestone; no recurrence rule.
+
+## Saving a decision, with or without tracking
+
+- **When:** the supervisor explicitly asks the assistant to save a recommendation they support.
+- **What happens:** `record_team_change` creates an **idempotent pending draft**.
+  - Playbook changes only.
+  - The app shows it as **"Suggested in chat — awaiting your confirmation"**.
+  - Confirm or decline happens there; nothing notifies anyone before confirmation.
+  - The draft records the intended dates and, where the supervisor gave one, the explicit link
+    to an authorized event or finding.
+- **Tracking is optional.**
+  - "Remember what we decided" saves the decision only: no metric, no trial window, no outcome.
+  - To track an outcome, the metric, the observation dates and the comparison rule are captured
+    **when the decision is saved, before any outcome exists**.
+  - The assistant asks one short question when they are missing. Patterns never fills in sleep or
+    14 days silently.
+- **Implementation** is reported by the supervisor in the app ("Did the team try it?"). Not
+  reported means **unknown**.
+- **Retrospective questions** about a past event are allowed. Their answers are labelled
+  **retrospective**, and the original tracking choice is kept as it was.
+
+**Comparison rules** (what a tracked action may ask for):
+
+| Rule | Allowed for | Says |
+|---|---|---|
+| Before the first flagged week | A sustained action explicitly linked to a sustained finding: the case step 0 evaluated (milestone 2) | One of the four outcome labels, the dates, contributors, and "we can't determine how much the action contributed" |
+| 28 days before the action | Actions made in the app so far (unchanged) | The same, with the rebound caveat |
+| Observation only | Anything else: a one-day action, an unlisted metric, an arbitrary window | The available observation with its limits; no comparison verdict |
+
+## Time and evidence resolution
+
+**Dates.**
+- Events can be one day or several days long; actions run over their own dates. An action can
+  come before an event, and an observation after it.
+- Each metric keeps its existing local-date convention, and the response says which day or night
+  a figure covers. Time asleep is dated by the local day the sleep ended, so "Thursday night" is
+  the record dated Friday and is shown as "the night ending Friday, Nov 20".
+
+**Milestone 1 resolves evidence in this order:**
+1. **Evidence Patterns already has.** For an event on a Friday, an overlapping weekly report is
+   returned as **weekly context**, with its actual dates.
+   - If the question is about that day and only weekly evidence exists, the answer is **"No
+     day-specific team evidence available."**
+   - Nothing is borrowed from another week or day.
+2. **Day-level team readings** (milestone 3, only if verified).
+   - A descriptive figure for one day, under the same rules: at least 5 contributors that day,
+     no individual values, and no statistical change verdict.
+   - Built only if a test shows it keeps the sharing and coverage rules. Until then, the gap
+     stays stated, not filled.
+3. **Comparisons** only where step 0 supports them (above).
+
+## MCP: the smallest extension
+
+| Tool | New or changed | Does | Never |
+|---|---|---|---|
+| `team_history(team_id, start?, end?, category?, play?, metric?, as_of?)` | New, read | A short list of cases for one authorized team. Events: category, dates, source. Actions: controlled title, type, dates, the state sequence, implementation, tracking. Each carries its `linked` records, its `nearby` records (date overlap, labelled so) and references to the evidence available for its dates. Events with no action are included, and so are declined, untried, inconclusive and unmeasured cases. With `as_of`, the history as it stood then | Free text, a person, a check-in; a ranking; "worked" |
+| `team_case(team_id, case_id, day?)` | New, read | One case in full, with evidence resolved for its dates. For `day`: a day-specific figure, or "No day-specific team evidence available" plus the weekly context | A figure from fewer than 5 people, another week's figure |
+| `record_team_change(team_id, request_id, play, starts_on, ends_on?, event_id?, finding?, tracking?)` | New, write, held | The pending draft above; a retry with the same `request_id` returns the same record | Approve, decline, mark tried, notify, or write a calendar |
+| `send_team_event` | Changed | Takes an optional `category` | Unchanged otherwise: held, screened, approved in the app |
+
+Drill-down into a finding uses the existing `team_finding_evidence`, and a week uses
+`team_overview(week)`. **"What we knew then"** (`as_of`) and **"what we know today"** stay
+separate answers.
+
+## Acceptance cases (frozen before coding)
+
+`eval/change_memory_tasks.json` holds these, scripted on local data first. The evaluation target is
+**MCP tool use**: the right team, dates, state, evidence resolution, and abstaining when there is
+nothing to say.
+
+| Question or situation | Required |
 |---|---|
-| `TeamAction` (`proposed` → `approved` / `declined`; a playbook change or "custom"; metric; dates) | The change record |
-| `actions.decide` (the app's **Waiting for you**: approval tells the members) | Confirmation, unchanged: only in the app |
-| `view.follow_up` (lifecycle as of a date; stored result from the report) | The history's states, with `as_of` |
-| Held MCP submissions (`send_team_event`: held, screened, approved in the app) | The pattern for an MCP write that changes nothing until confirmed |
-| Report evidence ids (`team_finding_evidence`) | Linking a change to the finding that prompted it |
+| "What happened around last Friday's deadline?" Only a weekly report exists | The event and the dated weekly context; the missing day-specific evidence named |
+| "Remember that we'll keep Thursday evening free." No tracking asked | One pending draft; a retry makes no duplicate; no metric, no trial window |
+| A three-day offsite; the supervisor wants to track the first night only | The three-day event and the one-night observation kept separate; a figure that qualifies, or a clear unavailable state |
+| "What happened around our last three deadlines?" One had no action, one was declined, one was tried | All three, with their distinct states and evidence |
+| A deadline and an offsite overlap | Both as nearby context; an explicit link kept; neither event blamed |
+| A sustained decline resolves during a two-week action | The comparison chosen beforehand, the implementation status and what followed; no claim that the action caused the recovery |
+| A new chat; another team's records | The authorized case found without chat memory; another team's history and withheld figures stay inaccessible |
 
-## The record: four facts, kept apart
+Safety cases from the first version are kept:
+- no approval through MCP;
+- no duplicate on retry;
+- another supervisor's team refused;
+- a custom change shown only as "Custom team change" with its metric, dates, state and outcome,
+  and the assistant saying it cannot tell exactly what it involved.
 
-| Fact | Set by | Stored |
-|---|---|---|
-| **Recommended and agreed in a chat** | The assistant, through MCP | Which playbook change, the metric (fixed now, so no number is picked afterwards), dates, the prompting finding (`report_id`, `evidence_id`, checked against the team's reports), an event type from a fixed list, which connection saved it, when, and a `request_id` so a retry makes no duplicate |
-| **Confirmed or declined** | The supervisor, in the app only | `approved` / `declined`, when. Approval tells the members, as today |
-| **Tried or not** | The supervisor, in the app ("Did the team try it?" yes / no), after it starts | A separate field, never inferred from approval; not answered means **unknown**. Where the playbook has a calendar check, that is shown beside it as its own observation |
-| **What followed** | Patterns, deterministically, after it ends | The outcome above with its dates, contributors, measure and evidence id, **stored once** so a later answer is the same answer |
+**Live rehearsal, after the scripted cases pass.**
+- **Where:** a short fresh-chat run against a **local** Patterns. Codex CLI or Claude Code can
+  connect to `http://localhost` with a made-up supervisor, so no production write and no sign-in
+  to the real account are needed.
+- **What:** it saves a pending decision, the app confirms it, and a second fresh chat retrieves
+  it.
+- **Grading:** the tool calls and the grounded answer. No new paid run.
 
-## MCP
+## Build order
 
-| Tool | Does | Never |
-|---|---|---|
-| `record_team_change(team_id, request_id, play, starts_on, prompted_by?, event_type?)` | Saves the change as **waiting for confirmation**; the app shows **"Suggested in chat — awaiting your confirmation"**. A repeat of the same `request_id` returns the same record. Refused for a team the caller does not supervise now, a past start, an unknown change, or an evidence id not in that team's reports | Approve, decline, mark tried, edit, delete, notify anyone, or write a calendar |
-| `team_change_history(team_id, metric?, play?, event_type?)` | Every recorded change for that team, including declined, not tried and inconclusive ones. For each: controlled title, the four facts with dates, the outcome and its evidence reference, `as_of` | Return free text, a person, a note or a check-in; rank changes; say one "works" |
+**Milestone 1 (the core).** An assistant retrieves an event, its actual decision state, and the
+evidence that exists, including "nothing was measured for that day".
+1. Freeze the acceptance cases (with this plan).
+2. Schema: event category; action request id, connection, implementation and explicit links.
+3. `record_team_change`, plus the app's "Suggested in chat — awaiting your confirmation" and "Did
+   the team try it?".
+4. `team_history` and `team_case`, with weekly context and the day-specific gap.
+5. The scripted cases, a red-team pass on MCP, full checks, then the local live rehearsal.
 
-The weekly `team_overview` follow-up keeps working, with the same states and the corrected
-outcome.
+**Milestone 2.**
+- Tracking with the before-the-first-flagged-week comparison, for a sustained action linked to a
+  sustained finding.
+- Retrospective inquiry, labelled so.
 
-## Risks and how each is handled
+**Milestone 3 (only if verified).** Day-level descriptive team readings.
 
-| Risk | Handling | Tested by |
-|---|---|---|
-| "The supervisor agreed" is wrong (a misunderstanding, or an instruction hidden in an event title) | Nothing reaches the team until a tap in the app; the record says "agreed in chat, not confirmed" | Scripted: a record made through MCP notifies nobody. Live: an injected event title |
-| Approval through MCP | No tool can do it; `record_team_change` only ever writes `proposed` | Scripted and red-team |
-| A duplicate on retry | `request_id`, unique per team | Scripted |
-| Another supervisor's team, a former supervisor, a guessed evidence id | The same checks as today ("No such team", not found) | Scripted |
-| Free text naming a person or health (#246) | Playbook changes only through MCP in this version (see decision 1); controlled labels in every response | Regression test, as for #259 |
-| Choosing the metric after the fact | Fixed when recorded; the outcome is computed only on it | Unit test |
-| Calling recovery a success | The before-the-drop measure; fixed wording; "observed, not caused" on every result | Step 0's simulation, kept as a statistical test over many seeds |
-
-## Frozen tasks (before any code)
-
-`eval/change_memory_tasks.json`: scripted tasks for the MCP SDK client, and live tasks for a real
-assistant, frozen now. The baseline is `main` today, which has neither tool, so it is expected to
-fail the memory tasks. The point of the scripted run is coverage and safety; the live run is
-reported apart.
-
-## Build order (each a focused PR, after the open decisions)
-
-1. **This plan**, the step-0 result and the frozen tasks.
-2. **The outcome fix:** the before-the-drop measure for linked changes and the caveat for the rest.
-   Stored on the change; the follow-up shows it. Tests: step 0 as a many-seed property test.
-   Without this step the memory would teach the wrong thing.
-3. **The record:** a migration (new columns on `team_actions`) and `record_team_change` with its
-   checks. In the app, **Waiting for you** says "agreed in chat with <assistant connection>".
-4. **"Did the team try it?"** in the app, and `team_change_history`.
-5. **The gate:**
-   - every frozen scripted task passes, at least as well as on `main`;
-   - an MCP red-team pass, covering approval, another team, duplicates and injected text;
-   - full checks;
-   - then one live run (Claude or Codex) in a fresh chat, on the synthetic team, reported apart.
-
-   If any part fails, it does not ship.
-
-**Production.** Nothing is written there before the gate. Deploying needs your approval, and the
-live run needs your sign-in (the same as today's Codex connection). Recording a change on the
-synthetic demo team in the live run is a write; it is asked for at that point. The waiting evening
-boundary proposal is left alone.
-
-**Dec 5.** A change needs 1–2 weeks to run before it has an outcome. A demo of "what happened"
-therefore uses a labelled synthetic history, the way the demo team does.
+Each step is a focused PR. Nothing ships unless its cases pass. Production deployment and any
+production write need separate approval.
 
 ## Decisions (owners, 2026-11-27)
 
-1. **Playbook-only submissions through MCP** in this version.
-   - A supervisor can still write a custom change in the app.
-   - MCP returns a custom change's metric, dates, state and permitted outcome under "Custom team
-     change", and says the assistant cannot tell exactly what it involved.
+1. **Playbook-only submissions through MCP.**
+   - A custom change is written in the app. MCP shows it as "Custom team change" with its metric,
+     dates, state and permitted outcome.
    - Recording through MCP leaves the change pending and notifies no one.
-   - The history keeps the sequence clear: proposed; approved or declined; reported tried or
-     untried (unknown when not reported); the measured outcome.
-2. **Fixed event categories, optional.**
-   - The categories: deadline, launch, travel, holiday, reorganisation, onboarding, other.
-   - "Other" is for an event that is known but does not fit the list. The category is left unset
-     when no event was given.
-   - A shared category helps retrieval. The history also shows each change's type, metric and
-     dates, so the supervisor judges relevance, and it includes untried and inconclusive changes.
-3. **The outcome correction applies to both the app and MCP**, as described in step 0's decision.
-
-**Acceptance.**
-- **A fresh chat asks "Have we tried anything like this before?"** It must retrieve the right
-  team's change, tell approval from implementation, and cite the dated result. It must handle an
-  inconclusive or untried case as accurately as a favourable one.
-- **The pre-deploy live test** runs on local or staging data.
-- **Production** deployment and writes each need separate approval.
+2. **Fixed event categories, optional.** "Other" is for a known event that fits no category. The
+   category is unset when none was given. The history shows type, metric and dates, so the
+   supervisor judges relevance.
+3. **The outcome correction applies to both the app and MCP.** Done for every change so far;
+   linked comparisons come in milestone 2.
+4. **Events and decisions first; measurement optional** (this revision).
