@@ -92,8 +92,6 @@ def test_a_retry_racing_the_first_returns_the_first(engine, monkeypatch):
 @pytest.mark.parametrize(
     "change, refused",
     [
-        ({"play": "custom"}, "Only a playbook change"),
-        ({"play": "four_day_week"}, "Only a playbook change"),
         ({"starts_on": TODAY - timedelta(days=1)}, "starts_on"),
         ({"starts_on": TODAY + timedelta(days=61)}, "starts_on"),
         ({"ends_on": TODAY + timedelta(days=2)}, "ends_on"),  # before it starts
@@ -352,3 +350,46 @@ def test_a_change_title_is_never_free_text_through_mcp(engine):
         action.title = "Quiet mornings for Dana"  # as if edited in the app
         db.flush()
         assert view.action_title(action) == out["title"]
+
+
+def test_the_playbook_ids_are_the_schemas_choices_and_anything_else_is_refused(engine):
+    """The live run's assistant tried free text twice before finding the id: the ids are now the
+    input schema's choices, taken from the playbook itself."""
+    import pydantic
+
+    from app.db.models import HarnessCall
+
+    schema = TeamChangeIn.model_json_schema()["properties"]["play"]
+    assert schema["enum"] == list(playbook.PLAY)
+    tools_listed = asyncio.run(build_mcp(engine).list_tools())
+    [tool] = [t for t in tools_listed if t.name == "record_team_change"]
+    assert list(playbook.PLAY) == _enum_of(tool.input_schema)
+    for bad in ("custom", "four_day_week", "One meeting-free day a week"):
+        with pytest.raises(pydantic.ValidationError):
+            TeamChangeIn(request_id="schema-0001", play=bad, starts_on=TODAY, ends_on=TODAY)
+    team_id = make_team(engine)
+    server = build_mcp(engine)
+    with session_scope(engine) as db:
+        boss_id = boss(db).id
+    today = date.today()
+    free = {"request_id": "schema-0002", "play": "One meeting-free day a week"}
+    free |= {"starts_on": str(today), "ends_on": str(today)}
+    error, text = call_mcp(server, boss_id, "record_team_change", team_id=team_id, change=free)
+    assert error and "meeting_free_day" in text  # the refusal names the choices
+    past = free | {"play": "meeting_free_day", "starts_on": str(today - timedelta(days=1))}
+    error, _ = call_mcp(server, boss_id, "record_team_change", team_id=team_id, change=past)
+    assert error
+    with session_scope(engine) as db:
+        assert drafts(db, team_id) == []
+        logged = db.scalars(select(HarnessCall).where(HarnessCall.tool == "record_team_change"))
+        # The server's log counts calls that reach the handler: the past start, refused there.
+        # The schema refusal never reaches it; only the client's transcript shows it.
+        assert [c.ok for c in logged] == [False]
+
+
+def _enum_of(schema: dict) -> list[str]:
+    """The play choices in a tool's input schema, wherever the SDK put the change's model."""
+    change = schema["properties"]["change"]
+    if "$ref" in change:
+        change = schema["$defs"][change["$ref"].rsplit("/", 1)[-1]]
+    return change["properties"]["play"]["enum"]

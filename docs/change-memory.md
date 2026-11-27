@@ -31,8 +31,36 @@ nothing stored specifically for Thursday night."*
   - **Done:** the decision record. That covers the schema, `record_team_change`, the event
     category, the app's "Suggested in chat — awaiting your confirmation" and "Did the team try
     it?".
-  - **Next:** `team_history` and `team_case`, then the scripted cases and the local live
-    rehearsal.
+  - **Done:** `team_history` and `team_case`. They return facts with dates. Links are the
+    supervisor's; a date overlap is `nearby`. Evidence is the weekly reports overlapping a case,
+    each with its own dates. A single day gets "No day-specific team evidence available." An
+    `as_of` answer leaves out anything recorded later. Retired and custom changes read "Custom
+    team change", with `playbook_entry` saying which ("retired" or "the supervisor's own
+    words"). A retired entry's old id is not given; its `case_id` opens it.
+  - **Done:** the local live rehearsal (`eval/change_memory_rehearsal.md`), closed with its
+    scores as recorded; the rebound caveat left out of a short summary is a known limitation.
+  - **Done:** the scripted cases on a local instance: **11/11 frozen cases and 5/5 review
+    regressions** on this branch, **0/11 and 0/5 on `main`** (2b31471), with the same runner
+    (`eval/change_memory_eval.py`, instance `eval/change_memory_instance.py`; results in
+    `eval/results/change_memory_scripted_2026-11-27.json` and `..._baseline-main_...`).
+  - **Done:** the MCP red-team pass with the new tools: **84/84**, 36 of them on change memory
+    (`eval/results/mcp_red_team_2026-11-27.json`, docs/mcp.md).
+  - **Done:** the full checks (2026-11-27):
+    - backend: ruff clean; 3188 passed with Postgres, 94.46% coverage;
+    - mobile: lint, typecheck, 234 tests and the web export.
+
+    `expo-doctor` now reports Expo 58.1.0 published upstream. The packages are the same as on
+    `main`, so that bump is for its own PR, once Expo Go runs it.
+  - **Accepted (2026-11-27)** by the owners, with both scoring judgments:
+    - **Calendar.** Recording a team decision leaves calendar events, stored meeting counts and
+      pending calendar submissions unchanged. The separate tool for submitting meeting counts
+      for approval still exists.
+    - **Caveat.** "Cannot show how much the change itself contributed" meets the frozen "cannot
+      determine how much the action contributed".
+
+    The live scores stand as recorded, the rebound caveat as a known limitation. 84/84 covers
+    the MCP scenarios tested; it does not close the note screen's gaps (#246).
+  - **Before merging:** the `expo-doctor` warning, checked on `main` and against Expo Go.
 
 ## Step 0: can the outcome be trusted? (done)
 

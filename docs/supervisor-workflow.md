@@ -25,7 +25,7 @@ needed.
 | **Calendar is context, not a cause** | `team_meeting_load(team_id, week)` takes an explicit week and returns that week only, with its comparison dates and a state. It never falls back to the current week, and never says meetings caused a change |
 | **The calendar counts the report's group** | For any week, the calendars counted are those of the members behind that week's Fitbit report (joined by the exact moment it was made) who are still in the team. Someone who joined later, even the same day, is not counted, so a same-day joiner cannot lift a withheld figure over the minimum. Someone who has left is not counted either, because leaving withdraws their data. The response gives the counts (`cohort`), and says so when people in the report have left since, or when the week has no report to match. With no report, the group is the members at the start of the day after the week, and `cohort.basis` says so |
 | **A clear change in either direction** | `clear_change` is `higher`, `lower`, `none` or `not judged` (the number of meetings), by the coach's bar in both directions; `heavier_load` says whether that direction adds load. A clearly lighter week is a fall, not "none" |
-| **Follow-up as it stood then** | A historical week's answer is as of the day after that week: a change still running shows *in progress* without a result; later results, today's readings and open alerts are left out |
+| **Follow-up as it stood then** | A historical week's answer is as of the day after that week, or of the day its report was made if that was later (since 2026-11-27), so a report never appears under a date before it existed; `made_on` is given apart from the week. A change still running then shows *in progress* without a result; later results, today's readings and open alerts are left out. With `as_of`, the whole answer is cut off at that date: no report made later ("No report was available by that date."), decisions, tried reports and outcomes as recorded by then |
 | **MCP stays read-only for decisions** | MCP cannot approve or decline a change and cannot write to anyone's calendar |
 
 ## The proposal already waiting on production
@@ -74,8 +74,11 @@ Each team change in `follow_up` shows:
   reference days and their label, contributors and the bounded figure, and the stored record of
   the report that covered it (`report_id`, `evidence_id`), so it opens like any finding.
 
-When no report has covered the change yet, the result is measured on request and marked
-`measured_now`.
+When no report has covered the change yet, today's answer measures it on request and marks it
+`measured_now`. An answer about a past week never does: if no report had covered the change by
+its cutoff, it says "No outcome was recorded by" that date and gives no figure. It reads no
+current data either: no calendar check is stored yet, so a past answer says "No calendar check
+was recorded by" that date and gives no `followed_on_the_calendar`.
 
 **Why no "better" (since 2026-11-27, [change-memory.md](change-memory.md) step 0).** A change is
 compared with the 28 days before it started, and changes usually start right after a drop. In a
@@ -128,6 +131,23 @@ on the tool outputs only. A failed task gets no efficiency credit. Free: no mode
 | Response size, all task calls | 11.4 kB | 36.8 kB |
 | Server time, all task calls (local, varies run to run) | 0.24 s | 0.60 to 0.73 s |
 | Cost | $0 | $0 |
+
+**Frozen suite at `fc467c4`: 10/11 (2026-11-27), kept on record.** From `fc467c4` a week's answer
+is dated no earlier than its report ([change-memory.md](change-memory.md)). The instance's report
+for the action week was made at build time, 11 days after that week. So `action_follow_up`, which
+asks for that week with no cutoff, now gets an answer dated by the report, with the change ended
+and its outcome. Its historical half fails (in progress: no; no result: no); its current half
+passes. The answer is right for "what does that week's report say?" but not for "was it still in
+progress at the end of that week?". Same instance, same checker
+(`eval/results/supervisor_frozen_fc467c4_2026-11-27.json`).
+
+**Revised suite: 11/11, scored apart.** `action_follow_up_v2` (in `eval/supervisor_tasks.json`,
+`versioned`) asks the second question with `as_of` the day after the week. It checks in progress,
+no result and no later report. Its current half is the frozen task's own checks. The frozen tasks
+are unchanged. The versioned call is counted on its own (1 call), so the frozen run's 14 task calls
+stay comparable (`eval/results/supervisor_revised_2026-11-27.json`, run at `11b8f58`: frozen
+10/11, revised 11/11). Whether a real assistant passes `as_of` by itself for the question in plain
+words is checked in the fresh-chat rehearsal.
 
 **Reading it.** This shows **better task coverage**: the tools now supply information the old
 interface lacked. It does not show that a real assistant answers better or that a supervisor saves

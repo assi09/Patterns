@@ -32,7 +32,7 @@ from app.sync import calendar
 from app.teams import agent as team_agent
 from app.teams import memberships as teams
 from app.teams import observed as observed_text
-from app.teams import reports, view
+from app.teams import playbook, reports, view
 
 PAST_DAYS = 60  # how far back a harness may send calendar days
 AHEAD_DAYS = 14  # and how far ahead
@@ -108,7 +108,9 @@ class TeamChangeIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     request_id: str = Field(min_length=8, max_length=64)
-    play: str = Field(min_length=1, max_length=32)
+    # The playbook's own ids, offered as the schema's choices so an assistant picks one on its
+    # first try; a change in the supervisor's own words is planned in the app.
+    play: Literal[tuple(playbook.PLAY)]  # type: ignore[valid-type]
     starts_on: date
     # Required: the dates the supervisor agreed to, never a length Patterns picks (one day is
     # starts_on again).
@@ -187,17 +189,27 @@ def _week(value: str | None) -> date | None:
 
 
 def team_overview(
-    db: Session, user: User, team_id: str, today: date, week: str | None = None
+    db: Session,
+    user: User,
+    team_id: str,
+    today: date,
+    week: str | None = None,
+    as_of: str | None = None,
 ) -> dict:
     """The team's week in one call: the report's state, its priority findings and weekly
     comparison, each with its own dates, coverage and evidence id, and the follow-up on team
     changes as known then (app.teams.view). With no week, the latest report, plus today's
     observed readings and open alerts as before. With a week, that week only: nothing current is
-    mixed in, and a week without a report says so."""
+    mixed in, and a week without a report says so. `as_of`: what was known by that day, applied
+    to the whole answer; nothing current is mixed in either."""
     team = _supervised(db, user, team_id)
     asked = _week(week)
-    out = view.overview(db, team, asked, today)
+    cutoff = _date(as_of, "as_of")
+    out = view.overview(db, team, asked, today, as_of=cutoff)
     if asked is not None:
+        return out
+    if cutoff is not None and cutoff < today:
+        out["note"] = "Today's readings and open alerts are left out of an answer for a past date."
         return out
     frames = reports.member_frames(db, team, today - timedelta(days=4), today)
     report = view.week_report(db, team, None)
@@ -329,6 +341,152 @@ def send_team_event(
     return _hold(db, user, "team_event", event.model_dump(mode="json"), team, token_id, now)
 
 
+# --- the team's past cases (docs/change-memory.md) ----------------------------------------------
+
+
+def _date(value: str | None, field: str) -> date | None:
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise HarnessError(f"{field}: a date like 2026-11-20.") from None
+
+
+def team_history(
+    db: Session,
+    user: User,
+    team_id: str,
+    today: date,
+    start: str | None = None,
+    end: str | None = None,
+    category: str | None = None,
+    play: str | None = None,
+    metric: str | None = None,
+    as_of: str | None = None,
+    cursor: str | None = None,
+) -> dict:
+    """The team's past cases: events (with or without a change), changes in every state, and the
+    evidence available for their dates. Facts only: relevance is the assistant's to judge.
+
+    A page holds at most 20; `next_cursor` continues the same lookup. The cursor carries the
+    team, the filters and the as-of date of the first page (resolved, so "today" does not move
+    between pages); it is passed alone."""
+    from app.teams import history
+
+    team = _supervised(db, user, team_id)
+    after = None
+    asked_as_of = as_of is not None
+    if cursor is not None:
+        if any(v is not None for v in (start, end, category, play, metric, as_of)):
+            raise HarnessError(
+                "cursor: pass it alone; it already carries the filters and as_of of the first page."
+            )
+        saved = _read_cursor(cursor, team)
+        start, end, category, play, metric = (saved["filters"][k] for k in FILTERS)
+        as_of, asked_as_of, after = saved["as_of"], saved["asked_as_of"], tuple(saved["after"])
+    if category is not None and category not in EVENT_CATEGORIES:
+        raise HarnessError(f"category: one of {', '.join(EVENT_CATEGORIES)}.")
+    if play is not None and play not in (*playbook.PLAY, "custom"):
+        raise HarnessError(f"play: one of {', '.join(playbook.PLAY)}, or custom.")
+    if metric is not None and metric not in TEAM_METRICS:
+        raise HarnessError(f"metric: one of {', '.join(TEAM_METRICS)}.")
+    known = min(_date(as_of, "as_of") or today, today)
+    out = history.history(
+        db,
+        team,
+        today,
+        start=_date(start, "start"),
+        end=_date(end, "end"),
+        category=category,
+        play=play,
+        metric=metric,
+        as_of=known,
+        after=after,
+    )
+    if not asked_as_of:
+        out["as_of_meaning"] = "what was known on the day this lookup began"
+    last = out.pop("last")
+    out["next_cursor"] = (
+        _write_cursor(
+            team,
+            {k: out["filters"][k] for k in FILTERS},
+            out["as_of"],
+            asked_as_of,
+            last,
+        )
+        if last
+        else None
+    )
+    return out
+
+
+FILTERS = ("start", "end", "category", "play", "metric")
+
+
+def _write_cursor(team: Team, filters: dict, as_of: str, asked: bool, after) -> str:
+    import base64
+    import json
+
+    body = {"team": str(team.id), "filters": filters, "as_of": as_of, "asked_as_of": asked}
+    body["after"] = list(after)
+    raw = json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _read_cursor(cursor: str, team: Team) -> dict:
+    """A cursor is the caller's to hold, so it is checked like any input: its values pass the
+    same validation as the filters (team_history re-checks them), and it only works for the team
+    it came from."""
+    import base64
+    import binascii
+    import json
+
+    try:
+        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+        saved = json.loads(raw)
+        ok = (
+            isinstance(saved, dict)
+            and set(saved) == {"team", "filters", "as_of", "asked_as_of", "after"}
+            and isinstance(saved["filters"], dict)
+            and set(saved["filters"]) == set(FILTERS)
+            and all(v is None or isinstance(v, str) for v in saved["filters"].values())
+            and isinstance(saved["as_of"], str)
+            and isinstance(saved["asked_as_of"], bool)
+            and isinstance(saved["after"], list)
+            and len(saved["after"]) == 2
+            and all(isinstance(v, str) for v in saved["after"])
+        )
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        ok = False
+    if not ok or len(cursor) > 2000:
+        raise HarnessError("cursor: not a cursor from team_history.")
+    if saved["team"] != str(team.id):
+        raise HarnessError("cursor: it belongs to another lookup.")
+    return saved
+
+
+def team_case(
+    db: Session,
+    user: User,
+    team_id: str,
+    today: date,
+    case_id: str,
+    day: str | None = None,
+    as_of: str | None = None,
+) -> dict:
+    """One case from team_history in full, with the evidence that exists for its dates."""
+    from app.teams import history
+
+    team = _supervised(db, user, team_id)
+    try:
+        return history.one_case(
+            db, team, case_id, today, day=_date(day, "day"), as_of=_date(as_of, "as_of")
+        )
+    except history.NotFound:
+        raise HarnessError("No such case for this team.") from None
+
+
 # --- a decision, recorded as a pending draft (docs/change-memory.md) ---------------------------
 
 SUGGESTED = "Suggested in chat — awaiting your confirmation"
@@ -345,7 +503,7 @@ def _draft(action: TeamAction) -> dict:
         "status": "pending" if action.status == "proposed" else action.status,
         "shown_in_app": SUGGESTED if action.status == "proposed" else None,
         "title": view.action_title(action),
-        "play": action.play,
+        "play": action.play if action.play in playbook.PLAY else None,  # never a retired id
         "starts_on": action.starts_on.isoformat(),
         "ends_on": action.ends_on.isoformat(),
         "linked_event_id": str(action.event_id) if action.event_id else None,
@@ -395,11 +553,9 @@ def record_team_change(
     """Records a playbook change the supervisor agreed to in the chat, as a pending draft that
     only the Patterns app can confirm or decline. Nobody is told; nothing is measured unless
     tracking was chosen now. The same request_id returns the same record."""
-    from app.teams import playbook
-
     team = _supervised(db, user, team_id)
     play = playbook.PLAY.get(change.play)
-    if change.play == playbook.CUSTOM or play is None:
+    if change.play == playbook.CUSTOM or play is None:  # the schema already refuses these
         raise HarnessError(
             "Only a playbook change can be recorded through MCP; a change in your own words is "
             "planned in the Patterns app. Playbook changes: " + ", ".join(playbook.PLAY) + "."

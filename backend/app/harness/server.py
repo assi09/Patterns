@@ -164,14 +164,17 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
         "('Sustained change' or 'New change') and each weekly line ('This week vs. the previous "
         "four weeks') with its own comparison dates, contributors, roster and evidence id, and "
         "team changes as known then. `week`: any date in the week (e.g. 2021-07-19); left out, "
-        "the latest report plus today's readings and open alerts. Aggregates from at least 5 "
-        "people; never a person's value."
+        "the latest report plus today's readings and open alerts. The report gives the week it "
+        "covers and the day it was made (made_on) apart. `as_of`: what was known by that day, "
+        "for the whole answer: only a report made by then ('No report was available by that "
+        "date.' otherwise), decisions and outcomes as recorded by then. Aggregates from at least "
+        "5 people; never a person's value."
     )
-    def team_overview(team_id: str, week: str | None = None) -> dict:
+    def team_overview(team_id: str, week: str | None = None, as_of: str | None = None) -> dict:
         return use(
             "team_overview",
             lambda db, user, _: tools.team_overview(
-                db, user, team_id, _today(user, timezone), week
+                db, user, team_id, _today(user, timezone), week, as_of
             ),
         )
 
@@ -241,6 +244,64 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
             "send_team_event",
             lambda db, user, token: tools.send_team_event(
                 db, user, team_id, event, token, datetime.now(UTC)
+            ),
+        )
+
+    @server.tool(
+        description="A supervisor's team history, newest first: events (category and dates; an "
+        "event's words stay in the app) whether or not anything was done about them, and team "
+        "changes in every state (pending, approved, declined; reported tried, not tried or "
+        "unknown; tracked or not; any outcome), each with records the supervisor linked, records "
+        "nearby only by date (not a link, not a cause), and how much evidence exists for its "
+        "dates. Filters, all optional: start, end (dates), category (deadline, launch, travel, "
+        "holiday, reorganisation, onboarding, other), play, metric, as_of (what was known that "
+        "day). Every filter given must hold. At most 20 cases a page: when `more` is above 0, "
+        "call again with only team_id and the returned next_cursor to get the rest of the same "
+        "lookup (same filters, same as_of); the last page has next_cursor null. Facts only: it "
+        "never ranks, recommends or says a change worked."
+    )
+    def team_history(
+        team_id: str,
+        start: str | None = None,
+        end: str | None = None,
+        category: str | None = None,
+        play: str | None = None,
+        metric: str | None = None,
+        as_of: str | None = None,
+        cursor: str | None = None,
+    ) -> dict:
+        return use(
+            "team_history",
+            lambda db, user, _: tools.team_history(
+                db,
+                user,
+                team_id,
+                _today(user, timezone),
+                start,
+                end,
+                category,
+                play,
+                metric,
+                as_of,
+                cursor,
+            ),
+        )
+
+    @server.tool(
+        description="One case from team_history in full (case_id): its record, links, and the "
+        "evidence that exists for its dates: the weekly reports that overlap, each with its own "
+        "dates, figures from at least 5 people and evidence ids. `day`: a date to ask about; "
+        "there is no team figure for a single day, so the answer says 'No day-specific team "
+        "evidence available' and gives the week holding it as weekly context. `as_of`: what was "
+        "known that day."
+    )
+    def team_case(
+        team_id: str, case_id: str, day: str | None = None, as_of: str | None = None
+    ) -> dict:
+        return use(
+            "team_case",
+            lambda db, user, _: tools.team_case(
+                db, user, team_id, _today(user, timezone), case_id, day, as_of
             ),
         )
 

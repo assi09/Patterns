@@ -1,0 +1,108 @@
+{
+ "label": "frozen_fc467c4",
+ "commit": "fc467c4",
+ "server_revision": "this checkout",
+ "date": "2026-11-27",
+ "tools": [
+  "my_calendar_days",
+  "my_recent_days",
+  "record_team_change",
+  "send_calendar_days",
+  "send_team_event",
+  "team_case",
+  "team_finding_evidence",
+  "team_history",
+  "team_meeting_load",
+  "team_overview",
+  "who_am_i"
+ ],
+ "tasks_passed": "10/11",
+ "passed": {
+  "ls11_what_changed": true,
+  "ls11_all_eleven": true,
+  "ls11_evidence": true,
+  "ls4_withheld": true,
+  "quiet_week": true,
+  "no_report_week": true,
+  "historical_calendar": true,
+  "synthetic_both_sources": true,
+  "action_follow_up": false,
+  "scope_and_authorization": true,
+  "tool_failures": true
+ },
+ "checks": {
+  "ls11_what_changed": {
+   "steps -696": true,
+   "contributors 5": true,
+   "comparison 2021-06-21 to 2021-07-18": true,
+   "target week 2021-07-19 to 2021-07-25": true,
+   "evidence reference": true
+  },
+  "ls11_all_eleven": {
+   "roster 11": true,
+   "contributors 5": true,
+   "minimum 5": true
+  },
+  "ls11_evidence": {
+   "reached": true,
+   "method stated": true,
+   "dates": true,
+   "contributors 5": true,
+   "0 higher, 5 lower": true,
+   "no quartiles": true
+  },
+  "ls4_withheld": {
+   "withheld": true,
+   "reason": true,
+   "week asked": true,
+   "no figure": true
+  },
+  "quiet_week": {
+   "week asked": true,
+   "ready": true,
+   "no priority": true,
+   "no weekly change": true,
+   "coverage stated": true
+  },
+  "no_report_week": {
+   "no report stated": true,
+   "no other week": true
+  },
+  "historical_calendar": {
+   "week asked": true,
+   "unavailable stated": true,
+   "no figures": true,
+   "no zero inferred": true
+  },
+  "synthetic_both_sources": {
+   "sustained change": true,
+   "finding dates": true,
+   "calendar same week": true,
+   "calendar comparison dates": true,
+   "no automatic scheduling proposal": true
+  },
+  "action_follow_up": {
+   "historical: in progress": false,
+   "historical: no result": false,
+   "current: result": true,
+   "current: result evidence": true,
+   "measured apart from tried": true
+  },
+  "scope_and_authorization": {
+   "another supervisor's team refused": true,
+   "unknown evidence reveals nothing": true,
+   "revoked token refused": true
+  },
+  "tool_failures": {
+   "unavailable evidence is an error": true,
+   "retry gives the same answer": true
+  }
+ },
+ "calls": {
+  "discovery": 1,
+  "task_calls": 14,
+  "failed_calls": 2,
+  "bytes": 38579,
+  "seconds": 1.02
+ }
+}

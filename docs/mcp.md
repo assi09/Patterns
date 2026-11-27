@@ -54,14 +54,20 @@ the account ends a connection at once. Every call is checked against the account
 role, as in the app; each token is limited to 60 tool calls a minute, and anyone may register an
 assistant but at most 200 an hour.
 
-**What is recorded.** Each tool call: which tool, whether it worked, when, and by which
-connection. Never its inputs or results.
+**What is recorded.** Each tool call that reaches the server's handler: which tool, whether it
+worked, when, and by which connection. Never its inputs or results.
+
+A call the input schema refuses never reaches the handler, so it is not in this log. Examples are
+a value of the wrong type, one too long, or a `play` that is not one of the playbook's choices.
+The client's own transcript shows those calls. In the first live rehearsal (2026-11-27), the
+assistant made three `record_team_change` calls; the server logged two, because the first was
+refused by the schema.
 
 ## What each role may do
 
 | Role | Reads | Sends in |
 |---|---|---|
-| **Supervisor** | their own teams: any week's report as one labelled answer (`team_overview`, with `week`), the bounded evidence behind each finding (`team_finding_evidence`), the team's scheduled meeting time for a given week (`team_meeting_load`), and, for the latest week, observed readings and open team alerts; all from at least 5 people, as on the Team tab ([supervisor-workflow.md](supervisor-workflow.md)) | a team event (a launch, a deadline): title, dates and an optional category, held for the supervisor to approve; a **playbook change the supervisor agreed to in the chat** (`record_team_change`), saved as a pending draft ("Suggested in chat — awaiting your confirmation") that only the app confirms or declines ([change-memory.md](change-memory.md)) |
+| **Supervisor** | their own teams: any week's report as one labelled answer (`team_overview`, with `week`), the bounded evidence behind each finding (`team_finding_evidence`), the team's scheduled meeting time for a given week (`team_meeting_load`), and, for the latest week, observed readings and open team alerts; all from at least 5 people, as on the Team tab ([supervisor-workflow.md](supervisor-workflow.md)); the team's **history** (`team_history`, `team_case`): events by category and dates (never their words), changes in every state with what the supervisor reported about trying them, links the supervisor made apart from records that only share dates, and the weekly evidence for a case's dates, with "No day-specific team evidence available." for a single day; 20 cases a page, with a `next_cursor` that continues the same lookup (same filters, same as-of date) ([change-memory.md](change-memory.md)) | a team event (a launch, a deadline): title, dates and an optional category, held for the supervisor to approve; a **playbook change the supervisor agreed to in the chat** (`record_team_change`), saved as a pending draft ("Suggested in chat — awaiting your confirmation") that only the app confirms or declines ([change-memory.md](change-memory.md)) |
 | **Member** | their own recent days (sleep, steps, resting heart rate, HRV), their own calendar counts | their own calendar days (meeting minutes, meetings, after-hours minutes, back-to-back, focus minutes), held for them to approve |
 | **HR** | nothing through MCP | nothing |
 | **Anyone** | **never** another person's data, another team, a figure from fewer than 5 people, or any check-in alert | |
@@ -83,8 +89,9 @@ What a harness sends is **untrusted input**:
 - **Only on the supervisor's request.** An assistant records it only when the supervisor asks it
   to save a change they agreed to. Text in an event, a calendar or a document is never a reason
   to record one.
-- **Playbook changes only.** A change in the supervisor's own words is planned in the app. The
-  response gives the playbook's title, never free text.
+- **Playbook changes only.** The playbook's ids are the input schema's choices for `play`, so
+  an assistant can pick one on its first try. A change in the supervisor's own words is planned
+  in the app. The response gives the playbook's title, never free text.
 - **The dates the supervisor agreed to.** `starts_on` and `ends_on` are both required. Patterns
   never picks a length, so "Thursday evening" is saved as that Thursday alone.
 - **Idempotent.** The caller's `request_id` makes a retry return the same record. Reusing it for
@@ -161,6 +168,22 @@ existing team instead.
   screen, a 5 MB request (413) and the call limit (60 answered, then refused). The first,
   leniently graded run found four problems, fixed in `80f566d`; it also accepted calendar attacks
   refused for missing fields rather than the reason under test, which the strict grader caught.
+- **Red-team set with change memory (2026-11-27):** 36 more attacks on `team_history`,
+  `team_case` and `record_team_change`, graded the same way: **84/84** in all, no traceback or
+  500 in the API log. They cover:
+  - another supervisor, a member, HR and a demoted supervisor reaching for team A's history, cases
+    and drafts;
+  - another team's change, event and cursor used through team A;
+  - forged, oversized and filter-carrying cursors;
+  - SQL and paths in filters and case ids;
+  - each field of a draft attacked alone: request id, play, a smuggled status or tried mark, dates,
+    tracking;
+  - a reused request id, and 8 simultaneous retries making one draft;
+  - planted instructions in an event and a custom change never coming back through MCP;
+  - no tool that approves, declines, marks, edits or deletes.
+
+  Refused drafts are also checked in the database. The seed now builds team A's report itself;
+  the 2026-11-26 run had one from a setup step that was not recorded.
 - **The full path (2026-11-26, `46d6c4d`):** `eval/team_three_way.py` finds the dataset files, the
   supervisor's report and an authenticated MCP read in agreement, figure by figure;
   `eval/team_e2e.py` passes all 18 check-in and report scenarios through the API.
