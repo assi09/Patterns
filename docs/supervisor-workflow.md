@@ -69,12 +69,24 @@ Each team change in `follow_up` shows:
 - a controlled title (the playbook's, or "Custom team change") and who started it;
 - whether it was tried. That is the calendar check when the change has one; otherwise "approved
   by the supervisor; whether the team did it is not measured here";
-- for an ended change, `result`: what was measured, the verdict (`better`, `worse`, `changed`,
-  `no_change` or `unclear`), the dates, contributors and the bounded figure, and the stored record
-  of the report that covered it (`report_id`, `evidence_id`), so it opens like any finding.
+- for an ended change, `result`: what was measured, the `outcome` ("above the reference level",
+  "below the reference level", "no clear difference detected" or "insufficient data"), the
+  reference days and their label, contributors and the bounded figure, and the stored record of
+  the report that covered it (`report_id`, `evidence_id`), so it opens like any finding.
 
 When no report has covered the change yet, the result is measured on request and marked
-`measured_now`. Every result says it is an observation during the change, not proof it caused it.
+`measured_now`.
+
+**Why no "better" (since 2026-11-27, [change-memory.md](change-memory.md) step 0).** A change is
+compared with the 28 days before it started, and changes usually start right after a drop. In a
+simulation, an ordinary rebound made a change that did nothing read "better" in 39–84% of the
+changes started. So results are named without a judgement, and each carries two caveats:
+- it cannot show how much the change itself contributed;
+- a preceding dip can make an ordinary rebound look like an improvement.
+
+**Stored results keep their meaning.** The comparison and the test are the same as before; only
+the words describing them changed. The app API still sends the old `verdict` for older app
+versions, and nothing shows it.
 
 ## Evaluation
 
@@ -98,6 +110,9 @@ on the tool outputs only. A failed task gets no efficiency credit. Free: no mode
 - **One check was corrected after the first development run:** the pattern for a finding's
   baseline dates did not allow the indentation the server's JSON has. The baseline has no such
   field, so the correction cannot favour either version.
+- **One check accepts a renamed key (2026-11-27):** a measured follow-up result was marked by
+  `"verdict"` and is now marked by `"outcome"`. The check accepts either, so the change of key
+  favours neither version. This work still scores 11/11.
 - **The instance builder was corrected in the review round:** reports were dated the day after
   their week, before the made-up members had joined. They are now made at build time, as the demo
   command does. Both instances were rebuilt and both versions rescored; the results did not
