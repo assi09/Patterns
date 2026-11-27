@@ -313,3 +313,32 @@ def test_an_outcome_from_a_report_made_after_as_of_is_left_out(engine):
     assert then["outcome"] is None and then["evidence"] == []
     assert listed_then["cases"][0]["outcome"] is None
     assert now["outcome"] is not None and now["outcome"]["report_id"]
+
+
+def test_every_filter_given_must_hold(engine):
+    team_id = make_team(engine)
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        first, second = event(db, team, FRIDAY), event(db, team, FRIDAY - timedelta(days=7))
+        launch = event(db, team, FRIDAY - timedelta(days=14), category="launch")
+        start = WEEK.start - timedelta(days=21)
+        wanted = change(db, team, start, note=first, metric="sleep_minutes")
+        change(db, team, start, note=second, metric="steps")  # deadline, step goal, wrong metric
+        change(db, team, start, note=launch, metric="sleep_minutes")  # wrong category
+        change(db, team, start, note=second, play="meeting_breaks", metric="sleep_minutes")
+        change(db, team, start, metric="sleep_minutes")  # linked to no event
+        found = tools.team_history(
+            db,
+            boss(db),
+            team_id,
+            TODAY,
+            category="deadline",
+            play="step_goal",
+            metric="sleep_minutes",
+        )
+        by_metric = tools.team_history(
+            db, boss(db), team_id, TODAY, category="deadline", metric="steps"
+        )
+    assert [c["case_id"] for c in found["cases"]] == [f"change:{wanted.id}"]
+    assert [c["tracked"] for c in by_metric["cases"]] == [True]
+    assert all(c["kind"] == "change" for c in by_metric["cases"])

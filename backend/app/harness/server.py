@@ -252,7 +252,8 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
         "nearby only by date (not a link, not a cause), and how much evidence exists for its "
         "dates. Filters, all optional: start, end (dates), category (deadline, launch, travel, "
         "holiday, reorganisation, onboarding, other), play, metric, as_of (what was known that "
-        "day). Facts only: it never ranks, recommends or says a change worked."
+        "day). Every filter given must hold. Facts only: it never ranks, recommends or says a "
+        "change worked."
     )
     def team_history(
         team_id: str,

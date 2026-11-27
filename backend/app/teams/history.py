@@ -235,17 +235,25 @@ def _keep(case: dict, start, end, category, play, metric, cases: dict[str, dict]
         return False
     if end and (dates is None or dates["start"] > end.isoformat()):
         return False
+    # Every filter given must hold; none is skipped because another matched.
     if category is not None:
         if case["kind"] == EVENT:
-            return case["category"] == category
-        event = cases.get((case.get("linked") or {}).get("event") or "")
-        return event is not None and event["category"] == category
+            if case["category"] != category:
+                return False
+        else:
+            event = cases.get((case.get("linked") or {}).get("event") or "")
+            if event is None or event["category"] != category:
+                return False
     if play is not None:
         if case["kind"] != CHANGE:
             return False
-        return case["custom"] if play == "custom" else case["play"] == play
-    tracked = (case.get("tracking") or {}).get("metric")
-    return metric is None or (case["kind"] == CHANGE and tracked == metric)
+        if not (case["custom"] if play == "custom" else case["play"] == play):
+            return False
+    if metric is not None:
+        tracked = (case.get("tracking") or {}).get("metric")
+        if case["kind"] != CHANGE or tracked != metric:
+            return False
+    return True
 
 
 def history(
