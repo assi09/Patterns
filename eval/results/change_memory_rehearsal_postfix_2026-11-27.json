@@ -33,5 +33,11 @@
   "chat_1": "pass in both; refused attempts 2 -> 0",
   "chat_2": "partial in both; the retired-id naming is gone (old id absent from every tool output), the outcome label and rebound caveat are still omitted by the assistant although the tools return them"
  },
- "files": "data/eval/change_memory/post_fix_run/ (git-ignored): chat-1-calls.json, chat-2-calls.json, after-approval-check.json, after-chat-2-check.json"
+ "files": "data/eval/change_memory/post_fix_run/ (git-ignored): chat-1-calls.json, chat-2-calls.json, after-approval-check.json, after-chat-2-check.json",
+ "closed": {
+  "on": "2026-11-27",
+  "decision": "closed with the scores as recorded; no required sentence, no third run",
+  "known_limitation": "the assistant may leave out the rebound caveat in a short summary although the tools return it; it still warns against attributing the difference to the change. The missing outcome label is a wording difference ('59 minutes lower' gives direction and size)",
+  "open_question": "which caveats a supervisor needs in a short summary: to be asked of the doctors"
+ }
 }

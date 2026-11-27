@@ -210,3 +210,24 @@ effort, and the same criteria. Recorded apart: the first run's scores stand. The
 | Team selection | **No wrong-team access in either chat.** Other teams' ids appear only in `who_am_i`'s list |
 
 **What is left:** the gap in chat 2 is now the assistant's summary, not what the tools return.
+
+## Closed (2026-11-27)
+
+The live rehearsal is closed with the scores as recorded above: the first run 3 passes and 1
+partial, the post-fix run of chats 1 and 2 a pass and a partial. No required sentence was added
+and there is no third run.
+
+**What it showed:** in both runs a fresh assistant found the approved decision, said nobody had
+reported whether the team tried it, and kept the earlier sleep evidence apart from it. After the
+fixes, saving took one call and the retired change was named as what it is.
+
+**Known limitation.** The two omissions in chat 2 weigh differently:
+- **The outcome label.** "59 minutes lower" says the direction and size in plain words. That is a
+  wording difference, not missing information.
+- **The rebound caveat.** It is missing information: if the team had dipped just before the
+  change, a later recovery could happen on its own. The assistant still warned against
+  attributing the difference to the change, but not why a before/after comparison can mislead.
+  The tools return it; an assistant may leave it out of a short summary.
+
+**Open question, for the doctors:** which caveats a supervisor needs to see in a short summary.
+Whether to require any wording waits on their answer.
