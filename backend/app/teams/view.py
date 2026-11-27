@@ -69,12 +69,22 @@ def _change(metric: str, raw: float) -> dict:
     return {"value": _value(metric, raw), "unit": _unit(metric), "text": change_text(metric, raw)}
 
 
-def week_report(db: Session, team: Team, week: date | None) -> TeamReport | None:
-    """The report of the week holding `week`, or the latest stored report when no week is asked."""
+def week_report(
+    db: Session, team: Team, week: date | None, made_by: date | None = None
+) -> TeamReport | None:
+    """The report of the week holding `week`, or the latest stored report when no week is asked;
+    with `made_by`, only a report that existed by the end of that day. A week's report is made
+    once and never replaced (`reports.build_report`), so the one stored is the version that was
+    available from the day it was made."""
     query = select(TeamReport).where(TeamReport.team_id == team.id)
     if week is not None:
-        return db.scalar(query.where(TeamReport.week_start == week_of(week).start))
-    return db.scalar(query.order_by(TeamReport.week_start.desc()).limit(1))
+        query = query.where(TeamReport.week_start == week_of(week).start)
+    found = [
+        r
+        for r in db.scalars(query.order_by(TeamReport.week_start.desc()))
+        if made_by is None or r.created_at.date() <= made_by
+    ]
+    return found[0] if found else None
 
 
 def _held(stats: dict) -> dict | None:
@@ -355,16 +365,35 @@ def overview(
     today: date,
     report: TeamReport | None = None,
     follow: bool = True,
+    as_of: date | None = None,
 ) -> dict:
     """The team's week: its report's state, priorities, weekly comparison and follow-up.
 
     With no week asked, the latest stored report. With a week asked and no report for it, says so
-    and substitutes nothing. A historical answer is as of the day after that report's week:
-    current readings and later results are left out.
+    and substitutes nothing. A week's answer is dated the day after the week, or the day its
+    report was made if that was later (never after today), so a report never appears under a date
+    before it existed; the week covered and the day it was made are given apart.
+
+    An explicit `as_of` is a cutoff for the whole answer: only a report made by then, the team's
+    decisions and reports of trying as known then, and outcomes stored by then. With no report by
+    then it says "No report was available by that date." and gives nothing about a later one.
     """
+    cutoff = min(as_of, today) if as_of is not None else None
     if report is None:
-        report = week_report(db, team, week)
+        report = week_report(db, team, week, made_by=cutoff)
     out: dict = {"team_id": str(team.id), "team": team.name, "minimum": MIN_MEMBERS}
+    if report is None and cutoff is not None:
+        asked = week_of(week) if week is not None else None
+        out["report"] = {
+            "state": "no_report_by_then",
+            "week": _span(asked.start, asked.end) if asked else None,
+            "note": "No report was available by that date.",
+        }
+        out["priorities"] = []
+        if follow:
+            out["follow_up"] = follow_up(db, team, cutoff, today)
+        out["as_of"] = cutoff.isoformat()
+        return out
     if report is None:
         asked = week_of(week) if week is not None else None
         out["report"] = {
@@ -375,7 +404,13 @@ def overview(
         out["priorities"] = []
         return out
     span = week_of(report.week_start)
-    as_of = min(today, span.end + timedelta(days=1)) if week is not None else today
+    made = report.created_at.date()
+    if cutoff is not None:
+        as_of = cutoff
+    elif week is not None:
+        as_of = min(today, max(span.end + timedelta(days=1), made))
+    else:
+        as_of = today
     priorities = [
         p for row in (report.body or {}).get("priorities", []) if (p := _priority(report, row))
     ]
@@ -391,6 +426,7 @@ def overview(
         "status": report.status,  # ready or withheld, as the report was made
         "report_id": str(report.id),
         "week": _span(span.start, span.end),
+        "made_on": made.isoformat(),  # apart from the week covered: a report can be made later
         "roster": report.members_total,
         "with_enough_data": report.members_included,
     }

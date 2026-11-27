@@ -164,14 +164,17 @@ def build(sessions: Sessions, public_url: str, timezone: str = "UTC") -> MCPServ
         "('Sustained change' or 'New change') and each weekly line ('This week vs. the previous "
         "four weeks') with its own comparison dates, contributors, roster and evidence id, and "
         "team changes as known then. `week`: any date in the week (e.g. 2021-07-19); left out, "
-        "the latest report plus today's readings and open alerts. Aggregates from at least 5 "
-        "people; never a person's value."
+        "the latest report plus today's readings and open alerts. The report gives the week it "
+        "covers and the day it was made (made_on) apart. `as_of`: what was known by that day, "
+        "for the whole answer: only a report made by then ('No report was available by that "
+        "date.' otherwise), decisions and outcomes as recorded by then. Aggregates from at least "
+        "5 people; never a person's value."
     )
-    def team_overview(team_id: str, week: str | None = None) -> dict:
+    def team_overview(team_id: str, week: str | None = None, as_of: str | None = None) -> dict:
         return use(
             "team_overview",
             lambda db, user, _: tools.team_overview(
-                db, user, team_id, _today(user, timezone), week
+                db, user, team_id, _today(user, timezone), week, as_of
             ),
         )
 

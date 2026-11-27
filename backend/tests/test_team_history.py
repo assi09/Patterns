@@ -297,38 +297,87 @@ def test_a_tracked_legacy_change_shows_its_stored_outcome_and_filters_by_metric(
     assert found["outcome"]["evidence_id"] and found["outcome"]["report_id"]
 
 
-def test_an_outcome_from_a_report_made_after_as_of_is_left_out(engine):
-    """A report made late, for a week before the cutoff: an as-of answer from before it was made
-    has no outcome from it; today's answer has."""
+def test_a_late_first_report_appears_only_from_the_day_it_was_made(engine):
+    """A week's first report made ten days late. Asked as of the cutoff, through team_case,
+    team_history and team_overview: the decision state known then, no report, no figures, no
+    outcome, and nothing decided or marked later. Today: the report, dated by when it was made,
+    with its outcome."""
     from app.teams import reports
 
     team_id = make_team(engine)
+    late = NOW + timedelta(days=10)
     with session_scope(engine) as db:
         team = team_of(db, team_id)
         action = change(db, team, WEEK.start - timedelta(days=14), days=21, metric="sleep_minutes")
-        late = NOW + timedelta(days=10)
+        pending = change(db, team, WEEK.start, days=7, status="proposed", play="meeting_breaks")
+        team_actions.decide(db, team, pending, True, late - timedelta(days=2))  # after the cutoff
+        team_actions.mark_implementation(db, action, True, late - timedelta(days=1))
         reports.build_report(db, team, WEEK, late)
         case_id = f"change:{action.id}"
         then = history.one_case(db, team, case_id, late.date(), as_of=TODAY)
         now = history.one_case(db, team, case_id, late.date())
         listed_then = tools.team_history(db, boss(db), team_id, late.date(), as_of=str(TODAY))
-        # The same question through the week's overview: as of the day after that week.
-        week_then = tools.team_overview(db, boss(db), team_id, late.date(), week=str(WEEK.start))
-        week_now = tools.team_overview(db, boss(db), team_id, late.date())
+        asked = {"week": str(WEEK.start)}
+        week_then = tools.team_overview(
+            db, boss(db), team_id, late.date(), **asked, as_of=str(TODAY)
+        )
+        latest_then = tools.team_overview(db, boss(db), team_id, late.date(), as_of=str(TODAY))
+        week_now = tools.team_overview(db, boss(db), team_id, late.date(), **asked)
+        latest_now = tools.team_overview(db, boss(db), team_id, late.date())
+        report_id = str(reports.build_report(db, team, WEEK, late).id)
     not_yet = f"No outcome was recorded by {TODAY}"
+    # Then, through every tool.
     assert then["outcome"] is None and then["evidence"] == []
     assert then["outcome_note"].startswith(not_yet)
-    assert listed_then["cases"][0]["outcome"] is None
-    assert listed_then["cases"][0]["outcome_note"].startswith(not_yet)
-    assert week_then["as_of"] == str(TODAY)
-    [followed] = week_then["follow_up"]
-    assert followed["state"] == "ended" and followed["result"]["outcome"] is None
-    assert followed["result"]["note"].startswith(not_yet)
-    assert "figure" not in followed["result"] and "measured_now" not in followed["result"]
-    assert now["outcome"] is not None and now["outcome"]["report_id"] and "outcome_note" not in now
-    [current] = week_now["follow_up"]
-    assert current["result"]["outcome"] == now["outcome"]["outcome"]
-    assert current["result"]["report_id"] == now["outcome"]["report_id"]
+    assert then["implementation"] == "not reported: whether the team tried it is unknown"
+    assert by_id(listed_then)[case_id]["outcome_note"].startswith(not_yet)
+    for answer in (week_then, latest_then):
+        assert answer["as_of"] == str(TODAY)
+        assert answer["report"]["state"] == "no_report_by_then"
+        assert answer["report"]["note"] == "No report was available by that date."
+        assert answer["priorities"] == [] and "this_week_vs_previous_four" not in answer
+        assert report_id not in str(answer) and str(late.date()) not in str(answer)
+        assert "readings" not in answer and "open_alerts" not in answer
+        ended, waiting = sorted(answer["follow_up"], key=lambda f: f["state"])
+        assert ended["state"] == "ended" and ended["result"]["outcome"] is None
+        assert ended["result"]["note"].startswith(not_yet)
+        assert ended["tried"] == "not reported: whether the team tried it is unknown"
+        assert waiting["state"] == "proposed"  # approved only after the cutoff
+    # Today.
+    assert now["outcome"]["report_id"] == report_id and "outcome_note" not in now
+    for answer in (week_now, latest_now):
+        assert answer["report"]["report_id"] == report_id
+        assert answer["report"]["made_on"] == str(late.date())
+        assert answer["report"]["week"] == {"start": str(WEEK.start), "end": str(WEEK.end)}
+        assert answer["as_of"] == str(late.date())  # never dated before the report existed
+        [current] = [f for f in answer["follow_up"] if f.get("result")]
+        assert current["result"]["report_id"] == report_id
+        assert current["tried"] == "reported tried by the supervisor"
+
+
+def test_a_report_is_never_replaced_so_an_earlier_date_reads_the_version_it_had(engine):
+    """Making a week's report again returns the one already made, with its own date and figures:
+    an answer dated between the two reads that version, and one before it reads none."""
+    from app.teams import reports
+
+    team_id = make_team(engine)
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        first = reports.build_report(db, team, WEEK, NOW)
+        made = (str(first.id), first.created_at, dict(first.evidence))
+        give_more = change(db, team, WEEK.start, metric="steps")  # something new to report on
+        assert give_more
+        again = reports.build_report(db, team, WEEK, NOW + timedelta(days=6))
+        assert (str(again.id), again.created_at, dict(again.evidence)) == made
+        between = tools.team_overview(
+            db, boss(db), team_id, TODAY + timedelta(days=6), as_of=str(TODAY + timedelta(days=3))
+        )
+        before = tools.team_overview(
+            db, boss(db), team_id, TODAY + timedelta(days=6), as_of=str(TODAY - timedelta(days=1))
+        )
+    assert between["report"]["report_id"] == made[0]
+    assert between["report"]["made_on"] == str(NOW.date())
+    assert before["report"]["note"] == "No report was available by that date."
 
 
 def test_every_filter_given_must_hold(engine):

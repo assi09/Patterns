@@ -187,17 +187,27 @@ def _week(value: str | None) -> date | None:
 
 
 def team_overview(
-    db: Session, user: User, team_id: str, today: date, week: str | None = None
+    db: Session,
+    user: User,
+    team_id: str,
+    today: date,
+    week: str | None = None,
+    as_of: str | None = None,
 ) -> dict:
     """The team's week in one call: the report's state, its priority findings and weekly
     comparison, each with its own dates, coverage and evidence id, and the follow-up on team
     changes as known then (app.teams.view). With no week, the latest report, plus today's
     observed readings and open alerts as before. With a week, that week only: nothing current is
-    mixed in, and a week without a report says so."""
+    mixed in, and a week without a report says so. `as_of`: what was known by that day, applied
+    to the whole answer; nothing current is mixed in either."""
     team = _supervised(db, user, team_id)
     asked = _week(week)
-    out = view.overview(db, team, asked, today)
+    cutoff = _date(as_of, "as_of")
+    out = view.overview(db, team, asked, today, as_of=cutoff)
     if asked is not None:
+        return out
+    if cutoff is not None and cutoff < today:
+        out["note"] = "Today's readings and open alerts are left out of an answer for a past date."
         return out
     frames = reports.member_frames(db, team, today - timedelta(days=4), today)
     report = view.week_report(db, team, None)
