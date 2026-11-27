@@ -75,6 +75,12 @@ reliability, QA and security):
 | **Fresh-clone run** of the README quickstart | the flag (`FA_PERSONAL_FEATURES`) and the new roles |
 | **Reviews** of Karim's PRs, and the project board if the brief needs one | |
 
+**Preparation on 2026-11-27:** Jad's draft threat model, Failure Matrix, security scenarios,
+reliability test plan, QA checklist and evaluation checklist are indexed in
+[qa-preparation.md](qa-preparation.md). App-dependent execution waits for the final candidate;
+the drafts do not mark these deliverables as tested or close #246. The historical assignment
+and dates above are retained.
+
 The deferred agent issues ([pr-195-followup-issues.md](pr-195-followup-issues.md)) stay deferred:
 the individual chat is behind the flag.
 
