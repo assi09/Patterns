@@ -32,7 +32,7 @@ from app.sync import calendar
 from app.teams import agent as team_agent
 from app.teams import memberships as teams
 from app.teams import observed as observed_text
-from app.teams import reports, view
+from app.teams import playbook, reports, view
 
 PAST_DAYS = 60  # how far back a harness may send calendar days
 AHEAD_DAYS = 14  # and how far ahead
@@ -108,7 +108,9 @@ class TeamChangeIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     request_id: str = Field(min_length=8, max_length=64)
-    play: str = Field(min_length=1, max_length=32)
+    # The playbook's own ids, offered as the schema's choices so an assistant picks one on its
+    # first try; a change in the supervisor's own words is planned in the app.
+    play: Literal[tuple(playbook.PLAY)]  # type: ignore[valid-type]
     starts_on: date
     # Required: the dates the supervisor agreed to, never a length Patterns picks (one day is
     # starts_on again).
@@ -370,7 +372,7 @@ def team_history(
     A page holds at most 20; `next_cursor` continues the same lookup. The cursor carries the
     team, the filters and the as-of date of the first page (resolved, so "today" does not move
     between pages); it is passed alone."""
-    from app.teams import history, playbook
+    from app.teams import history
 
     team = _supervised(db, user, team_id)
     after = None
@@ -501,7 +503,7 @@ def _draft(action: TeamAction) -> dict:
         "status": "pending" if action.status == "proposed" else action.status,
         "shown_in_app": SUGGESTED if action.status == "proposed" else None,
         "title": view.action_title(action),
-        "play": action.play,
+        "play": action.play if action.play in playbook.PLAY else None,  # never a retired id
         "starts_on": action.starts_on.isoformat(),
         "ends_on": action.ends_on.isoformat(),
         "linked_event_id": str(action.event_id) if action.event_id else None,
@@ -551,11 +553,9 @@ def record_team_change(
     """Records a playbook change the supervisor agreed to in the chat, as a pending draft that
     only the Patterns app can confirm or decline. Nobody is told; nothing is measured unless
     tracking was chosen now. The same request_id returns the same record."""
-    from app.teams import playbook
-
     team = _supervised(db, user, team_id)
     play = playbook.PLAY.get(change.play)
-    if change.play == playbook.CUSTOM or play is None:
+    if change.play == playbook.CUSTOM or play is None:  # the schema already refuses these
         raise HarnessError(
             "Only a playbook change can be recorded through MCP; a change in your own words is "
             "planned in the Patterns app. Playbook changes: " + ", ".join(playbook.PLAY) + "."

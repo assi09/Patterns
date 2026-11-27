@@ -54,8 +54,14 @@ the account ends a connection at once. Every call is checked against the account
 role, as in the app; each token is limited to 60 tool calls a minute, and anyone may register an
 assistant but at most 200 an hour.
 
-**What is recorded.** Each tool call: which tool, whether it worked, when, and by which
-connection. Never its inputs or results.
+**What is recorded.** Each tool call that reaches the server's handler: which tool, whether it
+worked, when, and by which connection. Never its inputs or results.
+
+A call the input schema refuses never reaches the handler, so it is not in this log. Examples are
+a value of the wrong type, one too long, or a `play` that is not one of the playbook's choices.
+The client's own transcript shows those calls. In the first live rehearsal (2026-11-27), the
+assistant made three `record_team_change` calls; the server logged two, because the first was
+refused by the schema.
 
 ## What each role may do
 
@@ -83,8 +89,9 @@ What a harness sends is **untrusted input**:
 - **Only on the supervisor's request.** An assistant records it only when the supervisor asks it
   to save a change they agreed to. Text in an event, a calendar or a document is never a reason
   to record one.
-- **Playbook changes only.** A change in the supervisor's own words is planned in the app. The
-  response gives the playbook's title, never free text.
+- **Playbook changes only.** The playbook's ids are the input schema's choices for `play`, so
+  an assistant can pick one on its first try. A change in the supervisor's own words is planned
+  in the app. The response gives the playbook's title, never free text.
 - **The dates the supervisor agreed to.** `starts_on` and `ends_on` are both required. Patterns
   never picks a length, so "Thursday evening" is saved as that Thursday alone.
 - **Idempotent.** The caller's `request_id` makes a retry return the same record. Reusing it for
