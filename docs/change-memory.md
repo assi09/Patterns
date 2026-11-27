@@ -15,8 +15,8 @@ the app can then answer: **"Have we tried anything like this before, and what ha
 
 Patterns never says a change "worked", and never ranks changes.
 
-**Status: plan only.** No product code is written yet. Step 0 (below) has been run. The open
-decisions at the end need an answer before step 2.
+**Status: approved 2026-11-27, building.** Step 0 (below) has been run, and the three decisions
+are made (end of this page). Build order: the outcome fix first, then the record and the history.
 
 ## Step 0: can the outcome be trusted? (done)
 
@@ -39,9 +39,12 @@ it. Those 28 days hold the drop, so recovery alone could read as "better".
   - *Now*: the change's days against the 28 days just before it (in use today).
   - *Before the drop*: the change's days against the 28 days before the drop was first flagged.
 
-**How often each measure says "better" or "worse"** (change does nothing, unless stated):
+**How often each measure reports a difference** (the change does nothing, unless stated; for these two metrics, "better" means above).
+Percentages are of the **changes actually started** (the trigger fired), not of the 300 teams; the
+counts are in the next table. They describe this failure mode under simulated conditions; they are
+not error rates measured on users.
 
-| Situation | Daily variation | Now says "better" | Before the drop says "better" | Before the drop says "worse" |
+| Situation | Daily variation | Now says "better" | Before the drop: "above" | Before the drop: "below" |
 |---|---|---|---|---|
 | Random start, no drop | independent | 2–3% | – | – |
 | | team-wide weekly shifts | 13–15% | – | – |
@@ -56,18 +59,30 @@ it. Those 28 days hold the drop, so recovery alone could read as "better".
 Ranges cover both metrics. The 3-week dip's "worse" is correct: the team was still below its level
 before the drop.
 
+**Changes started, of 300 teams per case** (time asleep / steps):
+
+| Situation | Independent days | Slow personal drift | Team-wide weekly shifts |
+|---|---|---|---|
+| Random start | 300 / 300 | 300 / 300 | 300 / 300 |
+| After a flagged drop that was only noise | 1 / 3 | 0 / 6 | 64 / 65 |
+| After a 2-week dip | 251 / 249 | 156 / 151 | 191 / 205 |
+| After a 3-week dip | 256 / 252 | 166 / 156 | 210 / 217 |
+
+Drops that were only noise rarely triggered a change; with so few, that row is not interpreted.
+
 **What it shows.**
 1. **The measure in use credits recovery.** After a temporary dip it says "better" for a change
    that did nothing in **4 to 8 of every 10 teams**.
    - This affects the follow-up result Patterns shows **today** for any change started after a
      drop.
    - Stored as memory, it would teach the next assistant that a useless change works.
-2. **Measuring against the level before the drop removes most of that.** False "better" falls to
-   about 1–3%, or 12% with team-wide weekly shifts.
-   - It answers a different, honest question: is the team **back to, above or still below** where
-     it was before the drop?
-   - A dip still running reads as "still below". That is true, and it is not a judgement of the
-     change.
+2. **Measuring against the level before the drop removes most of that.** False "above" falls to
+   about 1–3%, but stays about 12% with team-wide weekly shifts.
+   - It answers a different question: is the team **above, below, or not clearly different from**
+     its level before the first flagged week?
+   - "No clear difference detected" is **not** "back to normal". Calling it that needs a test that
+     the difference is small enough to count as equal, which is not built.
+   - A dip still running reads as "below". That is true, and it is not a judgement of the change.
 3. **No measure here can separate the change from recovery or from a deadline that ended.** With
    5–8 people and one trial, Patterns can report what followed, never that the change caused it.
 4. **The before-the-drop measure is less sensitive.** It finds a real 0.5 SD improvement in 40–84%
@@ -75,14 +90,25 @@ before the drop.
    - "No clear change" must read as "not shown", never as "did not help".
    - Several similar trials, retrieved together, are more informative than one.
 
-**Decision (proposed).**
-- **Keep the outcome part, with the measure changed:**
-  - A change linked to the finding that prompted it is measured against the 28 days before that
-    finding's first held week, and stated as "back to / above / still below its level before the
-    drop".
-  - A change with no linked finding (every change made so far) keeps the 28-days-before comparison
-    with a stated caveat: if the team had just dipped, recovery alone can look like improvement.
-- Neither result is ever called "better because of the change".
+**Decision (2026-11-27).**
+- **A linked change:** the metric and the comparison dates are taken from its verified triggering
+  finding **when the change is recorded**, and frozen. The comparison is the 28 days before the
+  finding's first flagged week, shown as "before the first flagged week" with its dates.
+- **A change with no linked finding** (every change made so far): the existing dated 28-day
+  comparison, with a stated caveat that a preceding dip can make an ordinary rebound look like
+  improvement. Results already stored keep their meaning (the same comparison and the same test);
+  only the words change.
+- **Four outcome labels, in the app and in MCP:**
+  - "above the reference level";
+  - "below the reference level";
+  - "no clear difference detected";
+  - "insufficient data".
+
+  Each shows the observed difference and the contributor count when permitted. Nothing says
+  "better", "worse", "worked" or "returned to baseline".
+- The change's implementation status ("tried", step 4) is shown beside the observation. A fresh
+  assistant should be able to say: **"You confirmed trying it; here's what followed; we can't
+  determine how much the action contributed."**
 
 ## What is built on
 
@@ -100,14 +126,14 @@ before the drop.
 |---|---|---|
 | **Recommended and agreed in a chat** | The assistant, through MCP | Which playbook change, the metric (fixed now, so no number is picked afterwards), dates, the prompting finding (`report_id`, `evidence_id`, checked against the team's reports), an event type from a fixed list, which connection saved it, when, and a `request_id` so a retry makes no duplicate |
 | **Confirmed or declined** | The supervisor, in the app only | `approved` / `declined`, when. Approval tells the members, as today |
-| **Tried or not** | The supervisor, in the app ("Did the team try it?" yes / no / not sure), after it starts | A separate field, never inferred from approval. Where the playbook has a calendar check, that is shown beside it as its own observation |
+| **Tried or not** | The supervisor, in the app ("Did the team try it?" yes / no), after it starts | A separate field, never inferred from approval; not answered means **unknown**. Where the playbook has a calendar check, that is shown beside it as its own observation |
 | **What followed** | Patterns, deterministically, after it ends | The outcome above with its dates, contributors, measure and evidence id, **stored once** so a later answer is the same answer |
 
 ## MCP
 
 | Tool | Does | Never |
 |---|---|---|
-| `record_team_change(team_id, request_id, play, starts_on, prompted_by?, event_type?)` | Saves the change as **waiting for confirmation**, marked "agreed in chat". A repeat of the same `request_id` returns the same record. Refused for a team the caller does not supervise now, a past start, an unknown change, or an evidence id not in that team's reports | Approve, decline, mark tried, edit, delete, notify anyone, or write a calendar |
+| `record_team_change(team_id, request_id, play, starts_on, prompted_by?, event_type?)` | Saves the change as **waiting for confirmation**; the app shows **"Suggested in chat — awaiting your confirmation"**. A repeat of the same `request_id` returns the same record. Refused for a team the caller does not supervise now, a past start, an unknown change, or an evidence id not in that team's reports | Approve, decline, mark tried, edit, delete, notify anyone, or write a calendar |
 | `team_change_history(team_id, metric?, play?, event_type?)` | Every recorded change for that team, including declined, not tried and inconclusive ones. For each: controlled title, the four facts with dates, the outcome and its evidence reference, `as_of` | Return free text, a person, a note or a check-in; rank changes; say one "works" |
 
 The weekly `team_overview` follow-up keeps working, with the same states and the corrected
@@ -157,17 +183,26 @@ boundary proposal is left alone.
 **Dec 5.** A change needs 1–2 weeks to run before it has an outcome. A demo of "what happened"
 therefore uses a labelled synthetic history, the way the demo team does.
 
-## Open decisions (yours)
+## Decisions (owners, 2026-11-27)
 
-1. **Custom changes through MCP?**
-   - Proposed: **playbook changes only** in this version.
-   - A custom change, with its own words, is still made in the app ("Plan a change"), and appears
-     in history as "Custom team change" plus its metric.
-   - The cost: a later assistant cannot see *what* a custom change was. Allowing screened custom
-     titles through MCP reopens #246's question.
-2. **Event types.** Proposed fixed list: deadline, launch, travel, holiday, reorganisation,
-   onboarding, other. The assistant picks one; Patterns matches on it. Free-text events stay as
-   today's team notes and are never matched on.
-3. **The outcome fix applies to the follow-up already shown today** (step 2). It changes what the
-   app and MCP say about any ended change: the caveat, and for a linked change the new comparison.
-   Proposed: yes.
+1. **Playbook-only submissions through MCP** in this version.
+   - A supervisor can still write a custom change in the app.
+   - MCP returns a custom change's metric, dates, state and permitted outcome under "Custom team
+     change", and says the assistant cannot tell exactly what it involved.
+   - Recording through MCP leaves the change pending and notifies no one.
+   - The history keeps the sequence clear: proposed; approved or declined; reported tried or
+     untried (unknown when not reported); the measured outcome.
+2. **Fixed event categories, optional.**
+   - The categories: deadline, launch, travel, holiday, reorganisation, onboarding, other.
+   - "Other" is for an event that is known but does not fit the list. The category is left unset
+     when no event was given.
+   - A shared category helps retrieval. The history also shows each change's type, metric and
+     dates, so the supervisor judges relevance, and it includes untried and inconclusive changes.
+3. **The outcome correction applies to both the app and MCP**, as described in step 0's decision.
+
+**Acceptance.**
+- **A fresh chat asks "Have we tried anything like this before?"** It must retrieve the right
+  team's change, tell approval from implementation, and cite the dated result. It must handle an
+  inconclusive or untried case as accurately as a favourable one.
+- **The pre-deploy live test** runs on local or staging data.
+- **Production** deployment and writes each need separate approval.
