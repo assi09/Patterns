@@ -293,3 +293,23 @@ def test_a_tracked_legacy_change_shows_its_stored_outcome_and_filters_by_metric(
     assert found["outcome"]["reference"]["label"] == "the 28 days before the change started"
     assert found["implementation"] == "not reported: whether the team tried it is unknown"
     assert found["outcome"]["evidence_id"] and found["outcome"]["report_id"]
+
+
+def test_an_outcome_from_a_report_made_after_as_of_is_left_out(engine):
+    """A report made late, for a week before the cutoff: an as-of answer from before it was made
+    has no outcome from it; today's answer has."""
+    from app.teams import reports
+
+    team_id = make_team(engine)
+    with session_scope(engine) as db:
+        team = team_of(db, team_id)
+        action = change(db, team, WEEK.start - timedelta(days=14), days=21, metric="sleep_minutes")
+        late = NOW + timedelta(days=10)
+        reports.build_report(db, team, WEEK, late)
+        case_id = f"change:{action.id}"
+        then = history.one_case(db, team, case_id, late.date(), as_of=TODAY)
+        now = history.one_case(db, team, case_id, late.date())
+        listed_then = tools.team_history(db, boss(db), team_id, late.date(), as_of=str(TODAY))
+    assert then["outcome"] is None and then["evidence"] == []
+    assert listed_then["cases"][0]["outcome"] is None
+    assert now["outcome"] is not None and now["outcome"]["report_id"]

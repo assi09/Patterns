@@ -202,6 +202,8 @@ def _stored_result(db: Session, team: Team, action: TeamAction, as_of: date):
         .where(TeamReport.team_id == team.id, TeamReport.week_start <= as_of - timedelta(days=7))
         .order_by(TeamReport.week_start)
     ):
+        if report.created_at.date() > as_of:
+            continue  # made later: on `as_of` this outcome did not exist yet
         for row in (report.body or {}).get("challenges", []):
             record = (report.evidence or {}).get(row.get("evidence_id")) or {}
             if row.get("metric") == action.metric and _window(record, 0) == window:
