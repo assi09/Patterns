@@ -307,6 +307,12 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
           approve ? 'approve' : 'decline'
         }`,
       ),
+    setTeamImplementation: (teamId, actionId, tried) =>
+      request<TeamAction>(
+        baseUrl,
+        `/teams/${encodeURIComponent(teamId)}/actions/${encodeURIComponent(actionId)}/implementation`,
+        { method: 'PUT', body: JSON.stringify({ tried }) },
+      ),
     getTeamPlaybook: (teamId) =>
       request<TeamPlay[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/playbook`),
     planTeamChange: (teamId, change) =>

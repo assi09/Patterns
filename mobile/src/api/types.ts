@@ -720,11 +720,20 @@ export interface TeamAction {
   startsOn: ISODate | null;
   endsOn: ISODate | null;
   status: 'proposed' | 'approved' | 'declined';
-  source?: 'agent' | 'supervisor';
+  /** 'assistant': recorded through MCP from the supervisor's agreement in a chat. */
+  source?: 'agent' | 'supervisor' | 'assistant';
   play?: string | null; // the playbook change it came from, or "custom"
   result?: ChangeResult | null; // once an approved change has ended
   proposedAt: ISODateTime;
   decidedAt: ISODateTime | null;
+  /** What the supervisor reported once it started; null is unknown, never inferred. */
+  implementation?: 'tried' | 'not_tried' | null;
+  implementationAt?: ISODateTime | null;
+  /** Tracked and how; null with no metric: not tracked, nothing measured. */
+  comparison?: 'before_the_change' | 'observation_only' | null;
+  observeStartsOn?: ISODate | null;
+  observeEndsOn?: ISODate | null;
+  eventId?: string | null;
 }
 
 /** A change from the playbook a supervisor can start. */
@@ -747,11 +756,15 @@ export interface PlanChange {
 }
 
 /** Something the supervisor told the agent about the team's work, such as a deadline. */
+export type EventCategory =
+  'deadline' | 'launch' | 'travel' | 'holiday' | 'reorganisation' | 'onboarding' | 'other';
+
 export interface TeamNote {
   id: string;
   text: string;
   startsOn: ISODate | null;
   endsOn: ISODate | null;
+  category?: EventCategory | null;
   createdAt: ISODateTime;
 }
 
@@ -997,6 +1010,12 @@ export interface ApiClient {
     actionId: string,
     approve: boolean,
   ): Promise<{ membersTold: number; action: TeamAction }>;
+  /** Did the team try it? null takes an answer back (unknown again). */
+  setTeamImplementation(
+    teamId: string,
+    actionId: string,
+    tried: boolean | null,
+  ): Promise<TeamAction>;
   getTeamPlaybook(teamId: string): Promise<TeamPlay[]>;
   planTeamChange(
     teamId: string,

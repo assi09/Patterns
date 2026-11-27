@@ -823,6 +823,15 @@ export function usePlanTeamChange(teamId: string) {
   });
 }
 
+export function useSetTeamImplementation(teamId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ actionId, tried }: { actionId: string; tried: boolean | null }) =>
+      api.setTeamImplementation(teamId, actionId, tried),
+    onSuccess: () => client.invalidateQueries({ queryKey: [...keys.teams, teamId, 'actions'] }),
+  });
+}
+
 export function useDecideTeamAction(teamId: string) {
   const client = useQueryClient();
   return useMutation({
