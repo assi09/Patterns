@@ -45,7 +45,13 @@ nothing stored specifically for Thursday night."*
     `eval/results/change_memory_scripted_2026-11-27.json` and `..._baseline-main_...`).
   - **Done:** the MCP red-team pass with the new tools: **84/84**, 36 of them on change memory
     (`eval/results/mcp_red_team_2026-11-27.json`, docs/mcp.md).
-  - **Next:** the full checks, then milestone acceptance.
+  - **Done:** the full checks (2026-11-27):
+    - backend: ruff clean; 3188 passed with Postgres, 94.46% coverage;
+    - mobile: lint, typecheck, 234 tests and the web export.
+
+    `expo-doctor` now reports Expo 58.1.0 published upstream. The packages are the same as on
+    `main`, so that bump is for its own PR, once Expo Go runs it.
+  - **Next:** milestone acceptance, the owners' call. Both PRs stay in draft until then.
 
 ## Step 0: can the outcome be trusted? (done)
 
