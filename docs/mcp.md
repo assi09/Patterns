@@ -85,6 +85,8 @@ What a harness sends is **untrusted input**:
   to record one.
 - **Playbook changes only.** A change in the supervisor's own words is planned in the app. The
   response gives the playbook's title, never free text.
+- **The dates the supervisor agreed to.** `starts_on` and `ends_on` are both required. Patterns
+  never picks a length, so "Thursday evening" is saved as that Thursday alone.
 - **Idempotent.** The caller's `request_id` makes a retry return the same record. Reusing it for
   a different change is refused.
 - **Nothing happens until confirmed.** No member is told, nothing is approved and no calendar is

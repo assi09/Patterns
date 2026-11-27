@@ -110,7 +110,9 @@ class TeamChangeIn(BaseModel):
     request_id: str = Field(min_length=8, max_length=64)
     play: str = Field(min_length=1, max_length=32)
     starts_on: date
-    ends_on: date | None = None
+    # Required: the dates the supervisor agreed to, never a length Patterns picks (one day is
+    # starts_on again).
+    ends_on: date
     event_id: str | None = Field(default=None, max_length=64)
     finding: FindingRef | None = None
     tracking: TrackingIn | None = None
@@ -402,7 +404,7 @@ def record_team_change(
             "Only a playbook change can be recorded through MCP; a change in your own words is "
             "planned in the Patterns app. Playbook changes: " + ", ".join(playbook.PLAY) + "."
         )
-    ends_on = change.ends_on or change.starts_on + timedelta(days=play.days - 1)
+    ends_on = change.ends_on
     if (repeat := _repeat(db, team, change, ends_on)) is not None:
         return repeat
     if not today <= change.starts_on <= today + timedelta(days=CHANGE_AHEAD_DAYS):

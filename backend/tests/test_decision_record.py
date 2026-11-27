@@ -27,6 +27,7 @@ TOKEN = uuid.uuid4()
 def record(db, team_id: str, user=None, now=NOW, today=TODAY, **change) -> dict:
     fields = {"request_id": "req-evening-1", "play": "evening_boundary"}
     fields |= {"starts_on": today + timedelta(days=3)} | change
+    fields.setdefault("ends_on", fields["starts_on"] + timedelta(days=13))
     return tools.record_team_change(
         db, user or boss(db), team_id, TeamChangeIn(**fields), TOKEN, now, today
     )
@@ -53,7 +54,7 @@ def test_a_recorded_change_waits_for_the_app_and_tells_nobody(engine):
     assert out["tracking"] is None and out["linked_event_id"] is None
     assert (action.status, action.source, action.token_id) == ("proposed", "assistant", TOKEN)
     assert action.metric is None and action.comparison is None  # not tracked, never measured
-    assert action.ends_on == action.starts_on + timedelta(days=13)  # the play's own length
+    assert action.ends_on == TODAY + timedelta(days=16)  # the end it was given
     assert action.implementation is None
 
 
@@ -205,6 +206,29 @@ def test_whether_it_was_tried_is_the_supervisors_report_and_known_only_from_then
     assert cleared["implementation"] is None
 
 
+def test_a_one_day_decision_keeps_its_one_day_and_needs_its_end_stated(engine):
+    """'Keep Thursday evening free', saved without tracking: no length is picked for it."""
+    team_id = make_team(engine)
+    server = build_mcp(engine)
+    with session_scope(engine) as db:
+        boss_id = boss(db).id
+    today = date.today()
+    thursday = today + timedelta(days=(3 - today.weekday()) % 7 or 7)
+    change = {"request_id": "thursday-0001", "play": "evening_boundary", "starts_on": str(thursday)}
+    error, text = call_mcp(server, boss_id, "record_team_change", team_id=team_id, change=change)
+    assert error and "ends_on" in text
+    with session_scope(engine) as db:
+        assert drafts(db, team_id) == []
+    change["ends_on"] = str(thursday)
+    for _ in range(2):  # saved, then retried
+        error, out = call_mcp(server, boss_id, "record_team_change", team_id=team_id, change=change)
+        assert not error and (out["starts_on"], out["ends_on"]) == (str(thursday), str(thursday))
+    client, auth = api_client(engine, "boss@example.com")
+    [listed] = client.get(f"/teams/{team_id}/actions", headers=auth).json()
+    assert (listed["startsOn"], listed["endsOn"]) == (str(thursday), str(thursday))
+    assert listed["status"] == "proposed" and listed["metric"] is None
+
+
 def test_an_approved_change_is_unknown_until_reported(engine):
     team_id = make_team(engine)
     with session_scope(engine) as db:
@@ -244,7 +268,8 @@ def test_mcp_records_a_draft_and_offers_no_way_to_decide_it(engine):
     with session_scope(engine) as db:
         boss_id = boss(db).id
     today = date.today()
-    change = {"request_id": "mcp-req-0001", "play": "meeting_free_day", "starts_on": str(today)}
+    change = {"request_id": "mcp-req-0001", "play": "meeting_free_day"}
+    change |= {"starts_on": str(today), "ends_on": str(today)}
     error, out = call_mcp(server, boss_id, "record_team_change", team_id=team_id, change=change)
     error2, again = call_mcp(server, boss_id, "record_team_change", team_id=team_id, change=change)
     assert not error and not error2 and out["status"] == "pending"
@@ -265,7 +290,8 @@ def test_mcp_refuses_another_supervisors_team_as_no_such_team(engine):
         db.add(other)
         db.flush()
         other_id = other.id
-    change = {"request_id": "mcp-req-0003", "play": "step_goal", "starts_on": str(date.today())}
+    change = {"request_id": "mcp-req-0003", "play": "step_goal"}
+    change |= {"starts_on": str(date.today()), "ends_on": str(date.today())}
     error, text = call_mcp(server, other_id, "record_team_change", team_id=team_id, change=change)
     assert error and "No such team" in text
 
