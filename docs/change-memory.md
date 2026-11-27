@@ -37,8 +37,13 @@ nothing stored specifically for Thursday night."*
     `as_of` answer leaves out anything recorded later. Retired and custom changes read "Custom
     team change", with `playbook_entry` saying which ("retired" or "the supervisor's own
     words"). A retired entry's old id is not given; its `case_id` opens it.
-  - **Next:** the scripted cases on a local eval instance, an MCP red-team pass, and the local
-    live rehearsal.
+  - **Done:** the local live rehearsal (`eval/change_memory_rehearsal.md`), closed with its
+    scores as recorded; the rebound caveat left out of a short summary is a known limitation.
+  - **Done:** the scripted cases on a local instance: **11/11 frozen cases and 5/5 review
+    regressions** on this branch, **0/11 and 0/5 on `main`** (2b31471), with the same runner
+    (`eval/change_memory_eval.py`, instance `eval/change_memory_instance.py`; results in
+    `eval/results/change_memory_scripted_2026-11-27.json` and `..._baseline-main_...`).
+  - **Next:** the MCP red-team pass on the new tools, then the full checks.
 
 ## Step 0: can the outcome be trusted? (done)
 

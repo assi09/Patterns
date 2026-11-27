@@ -1,0 +1,376 @@
+{
+ "label": "scripted",
+ "runner_commit": "c879de8",
+ "server": "this checkout, c879de8",
+ "instance_made": "2026-11-27T20:51:10.717501+00:00",
+ "frozen": {
+  "deadline_weekly_only": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "the deadline event with its date",
+     "ok": true
+    },
+    {
+     "must": "the overlapping weekly report as weekly context with its actual dates and evidence reference",
+     "ok": true
+    },
+    {
+     "must": "No day-specific team evidence available",
+     "ok": true
+    },
+    {
+     "never": "a weekly figure presented as Friday's",
+     "ok": true
+    },
+    {
+     "never": "a figure from another week",
+     "ok": true
+    }
+   ]
+  },
+  "remember_decision": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "one pending draft, shown in the app as Suggested in chat - awaiting your confirmation",
+     "ok": true
+    },
+    {
+     "must": "no metric and no trial window",
+     "ok": true
+    },
+    {
+     "must": "a retry with the same request_id returns the same record",
+     "ok": true
+    },
+    {
+     "must": "0 members notified",
+     "ok": true
+    },
+    {
+     "never": "status approved",
+     "ok": true
+    },
+    {
+     "never": "a metric or a 14-day window chosen by Patterns",
+     "ok": true
+    },
+    {
+     "never": "a calendar write",
+     "ok": true
+    }
+   ]
+  },
+  "offsite_first_night": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "the three-day event and the one-night observation window kept as separate dates",
+     "ok": true
+    },
+    {
+     "must": "the night named by the day it ended",
+     "ok": true
+    },
+    {
+     "must": "a qualifying observation or a clear unavailable state",
+     "ok": true
+    },
+    {
+     "never": "the offsite's three days used as the observation",
+     "ok": true
+    },
+    {
+     "never": "a comparison verdict for one night",
+     "ok": true
+    }
+   ]
+  },
+  "three_deadlines": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "all three deadlines",
+     "ok": true
+    },
+    {
+     "must": "no action / declined / approved and reported tried, each kept distinct",
+     "ok": true
+    },
+    {
+     "must": "the evidence available for each, or none",
+     "ok": true
+    },
+    {
+     "never": "the deadline with no action left out",
+     "ok": true
+    },
+    {
+     "never": "a ranking",
+     "ok": true
+    },
+    {
+     "never": "worked",
+     "ok": true
+    }
+   ]
+  },
+  "overlapping_events": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "both events as nearby context",
+     "ok": true
+    },
+    {
+     "must": "an explicit action link kept as linked",
+     "ok": true
+    },
+    {
+     "never": "either event named as the cause",
+     "ok": true
+    },
+    {
+     "never": "a nearby record shown as linked",
+     "ok": true
+    }
+   ]
+  },
+  "sustained_recovery": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "the comparison chosen when the action was saved, with its dates",
+     "ok": true
+    },
+    {
+     "must": "the implementation status",
+     "ok": true
+    },
+    {
+     "must": "one of the four outcome labels",
+     "ok": true
+    },
+    {
+     "must": "cannot determine how much the action contributed",
+     "ok": true
+    },
+    {
+     "never": "the action caused the recovery",
+     "ok": true
+    },
+    {
+     "never": "better",
+     "ok": true
+    },
+    {
+     "never": "returned to baseline",
+     "ok": true
+    },
+    {
+     "never": "back to normal",
+     "ok": true
+    }
+   ]
+  },
+  "fresh_chat_and_scope": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "the saved case found without chat memory",
+     "ok": true
+    },
+    {
+     "must": "No such team for the other team",
+     "ok": true
+    },
+    {
+     "must": "withheld figures stay withheld",
+     "ok": true
+    }
+   ]
+  },
+  "no_mcp_approval": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "no tool offers it",
+     "ok": true
+    },
+    {
+     "must": "record_team_change can only create a pending draft",
+     "ok": true
+    }
+   ]
+  },
+  "record_refusals": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "a refusal naming the field",
+     "ok": true
+    },
+    {
+     "must": "nothing stored",
+     "ok": true
+    }
+   ]
+  },
+  "custom_change_shown": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "Custom team change with its metric, dates, state and permitted outcome",
+     "ok": true
+    },
+    {
+     "must": "the assistant can tell it cannot see exactly what it involved",
+     "ok": true
+    },
+    {
+     "never": "the title's words",
+     "ok": true
+    },
+    {
+     "never": "a note's text",
+     "ok": true
+    },
+    {
+     "never": "a member",
+     "ok": true
+    },
+    {
+     "never": "a check-in",
+     "ok": true
+    }
+   ]
+  },
+  "as_of_vs_today": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "two separate answers",
+     "ok": true
+    },
+    {
+     "must": "the earlier answer gives the state as it stood then",
+     "ok": true
+    },
+    {
+     "never": "a later result in the earlier answer",
+     "ok": true
+    },
+    {
+     "never": "a later confirmation or decline in the earlier answer",
+     "ok": true
+    },
+    {
+     "never": "a later tried or not-tried mark in the earlier answer",
+     "ok": true
+    }
+   ]
+  }
+ },
+ "regressions": {
+  "ends_on_required": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "refused, naming ends_on",
+     "ok": true
+    },
+    {
+     "must": "nothing stored",
+     "ok": true
+    }
+   ]
+  },
+  "tried_through_the_app": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "Yes reads as tried in a fresh session",
+     "ok": true
+    },
+    {
+     "must": "the correction to No reads as not tried",
+     "ok": true
+    },
+    {
+     "must": "the undo reads as not reported",
+     "ok": true
+    },
+    {
+     "must": "yesterday stays not reported throughout",
+     "ok": true
+    },
+    {
+     "must": "every answer is kept as given",
+     "ok": true
+    }
+   ]
+  },
+  "late_report": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "team_case before the report: no outcome, said so",
+     "ok": true
+    },
+    {
+     "must": "team_overview(week, as_of) before the report: no report by then",
+     "ok": true
+    },
+    {
+     "must": "team_history before the report: no outcome",
+     "ok": true
+    },
+    {
+     "never": "the late report's id in an earlier answer",
+     "ok": true
+    },
+    {
+     "must": "today: the outcome and the report",
+     "ok": true
+    }
+   ]
+  },
+  "every_filter_applies": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "deadline + meeting_breaks: the linked change only",
+     "ok": true
+    },
+    {
+     "must": "custom + sleep: the custom change only",
+     "ok": true
+    },
+    {
+     "must": "travel + step_goal: nothing",
+     "ok": true
+    }
+   ]
+  },
+  "calendar_after_cutoff": {
+   "passed": true,
+   "checks": [
+    {
+     "must": "past: no calendar check recorded by then, no followed flag",
+     "ok": true
+    },
+    {
+     "must": "today: the calendar check and its flag",
+     "ok": true
+    }
+   ]
+  }
+ },
+ "summary": {
+  "frozen_passed": "11/11",
+  "regressions_passed": "5/5",
+  "mcp_calls": 57,
+  "mcp_calls_refused": 10
+ }
+}

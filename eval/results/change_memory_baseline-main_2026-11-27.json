@@ -1,0 +1,107 @@
+{
+ "label": "baseline-main",
+ "runner_commit": "c879de8",
+ "server": "main at 2b31471",
+ "instance_made": "2026-11-27T20:51:10.717501+00:00",
+ "frozen": {
+  "deadline_weekly_only": {
+   "passed": false,
+   "error": "ExceptionGroup"
+  },
+  "remember_decision": {
+   "passed": false,
+   "error": "AttributeError"
+  },
+  "offsite_first_night": {
+   "passed": false,
+   "error": "TypeError"
+  },
+  "three_deadlines": {
+   "passed": false,
+   "error": "ExceptionGroup"
+  },
+  "overlapping_events": {
+   "passed": false,
+   "error": "TypeError"
+  },
+  "sustained_recovery": {
+   "passed": false,
+   "error": "ExceptionGroup"
+  },
+  "fresh_chat_and_scope": {
+   "passed": false,
+   "error": "IndexError"
+  },
+  "no_mcp_approval": {
+   "passed": false,
+   "error": "ExceptionGroup"
+  },
+  "record_refusals": {
+   "passed": false,
+   "checks": [
+    {
+     "must": "a refusal naming the field",
+     "ok": false
+    },
+    {
+     "must": "nothing stored",
+     "ok": true
+    }
+   ]
+  },
+  "custom_change_shown": {
+   "passed": false,
+   "error": "ExceptionGroup"
+  },
+  "as_of_vs_today": {
+   "passed": false,
+   "error": "TypeError"
+  }
+ },
+ "regressions": {
+  "ends_on_required": {
+   "passed": false,
+   "checks": [
+    {
+     "must": "refused, naming ends_on",
+     "ok": false
+    },
+    {
+     "must": "nothing stored",
+     "ok": true
+    }
+   ]
+  },
+  "tried_through_the_app": {
+   "passed": false,
+   "error": "HTTPStatusError"
+  },
+  "late_report": {
+   "passed": false,
+   "error": "AttributeError"
+  },
+  "every_filter_applies": {
+   "passed": false,
+   "error": "TypeError"
+  },
+  "calendar_after_cutoff": {
+   "passed": false,
+   "checks": [
+    {
+     "must": "past: no calendar check recorded by then, no followed flag",
+     "ok": false
+    },
+    {
+     "must": "today: the calendar check and its flag",
+     "ok": true
+    }
+   ]
+  }
+ },
+ "summary": {
+  "frozen_passed": "0/11",
+  "regressions_passed": "0/5",
+  "mcp_calls": 31,
+  "mcp_calls_refused": 27
+ }
+}
