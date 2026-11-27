@@ -60,6 +60,9 @@ import type {
   TeamChatMessage,
   TeamNote,
   TeamFindingEvidence,
+  TeamMetricEvidence,
+  TeamMetricRow,
+  TeamMetrics,
   TeamFindingView,
   TeamReport,
 } from './types';
@@ -1451,6 +1454,182 @@ function mockFindings(start: ISODate): TeamFindingView[] {
 }
 
 /** The bounded record behind a finding or weekly line of a mock report. */
+// The explorer's catalogue as the backend lists it (app.teams.explorer), with made-up changes:
+// [metric, category, subgroup, label, unit, change, people short of the team's count].
+// `null` change: withheld below the minimum, or no data at all when everyone is short.
+const MOCK_METRICS: [string, string, string, string, string, number | null, number][] = [
+  ['sleep_minutes', 'Sleep', 'Duration', 'Time asleep', 'min', -24, 0],
+  ['time_in_bed', 'Sleep', 'Duration', 'Time in bed', 'min', -18, 0],
+  ['bedtime_hour', 'Sleep', 'Timing', 'Bedtime', 'min', 21, 0],
+  ['deep_sleep_minutes', 'Sleep', 'Stages', 'Deep sleep', 'min', -3.5, 2],
+  ['light_sleep_minutes', 'Sleep', 'Stages', 'Light sleep', 'min', -11, 2],
+  ['rem_sleep_minutes', 'Sleep', 'Stages', 'REM sleep', 'min', -8.5, 2],
+  ['awake_in_bed_minutes', 'Sleep', 'Stages', 'Awake in bed', 'min', 4.5, 2],
+  ['sleep_efficiency', 'Sleep', 'Efficiency', 'Sleep efficiency', 'percentage points', -1.5, 0],
+  ['steps', 'Movement', 'Totals', 'Steps', 'steps', -640, 0],
+  ['distance_km', 'Movement', 'Totals', 'Distance', 'km', -0.4, 0],
+  ['calories', 'Movement', 'Totals', 'Calories burned', 'kcal', -55, 0],
+  ['lightly_active_minutes', 'Movement', 'Activity intensity', 'Light activity', 'min', -12, 0],
+  [
+    'moderately_active_minutes',
+    'Movement',
+    'Activity intensity',
+    'Moderate activity',
+    'min',
+    -2.5,
+    0,
+  ],
+  ['very_active_minutes', 'Movement', 'Activity intensity', 'Vigorous activity', 'min', 0, 0],
+  [
+    'hr_zone_light_minutes',
+    'Heart',
+    'Time in heart-rate zones',
+    'Below fat burn zone',
+    'min',
+    -9,
+    1,
+  ],
+  ['hr_zone_moderate_minutes', 'Heart', 'Time in heart-rate zones', 'Fat burn zone', 'min', -4, 1],
+  ['hr_zone_vigorous_minutes', 'Heart', 'Time in heart-rate zones', 'Cardio zone', 'min', 1.5, 1],
+  ['hr_zone_peak_minutes', 'Heart', 'Time in heart-rate zones', 'Peak zone', 'min', 0, 1],
+  [
+    'active_zone_minutes',
+    'Heart',
+    'Active Zone Minutes',
+    'Active Zone Minutes (weighted)',
+    'min',
+    -1,
+    1,
+  ],
+  ['resting_hr', 'Heart', 'Resting and overnight', 'Resting heart rate', 'bpm', 0.8, 0],
+  ['hrv_ms', 'Heart', 'Resting and overnight', 'Heart rate variability', 'ms', -2.1, 0],
+  ['recovery_score', 'Scores', 'Patterns scores', 'Recovery', 'points', -4, 0],
+  ['strain', 'Scores', 'Patterns scores', 'Strain', 'points', -0.6, 1],
+  ['stress_score', 'Scores', 'Patterns scores', 'Stress', 'points', null, 99],
+];
+const MOCK_DERIVED: Record<string, string> = {
+  sleep_efficiency:
+    "Patterns-calculated: minutes asleep ÷ time in bed × 100, rounded. The Google Health API gives no efficiency, so this is not Fitbit's own figure.",
+  active_zone_minutes:
+    'Weighted: a fat burn minute counts once, a cardio or peak minute twice, so this is not the time spent in zones.',
+};
+
+function mockMetricsWeeks(): ISODate[] {
+  const latest = lastFullWeek();
+  return [0, 1, 2, 3].map((i) => dayShift(latest, -7 * i));
+}
+
+function mockTeamMetrics(teamId: string, week?: ISODate): TeamMetrics {
+  const team = ownTeam(teamId);
+  const latest = lastFullWeek();
+  const asked = week
+    ? dayShift(week, -((new Date(`${week}T00:00:00Z`).getUTCDay() + 6) % 7))
+    : latest;
+  const head = {
+    teamId,
+    week: { start: asked, end: dayShift(asked, 6) },
+    baseline: { start: dayShift(asked, -28), end: dayShift(asked, -1) },
+    weeks: mockMetricsWeeks(),
+    minimumMembers: team.minimumMembers,
+    categories: [],
+  };
+  if (asked > latest)
+    return { ...head, state: 'week_not_over', message: 'This week is not over yet.' };
+  if (team.paused) return { ...head, state: 'paused', message: team.paused };
+  const back = Math.round((Date.parse(latest) - Date.parse(asked)) / (7 * 86_400_000));
+  const categories: TeamMetrics['categories'] = [];
+  for (const [metric, category, subgroup, label, unit, change, short] of MOCK_METRICS) {
+    if (categories.at(-1)?.name !== category) categories.push({ name: category, subgroups: [] });
+    const groups = categories.at(-1)!.subgroups;
+    if (groups.at(-1)?.name !== subgroup) groups.push({ name: subgroup, metrics: [] });
+    const contributors = Math.max(0, team.members - short);
+    const shown = change !== null && contributors >= team.minimumMembers;
+    const value = shown ? Math.round((change! - back * change! * 0.3) * 10) / 10 : null;
+    const row: TeamMetricRow = {
+      metric,
+      label,
+      unit,
+      state: shown ? 'figure' : contributors ? 'below_minimum' : 'no_data',
+      evidenceId: `m_${asked}_${metric}`,
+      contributors,
+      change:
+        value === null
+          ? null
+          : {
+              value,
+              unit,
+              text: `${value >= 0 ? '+' : '−'}${Math.abs(value).toLocaleString('en-US')} ${unit}`,
+            },
+      withheld: shown
+        ? null
+        : contributors
+          ? `Withheld: ${contributors} of the ${team.minimumMembers} people needed had enough ${label.toLowerCase()} data for this week and the 28 days before.`
+          : `Unavailable: no one had enough synced ${label.toLowerCase()} data for this week and the 28 days before.`,
+    };
+    groups.at(-1)!.metrics.push(row);
+  }
+  return {
+    ...head,
+    state: 'ready',
+    madeOn: dayShift(asked, 8),
+    roster: team.members,
+    membersWithData: team.members,
+    categories,
+  };
+}
+
+function mockTeamMetric(teamId: string, week: ISODate, metric: string): TeamMetricEvidence {
+  const listed = mockTeamMetrics(teamId, week);
+  const entry = MOCK_METRICS.find((m) => m[0] === metric);
+  if (!entry) throw new ApiError('There is no such team metric.', 'not_found', 404);
+  if (listed.state !== 'ready') return { ...listed, metric, label: entry[3], limitations: [] };
+  const row = listed.categories
+    .flatMap((c) => c.subgroups.flatMap((g) => g.metrics))
+    .find((m) => m.metric === metric)!;
+  const n = row.contributors;
+  const up = row.change ? (row.change.value > 0 ? n - 1 : row.change.value < 0 ? 1 : 0) : null;
+  const down = row.change ? (row.change.value < 0 ? n - 1 : row.change.value > 0 ? 1 : 0) : null;
+  return {
+    state: row.state,
+    evidenceId: row.evidenceId,
+    teamId,
+    metric,
+    label: row.label,
+    category: entry[1],
+    subgroup: entry[2],
+    unit: row.unit,
+    week: listed.week,
+    baseline: listed.baseline,
+    madeOn: listed.madeOn,
+    figureLabel: "Median change from each person's own previous 28 days",
+    change: row.change,
+    higher: up,
+    lower: down,
+    unchanged: row.change ? n - (up ?? 0) - (down ?? 0) : null,
+    coverage: {
+      contributors: n,
+      minimum: listed.minimumMembers,
+      roster: listed.roster ?? 0,
+      withAnyData: listed.membersWithData ?? 0,
+    },
+    withheld: row.withheld,
+    measured:
+      "For each person, the week's average minus the average of their own 28 days before; the figure is the median of those changes.",
+    method:
+      'A person counts on this metric with at least 4 days of it in the week and 14 in the 28 days before; a figure needs at least 5 such people. Live Google Health data only.',
+    zeroAndMissing:
+      'A day without data, or barely worn, is missing; 0 is not expected on a worn day.',
+    derivation: MOCK_DERIVED[metric] ?? null,
+    source: 'Google Health live sync',
+    limitations: [
+      "Team aggregates from at least 5 people; no person's value is shown.",
+      'A description of a change, not a test: browsing many metrics, some move by chance.',
+      'Describes a change in readings; it does not establish a cause.',
+      'Not part of the weekly briefing; looking at it here does not make it a headline.',
+    ],
+  };
+}
+
 function mockTeamEvidence(report: TeamReport, evidenceId: string): TeamFindingEvidence {
   const record = report.evidence[evidenceId];
   const cited = [...report.priorities, ...report.sections].some((r) => r.evidenceId === evidenceId);
@@ -1806,6 +1985,8 @@ export const mockClient: ApiClient = {
       if (!found) throw new ApiError('There is no such evidence in that report.', 'not_found', 404);
       return mockTeamEvidence(found, evidenceId);
     }),
+  getTeamMetrics: (teamId, week) => later(() => mockTeamMetrics(teamId, week)),
+  getTeamMetric: (teamId, week, metric) => later(() => mockTeamMetric(teamId, week, metric)),
   getTeamChat: (teamId) =>
     later(() => {
       ownTeam(teamId);

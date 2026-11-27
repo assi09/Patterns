@@ -623,3 +623,52 @@ describe('mock feedback', () => {
     expect(latest.kind).toBe('feedback');
   });
 });
+
+describe('the team metric explorer in the mock', () => {
+  async function teamId(): Promise<string> {
+    const signed = await mockClient.logIn(DEMO_SUPERVISOR);
+    await saveToken(signed.token);
+    const teams = await mockClient.getTeams();
+    return (teams[0] ?? (await mockClient.createTeam('Design'))).id;
+  }
+
+  it('lists every metric by category with its change or why it has none', async () => {
+    const id = await teamId();
+    const week = await mockClient.getTeamMetrics(id);
+    expect(week.categories.map((c) => c.name)).toEqual(['Sleep', 'Movement', 'Heart', 'Scores']);
+    const rows = week.categories.flatMap((c) => c.subgroups.flatMap((g) => g.metrics));
+    for (const row of rows) {
+      expect(row.state === 'figure').toBe(!!row.change);
+      expect(!row.withheld).toBe(row.state === 'figure'); // no figure always says why
+    }
+    // Actual zone minutes and weighted Active Zone Minutes are separate metrics.
+    const heart = week.categories.find((c) => c.name === 'Heart')!;
+    expect(heart.subgroups.map((g) => g.name)).toContain('Time in heart-rate zones');
+    expect(heart.subgroups.map((g) => g.name)).toContain('Active Zone Minutes');
+  });
+
+  it('opens one metric with the list row’s evidence id, and refuses an unknown one', async () => {
+    const id = await teamId();
+    const week = await mockClient.getTeamMetrics(id);
+    const rem = week.categories
+      .flatMap((c) => c.subgroups.flatMap((g) => g.metrics))
+      .find((m) => m.metric === 'rem_sleep_minutes')!;
+    const record = await mockClient.getTeamMetric(id, week.week.start, 'rem_sleep_minutes');
+    expect(record.evidenceId).toBe(rem.evidenceId);
+    expect(record.week).toEqual(week.week);
+    expect(record.baseline).toEqual(week.baseline);
+    const efficiency = await mockClient.getTeamMetric(id, week.week.start, 'sleep_efficiency');
+    expect(efficiency.derivation).toContain('Patterns-calculated');
+    await expect(mockClient.getTeamMetric(id, week.week.start, 'nope')).rejects.toMatchObject({
+      code: 'not_found',
+    });
+  });
+
+  it('has no figures for a week in progress', async () => {
+    const id = await teamId();
+    const future = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+    const week = await mockClient.getTeamMetrics(id, future);
+    expect(week.state).toBe('week_not_over');
+    expect(week.categories).toEqual([]);
+  });
+});
