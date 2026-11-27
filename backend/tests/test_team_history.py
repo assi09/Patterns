@@ -356,3 +356,37 @@ def test_every_filter_given_must_hold(engine):
     assert [c["case_id"] for c in found["cases"]] == [f"change:{wanted.id}"]
     assert [c["tracked"] for c in by_metric["cases"]] == [True]
     assert all(c["kind"] == "change" for c in by_metric["cases"])
+
+
+def test_a_past_answer_ignores_calendar_data_synced_after_its_cutoff(engine):
+    """Calendars arriving after the cutoff: the answer for then says no check was recorded by
+    then and gives no followed flag; today's answer reads them."""
+    from test_coach import ended_change, give_calendars
+
+    from app.teams import reports
+
+    team_id = make_team(engine, effects=())
+    span = (TODAY - timedelta(days=21), TODAY - timedelta(days=8))
+    ended_change(engine, team_id, "evening_boundary", span)
+    with session_scope(engine) as db:
+        reports.build_report(db, team_of(db, team_id), WEEK, NOW)  # on time
+
+    def asked():
+        later = TODAY + timedelta(days=10)
+        with session_scope(engine) as db:
+            then = tools.team_overview(db, boss(db), team_id, later, week=str(WEEK.start))
+            [now] = view_follow_up(db, team_of(db, team_id), later)
+            return then, now
+
+    from app.teams.view import follow_up as view_follow_up
+
+    before_sync, _ = asked()
+    give_calendars(engine, 7, {"after_hours_minutes": -9.0}, span=span)  # synced later
+    then, now = asked()
+    assert then["as_of"] == str(TODAY)
+    for answer in (before_sync, then):
+        [followed] = answer["follow_up"]
+        assert followed["calendar_check"] == f"No calendar check was recorded by {TODAY}."
+        assert "followed_on_the_calendar" not in followed
+    assert then["follow_up"] == before_sync["follow_up"]  # the sync changed nothing about then
+    assert now["followed_on_the_calendar"] is True and "fell during it" in now["calendar_check"]

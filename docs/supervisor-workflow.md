@@ -76,7 +76,9 @@ Each team change in `follow_up` shows:
 
 When no report has covered the change yet, today's answer measures it on request and marks it
 `measured_now`. An answer about a past week never does: if no report had covered the change by
-its cutoff, it says "No outcome was recorded by" that date and gives no figure.
+its cutoff, it says "No outcome was recorded by" that date and gives no figure. It reads no
+current data either: no calendar check is stored yet, so a past answer says "No calendar check
+was recorded by" that date and gives no `followed_on_the_calendar`.
 
 **Why no "better" (since 2026-11-27, [change-memory.md](change-memory.md) step 0).** A change is
 compared with the 28 days before it started, and changes usually start right after a drop. In a

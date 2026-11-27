@@ -216,6 +216,9 @@ NO_OUTCOME_BY = (
 )
 
 
+NO_CHECK_BY = "No calendar check was recorded by {day}."
+
+
 def no_outcome(as_of: date) -> dict:
     """A past date's answer when no stored record existed by then: said, with no figure, rather
     than one measured today inside an answer about what was known then."""
@@ -282,14 +285,21 @@ def implementation(db: Session, action: TeamAction, as_of: date) -> str:
 
 def follow_up(db: Session, team: Team, as_of: date, today: date | None = None) -> list[dict]:
     """Team changes as they stood on `as_of`: a result only for a change that had ended by then.
-    For a past date (`as_of` before `today`), only a result stored by then: nothing measured now."""
+    For a past date (`as_of` before `today`), only what was stored by then: nothing is measured
+    on today's data or membership, so a later sync cannot change what was known then. No calendar
+    check is stored yet, so a past answer says none was recorded and gives no followed flag."""
     past = today is not None and as_of < today
     actions = db.scalars(
         select(TeamAction)
         .where(TeamAction.team_id == team.id, TeamAction.kind == "challenge")
         .order_by(TeamAction.proposed_at)
     ).all()
-    results = playbook.results_of(db, team, as_of)
+    if past:
+        measured = {str(a.id) for a in playbook.ended(db, team, as_of)}
+        results = {}
+    else:
+        results = playbook.results_of(db, team, as_of)
+        measured = set()
     out = []
     for action in actions:
         decided = action.decided_at.date() if action.decided_at else None
@@ -319,16 +329,21 @@ def follow_up(db: Session, team: Team, as_of: date, today: date | None = None) -
             if state in ("in_progress", "ended")
             else None,
         }
+        if state == "ended" and past and str(action.id) in measured:
+            play = playbook.PLAY.get(action.play or "")
+            if play is not None and play.adherence is not None:
+                item["calendar_check"] = NO_CHECK_BY.format(day=as_of)
+            stored = _stored_result(db, team, action, as_of)
+            item["result"] = _result(db, team, action, as_of, {}) if stored else no_outcome(as_of)
+            out.append(item)
+            continue
         found = results.get(str(action.id)) if state == "ended" else None
         if found is not None:
             followed = found.get("followed")
             if followed is not None:  # the calendar's own observation, beside the report
                 item["calendar_check"] = followed.get("text")
                 item["followed_on_the_calendar"] = bool(followed.get("followed"))
-            if past and _stored_result(db, team, action, as_of) is None:
-                item["result"] = no_outcome(as_of)
-            else:
-                item["result"] = _result(db, team, action, as_of, found)
+            item["result"] = _result(db, team, action, as_of, found)
         out.append(item)
     return out
 
