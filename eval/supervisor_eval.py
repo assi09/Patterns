@@ -241,9 +241,7 @@ async def versioned(run: Run, frozen: dict[str, dict]) -> dict[str, dict]:
         ("as_of",),
     )
     current = {
-        k: v
-        for k, v in frozen["action_follow_up"].items()
-        if k.startswith(("current", "measured"))
+        k: v for k, v in frozen["action_follow_up"].items() if k.startswith(("current", "measured"))
     }
     return {
         "action_follow_up_v2": {
