@@ -168,6 +168,22 @@ existing team instead.
   screen, a 5 MB request (413) and the call limit (60 answered, then refused). The first,
   leniently graded run found four problems, fixed in `80f566d`; it also accepted calendar attacks
   refused for missing fields rather than the reason under test, which the strict grader caught.
+- **Red-team set with change memory (2026-11-27):** 36 more attacks on `team_history`,
+  `team_case` and `record_team_change`, graded the same way: **84/84** in all, no traceback or
+  500 in the API log. They cover:
+  - another supervisor, a member, HR and a demoted supervisor reaching for team A's history, cases
+    and drafts;
+  - another team's change, event and cursor used through team A;
+  - forged, oversized and filter-carrying cursors;
+  - SQL and paths in filters and case ids;
+  - each field of a draft attacked alone: request id, play, a smuggled status or tried mark, dates,
+    tracking;
+  - a reused request id, and 8 simultaneous retries making one draft;
+  - planted instructions in an event and a custom change never coming back through MCP;
+  - no tool that approves, declines, marks, edits or deletes.
+
+  Refused drafts are also checked in the database. The seed now builds team A's report itself;
+  the 2026-11-26 run had one from a setup step that was not recorded.
 - **The full path (2026-11-26, `46d6c4d`):** `eval/team_three_way.py` finds the dataset files, the
   supervisor's report and an authenticated MCP read in agreement, figure by figure;
   `eval/team_e2e.py` passes all 18 check-in and report scenarios through the API.

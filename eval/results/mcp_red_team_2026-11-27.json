@@ -1,0 +1,439 @@
+{
+  "ran": "2026-11-27",
+  "commit": "9c2d5c2",
+  "grading": "strict: the expected denial text or exact HTTP answer only",
+  "passed": 84,
+  "of": 84,
+  "by_group": {
+    "auth": "8/8",
+    "reach": "15/15",
+    "send": "4/4",
+    "input": "15/15",
+    "inject": "4/4",
+    "memory": "36/36",
+    "limit": "1/1",
+    "server": "1/1"
+  },
+  "checks": [
+    {
+      "group": "auth",
+      "check": "no token: 401 invalid_token",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "a made-up pat_ token: 401 invalid_token",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "a made-up OAuth token: 401 invalid_token",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "a revoked token: 401 invalid_token",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "an unapproved account's token: 401 invalid_token",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "the token in the query string: 401",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "a forged Host header: 421 Invalid Host header",
+      "passed": true
+    },
+    {
+      "group": "auth",
+      "check": "control: a valid token lists the tools (200)",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "control: supervisor A reads team A's report figures",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "control: no name or email in team A's figures",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "supervisor B asks for team A: 'No such team.'",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a team that does not exist: the same 'No such team.'",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a member asks for their team's figures",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a member asks for the team's meeting load",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "HR: who_am_i says nothing through MCP",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "HR asks for team figures",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "HR calls my_recent_days",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "HR calls my_calendar_days",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a supervisor demoted after making the token: their old team",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a member asks for 100,000 days: answered, capped at 28",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a member passes another member's id: ignored, own days only",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "no tool reaches check-in alerts",
+      "passed": true
+    },
+    {
+      "group": "reach",
+      "check": "a made-up check-in tool: 'Unknown tool'",
+      "passed": true
+    },
+    {
+      "group": "send",
+      "check": "a supervisor sends calendar days",
+      "passed": true
+    },
+    {
+      "group": "send",
+      "check": "a member sends a team event",
+      "passed": true
+    },
+    {
+      "group": "send",
+      "check": "supervisor B sends an event to team A",
+      "passed": true
+    },
+    {
+      "group": "send",
+      "check": "HR sends a team event",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with a date years ahead",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with a negative count",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with more minutes than a day has",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with an extra field",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with not a date",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with a thousand days",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "calendar days with the same day twice",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a 100,000-character title",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a title with NUL",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a title with a terminal escape",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a title with a right-to-left override",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a title on two lines: held as one line of data",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "SQL in the team id",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a path in the team id",
+      "passed": true
+    },
+    {
+      "group": "input",
+      "check": "a 5 MB request: 413 Request body too large",
+      "passed": true
+    },
+    {
+      "group": "inject",
+      "check": "an instruction as a title",
+      "passed": true
+    },
+    {
+      "group": "inject",
+      "check": "one person singled out",
+      "passed": true
+    },
+    {
+      "group": "inject",
+      "check": "someone's health",
+      "passed": true
+    },
+    {
+      "group": "inject",
+      "check": "nothing sent changes what the supervisor reads",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "control: supervisor A lists team A's history",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "supervisor B: team A's history",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "supervisor B: a team A case",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "supervisor B: a draft on team A",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a member: team A's history",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a member: a draft on team A",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "HR: a team A case",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a demoted supervisor: their old team's history",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "supervisor A: team B's change through team A",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "supervisor A: a draft linked to team B's event",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "supervisor A: team B's cursor on team A",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a cursor that is not one",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a 3000-character cursor",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a cursor passed with a filter",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a forged cursor carrying an unknown play",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "SQL in a category",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "an impossible as_of",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a day that is not a date",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a 10,000-character case id",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a path as a case id",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "nothing stored by the refused drafts",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "SQL in a request_id",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a 65-character request_id",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a custom change",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "an approved status smuggled in",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a tried mark smuggled in",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a start in the past",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "61 days",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "an unknown tracked metric",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "observed days already past",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "nothing stored by the refused fields",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "a valid draft is pending, and nobody is told",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "the same request_id for a different change",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "8 simultaneous retries: all answered, one draft",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "planted words in an event and a custom change never come back through MCP",
+      "passed": true
+    },
+    {
+      "group": "memory",
+      "check": "no tool approves, declines, marks, edits or deletes a change",
+      "passed": true
+    },
+    {
+      "group": "limit",
+      "check": "65 calls in a minute: 60 answered, then 5 'Too many calls'",
+      "passed": true
+    },
+    {
+      "group": "server",
+      "check": "no crash logged by the API during the run",
+      "passed": true
+    }
+  ]
+}

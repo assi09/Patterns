@@ -43,7 +43,9 @@ nothing stored specifically for Thursday night."*
     regressions** on this branch, **0/11 and 0/5 on `main`** (2b31471), with the same runner
     (`eval/change_memory_eval.py`, instance `eval/change_memory_instance.py`; results in
     `eval/results/change_memory_scripted_2026-11-27.json` and `..._baseline-main_...`).
-  - **Next:** the MCP red-team pass on the new tools, then the full checks.
+  - **Done:** the MCP red-team pass with the new tools: **84/84**, 36 of them on change memory
+    (`eval/results/mcp_red_team_2026-11-27.json`, docs/mcp.md).
+  - **Next:** the full checks, then milestone acceptance.
 
 ## Step 0: can the outcome be trusted? (done)
 
