@@ -182,5 +182,28 @@
    ],
    "needs": "a real Claude or Codex client with its own calendar connector; mocked runs are labelled apart"
   }
- ]
+ ],
+ "versioned": {
+  "note": "Added 2026-11-27 after fc467c4, which dates a week's answer no earlier than its report. The frozen tasks above stay as they were and keep their own score (10/11 on fc467c4, eval/results/supervisor_frozen_fc467c4_2026-11-27.json). The revised suite is the frozen one with each task listed here in place of the task it replaces; its score is reported apart.",
+  "tasks": [
+   {
+    "id": "action_follow_up_v2",
+    "replaces": "action_follow_up",
+    "why": "The frozen task asks for the week the change was running without a cutoff. That week's report in the eval instance was made 11 days after the week, so from fc467c4 the answer is dated by the report and rightly includes the later outcome: 'what does that week's report say?' and 'was it still in progress at the end of that week?' are different questions. This version asks the second explicitly, with as_of at the original cutoff (the day after the week). The current half is unchanged.",
+    "team": "demo with an action (synthetic)",
+    "week": "the week the action was running, as known the day after it; then current",
+    "question": "Was the change we agreed to try still in progress at the end of that week, as we knew it then? And what happened since?",
+    "must": [
+     "status and dates as known at the cutoff",
+     "historical answer without the later result or the later report",
+     "current answer with the measured result and its evidence",
+     "measured apart from whether it was tried"
+    ],
+    "never": [
+     "a later result or report presented as known at the earlier date"
+    ],
+    "state": "in progress then finished"
+   }
+  ]
+ }
 }

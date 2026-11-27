@@ -22,7 +22,7 @@ import re
 import subprocess
 import sys
 import time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import httpx2
@@ -219,6 +219,45 @@ async def other_checks() -> dict:
     return out
 
 
+def _no_later_report(text: str, cutoff: str) -> bool:
+    """No report made after the cutoff: none by then, or one whose made_on is by then."""
+    try:
+        report = json.loads(text).get("report") or {}
+    except (ValueError, AttributeError):
+        return False
+    made = report.get("made_on")
+    return report.get("state") == "no_report_by_then" or (made is not None and made <= cutoff)
+
+
+async def versioned(run: Run, frozen: dict[str, dict]) -> dict[str, dict]:
+    """The versioned tasks (eval/supervisor_tasks.json, "versioned"), on their own call count so
+    the frozen run's stays comparable. action_follow_up_v2 asks the historical question with its
+    cutoff, as_of the day after the week; its current half is the frozen task's own checks."""
+    acted = TEAMS["demo_acted"]
+    cutoff = (date.fromisoformat(INSTANCE["action_week"]) + timedelta(days=7)).isoformat()
+    h = await run.call(
+        "team_overview",
+        {"team_id": acted, "week": INSTANCE["action_week"], "as_of": cutoff},
+        ("as_of",),
+    )
+    current = {
+        k: v
+        for k, v in frozen["action_follow_up"].items()
+        if k.startswith(("current", "measured"))
+    }
+    return {
+        "action_follow_up_v2": {
+            "historical: in progress": has(h["text"], "in_progress"),
+            "historical: no result": not any(k in h["text"] for k in ('"verdict"', '"outcome"')),
+            "historical: no later report": _no_later_report(h["text"], cutoff),
+            **current,
+        }
+    }
+
+
+REPLACES = {"action_follow_up_v2": "action_follow_up"}
+
+
 async def main(label: str) -> None:
     token = INSTANCE["presenter"]["token"]
     http = httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=60)
@@ -238,8 +277,13 @@ async def main(label: str) -> None:
                 "team_overview", {"team_id": TEAMS["lifesnaps-11"], "week": "2021-07-19"}, ("week",)
             )
             results["tool_failures"]["retry gives the same answer"] = r1["text"] == r2["text"]
+            later = Run(s)
+            newer = await versioned(later, results)
     results["scope_and_authorization"] |= await other_checks()
     passed = {k: all(v.values()) for k, v in results.items()}
+    # The revised suite: the frozen one with each versioned task in place of the one it replaces.
+    revised = {k: v for k, v in passed.items() if k not in REPLACES.values()}
+    revised |= {k: all(v.values()) for k, v in newer.items()}
     calls = run.calls
     summary = {
         "label": label,
@@ -253,6 +297,14 @@ async def main(label: str) -> None:
         "tasks_passed": f"{sum(passed.values())}/{len(passed)}",
         "passed": passed,
         "checks": results,
+        # Reported apart: the frozen score above is the one on record.
+        "revised": {
+            "replaces": REPLACES,
+            "tasks_passed": f"{sum(revised.values())}/{len(revised)}",
+            "passed": revised,
+            "checks": newer,
+            "calls": len(later.calls),
+        },
         "calls": {
             "discovery": len(discovery.calls),
             "task_calls": len(calls),
@@ -265,7 +317,8 @@ async def main(label: str) -> None:
     out.write_text(json.dumps(summary, indent=1) + "\n")
     print(
         json.dumps(
-            {k: summary[k] for k in ("label", "server_revision", "tasks_passed", "calls")},
+            {k: summary[k] for k in ("label", "server_revision", "tasks_passed", "calls")}
+            | {"revised_tasks_passed": summary["revised"]["tasks_passed"]},
             indent=1,
         )
     )
