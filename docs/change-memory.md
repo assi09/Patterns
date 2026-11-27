@@ -31,8 +31,13 @@ nothing stored specifically for Thursday night."*
   - **Done:** the decision record. That covers the schema, `record_team_change`, the event
     category, the app's "Suggested in chat — awaiting your confirmation" and "Did the team try
     it?".
-  - **Next:** `team_history` and `team_case`, then the scripted cases and the local live
-    rehearsal.
+  - **Done:** `team_history` and `team_case`. They return facts with dates. Links are the
+    supervisor's; a date overlap is `nearby`. Evidence is the weekly reports overlapping a case,
+    each with its own dates. A single day gets "No day-specific team evidence available." An
+    `as_of` answer leaves out anything recorded later. Retired and custom changes read "Custom
+    team change".
+  - **Next:** the scripted cases on a local eval instance, an MCP red-team pass, and the local
+    live rehearsal.
 
 ## Step 0: can the outcome be trusted? (done)
 
