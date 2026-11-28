@@ -140,7 +140,8 @@ Evidence ids are random, so the app and MCP can share one only by reading one st
   was made (`TeamReport.created_at`, the cutoff), less anyone who has left since. Membership rows
   keep their join and leave times (a rejoin is a new row), so that roster is on record. Someone
   who joined after the cutoff never counts, however much earlier data they bring. Someone who
-  withdrew is left out of any snapshot made after they left. The roster stored is the count at
+  withdrew is left out of any snapshot made after they left, even if they have rejoined: a
+  contributor needs the same membership record to have begun by the cutoff and still be active. The roster stored is the count at
   the cutoff; the contributors are those eligible now with enough data.
 - **No report, no roster.** A week without a report has no record of who belonged then, so it gets
   an explicit `roster_unavailable` state and nothing is stored. The weekly job makes the report
@@ -197,9 +198,11 @@ the app API and MCP. Every expected value is worked out by hand in the test:
   - one of five leaving after the report: withheld from 4, roster 5;
   - one of five leaving and a replacement joining, so the team still has 5: withheld from 4 in
     both;
+  - one of five leaving and rejoining before the first read: roster 5, contributors 4, withheld
+    in both;
   - no report for the week: `roster_unavailable` in both, and nothing stored.
 
-  Without the fix, the late-joiner and replacement cases show a figure from 5.
+  Without the fix, the late-joiner, replacement and rejoin cases count 5 contributors.
 
 **On a real live connection:** nothing in this PR. The local Google sign-in expired (Testing
 mode, 7 days), and local `google_health` rows include synthetic demo data (see gaps), so they

@@ -269,19 +269,26 @@ def roster_cutoff(db: Session, team: Team, week: Window) -> datetime | None:
 
 
 def historical_roster(db: Session, team: Team, cutoff: datetime) -> tuple[int, list[uuid.UUID]]:
-    """How many people were in the team at `cutoff`, and those of them still in it now.
+    """How many people were in the team at `cutoff`, and the contributors: those whose membership
+    at the cutoff is still unbroken.
 
     Membership rows keep their join and leave times (a rejoin is a new row), so who belonged at a
     past moment is on record. Someone who joined after the cutoff is never counted, however much
-    earlier data they bring; someone who has left since is left out of a new snapshot."""
+    earlier data they bring. Someone who has left since is left out of a new snapshot, and so is
+    someone who left and rejoined: the membership they hold now began after the cutoff, so it
+    does not cover the week, and the one that did ended when they withdrew."""
     rows = db.execute(
         select(TeamMembership.user_id, TeamMembership.joined_at, TeamMembership.left_at).where(
             TeamMembership.team_id == team.id
         )
     ).all()
-    then = {u for u, joined, left in rows if joined <= cutoff and (left is None or left > cutoff)}
-    still = {u for u, _, left in rows if left is None}
-    return len(then), sorted(then & still)
+    at_cutoff = [
+        (u, left)
+        for u, joined, left in rows
+        if joined <= cutoff and (left is None or left > cutoff)
+    ]
+    unbroken = {u for u, left in at_cutoff if left is None}  # the same record, still active
+    return len({u for u, _ in at_cutoff}), sorted(unbroken)
 
 
 def week_figures(db: Session, team: Team, week: Window, now: datetime) -> TeamMetricWeek | None:

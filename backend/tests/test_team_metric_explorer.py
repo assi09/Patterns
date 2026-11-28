@@ -623,3 +623,22 @@ def test_a_leaver_and_a_replacement_leave_four_eligible_though_the_team_is_still
     assert from_app["coverage"]["contributors"] == from_mcp["coverage"]["contributors"] == 4
     assert from_app["withheld"].startswith("Withheld: 4 of the 5 people needed")
     assert from_app["evidenceId"] == from_mcp["evidence_id"]
+
+
+@pytest.mark.parametrize("app_first", [True, False], ids=["app first", "mcp first"])
+def test_someone_who_left_and_rejoined_since_the_report_is_not_a_contributor(engine, app_first):
+    team_id = reported_team(engine, "r", 5)  # five in the team when the report was made
+    with session_scope(engine) as db:
+        team = db.get(Team, uuid.UUID(team_id))
+        person = db.scalar(select(User).where(User.email == "r4@example.com"))
+        memberships.leave(db, person, team_id, LATER_JOIN)
+        memberships.join(db, team, person, LATER_JOIN + timedelta(hours=1))  # a new record
+        assert memberships.active_members(db, team) == 5
+    from_app, from_mcp = both_interfaces(engine, team_id, "sleep_minutes", app_first)
+    # Their membership at the report ended; the one they hold now began after it. Five belonged
+    # then, four are eligible, and the figure is withheld in both.
+    assert from_app["coverage"]["roster"] == from_mcp["coverage"]["roster"] == 5
+    assert from_app["coverage"]["contributors"] == from_mcp["coverage"]["contributors"] == 4
+    assert from_app["state"] == from_mcp["state"] == "below_minimum"
+    assert from_app["change"] is None and from_mcp["change"] is None
+    assert from_app["evidenceId"] == from_mcp["evidence_id"]
