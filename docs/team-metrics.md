@@ -204,6 +204,39 @@ the app API and MCP. Every expected value is worked out by hand in the test:
 
   Without the fix, the late-joiner, replacement and rejoin cases count 5 contributors.
 
+**On real people (2026-11-28, `eval/explorer_real.py`, results in
+`eval/results/explorer_real_2026-11-28.json`).** These use the 11 teams frozen by
+`eval/varied_teams.py`: 67 LifeSnaps and PMData people in teams of 1, 3, 4, 5, 6, 9, 11 and 13,
+every week, 320 team-weeks. There are two arms:
+
+- **Histories as recorded.**
+- **Staggered.** Each person starts 0 to 42 days late, and in each team of 5 or more one person
+  leaves three quarters of the way through.
+
+The figures are made the way production makes them. The weekly job makes them from the middle
+week on. Earlier weeks are first opened through the app (even weeks) or MCP (odd weeks). All
+24 metrics are read through both interfaces, 16,000 reads per arm. The days enter the database
+through `save_daily`, not through Google-shaped responses. Every check passed in both arms:
+
+- The app and MCP agree on every list (320/320) and every metric's evidence (7,680/7,680).
+- Figures recomputed from the dataset files with the standard library agree on all 5,440
+  metric-weeks each arm can recompute: 849 figures as recorded and 538 staggered, the rest
+  withheld or without data. They match on contributors, median, and counts higher, lower and
+  unchanged.
+- The roster is the team at the report, including after a leave (320/320). No figure comes from
+  fewer than 5 people. No email appears in any output. The evidence holds only counts and the
+  median.
+- Rewriting the first three weeks with figures (steps doubled, 90 more minutes asleep) leaves
+  every shown figure unchanged (15/15), while a fresh computation would differ (15/15).
+- With the report, where both read the same people, the explorer never counts fewer people
+  (1,341/1,341). With the same people, the medians are identical (294/294). Where the report
+  says a metric changed, the explorer's median moved the same way 9 times out of 9.
+- 4-or-5 contributor boundaries met: 960 as recorded and 808 staggered.
+
+These are real people but not real teams. Neither dataset records wear time, calendars or
+heart-rate zone minutes, so zone rows are checked to be empty and the scores are only checked
+for consistency, not recomputed.
+
 **On a real live connection:** nothing in this PR. The local Google sign-in expired (Testing
 mode, 7 days), and local `google_health` rows include synthetic demo data (see gaps), so they
 were not used as evidence.
