@@ -1,0 +1,371 @@
+{
+ "spec_sha256": "411dfce547f8745634ce6be3f6c29767088cdc83a8903035a404874562346e79",
+ "shuffles_per_team_week": 5,
+ "ordinary": {
+  "11 (lifesnaps)": {
+   "any_flag": "1/36 (2.8%)",
+   "steps": 1
+  },
+  "13 (lifesnaps)": {
+   "any_flag": "0/36 (0.0%)"
+  },
+  "5 (lifesnaps)": {
+   "any_flag": "0/36 (0.0%)"
+  },
+  "6 (lifesnaps)": {
+   "any_flag": "0/36 (0.0%)"
+  },
+  "9 (lifesnaps)": {
+   "any_flag": "0/36 (0.0%)"
+  },
+  "5 (pmdata)": {
+   "any_flag": "4/17 (23.5%)",
+   "sleep_minutes": 1,
+   "bedtime_hour": 2,
+   "steps": 1,
+   "recovery_score": 1,
+   "strain": 1
+  },
+  "6 (pmdata)": {
+   "any_flag": "1/17 (5.9%)",
+   "sleep_minutes": 1,
+   "bedtime_hour": 1
+  }
+ },
+ "null": {
+  "11 (lifesnaps)": {
+   "any_flag": "2/180 (1.1%)",
+   "steps": 1,
+   "active_zone_minutes": 1,
+   "strain": 1
+  },
+  "13 (lifesnaps)": {
+   "any_flag": "7/180 (3.9%)",
+   "steps": 2,
+   "active_zone_minutes": 3,
+   "resting_hr": 3,
+   "strain": 1
+  },
+  "5 (lifesnaps)": {
+   "any_flag": "0/180 (0.0%)"
+  },
+  "6 (lifesnaps)": {
+   "any_flag": "0/180 (0.0%)"
+  },
+  "9 (lifesnaps)": {
+   "any_flag": "0/180 (0.0%)"
+  },
+  "5 (pmdata)": {
+   "any_flag": "2/85 (2.4%)",
+   "active_zone_minutes": 1,
+   "resting_hr": 1
+  },
+  "6 (pmdata)": {
+   "any_flag": "5/85 (5.9%)",
+   "bedtime_hour": 2,
+   "active_zone_minutes": 3,
+   "strain": 1
+  }
+ },
+ "null_overall": "16/1070 (1.5%)",
+ "null_pass_mark": 0.075,
+ "null_passed": true,
+ "planted": {
+  "sleep -30": {
+   "11 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/5 (0.0%)"
+   },
+   "13 (lifesnaps)": {
+    "all_weeks": "1/36 (2.8%)",
+    "observable_weeks": "1/4 (25.0%)"
+   },
+   "5 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "6 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "9 (lifesnaps)": {
+    "all_weeks": "1/36 (2.8%)",
+    "observable_weeks": "1/4 (25.0%)"
+   },
+   "5 (pmdata)": {
+    "all_weeks": "1/17 (5.9%)",
+    "observable_weeks": "1/13 (7.7%)"
+   },
+   "6 (pmdata)": {
+    "all_weeks": "5/17 (29.4%)",
+    "observable_weeks": "5/15 (33.3%)"
+   }
+  },
+  "sleep -45": {
+   "11 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/5 (0.0%)"
+   },
+   "13 (lifesnaps)": {
+    "all_weeks": "2/36 (5.6%)",
+    "observable_weeks": "2/4 (50.0%)"
+   },
+   "5 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "6 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "9 (lifesnaps)": {
+    "all_weeks": "2/36 (5.6%)",
+    "observable_weeks": "2/4 (50.0%)"
+   },
+   "5 (pmdata)": {
+    "all_weeks": "3/17 (17.6%)",
+    "observable_weeks": "3/13 (23.1%)"
+   },
+   "6 (pmdata)": {
+    "all_weeks": "8/17 (47.1%)",
+    "observable_weeks": "8/15 (53.3%)"
+   }
+  },
+  "sleep -60": {
+   "11 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/5 (0.0%)"
+   },
+   "13 (lifesnaps)": {
+    "all_weeks": "2/36 (5.6%)",
+    "observable_weeks": "2/4 (50.0%)"
+   },
+   "5 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "6 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "9 (lifesnaps)": {
+    "all_weeks": "2/36 (5.6%)",
+    "observable_weeks": "2/4 (50.0%)"
+   },
+   "5 (pmdata)": {
+    "all_weeks": "4/17 (23.5%)",
+    "observable_weeks": "4/13 (30.8%)"
+   },
+   "6 (pmdata)": {
+    "all_weeks": "10/17 (58.8%)",
+    "observable_weeks": "10/15 (66.7%)"
+   }
+  },
+  "sleep -90": {
+   "11 (lifesnaps)": {
+    "all_weeks": "1/36 (2.8%)",
+    "observable_weeks": "1/5 (20.0%)"
+   },
+   "13 (lifesnaps)": {
+    "all_weeks": "4/36 (11.1%)",
+    "observable_weeks": "4/4 (100.0%)"
+   },
+   "5 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "6 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "9 (lifesnaps)": {
+    "all_weeks": "3/36 (8.3%)",
+    "observable_weeks": "3/4 (75.0%)"
+   },
+   "5 (pmdata)": {
+    "all_weeks": "6/17 (35.3%)",
+    "observable_weeks": "6/13 (46.2%)"
+   },
+   "6 (pmdata)": {
+    "all_weeks": "13/17 (76.5%)",
+    "observable_weeks": "13/15 (86.7%)"
+   }
+  },
+  "sleep -60, half the team": {
+   "11 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/5 (0.0%)"
+   },
+   "13 (lifesnaps)": {
+    "all_weeks": "1/36 (2.8%)",
+    "observable_weeks": "1/4 (25.0%)"
+   },
+   "5 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "6 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "9 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/4 (0.0%)"
+   },
+   "5 (pmdata)": {
+    "all_weeks": "0/17 (0.0%)",
+    "observable_weeks": "0/13 (0.0%)"
+   },
+   "6 (pmdata)": {
+    "all_weeks": "0/17 (0.0%)",
+    "observable_weeks": "0/15 (0.0%)"
+   }
+  },
+  "steps -1500": {
+   "11 (lifesnaps)": {
+    "all_weeks": "2/36 (5.6%)",
+    "observable_weeks": "2/12 (16.7%)"
+   },
+   "13 (lifesnaps)": {
+    "all_weeks": "1/36 (2.8%)",
+    "observable_weeks": "1/11 (9.1%)"
+   },
+   "5 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "6 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "9 (lifesnaps)": {
+    "all_weeks": "1/36 (2.8%)",
+    "observable_weeks": "1/5 (20.0%)"
+   },
+   "5 (pmdata)": {
+    "all_weeks": "3/17 (17.6%)",
+    "observable_weeks": "3/16 (18.8%)"
+   },
+   "6 (pmdata)": {
+    "all_weeks": "1/17 (5.9%)",
+    "observable_weeks": "1/15 (6.7%)"
+   }
+  },
+  "steps -3000": {
+   "11 (lifesnaps)": {
+    "all_weeks": "5/36 (13.9%)",
+    "observable_weeks": "5/12 (41.7%)"
+   },
+   "13 (lifesnaps)": {
+    "all_weeks": "6/36 (16.7%)",
+    "observable_weeks": "6/11 (54.5%)"
+   },
+   "5 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "6 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "9 (lifesnaps)": {
+    "all_weeks": "2/36 (5.6%)",
+    "observable_weeks": "2/5 (40.0%)"
+   },
+   "5 (pmdata)": {
+    "all_weeks": "3/17 (17.6%)",
+    "observable_weeks": "3/16 (18.8%)"
+   },
+   "6 (pmdata)": {
+    "all_weeks": "1/17 (5.9%)",
+    "observable_weeks": "1/15 (6.7%)"
+   }
+  },
+  "resting HR +2": {
+   "11 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/10 (0.0%)"
+   },
+   "13 (lifesnaps)": {
+    "all_weeks": "3/36 (8.3%)",
+    "observable_weeks": "3/9 (33.3%)"
+   },
+   "5 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "6 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "9 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/4 (0.0%)"
+   },
+   "5 (pmdata)": {
+    "all_weeks": "0/17 (0.0%)",
+    "observable_weeks": "0/2 (0.0%)"
+   },
+   "6 (pmdata)": {
+    "all_weeks": "1/17 (5.9%)",
+    "observable_weeks": "1/9 (11.1%)"
+   }
+  },
+  "resting HR +4": {
+   "11 (lifesnaps)": {
+    "all_weeks": "4/36 (11.1%)",
+    "observable_weeks": "4/10 (40.0%)"
+   },
+   "13 (lifesnaps)": {
+    "all_weeks": "5/36 (13.9%)",
+    "observable_weeks": "5/9 (55.6%)"
+   },
+   "5 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "6 (lifesnaps)": {
+    "all_weeks": "0/36 (0.0%)",
+    "observable_weeks": "0/0"
+   },
+   "9 (lifesnaps)": {
+    "all_weeks": "1/36 (2.8%)",
+    "observable_weeks": "1/4 (25.0%)"
+   },
+   "5 (pmdata)": {
+    "all_weeks": "0/17 (0.0%)",
+    "observable_weeks": "0/2 (0.0%)"
+   },
+   "6 (pmdata)": {
+    "all_weeks": "7/17 (41.2%)",
+    "observable_weeks": "7/9 (77.8%)"
+   }
+  }
+ },
+ "also_flagged_beside_a_plant": {
+  "steps -3000": {
+   "sleep_minutes": 1
+  },
+  "resting HR +2": {
+   "sleep_minutes": 1,
+   "recovery_score": 1
+  },
+  "resting HR +4": {
+   "sleep_minutes": 1,
+   "recovery_score": 6
+  },
+  "sleep -30": {
+   "recovery_score": 2
+  },
+  "sleep -45": {
+   "recovery_score": 2
+  },
+  "sleep -60": {
+   "recovery_score": 2
+  },
+  "sleep -90": {
+   "recovery_score": 2
+  }
+ },
+ "commit": "adccc34"
+}
