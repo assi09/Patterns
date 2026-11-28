@@ -450,7 +450,9 @@ def run_arm(arm: str, data: dict, spec: dict, teams: dict, source: dict) -> dict
     for name, ids in teams.items():
         dataset = name.split("-")[0]
         weeks = spec["weeks"][dataset]
-        first_day = min(data[dataset][p].index.min().date() for p in ids)
+        # The dataset's first day, not the team's: its weeks are the dataset's, and no one can
+        # belong to a team before they joined it.
+        first_day = min(f.index.min().date() for f in data[dataset].values())
         starts = {p: first_day for p in ids}
         leaver = None
         if arm == "staggered":
