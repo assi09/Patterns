@@ -632,8 +632,16 @@ describe('the team metric explorer in the mock', () => {
     return (teams[0] ?? (await mockClient.createTeam('Design'))).id;
   }
 
+  it('has no figures for a week without a report, whose roster is not on record', async () => {
+    const id = await teamId();
+    const week = await mockClient.getTeamMetrics(id, '2020-01-06');
+    expect(week.state).toBe('roster_unavailable');
+    expect(week.categories).toEqual([]);
+  });
+
   it('lists every metric by category with its change or why it has none', async () => {
     const id = await teamId();
+    await mockClient.makeTeamReport(id);
     const week = await mockClient.getTeamMetrics(id);
     expect(week.categories.map((c) => c.name)).toEqual(['Sleep', 'Movement', 'Heart', 'Scores']);
     const rows = week.categories.flatMap((c) => c.subgroups.flatMap((g) => g.metrics));
@@ -649,6 +657,7 @@ describe('the team metric explorer in the mock', () => {
 
   it('opens one metric with the list row’s evidence id, and refuses an unknown one', async () => {
     const id = await teamId();
+    await mockClient.makeTeamReport(id);
     const week = await mockClient.getTeamMetrics(id);
     const rem = week.categories
       .flatMap((c) => c.subgroups.flatMap((g) => g.metrics))

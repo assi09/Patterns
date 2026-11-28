@@ -499,7 +499,9 @@ class TeamFindingEvidence(ApiModel):
     outcome_label: str | None = None
 
 
-ExplorerState = Literal["ready", "week_not_over", "paused", "not_available_then"]
+ExplorerState = Literal[
+    "ready", "week_not_over", "paused", "not_available_then", "roster_unavailable"
+]
 MetricState = Literal["figure", "below_minimum", "no_data"]
 
 

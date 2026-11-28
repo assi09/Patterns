@@ -1514,9 +1514,12 @@ const MOCK_DERIVED: Record<string, string> = {
     'Weighted: a fat burn minute counts once, a cardio or peak minute twice, so this is not the time spent in zones.',
 };
 
-function mockMetricsWeeks(): ISODate[] {
-  const latest = lastFullWeek();
-  return [0, 1, 2, 3].map((i) => dayShift(latest, -7 * i));
+/** The weeks with a report: the explorer's roster is the team as it was when one was made. */
+function mockMetricsWeeks(teamId: string): ISODate[] {
+  return (teamReports.get(teamId) ?? [])
+    .map((r) => r.week.start)
+    .sort()
+    .reverse();
 }
 
 function mockTeamMetrics(teamId: string, week?: ISODate): TeamMetrics {
@@ -1529,13 +1532,20 @@ function mockTeamMetrics(teamId: string, week?: ISODate): TeamMetrics {
     teamId,
     week: { start: asked, end: dayShift(asked, 6) },
     baseline: { start: dayShift(asked, -28), end: dayShift(asked, -1) },
-    weeks: mockMetricsWeeks(),
+    weeks: mockMetricsWeeks(teamId),
     minimumMembers: team.minimumMembers,
     categories: [],
   };
   if (asked > latest)
     return { ...head, state: 'week_not_over', message: 'This week is not over yet.' };
   if (team.paused) return { ...head, state: 'paused', message: team.paused };
+  if (!head.weeks.includes(asked))
+    return {
+      ...head,
+      state: 'roster_unavailable',
+      message:
+        "Unavailable: who belonged to the team that week is not on record. Figures describe the people in the team when the week's report was made, and this week has no report.",
+    };
   const back = Math.round((Date.parse(latest) - Date.parse(asked)) / (7 * 86_400_000));
   const categories: TeamMetrics['categories'] = [];
   for (const [metric, category, subgroup, label, unit, change, short] of MOCK_METRICS) {

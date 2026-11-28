@@ -12,7 +12,7 @@ from test_hr_invite_postgres import ADMIN_URL, BLOCKED, engine  # noqa: F401 (th
 
 from app.analysis.team import week_of
 from app.db.models import Team, TeamMetricWeek, User
-from app.teams import explorer, memberships
+from app.teams import explorer, memberships, reports
 
 pytestmark = pytest.mark.skipif(not ADMIN_URL, reason="FA_TEST_POSTGRES_URL is not set")
 NOW = datetime(2026, 11, 26, 9, tzinfo=UTC)
@@ -24,7 +24,9 @@ def test_two_first_requests_for_a_week_store_it_once(engine):  # noqa: F811
         boss = User(email="boss@example.com", status="approved", role="supervisor")
         db.add(boss)
         db.flush()
-        team_id = memberships.create_team(db, boss, "Design", None, NOW).id
+        team = memberships.create_team(db, boss, "Design", None, NOW)
+        reports.build_report(db, team, WEEK, NOW)  # the week's roster is on record
+        team_id = team.id
         db.commit()
 
     first = Session(engine)

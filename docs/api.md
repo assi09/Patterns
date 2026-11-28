@@ -1467,7 +1467,7 @@ One explorer metric's evidence, bounded as MCP gives it: what was measured, its 
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
-| `state` | `ready` \| `week_not_over` \| `paused` \| `not_available_then` or `figure` \| `below_minimum` \| `no_data` | yes |  |
+| `state` | `ready` \| `week_not_over` \| `paused` \| `not_available_then` \| `roster_unavailable` or `figure` \| `below_minimum` \| `no_data` | yes |  |
 | `metric` | string | yes |  |
 | `label` | string | yes |  |
 | `week` | [Window](#window) | yes |  |
@@ -1526,7 +1526,7 @@ Every explorer metric of one team week, or the week's state when there are none.
 | `baseline` | [Window](#window) | yes |  |
 | `weeks` | list[string (date)] | yes |  |
 | `minimumMembers` | integer | yes |  |
-| `state` | `ready` \| `week_not_over` \| `paused` \| `not_available_then` | yes |  |
+| `state` | `ready` \| `week_not_over` \| `paused` \| `not_available_then` \| `roster_unavailable` | yes |  |
 | `message` | string or null |  |  |
 | `madeOn` | string (date) or null |  |  |
 | `roster` | integer or null |  |  |

@@ -859,8 +859,12 @@ export interface TeamFindingEvidence {
   outcomeLabel?: string | null;
 }
 
-/** Where a week of the metric explorer stands; its figures exist only when `ready`. */
-export type TeamMetricsState = 'ready' | 'week_not_over' | 'paused' | 'not_available_then';
+/**
+ * Where a week of the metric explorer stands; its figures exist only when `ready`.
+ * `roster_unavailable`: the week has no report, so who belonged to the team then is not on record.
+ */
+export type TeamMetricsState =
+  'ready' | 'week_not_over' | 'paused' | 'not_available_then' | 'roster_unavailable';
 /** One metric's state: a figure, withheld (fewer than the minimum), or no data at all. */
 export type TeamMetricState = 'figure' | 'below_minimum' | 'no_data';
 

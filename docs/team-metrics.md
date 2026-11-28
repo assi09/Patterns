@@ -136,6 +136,16 @@ Evidence ids are random, so the app and MCP can share one only by reading one st
 - A team week's figures are computed once and stored in `team_metric_weeks` (migration 0042),
   with `made_at`. They are made by the weekly job right after the report, or on the first request
   for a finished week.
+- **Whose figures.** A week's figures describe the people in the team when that week's report
+  was made (`TeamReport.created_at`, the cutoff), less anyone who has left since. Membership rows
+  keep their join and leave times (a rejoin is a new row), so that roster is on record. Someone
+  who joined after the cutoff never counts, however much earlier data they bring. Someone who
+  withdrew is left out of any snapshot made after they left. The roster stored is the count at
+  the cutoff; the contributors are those eligible now with enough data.
+- **No report, no roster.** A week without a report has no record of who belonged then, so it gets
+  an explicit `roster_unavailable` state and nothing is stored. The weekly job makes the report
+  first, then the figures, so a regular week always has both. A report made late for an old week
+  uses the roster at the time it is made, as the report itself does.
 - A stored week is never recomputed. A later sync cannot change a figure already shown.
 - Every window ends on the week's last day, so nothing after the week is read.
 - `as_of` (MCP) returns only figures stored by that day. With nothing stored by then the answer
@@ -179,6 +189,17 @@ the app API and MCP. Every expected value is worked out by hand in the test:
 - Another supervisor's team is not found.
 - A later sync, the following week's data, an earlier `as_of`, and the week in progress reveal
   nothing.
+- **Roster (after review).** Each case is opened for the first time through the app, then MCP,
+  and the reverse:
+  - four people at the report and a fifth joining later with qualifying earlier data: withheld
+    from 4 in both;
+  - five at the report: −58 min from 5, with the same evidence id in both;
+  - one of five leaving after the report: withheld from 4, roster 5;
+  - one of five leaving and a replacement joining, so the team still has 5: withheld from 4 in
+    both;
+  - no report for the week: `roster_unavailable` in both, and nothing stored.
+
+  Without the fix, the late-joiner and replacement cases show a figure from 5.
 
 **On a real live connection:** nothing in this PR. The local Google sign-in expired (Testing
 mode, 7 days), and local `google_health` rows include synthetic demo data (see gaps), so they

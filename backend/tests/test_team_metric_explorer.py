@@ -174,6 +174,9 @@ def teams(engine):
         for email in [f"c{i}@example.com" for i in range(5)] + ["a5@example.com"]:
             person = db.scalar(select(User).where(User.email == email))
             save_daily(db, person.id, "takeout", takeout)
+        # Each week's report made at NOW: who belonged then is who its figures describe.
+        for team_id in (a, b, c):
+            reports.build_report(db, db.get(Team, uuid.UUID(team_id)), reports.week_of(WEEK), NOW)
     return a, b, c
 
 
@@ -423,19 +426,18 @@ def test_a_historical_lookup_reveals_nothing_later(teams, engine):
 def test_the_explorer_leaves_the_report_unchanged(teams, engine):
     a, _, _ = teams
     with session_scope(engine) as db:
-        team = db.get(Team, uuid.UUID(a))
-        before = reports.build_report(db, team, reports.week_of(WEEK), NOW)
-        sections_before = before.body["sections"]
-        db.delete(before)
+        made = db.scalar(select(TeamReport).where(TeamReport.team_id == uuid.UUID(a)))
+        sections_before = [s["metric"] for s in made.body["sections"]]
+        headline_before = made.headline
     explorer_view(engine, a)
     with session_scope(engine) as db:
-        team = db.get(Team, uuid.UUID(a))
-        after = reports.build_report(db, team, reports.week_of(WEEK), NOW)
-        assert [s["metric"] for s in after.body["sections"]] == [
-            s["metric"] for s in sections_before
-        ]
+        # Remade from scratch after the explorer stored its figures: the same report.
+        db.delete(db.scalar(select(TeamReport).where(TeamReport.team_id == uuid.UUID(a))))
+        db.flush()
+        after = reports.build_report(db, db.get(Team, uuid.UUID(a)), reports.week_of(WEEK), NOW)
+        assert [s["metric"] for s in after.body["sections"]] == sections_before
+        assert after.headline == headline_before
         assert {s["metric"] for s in after.body["sections"]} <= set(TEAM_METRICS)
-        assert db.scalar(select(func.count()).select_from(TeamReport)) == 1
 
 
 def test_every_catalogue_metric_is_one_the_live_sync_writes():
@@ -475,3 +477,149 @@ def test_a_request_racing_another_returns_the_week_stored_first(teams, engine, m
         got = explorer.week_figures(db, db.get(Team, uuid.UUID(a)), reports.week_of(WEEK), NOW)
         assert got.results["rem_sleep_minutes"]["id"] == shown
         assert db.scalar(select(func.count()).select_from(TeamMetricWeek)) == 1
+
+
+# The roster a week's figures describe (review of #267): the people in the team when that week's
+# report was made, less any who have left since, never whoever is in the team when the week is
+# first opened.
+LATER_JOIN = NOW + timedelta(days=1)
+OPENED = NOW + timedelta(days=2)
+
+
+def reported_team(engine, prefix: str, size: int) -> str:
+    """`size` people with staged nights, in the team since well before the week, and the week's
+    report made at NOW."""
+    team_id = team_with(
+        engine,
+        "boss@example.com",
+        f"Team {prefix}",
+        [
+            (f"{prefix}{i}@example.com", api_responses(SLEEP_DROPS[i], REM_RISES[i % 5]))
+            for i in range(size)
+        ],
+    )
+    with session_scope(engine) as db:
+        reports.build_report(db, db.get(Team, uuid.UUID(team_id)), reports.week_of(WEEK), NOW)
+    return team_id
+
+
+def join_later(engine, team_id: str, email: str, i: int) -> None:
+    """Someone with qualifying readings from before and during the week, joining after the
+    week's report was made."""
+    sync(engine, email, api_responses(SLEEP_DROPS[i], REM_RISES[i % 5]))
+    with session_scope(engine) as db:
+        person = db.scalar(select(User).where(User.email == email))
+        memberships.join(db, db.get(Team, uuid.UUID(team_id)), person, LATER_JOIN)
+
+
+def both_interfaces(engine, team_id: str, metric: str, app_first: bool) -> tuple[dict, dict]:
+    """The week opened for the first time through one interface, then read through the other."""
+    client, headers = api(engine, "boss@example.com", now=OPENED)
+
+    def app():
+        url = f"/teams/{team_id}/metrics/2026-10-12/{metric}"
+        response = client.get(url, headers=headers)
+        assert response.status_code == 200
+        return response.json()
+
+    def mcp():
+        error, out = call_mcp(
+            build_mcp(engine),
+            user_id(engine, "boss@example.com"),
+            "team_metric",
+            team_id=team_id,
+            metric=metric,
+            week="2026-10-12",
+        )
+        assert not error
+        return out
+
+    if app_first:
+        from_app = app()
+        return from_app, mcp()
+    from_mcp = mcp()
+    return app(), from_mcp
+
+
+@pytest.mark.parametrize("app_first", [True, False], ids=["app first", "mcp first"])
+def test_someone_who_joined_after_the_report_never_makes_an_old_week_qualify(engine, app_first):
+    team_id = reported_team(engine, "h", 4)  # four in the team when the report was made
+    join_later(engine, team_id, "late@example.com", 4)
+    from_app, from_mcp = both_interfaces(engine, team_id, "sleep_minutes", app_first)
+    # Withheld in both, from the four who belonged then: the fifth's readings do not count.
+    assert (from_app["state"], from_app["change"]) == ("below_minimum", None)
+    assert (from_mcp["state"], from_mcp["change"]) == ("below_minimum", None)
+    assert from_app["coverage"]["contributors"] == from_mcp["coverage"]["contributors"] == 4
+    assert from_app["coverage"]["roster"] == from_mcp["coverage"]["roster"] == 4
+    assert from_app["withheld"].startswith("Withheld: 4 of the 5 people needed")
+    assert from_app["evidenceId"] == from_mcp["evidence_id"]
+
+
+@pytest.mark.parametrize("app_first", [True, False], ids=["app first", "mcp first"])
+def test_five_who_belonged_at_the_report_give_the_same_figure_in_both(engine, app_first):
+    team_id = reported_team(engine, "f", 5)
+    from_app, from_mcp = both_interfaces(engine, team_id, "sleep_minutes", app_first)
+    # Drops of 54, 56, 58, 60 and 62 min: the median is -58.
+    expected = {"value": -58.0, "unit": "min", "text": "-58 min"}
+    assert from_app["state"] == from_mcp["state"] == "figure"
+    assert from_app["change"] == from_mcp["change"] == expected
+    assert from_app["coverage"]["contributors"] == from_mcp["coverage"]["contributors"] == 5
+    assert from_app["evidenceId"] == from_mcp["evidence_id"]
+
+
+def test_someone_who_left_since_the_report_is_left_out_of_a_new_snapshot(engine):
+    team_id = reported_team(engine, "w", 5)
+    with session_scope(engine) as db:
+        leaver = db.scalar(select(User).where(User.email == "w4@example.com"))
+        memberships.leave(db, leaver, team_id, LATER_JOIN)
+    from_app, from_mcp = both_interfaces(engine, team_id, "sleep_minutes", app_first=True)
+    assert from_app["state"] == from_mcp["state"] == "below_minimum"
+    assert from_app["coverage"]["contributors"] == 4
+    assert from_app["coverage"]["roster"] == 5  # five belonged then; one has withdrawn since
+
+
+def test_a_week_whose_roster_is_not_on_record_is_unavailable_and_stores_nothing(teams, engine):
+    team_id = team_with(
+        engine,
+        "boss@example.com",
+        "Unreported",
+        [(f"u{i}@example.com", api_responses(SLEEP_DROPS[i], REM_RISES[i])) for i in range(5)],
+    )  # no report for the week: who belonged then is not on record
+    client, headers = api(engine, "boss@example.com", now=OPENED)
+    listing = client.get(
+        f"/teams/{team_id}/metrics", params={"week": "2026-10-12"}, headers=headers
+    )
+    assert listing.json()["state"] == "roster_unavailable"
+    assert listing.json()["categories"] == []
+    error, out = call_mcp(
+        build_mcp(engine),
+        user_id(engine, "boss@example.com"),
+        "team_metric",
+        team_id=team_id,
+        metric="sleep_minutes",
+        week="2026-10-12",
+    )
+    assert not error and out["state"] == "roster_unavailable" and "evidence_id" not in out
+    with session_scope(engine) as db:
+        stored = select(func.count()).select_from(TeamMetricWeek)
+        assert db.scalar(stored.where(TeamMetricWeek.team_id == uuid.UUID(team_id))) == 0
+
+
+@pytest.mark.parametrize("app_first", [True, False], ids=["app first", "mcp first"])
+def test_a_leaver_and_a_replacement_leave_four_eligible_though_the_team_is_still_five(
+    engine, app_first
+):
+    team_id = reported_team(engine, "s", 5)  # five in the team when the report was made
+    with session_scope(engine) as db:
+        leaver = db.scalar(select(User).where(User.email == "s4@example.com"))
+        memberships.leave(db, leaver, team_id, LATER_JOIN)
+    join_later(engine, team_id, "replacement@example.com", 4)  # qualifying earlier readings
+    with session_scope(engine) as db:
+        assert memberships.active_members(db, db.get(Team, uuid.UUID(team_id))) == 5
+    from_app, from_mcp = both_interfaces(engine, team_id, "sleep_minutes", app_first)
+    # The replacement did not belong then and the leaver has withdrawn: four eligible, withheld.
+    assert from_app["state"] == from_mcp["state"] == "below_minimum"
+    assert from_app["change"] is None and from_mcp["change"] is None
+    assert from_app["coverage"]["contributors"] == from_mcp["coverage"]["contributors"] == 4
+    assert from_app["withheld"].startswith("Withheld: 4 of the 5 people needed")
+    assert from_app["evidenceId"] == from_mcp["evidence_id"]

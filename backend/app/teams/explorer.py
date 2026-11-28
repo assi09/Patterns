@@ -1,6 +1,8 @@
 """The weekly team metric explorer (docs/team-metrics.md): every metric the live sync supports,
 for one finished week, browsed on request in the app and through MCP.
 
+A week's figures describe the people in the team when its report was made, less any who have left
+since; a week without a report has no such record and gets no figures (`roster_unavailable`).
 Each figure is the median of eligible members' changes from their own 28 days before the week,
 with the same coverage rules as the weekly report applied to each metric on its own: a team can
 have a figure for time asleep and too few staged nights for REM. Figures are descriptive. None is
@@ -11,6 +13,7 @@ evidence id, and a figure once shown does not change when more days sync later. 
 Health data is read (`reports.SOURCE`); Takeout history never fills a live figure.
 """
 
+import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -27,9 +30,10 @@ from app.analysis.team import (
     team_metric_change,
     week_of,
 )
-from app.db.models import Team, TeamMetricWeek, TeamReport
+from app.db.daily import load_daily
+from app.db.models import Team, TeamMembership, TeamMetricWeek, TeamReport
 from app.teams import reports
-from app.teams.memberships import active_members, overlap_problem
+from app.teams.memberships import overlap_problem
 
 
 @dataclass(frozen=True)
@@ -232,6 +236,12 @@ LIMITS = (
 )
 
 
+ROSTER_UNAVAILABLE = (
+    "Unavailable: who belonged to the team that week is not on record. Figures describe the "
+    "people in the team when the week's report was made, and this week has no report."
+)
+
+
 class NotFound(LookupError):
     """No such metric or evidence for this team's week; says no more than that."""
 
@@ -248,20 +258,55 @@ def compute(frames: list, week: Window) -> dict[str, Evidence]:
     return out
 
 
-def week_figures(db: Session, team: Team, week: Window, now: datetime) -> TeamMetricWeek:
-    """The team's stored figures for a finished `week`, made now if they were not made yet.
-    The caller checks the week is over and the team is not paused."""
+def roster_cutoff(db: Session, team: Team, week: Window) -> datetime | None:
+    """When the week's report was made: who belonged to the team then is who the week's figures
+    describe. None without a report, when that roster is not on record."""
+    return db.scalar(
+        select(TeamReport.created_at).where(
+            TeamReport.team_id == team.id, TeamReport.week_start == week.start
+        )
+    )
+
+
+def historical_roster(db: Session, team: Team, cutoff: datetime) -> tuple[int, list[uuid.UUID]]:
+    """How many people were in the team at `cutoff`, and those of them still in it now.
+
+    Membership rows keep their join and leave times (a rejoin is a new row), so who belonged at a
+    past moment is on record. Someone who joined after the cutoff is never counted, however much
+    earlier data they bring; someone who has left since is left out of a new snapshot."""
+    rows = db.execute(
+        select(TeamMembership.user_id, TeamMembership.joined_at, TeamMembership.left_at).where(
+            TeamMembership.team_id == team.id
+        )
+    ).all()
+    then = {u for u, joined, left in rows if joined <= cutoff and (left is None or left > cutoff)}
+    still = {u for u, _, left in rows if left is None}
+    return len(then), sorted(then & still)
+
+
+def week_figures(db: Session, team: Team, week: Window, now: datetime) -> TeamMetricWeek | None:
+    """The team's stored figures for a finished `week`, made now if they were not made yet,
+    from the people in the team when the week's report was made, less any who have left since.
+    None when that roster is not on record (no report for the week). The caller checks the week
+    is over and the team is not paused."""
     found = _stored(db, team, week)
     if found is not None:
         return found
+    cutoff = roster_cutoff(db, team, week)
+    if cutoff is None:
+        return None
+    belonged, eligible = historical_roster(db, team, cutoff)
     # The same days the report reads, and nothing after the week's last day.
-    frames = reports.member_frames(
-        db, team, week.start - timedelta(days=reports.HISTORY_DAYS), week.end
-    )
+    start, end = week.start - timedelta(days=reports.HISTORY_DAYS), week.end + timedelta(days=1)
+    frames = [
+        frame
+        for user_id in eligible
+        if not (frame := load_daily(db, user_id, reports.SOURCE, start, end)).empty
+    ]
     row = TeamMetricWeek(
         team_id=team.id,
         week_start=week.start,
-        members_total=active_members(db, team),
+        members_total=belonged,
         members_with_data=len(frames),
         results={k: e.model_dump(mode="json") for k, e in compute(frames, week).items()},
         made_at=now,
@@ -372,6 +417,8 @@ def metrics_view(
         row = stored
     else:
         row = week_figures(db, team, asked, now)
+        if row is None:
+            return head | {"state": "roster_unavailable", "message": ROSTER_UNAVAILABLE}
     categories: list[dict] = []
     for metric in CATALOG:
         if not categories or categories[-1]["name"] != metric.category:
