@@ -99,6 +99,8 @@ function Navigation() {
           <Stack.Screen name="teams" options={{ title: 'Teams' }} />
           <Stack.Screen name="checkin/[id]" options={{ title: 'Check-in alert' }} />
           <Stack.Screen name="team-evidence" options={{ title: 'Evidence' }} />
+          <Stack.Screen name="team-metrics" options={{ title: 'Team metrics' }} />
+          <Stack.Screen name="team-metric" options={{ title: 'Team metric' }} />
           <Stack.Screen
             name="tour"
             options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}

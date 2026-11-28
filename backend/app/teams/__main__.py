@@ -22,7 +22,7 @@ from app.analysis.team import week_of
 from app.config import settings
 from app.db.models import Team
 from app.db.session import session_scope
-from app.teams import memberships, reports
+from app.teams import explorer, memberships, reports
 from app.teams.briefing import brief
 from app.teams.demo import (
     DemoTeamError,
@@ -99,6 +99,16 @@ def main(argv: list[str] | None = None) -> int:
             made += report.status == "ready"
             withheld += report.status == "withheld"
             written += report.generated_by == "model"
+            if not memberships.overlap_problem(session, team):
+                # The explorer's figures, made with the report so they carry its date; a
+                # failure here never stops the report, its briefing or its email.
+                try:
+                    with session.begin_nested():
+                        explorer.week_figures(session, team, week, now)
+                except Exception as error:  # noqa: BLE001
+                    print(
+                        f"{team.name}: no metric figures ({type(error).__name__})", file=sys.stderr
+                    )
             if agent is not None and report.status == "ready":
                 try:
                     briefed += (

@@ -499,6 +499,89 @@ class TeamFindingEvidence(ApiModel):
     outcome_label: str | None = None
 
 
+ExplorerState = Literal[
+    "ready", "week_not_over", "paused", "not_available_then", "roster_unavailable"
+]
+MetricState = Literal["figure", "below_minimum", "no_data"]
+
+
+class TeamMetricRow(ApiModel):
+    """One metric in the explorer's list: its change, or why it has none (app.teams.explorer)."""
+
+    metric: str
+    label: str
+    unit: str
+    state: MetricState
+    evidence_id: str
+    contributors: int
+    change: ChangeFigure | None = None
+    withheld: str | None = None
+
+
+class TeamMetricSubgroup(ApiModel):
+    name: str
+    metrics: list[TeamMetricRow]
+
+
+class TeamMetricCategory(ApiModel):
+    name: str
+    subgroups: list[TeamMetricSubgroup]
+
+
+class TeamMetrics(ApiModel):
+    """Every explorer metric of one team week, or the week's state when there are none."""
+
+    team_id: str
+    week: Window
+    baseline: Window
+    weeks: list[date]
+    minimum_members: int
+    state: ExplorerState
+    message: str | None = None
+    made_on: date | None = None
+    roster: int | None = None
+    members_with_data: int | None = None
+    categories: list[TeamMetricCategory] = Field(default_factory=list)
+
+
+class TeamMetricCoverage(ApiModel):
+    contributors: int
+    minimum: int
+    roster: int
+    with_any_data: int
+
+
+class TeamMetricEvidence(ApiModel):
+    """One explorer metric's evidence, bounded as MCP gives it: what was measured, its dates,
+    method, the team figure and coverage. Never a person's value or a quartile."""
+
+    state: ExplorerState | MetricState
+    metric: str
+    label: str
+    week: Window
+    message: str | None = None
+    evidence_id: str | None = None
+    team_id: str | None = None
+    category: str | None = None
+    subgroup: str | None = None
+    unit: str | None = None
+    baseline: Window | None = None
+    made_on: date | None = None
+    figure_label: str | None = None
+    change: ChangeFigure | None = None
+    higher: int | None = None
+    lower: int | None = None
+    unchanged: int | None = None
+    coverage: TeamMetricCoverage | None = None
+    withheld: str | None = None
+    measured: str | None = None
+    method: str | None = None
+    zero_and_missing: str | None = None
+    derivation: str | None = None
+    source: str | None = None
+    limitations: list[str] = Field(default_factory=list)
+
+
 class TeamReport(TeamReportSummary):
     members_total: int
     minimum_members: int

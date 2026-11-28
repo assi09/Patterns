@@ -30,9 +30,9 @@ from app.db.models import (
 )
 from app.sync import calendar
 from app.teams import agent as team_agent
+from app.teams import explorer, playbook, reports, view
 from app.teams import memberships as teams
 from app.teams import observed as observed_text
-from app.teams import playbook, reports, view
 
 PAST_DAYS = 60  # how far back a harness may send calendar days
 AHEAD_DAYS = 14  # and how far ahead
@@ -235,6 +235,43 @@ def team_finding_evidence(
         return view.finding_evidence(db, team, report_id, evidence_id)
     except view.NotFound:
         raise HarnessError("No such evidence for this team's report.") from None
+
+
+def team_metrics(
+    db: Session,
+    user: User,
+    team_id: str,
+    now: datetime,
+    today: date,
+    week: str | None = None,
+    as_of: str | None = None,
+) -> dict:
+    """Every explorer metric of one finished week (app.teams.explorer), the same as the app's
+    "View all team metrics": each with its median change, contributors and evidence id, or why
+    it has none."""
+    team = _supervised(db, user, team_id)
+    return explorer.metrics_view(db, team, _week(week), now, _date(as_of, "as_of"), today)
+
+
+def team_metric(
+    db: Session,
+    user: User,
+    team_id: str,
+    metric: str,
+    now: datetime,
+    today: date,
+    week: str | None = None,
+    as_of: str | None = None,
+) -> dict:
+    """One explorer metric's evidence for one week, with the evidence id the app shows."""
+    team = _supervised(db, user, team_id)
+    try:
+        return explorer.metric_view(
+            db, team, _week(week), metric, now, _date(as_of, "as_of"), today
+        )
+    except explorer.NotFound:
+        known = ", ".join(m.key for m in explorer.CATALOG)
+        raise HarnessError(f"No such team metric. Metrics: {known}.") from None
 
 
 def team_meeting_load(

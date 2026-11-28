@@ -28,7 +28,7 @@ from app.reminders import store
 from app.reminders.schedule import zone
 from app.teams import actions as team_actions
 from app.teams import agent as team_agent
-from app.teams import checkin, hr, playbook, pulse, reports, view
+from app.teams import checkin, explorer, hr, playbook, pulse, reports, view
 from app.teams import memberships as teams
 from app.teams import observed as observed_text
 
@@ -277,6 +277,28 @@ def get_report_evidence(
         return schemas.TeamFindingEvidence(**view.evidence_of(report, evidence_id))
     except view.NotFound:
         raise ApiError(404, "not_found", "There is no such evidence in that report.") from None
+
+
+@router.get("/teams/{team_id}/metrics", response_model=schemas.TeamMetrics)
+def get_team_metrics(
+    team_id: str, db: Db, clock: Now, user: Supervisor, week: date | None = None
+) -> schemas.TeamMetrics:
+    """Every explorer metric for one finished week (the last one when none is asked), as MCP's
+    team_metrics gives it (app.teams.explorer)."""
+    team = teams.supervised_team(db, user, team_id)
+    return schemas.TeamMetrics(**explorer.metrics_view(db, team, week, clock))
+
+
+@router.get("/teams/{team_id}/metrics/{week}/{metric}", response_model=schemas.TeamMetricEvidence)
+def get_team_metric(
+    team_id: str, week: date, metric: str, db: Db, clock: Now, user: Supervisor
+) -> schemas.TeamMetricEvidence:
+    """One explorer metric's evidence for one week, with the evidence id MCP gives for it."""
+    team = teams.supervised_team(db, user, team_id)
+    try:
+        return schemas.TeamMetricEvidence(**explorer.metric_view(db, team, week, metric, clock))
+    except explorer.NotFound:
+        raise ApiError(404, "not_found", "There is no such team metric.") from None
 
 
 @router.post("/teams/{team_id}/reports", response_model=schemas.TeamReport)

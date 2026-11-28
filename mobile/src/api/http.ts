@@ -50,6 +50,8 @@ import type {
   TeamNote,
   TeamPreview,
   TeamFindingEvidence,
+  TeamMetricEvidence,
+  TeamMetrics,
   TeamReport,
   TeamReportSummary,
 } from './types';
@@ -273,6 +275,16 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       request<TeamFindingEvidence>(
         baseUrl,
         `/teams/${encodeURIComponent(teamId)}/reports/${week}/evidence/${encodeURIComponent(evidenceId)}`,
+      ),
+    getTeamMetrics: (teamId, week) =>
+      request<TeamMetrics>(
+        baseUrl,
+        `/teams/${encodeURIComponent(teamId)}/metrics${week ? `?week=${week}` : ''}`,
+      ),
+    getTeamMetric: (teamId, week, metric) =>
+      request<TeamMetricEvidence>(
+        baseUrl,
+        `/teams/${encodeURIComponent(teamId)}/metrics/${week}/${encodeURIComponent(metric)}`,
       ),
     getTeamChat: (teamId) =>
       request<TeamChatMessage[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/chat`),

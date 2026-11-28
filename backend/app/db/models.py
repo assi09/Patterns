@@ -933,6 +933,26 @@ class TeamReport(Base):
     emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
+class TeamMetricWeek(Base):
+    """Every explorer metric's figure for one team's week (app.teams.explorer), computed once and
+    kept: made with the week's report, or on the first request for a finished week. A daily value
+    carries no time it was synced, so a week is never recomputed: a later sync cannot change a
+    figure already shown, and `made_at` says from when it was known. Aggregates only."""
+
+    __tablename__ = "team_metric_weeks"
+    __table_args__ = (UniqueConstraint("team_id", "week_start", name="uq_team_metric_weeks_week"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    )
+    week_start: Mapped[date] = mapped_column(Date)  # a Monday
+    members_total: Mapped[int] = mapped_column()  # active members when it was made
+    members_with_data: Mapped[int] = mapped_column()  # those with any live data then
+    results: Mapped[dict] = mapped_column(JSON)  # metric -> its evidence record
+    made_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class Reminder(Base):
     """A time-based reminder the person set, or one the agent proposed for them to approve.
 

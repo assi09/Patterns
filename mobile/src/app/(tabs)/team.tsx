@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import { router } from 'expo-router';
 import { type ReactNode, useState } from 'react';
 import {
   Pressable,
@@ -46,6 +47,7 @@ import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { windowLabel } from '@/lib/format';
 import { datesText } from '@/lib/teamEvidence';
+import { teamMetricsHref } from '@/lib/teamMetrics';
 import {
   areaReadings,
   briefingItems,
@@ -286,6 +288,14 @@ function TeamView({ team }: { team: SupervisedTeam }) {
             number="03"
             title="Weekly report"
             detail={report.data ? `Week of ${windowLabel(report.data.week)}` : undefined}
+            action={
+              <Button
+                label="View all team metrics"
+                icon="list"
+                variant="secondary"
+                onPress={() => router.push(teamMetricsHref(team.id, week))}
+              />
+            }
           >
             <ReportSection team={team} reports={reports.data} report={report.data} card={card} />
             <Cards>

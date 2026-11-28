@@ -859,6 +859,75 @@ export interface TeamFindingEvidence {
   outcomeLabel?: string | null;
 }
 
+/**
+ * Where a week of the metric explorer stands; its figures exist only when `ready`.
+ * `roster_unavailable`: the week has no report, so who belonged to the team then is not on record.
+ */
+export type TeamMetricsState =
+  'ready' | 'week_not_over' | 'paused' | 'not_available_then' | 'roster_unavailable';
+/** One metric's state: a figure, withheld (fewer than the minimum), or no data at all. */
+export type TeamMetricState = 'figure' | 'below_minimum' | 'no_data';
+
+/** One metric in the explorer's list (app.teams.explorer), the same as MCP's team_metrics. */
+export interface TeamMetricRow {
+  metric: string;
+  label: string;
+  unit: string;
+  state: TeamMetricState;
+  evidenceId: string;
+  contributors: number;
+  change?: ChangeFigure | null; // the median of members' changes, only with a figure
+  withheld?: string | null; // why there is no figure
+}
+
+/**
+ * Every explorer metric of one finished team week, grouped by category and subgroup. Each is the
+ * median of eligible members' changes from their own previous 28 days: descriptive, never a
+ * briefing headline. Live Google Health data only.
+ */
+export interface TeamMetrics {
+  teamId: string;
+  week: Window;
+  baseline: Window;
+  weeks: ISODate[]; // weeks to choose from, newest first
+  minimumMembers: number;
+  state: TeamMetricsState;
+  message?: string | null;
+  madeOn?: ISODate | null; // when the figures were made; they never change after
+  roster?: number | null;
+  membersWithData?: number | null;
+  categories: { name: string; subgroups: { name: string; metrics: TeamMetricRow[] }[] }[];
+}
+
+/** One explorer metric's evidence, bounded as MCP's team_metric gives it, same evidence id. */
+export interface TeamMetricEvidence {
+  state: TeamMetricsState | TeamMetricState;
+  metric: string;
+  label: string;
+  week: Window;
+  message?: string | null;
+  evidenceId?: string | null;
+  teamId?: string | null;
+  category?: string | null;
+  subgroup?: string | null;
+  unit?: string | null;
+  baseline?: Window | null;
+  madeOn?: ISODate | null;
+  figureLabel?: string | null;
+  change?: ChangeFigure | null;
+  higher?: number | null;
+  lower?: number | null;
+  unchanged?: number | null;
+  coverage?: { contributors: number; minimum: number; roster: number; withAnyData: number } | null;
+  withheld?: string | null;
+  measured?: string | null;
+  method?: string | null;
+  zeroAndMissing?: string | null;
+  derivation?: string | null; // how Patterns calculates it, when it is not read as is
+  source?: string | null;
+  limitations: string[];
+}
+
 /** What the team agent found on its own Monday run, every claim checked against team evidence. */
 export interface TeamBriefing {
   summary: string;
@@ -988,6 +1057,8 @@ export interface ApiClient {
   getTeamReports(teamId: string): Promise<TeamReportSummary[]>; // newest first
   getTeamReport(teamId: string, week: ISODate): Promise<TeamReport>;
   getTeamEvidence(teamId: string, week: ISODate, evidenceId: string): Promise<TeamFindingEvidence>;
+  getTeamMetrics(teamId: string, week?: ISODate): Promise<TeamMetrics>; // the last full week
+  getTeamMetric(teamId: string, week: ISODate, metric: string): Promise<TeamMetricEvidence>;
   makeTeamReport(teamId: string, week?: ISODate): Promise<TeamReport>; // the last full week
   getTeamChat(teamId: string): Promise<TeamChatMessage[]>; // oldest first
   rateTeamAnswer(

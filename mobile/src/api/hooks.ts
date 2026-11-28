@@ -759,6 +759,22 @@ export function useTeamEvidence(teamId?: string, week?: ISODate, evidenceId?: st
   });
 }
 
+export function useTeamMetrics(teamId?: string, week?: ISODate) {
+  return useQuery({
+    queryKey: [...keys.teams, teamId, 'metrics', week ?? 'latest'],
+    queryFn: () => api.getTeamMetrics(teamId!, week),
+    enabled: !!teamId,
+  });
+}
+
+export function useTeamMetric(teamId?: string, week?: ISODate, metric?: string) {
+  return useQuery({
+    queryKey: [...keys.teams, teamId, 'metrics', week, metric],
+    queryFn: () => api.getTeamMetric(teamId!, week!, metric!),
+    enabled: !!teamId && !!week && !!metric,
+  });
+}
+
 export function useMakeTeamReport() {
   const client = useQueryClient();
   return useMutation({
